@@ -2882,6 +2882,35 @@ describe("a megallt termekek okfajtankent a kor allapotaban", () => {
     assert.deepEqual(into, { constructor: 2 });
   });
 
+  it("az ar-futtato megallt sora NEM szamlalodik: a stopped a termek-vetites megallt termekeit mondja (a priceFailures az arakat)", async () => {
+    const { db } = adatbazis([termek()], [], [{ entityId: "prod-1" }]);
+    const n = naplo();
+    const arKapott: string[][] = [];
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: async (_ids, out) => {
+        out.stderr("prod-1: MEGÁLLT (no-sku) r\n");
+        return 1;
+      },
+      runPricing: async (ids, out) => {
+        arKapott.push(ids);
+        out.stderr("SKU-1: MEGÁLLT (ambiguous-price) x\n");
+        out.stderr("SKU-2: MEGÁLLT (own-price-missing) x\n");
+        return 1;
+      },
+      environment: BEKAPCSOLVA,
+      logger: n.logger,
+    });
+
+    await scheduler.runOnce();
+
+    // az ar-futas LEFUTOTT (különben a teszt semmit nem bizonyit), es a sorai a naploba mentek
+    assert.deepEqual(arKapott, [["prod-1"]]);
+    assert.ok(n.sorok.some((sor) => sor.includes("ambiguous-price")));
+    // de a stopped csak a termek-vetites megallt termeke
+    assert.deepEqual(scheduler.allapot().lastRound!.stopped, { "no-sku": 1 });
+  });
+
   it("egy hivasban tobb sor is szamlalodik, es a visszaadott allapot masolat", async () => {
     const { scheduler } = kesz([MEGALLT.slice(0, 3).join("")]);
     await scheduler.runOnce();

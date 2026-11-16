@@ -768,15 +768,25 @@ export class MedusaProjectionScheduler
 
     const kimenet = {
       stdout: (value: string) => this.logNemUres(value, "log"),
+      stderr: (value: string) => this.logNemUres(value, "warn"),
+    };
+    /*
+      A MEGALLT SOROKAT CSAK A TERMEK-VETITES KIMENETE SZAMOLJA (barracuda, #2624, blokkolo): az ar-futtato (lent) ugyanezt a
+      `kimenet`-et kapja, es ugyanilyen alaku `<cikkszam>: MEGÁLLT (<ok>)` sort ir (`ambiguous-price`, `own-price-missing`); az a
+      `priceFailures`-ben mar szerepel, a `stopped` pedig a TERMEK-vetites megallt termekeit mondja. A szamolo ezert a termek-
+      vetites SAJAT kimenet-objektumara kerul, nem a kozosre.
+    */
+    const termekKimenet = {
+      ...kimenet,
+      // a megallt termekek okfajtankent (a sor tovabbra is a naploba megy, valtozatlanul)
       stderr: (value: string) => {
-        // a megallt termekek okfajtankent (a sor tovabbra is a naploba megy, valtozatlanul)
         if (allapot.stopped) countStoppedLines(value, allapot.stopped);
-        this.logNemUres(value, "warn");
+        kimenet.stderr(value);
       },
     };
     if (esedekes.length) allapot.stopped = {};
     const kod = esedekes.length
-      ? await this.runProjection(esedekes, kimenet)
+      ? await this.runProjection(esedekes, termekKimenet)
       : 0;
     if (arUjra.length)
       this.naplo.log(
