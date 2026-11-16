@@ -47,6 +47,9 @@ const statusOf = (
     ? (code as WebshopOrderStatus)
     : null;
 
+/** A táblába írt részlet felső határa: a kliens szerződése szerint csak kulcsnevek, de a hossz ettől független. */
+const AUDIT_DETAIL_LIMIT = 500;
+
 /** A szállító hibája HTTP-ként, a kollegának szóló mondattal (a részlet csak naplóba megy). */
 const HTTP_OF: Record<CarrierErrorCode, number> = {
   NOT_CONFIGURED: 503,
@@ -83,7 +86,11 @@ export class WebshopOrderParcelService {
   ) {}
 
   /** A szállító hibája a felületnek; minden más változatlanul megy tovább. */
-  private async carrier<T>(work: () => Promise<T>): Promise<T> {
+  private async carrier<T>(
+    work: () => Promise<T>,
+    /** Ha megvan, a szállító VÁRATLAN válasza táblába is kerül (a napló egy újraindítással elvész). */
+    audit?: { orderId: string; operation: string; userId: string | null },
+  ): Promise<T> {
     try {
       return await work();
     } catch (error) {
@@ -91,6 +98,21 @@ export class WebshopOrderParcelService {
         this.logger.warn(
           `${error.message}${error.detail ? `: ${error.detail}` : ""}`,
         );
+        if (audit && error.code === "UNEXPECTED_RESPONSE")
+          await this.repository
+            .recordCarrierUnexpectedResponse({
+              userId: audit.userId,
+              orderId: audit.orderId,
+              operation: audit.operation,
+              carrier: error.carrier,
+              detail: error.detail?.slice(0, AUDIT_DETAIL_LIMIT) ?? null,
+            })
+            // best effort: a kollegának szóló válasz nem változik azon, hogy a nyom nem íródott
+            .catch((auditError: unknown) =>
+              this.logger.warn(
+                `carrier answer audit failed: ${auditError instanceof Error ? auditError.name : "UNKNOWN"}`,
+              ),
+            );
         throw new HttpException(error.userMessage, HTTP_OF[error.code]);
       }
       throw error;
@@ -135,31 +157,33 @@ export class WebshopOrderParcelService {
 
     const parcelSize = sizeFor(input.carrier, size);
     const courierNote = notesOf(order.metadata).carrier ?? undefined;
-    const parcel = await this.carrier(() =>
-      this.parcels.createParcel({
-        commerceOrderId: order.id,
-        displayId: order.display_id,
-        carrier: input.carrier,
-        recipient: input.recipient,
-        destination: input.destination,
-        ...(parcelSize ? { size: parcelSize } : {}),
-        ...(input.codHuf ? { codHuf: input.codHuf } : {}),
-        // az utánvét hivatkozása a számla sorszáma, a címkén a rendelésszám (Balázs, emlék 2109)
-        ...(input.codHuf && invoice?.number
-          ? { codReference: invoice.number }
-          : {}),
-        /*
+    const parcel = await this.carrier(
+      () =>
+        this.parcels.createParcel({
+          commerceOrderId: order.id,
+          displayId: order.display_id,
+          carrier: input.carrier,
+          recipient: input.recipient,
+          destination: input.destination,
+          ...(parcelSize ? { size: parcelSize } : {}),
+          ...(input.codHuf ? { codHuf: input.codHuf } : {}),
+          // az utánvét hivatkozása a számla sorszáma, a címkén a rendelésszám (Balázs, emlék 2109)
+          ...(input.codHuf && invoice?.number
+            ? { codReference: invoice.number }
+            : {}),
+          /*
           A SZÁLLÍTÓNAK SZÓLÓ ÜZENET (commerce #493) a rendelés metaadatán áll,
           és csak házhoz szállításnál értelmes (a pénztár másutt törli). GLS-nél
           a címke szövegébe kerül a rendelésszám után (a kliens 40 karakterre
           vág), Foxpostnál a futárnak szóló mezőbe.
         */
-        labelContent: courierNote
-          ? `Rendelés #${order.display_id} · ${courierNote}`
-          : `Rendelés #${order.display_id}`,
-        ...(courierNote ? { courierNote } : {}),
-        createdByUserId: user.id,
-      }),
+          labelContent: courierNote
+            ? `Rendelés #${order.display_id} · ${courierNote}`
+            : `Rendelés #${order.display_id}`,
+          ...(courierNote ? { courierNote } : {}),
+          createdByUserId: user.id,
+        }),
+      { orderId: order.id, operation: "create", userId: user.id },
     );
 
     let notice: WebshopShippingNoticeOutcome;

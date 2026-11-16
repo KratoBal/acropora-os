@@ -200,6 +200,36 @@ export class WebshopOrdersRepository {
   }
 
   /**
+   * A SZÁLLÍTÓ VÁRATLAN VÁLASZA, TÁBLÁBAN (kártya 6077cda9, task t-20261116-foxpost-kulcsnevek; acrobot 53880).
+   *
+   * Az éles Foxpost csomag-létrehozás válaszának kulcsneve nem mért, és a kliens a hiányzó `barcode` esetén a kulcsneveket
+   * naplóba írja: a napló viszont csak az aktuális konténeré, és minden telepítés újat indít, tehát a bizonyíték elvész. Az
+   * `AuditLog` tábla nincs ürítve és nem kell hozzá migráció. A `detail` CSAK kulcsneveket és a `set`/`empty` jelzést hordozza (a
+   * kliens szerződése), értéket (csomagszám, név, cím) nem.
+   */
+  async recordCarrierUnexpectedResponse(input: {
+    userId: string | null;
+    orderId: string;
+    operation: string;
+    carrier: string | null;
+    detail: string | null;
+  }): Promise<void> {
+    await prisma.auditLog.create({
+      data: {
+        userId: input.userId,
+        action: "webshop-order.carrier-unexpected-response",
+        entityType: "WebshopOrder",
+        entityId: input.orderId,
+        metadata: {
+          operation: input.operation,
+          carrier: input.carrier,
+          detail: input.detail,
+        },
+      },
+    });
+  }
+
+  /**
    * A RENDELÉSEK SZÁMLÁI. Rendelésenként a legutóbbi `WEBSHOP_ORDER` forrású
    * számla (a vázlat azonosítója rendelésenként egy, tehát a gyakorlatban
    * egyetlen sor). Ugyanez adja a szállítólevelet is (`DELIVERY_NOTE`).
