@@ -487,6 +487,14 @@ export function BillingDocumentEditor({
     setConfirmIssue(true);
     try {
       const saved = await persist();
+      // A MENTÉS ÚJ IDŐBÉLYEGE AZ ÁLLAPOTBA IS (Luca díjbekérője, 2026-11-16): a mentés a sor `updatedAt`-ját léptette, és a
+      // következő mentés ezt kéri vissza. Ha az állapot a régit tartja, egy elbukott kiállítás után minden mentés és az
+      // előnézet is "időközben más is mentette" ütközést ad (és egy új bizonylat újrapróbája újra létrehozni próbálná).
+      setState((previous) =>
+        previous
+          ? { ...previous, savedUpdatedAt: saved.detail.updatedAt }
+          : previous,
+      );
       setPending(saved);
       setSummary(
         await billingDocumentsApi.issueSummary(token, saved.detail.id),
@@ -542,6 +550,21 @@ export function BillingDocumentEditor({
       setSaveError(
         cause instanceof Error ? cause.message : "A kiállítás nem sikerült.",
       );
+      // a kiállítási kísérlet (foglalás, elutasítás) is lépteti a sor időbélyegét: a következő mentés az aktuálisat kéri
+      try {
+        const current = await billingDocumentsApi.detail(
+          token,
+          pending.detail.id,
+        );
+        setStatus(current.status);
+        setState((previous) =>
+          previous
+            ? { ...previous, savedUpdatedAt: current.updatedAt }
+            : previous,
+        );
+      } catch {
+        // az olvasás hibája nem rontja a kiállítás hibaüzenetét; a következő mentés a szerver ütközésével jelez
+      }
     } finally {
       setIssuing(false);
       setConfirmIssue(false);

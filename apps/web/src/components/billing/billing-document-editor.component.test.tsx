@@ -1330,6 +1330,80 @@ describe("BillingDocumentEditor", () => {
     });
 
     /*
+      A MENTÉS IDŐBÉLYEGE A KIÁLLÍTÁS UTÁN (Luca díjbekérője, 2026-11-16). MI PIROSÍT: ha a kiállítás előtti mentés új időbélyegét
+      az állapot nem kapja meg (egy elbukott kiállítás után a "Vázlat mentése" és az előnézet a régit küldi, a szerver
+      "időközben más is mentette" ütközést ad; új bizonylatnál az újrapróba újra LÉTREHOZNA ugyanazzal az azonosítóval); ha az
+      elbukott kiállítási kísérlet után az aktuális időbélyeget nem olvassuk vissza.
+    */
+    it("after a refused issue the next save updates the draft with the timestamp of the save that the issue made", async () => {
+      api.create.mockImplementation(async (_token, body) => ({
+        ...detailFrom(body, body.id),
+        updatedAt: "2026-09-30T10:06:00.000Z",
+      }));
+      api.issue.mockRejectedValue(new Error("A kiállítás elutasítva."));
+      // the read back after the refusal fails: the save's own timestamp stays
+      api.detail.mockReset().mockRejectedValue(new Error("nem olvasható"));
+      await readyPaperInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      fireEvent.click(
+        (await readyDialog()).getByRole("button", { name: "Kiállítom" }),
+      );
+      expect(
+        await screen.findByText("A kiállítás elutasítva."),
+      ).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Vázlat mentése" }));
+      await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+      // the document exists since the issue's own save: no second create
+      expect(api.create).toHaveBeenCalledTimes(1);
+      expect(api.update.mock.calls[0]![2].expectedUpdatedAt).toBe(
+        "2026-09-30T10:06:00.000Z",
+      );
+    });
+
+    it("after a refused issue the current timestamp and status are read back, because the attempt moved the row", async () => {
+      api.create.mockImplementation(async (_token, body) => ({
+        ...detailFrom(body, body.id),
+        updatedAt: "2026-09-30T10:06:00.000Z",
+      }));
+      api.issue.mockRejectedValue(new Error("A kiállítás elutasítva."));
+      api.detail.mockReset().mockResolvedValueOnce({
+        ...detailFrom(
+          {
+            documentType: "INVOICE",
+            invoiceFormat: "PAPER",
+            lines: [],
+          },
+          "x",
+        ),
+        status: "ISSUE_FAILED",
+        updatedAt: "2026-09-30T10:09:00.000Z",
+      });
+      await readyPaperInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      fireEvent.click(
+        (await readyDialog()).getByRole("button", { name: "Kiállítom" }),
+      );
+      expect(
+        await screen.findByText("A kiállítás elutasítva."),
+      ).toBeInTheDocument();
+      await waitFor(() => expect(api.detail).toHaveBeenCalledTimes(1));
+      expect(api.detail.mock.calls[0]![1]).toBe(
+        api.create.mock.calls[0]![1].id,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Vázlat mentése" }));
+      await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+      expect(api.update.mock.calls[0]![2].expectedUpdatedAt).toBe(
+        "2026-09-30T10:09:00.000Z",
+      );
+    });
+
+    /*
       A SZÁMLAKÉP ÉS A PDF A „KIÁLLÍTVA” SÁVBAN (hétfői lista M2, Luca kérése).
       MI PIROSÍT: ha a sávban nincs a két gomb; ha nem a hivatalos PDF-et kérik
       le (a kiállított bizonylat azonosítójával); ha a még meg nem lévő PDF-re
