@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { stoppedProductIsRunFailure } from "./medusa-product-projection.service.js";
 import {
   countStoppedLines,
   medusaProjectionScheduleConfig,
@@ -365,7 +366,10 @@ describe("MedusaProjectionScheduler ar-vetitese", () => {
       return (
         hivas.metodus === "externalReference.findMany" &&
         args.where?.entityType === "Product" &&
-        !args.select?.lastSyncedAt
+        !args.select?.lastSyncedAt &&
+        // a jelolt arva kotesek kulon, a kor ELEJEN futo olvasasa (`entityId`, `metadata`) is `lastSyncedAt` nelkuli: a kor vegi
+        // lekerdezest az `externalId` kulonbozteti meg (task t-20261116-arva-kotes)
+        args.select?.externalId
       );
     })?.args;
     assert.deepEqual(kotesLekerdezes, {
@@ -2922,5 +2926,148 @@ describe("a megallt termekek okfajtankent a kor allapotaban", () => {
       "no-sku": 2,
       ambiguous: 1,
     });
+  });
+});
+
+/**
+ * A JELOLT ARVA KOTES NEM ESEDEKES, ES NEM BUKTAT (task t-20261116-arva-kotes, acrobot 53748). A stage-en egyetlen `orphaned-link` termek
+ * (a bolti termek 404-et ad) minden kort FAILED-re tett, es minden korben elfoglalt egy helyet. MI PIROSIT: a jelolt arva a general, az
+ * inaktivalt vagy a forgas listaba bekerul; a tenyvaltozas listaja visszahozza; a szam nem latszik a statuszban (a jel eltunne); a
+ * kotesek olvasasanak bukasa kihagyja a termeket (egy hianyzo szuro helyett egy hibas); a futtato az `orphaned-link`-et hibanak szamolja.
+ */
+describe("a jelölt árva kötés nem esedékes, és nem buktat", () => {
+  const JEL = {
+    medusaOrphan: {
+      firstObservedAt: "2026-11-15T20:00:00.000Z",
+      lastObservedAt: "2026-11-16T07:00:00.000Z",
+      medusaProductId: "prod_regi",
+    },
+  };
+  const arva = (entityId: string) => ({ entityId, metadata: JEL });
+  const ep = (entityId: string) => ({ entityId, metadata: {} });
+  const kor = (
+    db: ProjectionSchedulerDatabase,
+    environment: NodeJS.ProcessEnv = BEKAPCSOLVA,
+  ) => {
+    const { run, kapott } = futtato(0);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+    return { scheduler, kapott };
+  };
+
+  it("a general listabol kimarad, az ep termek megy, es a szam a statuszban latszik", async () => {
+    const { db } = adatbazis(
+      [termek({ id: "prod-1" }), termek({ id: "prod-2" })],
+      [],
+      [arva("prod-1"), ep("prod-2")] as { entityId: string }[],
+    );
+    const { scheduler, kapott } = kor(db);
+
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+
+    assert.deepEqual(kapott, [["prod-2"]]);
+    assert.equal(scheduler.allapot().lastRound!.orphanedLinks, 1);
+  });
+
+  it("az inaktivalt listabol es a forgasbol is kimarad", async () => {
+    const regen = new Date("2026-11-01T00:00:00.000Z");
+    const { db } = adatbazis(
+      [
+        termek({ id: "i-arva", isActive: false, updatedAt: MOST }),
+        termek({ id: "i-ep", isActive: false, updatedAt: MOST }),
+      ],
+      [
+        { entityId: "i-arva", lastSyncedAt: regen },
+        { entityId: "i-ep", lastSyncedAt: regen },
+      ],
+      [arva("i-arva"), ep("i-ep")] as { entityId: string }[],
+    );
+    const inaktiv = kor(db);
+    await inaktiv.scheduler.runOnce();
+    assert.deepEqual(inaktiv.kapott, [["i-ep"]]);
+
+    const kesobb = (n: number) => new Date(MOST.getTime() + n * 86_400_000);
+    const { db: forgasDb } = adatbazis(
+      [termek({ id: "n1" }), termek({ id: "n2" })],
+      [
+        { entityId: "n1", lastSyncedAt: kesobb(1) },
+        { entityId: "n2", lastSyncedAt: kesobb(2) },
+      ],
+      [arva("n1"), ep("n2")] as { entityId: string }[],
+    );
+    const forgas = kor(forgasDb, {
+      ...BEKAPCSOLVA,
+      MEDUSA_PROJECTION_REFRESH_ENABLED: "true",
+      MEDUSA_PROJECTION_REFRESH_PER_ROUND: "5",
+    } as NodeJS.ProcessEnv);
+    await forgas.scheduler.runOnce();
+    assert.deepEqual(forgas.kapott, [["n2"]]);
+  });
+
+  it("a tenyvaltozas listajabol is kimarad (jel nelkul bekerulne)", async () => {
+    const kotes = [
+      { entityId: "prod-1", lastSyncedAt: new Date(MOST.getTime() - 60_000) },
+    ];
+    const tenyek = [{ productId: "prod-1", updatedAt: MOST }];
+    const kerdezett = async (kotesek: { entityId: string }[]) => {
+      const { db } = adatbazis(
+        [termek({ updatedAt: REGEN })],
+        kotes,
+        kotesek,
+        [],
+        [],
+        tenyek,
+      );
+      const eredmeny = kor(db, ISMERETTEL);
+      await eredmeny.scheduler.runOnce();
+      return eredmeny.kapott;
+    };
+
+    assert.deepEqual(await kerdezett([ep("prod-1")] as never), [["prod-1"]]);
+    assert.deepEqual(await kerdezett([arva("prod-1")] as never), []);
+  });
+
+  it("ha a kotesek olvasasa elbukik, semmi nem marad ki, es a szam null (egy hibas szuro eltuntetne a termeket)", async () => {
+    const { db } = adatbazis([termek({ id: "prod-1" })], [], [
+      arva("prod-1"),
+    ] as { entityId: string }[]);
+    const tarolt = db.externalReference as unknown as {
+      findMany: (args: unknown) => Promise<unknown[]>;
+    };
+    const eredeti = tarolt.findMany.bind(tarolt);
+    tarolt.findMany = async (args: unknown) => {
+      const a = args as {
+        where?: { entityType?: string };
+        select?: { metadata?: unknown };
+      };
+      // csak a kotesek (Product) jelolt-arva olvasasa bukik: az ar-sorok (ProductPrice) metaadat-olvasasa mas kerdes
+      if (a.where?.entityType === "Product" && a.select?.metadata)
+        throw new Error("olvasas elbukott");
+      return eredeti(args);
+    };
+    const { scheduler, kapott } = kor(db);
+
+    await scheduler.runOnce();
+
+    assert.deepEqual(kapott, [["prod-1"]]);
+    assert.equal(scheduler.allapot().lastRound!.orphanedLinks, null);
+  });
+
+  it("a futtato csak az orphaned-link megallast nem szamolja futasi hibanak", () => {
+    assert.equal(stoppedProductIsRunFailure("orphaned-link"), false);
+    for (const ok of [
+      "no-sku",
+      "ambiguous",
+      "medusa-write-failed",
+      "medusa-read-failed",
+      "broken-identity-chain",
+    ] as const)
+      assert.equal(stoppedProductIsRunFailure(ok), true, ok);
   });
 });
