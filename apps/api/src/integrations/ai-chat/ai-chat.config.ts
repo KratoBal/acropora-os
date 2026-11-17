@@ -41,8 +41,9 @@ export function aiChatConfig(
  * How long this layer waits for the AI service.
  *
  * The agreed ladder loosens outwards: the model call gives up at 40 s inside
- * the AI service, its socket net sits at 45 s, and the Next.js rewrite proxy
- * in front of this API at 50 s. This wait belongs between the AI service and
+ * the AI service, its chat deadline answers `ai_chat_deadline` at 43 s, its
+ * socket net sits at 45 s, and the Next.js rewrite proxy in front of this API
+ * at 50 s. This wait belongs between the AI service and
  * that proxy, so the failure that reaches a person is the AI's own named one -
  * `ai_provider_timeout` with the milliseconds it waited - rather than a silent
  * cut from here.

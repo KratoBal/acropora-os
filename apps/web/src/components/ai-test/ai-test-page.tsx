@@ -63,6 +63,24 @@ const MODE_LABELS: Record<string, string> = {
   resolved: "hitelesített vevő",
 };
 
+/*
+  A HIBAKÓD MELLÉ EGY MONDAT, AMIT A FELHASZNÁLÓ IS ÉRT (t-20261116-ai-kezelo-hatarido, acrobot 53996). Az AI 45 mp-es
+  kapcsolati hálója eddig válasz nélkül bontott, és itt csak egy üres "ai_unreachable" látszott. Az AI azóta a háló előtt
+  saját kóddal felel (ai_chat_deadline). A kód marad mellette: az a mérés adata. Ismeretlen kódnál nincs mondat, csak a kód.
+*/
+const ERROR_SENTENCES: Record<string, string> = {
+  ai_chat_deadline:
+    "Az AI nem készült el a válasszal a megengedett időn belül, ezért leállt. Próbáld újra, akár rövidebb kérdéssel.",
+  ai_provider_timeout:
+    "A nyelvi modell nem válaszolt időben. Próbáld újra egy kicsit később.",
+  ai_gateway_timeout:
+    "Az AI szolgáltatás nem válaszolt időben. Próbáld újra egy kicsit később.",
+  ai_unreachable:
+    "Az AI szolgáltatás nem érhető el, vagy válasz nélkül bontotta a kapcsolatot.",
+  ai_provider_error: "A nyelvi modell hibával válaszolt.",
+  ai_not_configured: "Az AI kapcsolat ezen a környezeten nincs beállítva.",
+};
+
 function formatMs(value: number | null): string {
   if (value === null) return "-";
   return `${formatNumber(value / 1000, 1)} mp (${formatNumber(value, 0)} ms)`;
@@ -265,6 +283,10 @@ export function AiTestPage() {
                   A hibakód mellett a VÁRAKOZÁS HOSSZA a leghasznosabb szám:
                   abból derül ki, hogy időtúllépés történt-e, és hol.
                 */}
+                {exchange.reply.errorCode &&
+                ERROR_SENTENCES[exchange.reply.errorCode] ? (
+                  <>{ERROR_SENTENCES[exchange.reply.errorCode]} </>
+                ) : null}
                 Hibakód:{" "}
                 <strong>{exchange.reply.errorCode ?? "ismeretlen"}</strong>
                 {exchange.reply.providerWaitedMs !== null ? (
