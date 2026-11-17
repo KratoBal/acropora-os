@@ -897,6 +897,22 @@ describe("Díjbekérő a mérföldkőből (P7)", () => {
       { status: "ACCEPTED", acceptedVersionId: "v1" },
     );
 
+  it("a tizedes nélküli százalék ép marad a mérföldkő feliratán: a 60 nem lesz 6 (az API a Decimal szövegét küldi, nulla nélkül; Luca, 2026-11-17)", async () => {
+    api.detail.mockResolvedValue(
+      acceptedWith({
+        milestones: [
+          { id: "m1", position: 0, label: "Előleg", percent: "40" },
+          { id: "m2", position: 1, label: "Átadáskor", percent: "60" },
+          { id: "m3", position: 2, label: "Zárás", percent: "62.5" },
+        ],
+      }),
+    );
+    render(<QuoteDetailPage quoteId="q1" />);
+    expect(await screen.findByText("Előleg (40%)")).toBeInTheDocument();
+    expect(screen.getByText("Átadáskor (60%)")).toBeInTheDocument();
+    expect(screen.getByText("Zárás (62.5%)")).toBeInTheDocument();
+  });
+
   it("a díjbekérő nélküli mérföldkőnél előkészít, a meglévőnél a vázlatra visz", async () => {
     api.detail.mockResolvedValue(
       acceptedWith({
