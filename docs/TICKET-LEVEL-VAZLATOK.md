@@ -41,6 +41,28 @@ A kezelő az összes aktív helyszínből választ (aktív, nem archivált ügyf
 - **A csatolmány idegen fájl:** csak tartalom szerint felismert PDF, JPEG és PNG, legfeljebb 10 fájl és 10 MiB fájlonként (25 MiB levelenként); ami kimarad, azt a vázlat számolja (`droppedAttachments`).
 - **A levél szövege idegen szöveg.** A vázlat szövege a levél tisztított olvasópéldánya (az idézett válasz, az aláírás levágva), **nem redakció**. Az AI-kitöltés (S3) csak redaktált szöveget kap (Balázs döntése, 2026-11-16), mezőket tölt ki, és semmit nem indíthat el.
 
+## A fejléc mérése a valódi tesztlevélen (csak olvasó eszköz)
+
+A beolvasás bekapcsolása előtt a valódi tesztlevél `Authentication-Results` fejlécét meg kell nézni. Erre van egy csak olvasó parancs: ugyanazt az olvasó klienst használja, mint a beolvasás (csak GET kérés, `gmail.readonly`), tehát pontosan azt látja, amit a beolvasás látna. **Nem ír semmit:** nincs adatbázis-írás, címke, jelölés, kiküldött levél, vázlat. A beolvasás kapcsolójának állapota nem számít, de kell hozzá a `GMAIL_TICKET_READ_*` hármas a környezetben (ha egy hiányzik, a nevét írja ki, értéket soha, kilépési kód 3).
+
+```bash
+cd /app && node dist/service-drafts/ticket-mail/ticket-mail-auth-measure.cli.js --limit 5 --query 'newer_than:2d in:anywhere'
+```
+
+A `--limit` 1 és 50 közötti (alapérték 10, legújabb elöl), a `--query` csak erre a futásra cseréli a lekérdezést (legfeljebb 300 karakter), például egy tesztlevél megkeresésére. Levelenként egy `AUTH-MEASURE {...}` sort ír, a végén egy `AUTH-MEASURE-SUMMARY {...}` sort:
+
+- `idHash`: a Gmail azonosító rövid lenyomata (8 hexa karakter), visszaút nélkül;
+- `fromDomain`: a feladó cím **tartománya**;
+- `headerCount`: hány `Authentication-Results` fejléc van a levélen;
+- `headers[]`: fejlécenként a szerkesztő-azonosító (`authservId`), a módszerek eredményei (`dkim`, `spf`, `dmarc`, mindegyiknél a `header.from` és `header.d` **tartománya**), és a fejléc szövege maszkolva (az e-mail címek helyi része `***`, az IP-címek `[ip]`, legfeljebb 700 karakter);
+- `verdict`: amit a beolvasás szabálya a fejlécekből dönt (`verified`, `reason`), és `skip`: hogy gépi levélként kihagyná-e.
+
+A kimenetben nincs tárgy, szöveg, csatolmány-név, token, e-mail cím helyi része és IP-cím. A maszkolás mintákra épül: egy szokatlan alakú, a fejléc megjegyzésébe írt személynév nem biztos, hogy kimarad, ezért a kimenetet ugyanúgy kezeljük, mint a belső naplót.
+
+**Mit kell kiolvasni belőle:** hány `mx.google.com` fejléc van egy levélen (a szabály mindegyikre ugyanazt várja), és a valódi tesztlevél `verdict`-je `DMARC_PASS`-e. Ha minden levél `FOREIGN_AUTHSERV`, a Gmail API a ticket@ postafiókban nem ezt a szerkesztő-azonosítót adja, és a szabályt a mért alakra kell igazítani, nem a beolvasást bekapcsolni.
+
+**Állapot:** a parancs a valódi postafiókra még nem futott. A tesztek hamis adatokon mennek (a maszkolás, a fejléc-bontás, az összesítés, az argumentumok).
+
 ## Beállítás (env)
 
 A bekapcsolás acrobot lépése, a valódi tesztlevél mérése után (az S2 vége).
