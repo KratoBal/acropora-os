@@ -238,6 +238,47 @@ export function priceFailureCounts(
 }
 
 /**
+ * A TÁROLT ÁR-MEGÁLLÁSOK, CSAK OLVASVA (task t-20261117-arstop-lista; acrobot 55208). A `recordPriceAttempt` minden elbukott terméknél a
+ * `metadata`-ba írja a `failedAt`-ot és az `okot` (`<cikkszám>: MEGÁLLT (<ok>) <részlet>`, több üzenet `; `-vel), siker után a metadata üres:
+ * ez adja az emberi munkalistát, amit a #2665 óta (az adat-állapot nem teszi FAILED-dé a kört) semmi nem mutatott meg. Nem ír, nem tisztít.
+ * A SZŰRÉS A KÓDBAN VAN, nem Prisma JSON-úttal: az helyi adatbázis nélkül nem mérhető.
+ */
+export interface StoredPriceStop {
+  productId: string;
+  failedAt: string;
+  /** a tárolt üzenetek egyenként (legfeljebb 300 karakter az egészből, ahogy az írás vágja) */
+  reasons: string[];
+  /** az üzenetek fajtái egyszer-egyszer (`priceFailureKind`) */
+  kinds: string[];
+}
+
+export async function storedPriceStops(
+  db: Pick<PriceSyncDatabase, "externalReference">,
+): Promise<StoredPriceStop[]> {
+  const rows = await db.externalReference.findMany({
+    where: { ...MEDUSA_PRICE_REFERENCE },
+    select: { entityId: true, lastSyncedAt: true, metadata: true },
+  });
+  const stops: StoredPriceStop[] = [];
+  for (const row of rows) {
+    const failedAt = failedAtOf(row.metadata);
+    if (!failedAt) continue;
+    const text = (row.metadata as Record<string, unknown>).reason;
+    const reasons =
+      typeof text === "string"
+        ? text.split("; ").filter((r) => r.trim() !== "")
+        : [];
+    stops.push({
+      productId: row.entityId,
+      failedAt: failedAt.toISOString(),
+      reasons,
+      kinds: [...new Set(reasons.map(priceFailureKind))],
+    });
+  }
+  return stops.sort((a, b) => b.failedAt.localeCompare(a.failedAt));
+}
+
+/**
  * A PRÓBÁLKOZÁS RÖGZÍTÉSE, a készlet mintájára. Sikernél a `lastSyncedAt` a kör
  * kezdete, és a kudarc-jel törlődik; kudarcnál a `lastSyncedAt` nem mozdul, a
  * `metadata.failedAt` és az ok kerül rá.
