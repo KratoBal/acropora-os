@@ -7,7 +7,7 @@ import {
   PilotCardHeader,
   PilotDataRow,
 } from "@acropora/ui";
-import type { QuoteDetailDto } from "@acropora/types";
+import { trimPercentText, type QuoteDetailDto } from "@acropora/types";
 import { useState } from "react";
 
 import { quotesApi } from "@/lib/api/quotes";
@@ -21,8 +21,8 @@ const STATUS: Record<string, string> = {
   ISSUE_FAILED: "kiállítás sikertelen",
 };
 
-/** "40.00" -> "40" */
-const percent = (value: string) => value.replace(/\.?0+$/, "");
+/** "40.00" -> "40", "40" -> "40" (a nulla csak a tizedespont után vágódik le: a 60% nem lehet 6%) */
+const percent = (value: string) => trimPercentText(value);
 
 /**
  * A FIZETÉSI ÜTEMEZÉS ÉS A DÍJBEKÉRŐK (#1582 P7). Elfogadott ajánlaton a

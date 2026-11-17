@@ -43,6 +43,14 @@ export interface QueueRunReport {
    * kulon mezoben, nem a `done`-ban elrejtve.
    */
   unresolved: number;
+  /**
+   * HANY SORNAL VALASZOLT A SZERVER, DE HIBAVAL (a `retried` es a `stalled` kozul).
+   *
+   * Balazs 2026-11-17: online lett, a sor nem ment fel, es a kepernyo azt mondta, "A telefon nem érte el a
+   * szervert" -- ez a mondat MINDEN nem-utkozo kudarcra kijott, akkor is, ha a szerver valaszolt. A ket esetnek mas a
+   * teendoje (a terero magatol rendbe jon, egy szerver-hiba nem), ezert kulon szam. Hianya nulla: regi jelentes.
+   */
+  answeredFailed?: number;
 }
 
 /**
@@ -65,7 +73,9 @@ export function describeQueueRun(report: QueueRunReport): string | null {
       `Egyetlen felvitel sem ment fel a ${report.attempted} várakozóból. ` +
       (report.conflicted > 0
         ? `${report.conflicted} elakadt, ezekhez döntés kell.`
-        : "A telefon nem érte el a szervert.")
+        : (report.answeredFailed ?? 0) > 0
+          ? "A szerver hibát adott. A telefon később magától újrapróbálja; a részletek a várakozók listájában."
+          : "A telefon nem érte el a szervert. Amint van kapcsolat, magától újrapróbálja.")
     );
   }
   return (
@@ -104,6 +114,27 @@ export function describeUnresolvedRecordings(
     `${report.unresolved} rögzítés felment, de a szerver azonosítója nem jött ` +
     "vissza: a hozzájuk készült fényképeket nem tudjuk feltölteni."
   );
+}
+
+/**
+ * A KEZDOLAP MONDATA EGY KOR UTAN.
+ *
+ * Volt esedekes sor: a kor mondata (vagy semmi, ha nincs mit mondani). Nem volt: az elozo mondat marad, mert az arrol
+ * szol, ami meg all -- KIVEVE, ha mar nincs elkuldheto sor sem (barracuda, #2653): ha a sor kozben mas uton kiurult, a
+ * "nem ment fel" mondat mar hamis, es ott maradna, amig egy kovetkezo kor nem mozdit valamit.
+ */
+export function nextQueueMessage(
+  previous: string | null,
+  report: QueueRunReport,
+  pendingLeft: number,
+): string | null {
+  if (report.attempted === 0) return pendingLeft === 0 ? null : previous;
+  const mondatok = [
+    describeQueueRun(report),
+    describeStalled(report),
+    describeUnresolvedRecordings(report),
+  ].filter((m): m is string => m !== null);
+  return mondatok.length > 0 ? mondatok.join(" ") : null;
 }
 
 export interface QueueRunnerDeps {
@@ -149,6 +180,7 @@ export async function drainQueue(
     conflicted: 0,
     stalled: 0,
     unresolved: 0,
+    answeredFailed: 0,
   };
 
   for (const row of rows) {
@@ -182,6 +214,8 @@ export async function drainQueue(
       case "retry":
         await deps.markRetry(row.id, outcome.attemptCount, outcome.lastError);
         report.retried += 1;
+        if (httpStatus !== null)
+          report.answeredFailed = (report.answeredFailed ?? 0) + 1;
         break;
       case "conflict":
         await deps.markConflict(row.id, outcome.lastError);
@@ -190,6 +224,8 @@ export async function drainQueue(
       case "stalled":
         await deps.markStalled(row.id, outcome.attemptCount, outcome.lastError);
         report.stalled += 1;
+        if (httpStatus !== null)
+          report.answeredFailed = (report.answeredFailed ?? 0) + 1;
         break;
     }
   }

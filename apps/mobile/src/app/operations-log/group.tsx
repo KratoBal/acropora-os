@@ -11,6 +11,7 @@ import {
   Text,
   TextInput,
   View,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -31,6 +32,7 @@ import {
   enqueueOperationsEntry,
   enqueuePhoto,
 } from "@/lib/offline/queue-store";
+import { confirmQueuedAndLeave } from "@/lib/offline/queued-confirmation";
 import { saveOrQueue, type SaveOutcome } from "@/lib/offline/save-or-queue";
 import {
   ENTRY_LIMITS,
@@ -244,15 +246,20 @@ export default function RecordOperationsGroupScreen() {
         setForm(emptyGroupForm(assets));
         return;
       }
-      setNotice(
-        [
-          queued > 0
-            ? `${queued} bejegyzés a feltöltésre várók közé került, amint van térerő, magától felmegy.`
-            : "A rögzítések felmentek.",
-          ...photoMessages,
-        ].join(" "),
-      );
       setForm(emptyGroupForm(assets));
+      if (queued > 0) {
+        // Balázs 2026-11-17: offline, not an empty form in place, but a confirmation and back
+        confirmQueuedAndLeave(
+          [
+            `${queued} bejegyzés a feltöltésre várók közé került, amint van térerő, magától felmegy.`,
+            ...photoMessages,
+          ].join(" "),
+          () => router.back(),
+          Alert.alert,
+        );
+        return;
+      }
+      setNotice(["A rögzítések felmentek.", ...photoMessages].join(" "));
     },
     onError: (cause: unknown) => {
       setError({

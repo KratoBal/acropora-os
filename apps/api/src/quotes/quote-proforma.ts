@@ -7,15 +7,20 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
-import type {
-  AuthenticatedUser,
-  QuoteProformaResultDto,
+import {
+  trimPercentText,
+  type AuthenticatedUser,
+  type QuoteProformaResultDto,
 } from "@acropora/types";
 
 import { normalizeBillingDraft } from "../billing/billing-document-draft.js";
 import { insertBillingDraft } from "../billing/billing-documents.repository.js";
 import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
 import { allocateMilestone } from "./quote-billing.js";
+import {
+  proformaLineDescription,
+  proformaNote,
+} from "./quote-proforma-text.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -122,7 +127,6 @@ export async function createMilestoneProforma(
       "Az elfogadott tételek összege nulla, nincs miből díjbekérőt készíteni.",
     );
 
-  const percent = milestone.percent.toString().replace(/\.?0+$/, "");
   const normalized = normalizeBillingDraft(
     {
       documentType: "PROFORMA",
@@ -134,12 +138,20 @@ export async function createMilestoneProforma(
       currency: "HUF",
       language: "hu",
       reference: quote.quoteNumber,
-      note: `${milestone.label} (${percent}%) a(z) ${quote.quoteNumber} ajánlathoz.`,
+      note: proformaNote({
+        label: milestone.label,
+        percent: milestone.percent,
+        quoteNumber: quote.quoteNumber,
+      }),
       sourceType: quote.project ? "PROJECT" : "MANUAL",
       sourceId: quote.project?.id ?? null,
       lines: split.lines.map((line) => ({
         productId: null,
-        description: `${milestone.label} (${percent}%), ${quote.quoteNumber}`,
+        description: proformaLineDescription({
+          label: milestone.label,
+          percent: milestone.percent,
+          quoteNumber: quote.quoteNumber,
+        }),
         quantity: "1",
         unit: "db",
         unitNet: line.net,
@@ -188,7 +200,7 @@ export async function createMilestoneProforma(
       actorUserId: args.userId,
       payload: {
         milestone: milestone.label,
-        percent,
+        percent: trimPercentText(milestone.percent.toString()),
         net: split.total,
         invoiceId,
       },

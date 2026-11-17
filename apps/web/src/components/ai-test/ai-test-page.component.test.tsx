@@ -241,6 +241,31 @@ describe("AiTestPage hibaüzenet", () => {
     expect(screen.getAllByText("ai_chat_deadline").length).toBeGreaterThan(0);
   });
 
+  it("a prototípus nevét viselő kód sem kap mondatot (toString)", async () => {
+    // a sima indexelés a prototípus függvényét adná: a React azt nem írja ki, hanem figyelmeztet
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    render(<AiTestPage />);
+    await ask(
+      reply({
+        messageId: null,
+        answer: null,
+        errorCode: "toString",
+        httpStatus: 500,
+      }),
+    );
+
+    const alert = screen
+      .getByText("Nem érkezett válasz")
+      .closest("[role=alert]")!;
+    expect(alert.textContent).toMatch(/Hibakód: toString/);
+    expect(
+      errors.mock.calls.some((c) =>
+        String(c[0]).includes("not valid as a React child"),
+      ),
+    ).toBe(false);
+    errors.mockRestore();
+  });
+
   it("ismeretlen kódhoz nem talál ki mondatot, csak a kódot mutatja", async () => {
     render(<AiTestPage />);
     await ask(

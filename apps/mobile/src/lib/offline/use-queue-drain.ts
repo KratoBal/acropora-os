@@ -33,14 +33,14 @@ import { readQueuedWorksheetLine } from "@/lib/worksheets/worksheet-line";
 import { ApiError } from "@/lib/api/client";
 
 import { readQueuedAssetUpdate } from "./asset-update-queue";
+import { subscribeToAppState } from "@/lib/auth/app-state";
+
 import { drainOfflineQueue } from "./drain-offline-queue";
+import { pendingQueueRows } from "./queue-store";
+import { startDrainTriggers } from "./drain-triggers";
 import type { SyncQueueRow } from "./sync-queue";
 import { readPhotoPayload } from "./queue-order";
-import {
-  describeQueueRun,
-  describeStalled,
-  describeUnresolvedRecordings,
-} from "./queue-runner";
+import { nextQueueMessage } from "./queue-runner";
 
 /**
  * A SOR KIURITESE, AMIKOR VISSZAJON A HALOZAT.
@@ -61,6 +61,22 @@ import {
 export function useQueueDrain(isOnline: boolean): string | null {
   const [uzenet, setUzenet] = useState<string | null>(null);
   const fut = useRef(false);
+  /**
+   * EGY KOR SORSZAMA: a halozat visszaterese mellett az eloterbe kerules es egy idozito is inditja a kiuritest
+   * (`drain-triggers.ts`, Balazs 2026-11-17: a sor csak az app ujranyitasa utan ment fel).
+   */
+  const [kor, setKor] = useState(0);
+
+  useEffect(
+    () =>
+      startDrainTriggers(isOnline, () => setKor((k) => k + 1), {
+        subscribeForeground: subscribeToAppState,
+        setInterval: (run, ms) => setInterval(run, ms),
+        clearInterval: (handle) =>
+          clearInterval(handle as ReturnType<typeof setInterval>),
+      }),
+    [isOnline],
+  );
 
   useEffect(() => {
     if (!isOnline || fut.current) return;
@@ -143,17 +159,15 @@ export function useQueueDrain(isOnline: boolean): string | null {
             }
           },
         });
-        const mondatok = [
-          describeQueueRun(report),
-          describeStalled(report),
-          describeUnresolvedRecordings(report),
-        ].filter((m): m is string => m !== null);
-        setUzenet(mondatok.length > 0 ? mondatok.join(" ") : null);
+        // a kor mondata; egy ures kor az elozot hagyja, hacsak a sor kozben ki nem urult (`nextQueueMessage`)
+        const megmaradt =
+          report.attempted === 0 ? (await pendingQueueRows()).length : 0;
+        setUzenet((elozo) => nextQueueMessage(elozo, report, megmaradt));
       } finally {
         fut.current = false;
       }
     })();
-  }, [isOnline]);
+  }, [isOnline, kor]);
 
   return uzenet;
 }

@@ -699,6 +699,33 @@ describe(
       );
     });
 
+    it("the proforma's line text and note carry the milestone's EXACT percent: 40 stays 40, not 4 (Luca, 2026-11-17, task t-20261117-dijbekero-szazalek)", async () => {
+      const c = await customer("label");
+      const q = await acceptedQuote("pf-label", MIXED, {
+        customerId: c,
+        milestones: SCHEDULE,
+      });
+      const m = await firstMilestone(q.quoteId);
+      const res = await proformaDraft(q.quoteId, m.id);
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+      const invoice = await prisma.invoice.findUniqueOrThrow({
+        where: { id: res.body!.invoiceId },
+        include: { lines: true },
+      });
+      const quote = await prisma.quote.findUniqueOrThrow({
+        where: { id: q.quoteId },
+        select: { quoteNumber: true },
+      });
+      assert.deepEqual(
+        [invoice.lines.map((l) => l.description), invoice.note],
+        [
+          invoice.lines.map(() => `Előleg (40%), ${quote.quoteNumber}`),
+          `Előleg (40%) a(z) ${quote.quoteNumber} ajánlathoz.`,
+        ],
+        "PROFORMA-LABEL",
+      );
+    });
+
     it("two clicks at once prepare one proforma", async () => {
       const c = await customer("once");
       const q = await acceptedQuote("pf-once", MIXED, {

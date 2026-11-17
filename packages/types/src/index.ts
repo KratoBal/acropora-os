@@ -68,6 +68,7 @@ export type {
   InvoiceFormat,
 } from "./billing-document.js";
 export { computeBillingDocumentAmounts } from "./billing-document-amounts.js";
+export { trimPercentText } from "./percent-text.js";
 export {
   CONTRACT_BILLING_STATE_LABELS,
   contractBilling,

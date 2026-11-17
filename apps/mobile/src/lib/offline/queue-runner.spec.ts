@@ -5,6 +5,7 @@ import {
   describeQueueRun,
   describeUnresolvedRecordings,
   drainQueue,
+  nextQueueMessage,
 } from "./queue-runner";
 import type { SyncQueueRow } from "./sync-queue";
 
@@ -279,5 +280,98 @@ describe("a címzetlen képek kimondása", () => {
     });
     assert.match(s ?? "", /2 rögzítés felment/);
     assert.match(s ?? "", /fényképeket nem tudjuk feltölteni/);
+  });
+});
+
+/**
+ * A HALOZATI ES A SZERVER-HIBA KULON MONDAT (Balazs 2026-11-17). Eddig minden nem-utkozo kudarcra "A telefon nem érte
+ * el a szervert" jott ki, akkor is, ha a szerver valaszolt. MI PIROSIT: egy valaszolt hiba halozatinak mondva; egy
+ * halozati hiba szerverhibanak; a mondat nem mondja ki, hogy magatol ujraprobalja.
+ */
+describe("a futás jelentése: hálózati vagy szerver-hiba", () => {
+  it("a szerver válaszolt, de hibával: a futtató megszámolja, a halózati hibát nem", async () => {
+    const valaszok: Record<
+      string,
+      { httpStatus: number | null; error: string | null }
+    > = {
+      h1: { httpStatus: null, error: "A szerver jelenleg nem érhető el." },
+      s1: { httpStatus: 500, error: "API request failed (500)." },
+      s2: { httpStatus: 401, error: "Unauthorized" },
+    };
+    const { d } = deps(
+      [sor("h1"), sor("s1"), sor("s2")],
+      (id) => valaszok[id]!,
+    );
+    const r = await drainQueue(d);
+    assert.equal(r.retried, 3);
+    assert.equal(r.answeredFailed, 2);
+  });
+
+  it("csak hálózati hiba: nem érte el a szervert, és magától újrapróbálja", () => {
+    const s = describeQueueRun({
+      attempted: 1,
+      done: 0,
+      retried: 1,
+      conflicted: 0,
+      stalled: 0,
+      unresolved: 0,
+      answeredFailed: 0,
+    });
+    assert.match(s ?? "", /nem érte el a szervert/);
+    assert.match(s ?? "", /magától újrapróbálja/);
+  });
+
+  it("a szerver hibát adott: NEM hálózati mondat", () => {
+    const s = describeQueueRun({
+      attempted: 1,
+      done: 0,
+      retried: 1,
+      conflicted: 0,
+      stalled: 0,
+      unresolved: 0,
+      answeredFailed: 1,
+    });
+    assert.match(s ?? "", /A szerver hibát adott/);
+    assert.doesNotMatch(s ?? "", /nem érte el/);
+  });
+});
+
+/**
+ * A KEZDOLAP MONDATA EGY KOR UTAN (barracuda, #2653). MI PIROSIT: egy ures kor torli a mondatot, mikozben a sor meg all;
+ * egy ures kor meghagyja a "nem ment fel" mondatot, mikozben a sor mar kiurult; egy valodi kor nem a sajat mondatat adja.
+ */
+describe("a kezdőlap mondata egy kör után", () => {
+  const ures = {
+    attempted: 0,
+    done: 0,
+    retried: 0,
+    conflicted: 0,
+    stalled: 0,
+    unresolved: 0,
+  };
+  const elozo =
+    "Egyetlen felvitel sem ment fel a 1 várakozóból. A telefon nem érte el a szervert.";
+  it("üres kör, a sor még vár: az előző mondat marad", () => {
+    assert.equal(nextQueueMessage(elozo, ures, 1), elozo);
+  });
+  it("üres kör, a sor közben kiürült: nincs mondat", () => {
+    assert.equal(nextQueueMessage(elozo, ures, 0), null);
+  });
+  it("valódi kör: a kör saját mondata", () => {
+    assert.equal(
+      nextQueueMessage(
+        elozo,
+        {
+          attempted: 1,
+          done: 1,
+          retried: 0,
+          conflicted: 0,
+          stalled: 0,
+          unresolved: 0,
+        },
+        0,
+      ),
+      "Minden várakozó felvitel felment (1).",
+    );
   });
 });
