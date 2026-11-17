@@ -238,6 +238,65 @@ export function priceFailureCounts(
 }
 
 /**
+ * A TÁROLT ÁR-MEGÁLLÁSOK, CSAK OLVASVA (task t-20261117-arstop-lista; acrobot 55208). A `recordPriceAttempt` minden elbukott terméknél a
+ * `metadata`-ba írja a `failedAt`-ot és az `okot` (`<cikkszám>: MEGÁLLT (<ok>) <részlet>`, több üzenet `; `-vel), siker után a metadata üres:
+ * ez adja az emberi munkalistát, amit a #2665 óta (az adat-állapot nem teszi FAILED-dé a kört) semmi nem mutatott meg. Nem ír, nem tisztít.
+ * A SZŰRÉS A KÓDBAN VAN, nem Prisma JSON-úttal: az helyi adatbázis nélkül nem mérhető.
+ */
+export interface StoredPriceStop {
+  productId: string;
+  failedAt: string;
+  /** a tárolt üzenetek egyenként (legfeljebb 300 karakter az egészből, ahogy az írás vágja) */
+  reasons: string[];
+  /** az üzenetek fajtái egyszer-egyszer (`priceFailureKind`); egy VÁGOTT utolsó üzenet, aminek a fajtája nem olvasható, `truncated` (nem `other`) */
+  kinds: string[];
+  /**
+   * A tárolt ok eléri a 300 karaktert, amire a `recordPriceAttempt` vág: az UTOLSÓ üzenet vége levágódhatott, és a `: <fajta>` végződés nélkül a fajtája
+   * nem olvasható (barracuda, #2666). Egy emberi adat-állapot így nem látszik futási hibának: a fajta `truncated`, és ez a jelző mondja ki.
+   */
+  reasonCut: boolean;
+}
+
+/** A `recordPriceAttempt` ennyi karakternél vágja a tárolt okot (`input.failure.slice(0, 300)`). */
+export const PRICE_REASON_STORED_LIMIT = 300;
+
+export async function storedPriceStops(
+  db: Pick<PriceSyncDatabase, "externalReference">,
+): Promise<StoredPriceStop[]> {
+  const rows = await db.externalReference.findMany({
+    where: { ...MEDUSA_PRICE_REFERENCE },
+    select: { entityId: true, lastSyncedAt: true, metadata: true },
+  });
+  const stops: StoredPriceStop[] = [];
+  for (const row of rows) {
+    const failedAt = failedAtOf(row.metadata);
+    if (!failedAt) continue;
+    const text = (row.metadata as Record<string, unknown>).reason;
+    const reasons =
+      typeof text === "string"
+        ? text.split("; ").filter((r) => r.trim() !== "")
+        : [];
+    const reasonCut =
+      typeof text === "string" && text.length >= PRICE_REASON_STORED_LIMIT;
+    const kinds = reasons.map((reason, index) => {
+      const kind = priceFailureKind(reason);
+      // only the LAST message can be the cut one; an unreadable kind there is `truncated`, not a run failure called `other`
+      return reasonCut && index === reasons.length - 1 && kind === "other"
+        ? "truncated"
+        : kind;
+    });
+    stops.push({
+      productId: row.entityId,
+      failedAt: failedAt.toISOString(),
+      reasons,
+      kinds: [...new Set(kinds)],
+      reasonCut,
+    });
+  }
+  return stops.sort((a, b) => b.failedAt.localeCompare(a.failedAt));
+}
+
+/**
  * A PRÓBÁLKOZÁS RÖGZÍTÉSE, a készlet mintájára. Sikernél a `lastSyncedAt` a kör
  * kezdete, és a kudarc-jel törlődik; kudarcnál a `lastSyncedAt` nem mozdul, a
  * `metadata.failedAt` és az ok kerül rá.

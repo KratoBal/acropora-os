@@ -9,6 +9,8 @@ import { MedusaCredentialProvider } from "./medusa-credential.provider.js";
 import { MedusaPriceDedupeController } from "./medusa-price-dedupe.controller.js";
 import { MedusaPriceDedupeService } from "./medusa-price-dedupe.service.js";
 import { MedusaPriceAuditController } from "./medusa-price-audit.controller.js";
+import { MedusaPriceStopsController } from "./medusa-price-stops.controller.js";
+import { MedusaPriceStopsService } from "./medusa-price-stops.service.js";
 import { MedusaPriceAuditService } from "./medusa-price-audit.service.js";
 import { MedusaPickupAdoptionController } from "./medusa-pickup-adoption.controller.js";
 import { MedusaPickupAdoptionService } from "./medusa-pickup-adoption.service.js";
@@ -40,6 +42,7 @@ import { MedusaInventoryScheduler } from "./medusa-inventory.scheduler.js";
     MedusaProjectionStatusController,
     MedusaPickupAdoptionController,
     MedusaPriceAuditController,
+    MedusaPriceStopsController,
     MedusaPriceDedupeController,
   ],
   providers: [
@@ -52,6 +55,7 @@ import { MedusaInventoryScheduler } from "./medusa-inventory.scheduler.js";
     MedusaInventoryScheduler,
     MedusaPickupAdoptionService,
     MedusaPriceAuditService,
+    MedusaPriceStopsService,
     MedusaPriceDedupeService,
   ],
   exports: [
