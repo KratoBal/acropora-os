@@ -328,10 +328,10 @@ export function TemplateAssetListEditor({
             ) : null}
           </div>
 
-          <div className="max-w-sm space-y-2">
+          <div className="max-w-md space-y-2">
             <PilotInput
               aria-label="Eszköz keresése"
-              placeholder="Egy eszköz hozzáadása szám vagy név szerint (legalább 2 karakter)…"
+              placeholder="Keresés számra vagy névre (legalább 2 karakter)…"
               value={search}
               onChange={setSearch}
             />

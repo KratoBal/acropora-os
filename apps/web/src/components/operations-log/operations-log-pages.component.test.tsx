@@ -365,6 +365,18 @@ describe("a sablon szerkesztője", () => {
     expect(screen.queryByText("V2197 · Másik szűrő")).toBeNull();
   });
 
+  it("a gyors keresés mezőjének szövege rövid, hogy 1440 px-en se vágódjon le (acrobot, 2026-11-17: a hosszú szöveg levágódott)", async () => {
+    api.get.mockResolvedValue(TEMPLATE);
+    render(<OperationsTemplateEditorPage templateId="t1" />);
+    const field = (await screen.findByLabelText(
+      "Eszköz keresése",
+    )) as HTMLInputElement;
+    expect(field.placeholder).toMatch(/^Keresés számra vagy névre/);
+    expect(field.placeholder.length).toBeLessThanOrEqual(50);
+    // a doboz a szélesebb max-w-md, nem a szűk max-w-sm
+    expect(field.closest(".max-w-md")).not.toBeNull();
+  });
+
   it("a gyors keresés csak az üzemben lévő eszközt kéri (az archiváltat a szerver mentéskor úgyis elutasítaná), és a találat a listára kerül", async () => {
     assets.list.mockResolvedValue({
       items: [{ id: "a9", assetNumber: "V2300", name: "Új szűrő" }],
