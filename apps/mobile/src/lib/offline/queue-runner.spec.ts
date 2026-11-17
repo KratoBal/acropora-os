@@ -5,6 +5,7 @@ import {
   describeQueueRun,
   describeUnresolvedRecordings,
   drainQueue,
+  nextQueueMessage,
 } from "./queue-runner";
 import type { SyncQueueRow } from "./sync-queue";
 
@@ -332,5 +333,45 @@ describe("a futás jelentése: hálózati vagy szerver-hiba", () => {
     });
     assert.match(s ?? "", /A szerver hibát adott/);
     assert.doesNotMatch(s ?? "", /nem érte el/);
+  });
+});
+
+/**
+ * A KEZDOLAP MONDATA EGY KOR UTAN (barracuda, #2653). MI PIROSIT: egy ures kor torli a mondatot, mikozben a sor meg all;
+ * egy ures kor meghagyja a "nem ment fel" mondatot, mikozben a sor mar kiurult; egy valodi kor nem a sajat mondatat adja.
+ */
+describe("a kezdőlap mondata egy kör után", () => {
+  const ures = {
+    attempted: 0,
+    done: 0,
+    retried: 0,
+    conflicted: 0,
+    stalled: 0,
+    unresolved: 0,
+  };
+  const elozo =
+    "Egyetlen felvitel sem ment fel a 1 várakozóból. A telefon nem érte el a szervert.";
+  it("üres kör, a sor még vár: az előző mondat marad", () => {
+    assert.equal(nextQueueMessage(elozo, ures, 1), elozo);
+  });
+  it("üres kör, a sor közben kiürült: nincs mondat", () => {
+    assert.equal(nextQueueMessage(elozo, ures, 0), null);
+  });
+  it("valódi kör: a kör saját mondata", () => {
+    assert.equal(
+      nextQueueMessage(
+        elozo,
+        {
+          attempted: 1,
+          done: 1,
+          retried: 0,
+          conflicted: 0,
+          stalled: 0,
+          unresolved: 0,
+        },
+        0,
+      ),
+      "Minden várakozó felvitel felment (1).",
+    );
   });
 });
