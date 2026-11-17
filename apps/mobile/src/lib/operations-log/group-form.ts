@@ -56,9 +56,9 @@ export function perAssetFields(
  * az azonos kategóriájú eszközöknél ugyanaz a sablon). Az első eszköz sorrendjében, az első eszköz példányával (a mezők a közös azonosítón
  * azonosak). Üres eszköz-lista vagy egy sablon nélküli eszköz: nincs közös sablon.
  */
-export function commonTemplates(
-  templateLists: readonly (readonly OperationsTemplate[])[],
-): OperationsTemplate[] {
+export function commonTemplates<T extends { id: string }>(
+  templateLists: readonly (readonly T[])[],
+): T[] {
   const [first, ...rest] = templateLists;
   if (!first) return [];
   return first.filter((template) =>
