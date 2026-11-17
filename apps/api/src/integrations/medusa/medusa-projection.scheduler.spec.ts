@@ -3334,3 +3334,114 @@ describe("a health az utolso sikertelen kor pillanatkepet megorzi (lastFailedRou
     );
   });
 });
+
+/*
+  AZ ÁR-FÉL ADAT-MEGÁLLÁSAI NEM BUKTATJÁK A KÖRT (t-20261117-vetito-ar-megallas, kártya 7ee90727, acrobot 54976 és 54985).
+  A stage-en 2026-11-17 17:44Z a kör FAILED volt `priceFailures {"price-not-whole-forint": 1, "own-price-missing": 2}` miatt:
+  három termék, amelynél egy ember dönt az adatról. ADR-017 szerint a FAILED a valódi futási hibát jelentse. MI FORDÍTJA PIROSRA:
+  egy adat-megállás FAILED-e teszi a kört; egy futási hiba (bolt olvasás/írás, ismeretlen fajta, termék nélküli bukás) APPLIED marad;
+  a számok eltűnnek a `priceFailures`-ből; a nyers `pricingExit` eltűnik.
+*/
+describe("az ár-félnek az emberi adat-megállásai nem teszik FAILED-dé a kört", () => {
+  const ADAT_ALLAPOTOK = [
+    "price-not-whole-forint",
+    "own-price-missing",
+    "mirror-price-missing",
+    "mirror-row-missing",
+    "authority-unknown",
+    "price-negative",
+    "ambiguous-price",
+    "foreign-currency-price-present",
+    "ambiguous-variant",
+  ];
+  const FUTASI_HIBAK = [
+    "medusa-read-failed",
+    "medusa-write-failed",
+    "write-not-visible",
+    "prices-not-returned",
+    "variant-lookup-truncated",
+    "tax-inclusive-not-set",
+    "no-product-link",
+    "variant-not-found",
+    "variant-identity-chain-broken",
+    "valami-uj-fajta",
+  ];
+
+  const kor = (ar: ProjectionRunner) => {
+    const { db } = adatbazis([termek()], [], [
+      { entityId: "prod-1", externalId: "prod_m1" },
+    ] as never);
+    return new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato().run,
+      runPricing: ar,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => MOST,
+    });
+  };
+  const megall =
+    (fajta: string): ProjectionRunner =>
+    async (_ids, out) => {
+      out.failed?.("prod-1", `SKU-1: MEGÁLLT (${fajta}) részlet`);
+      return 1;
+    };
+
+  for (const fajta of ADAT_ALLAPOTOK)
+    it(`${fajta}: emberi adat-állapot, a kör APPLIED, a szám látszik`, async () => {
+      const scheduler = kor(megall(fajta));
+      assert.equal(await scheduler.runOnce(), "APPLIED");
+      const allapot = scheduler.allapot();
+      assert.deepEqual(allapot.lastRound!.priceFailures, { [fajta]: 1 });
+      assert.equal(allapot.lastRound!.pricingExit, 1);
+      assert.equal(allapot.lastFailedRound, null);
+    });
+
+  for (const fajta of FUTASI_HIBAK)
+    it(`${fajta}: futási hiba, a kör FAILED`, async () => {
+      const scheduler = kor(megall(fajta));
+      assert.equal(await scheduler.runOnce(), "FAILED");
+      assert.deepEqual(scheduler.allapot().lastRound!.priceFailures, {
+        [fajta]: 1,
+      });
+      assert.equal(scheduler.allapot().lastFailedRound!.outcome, "FAILED");
+    });
+
+  it("egy adat-megállás és egy futási hiba együtt: FAILED (a futási hiba nem bújik el)", async () => {
+    const scheduler = kor(async (_ids, out) => {
+      out.failed?.("prod-1", "SKU-1: MEGÁLLT (own-price-missing) üres");
+      out.failed?.("prod-1", "SKU-2: MEGÁLLT (medusa-write-failed) 500");
+      return 1;
+    });
+    assert.equal(await scheduler.runOnce(), "FAILED");
+  });
+
+  it("a termék nélküli bukás (a bolt hitelesítése) FAILED marad", async () => {
+    const scheduler = kor(async () => 1);
+    assert.equal(await scheduler.runOnce(), "FAILED");
+    assert.deepEqual(scheduler.allapot().lastRound!.priceFailures, {
+      "run-failed": 1,
+    });
+  });
+
+  it("a kivétellel leálló ár-futás FAILED marad", async () => {
+    const scheduler = kor(async () => {
+      throw new Error("váratlan");
+    });
+    assert.equal(await scheduler.runOnce(), "FAILED");
+    assert.deepEqual(scheduler.allapot().lastRound!.priceFailures, {
+      "run-threw": 1,
+    });
+  });
+
+  it("egy ismeretlen alakú üzenet (other) FAILED: a tévedés iránya a hangos", async () => {
+    const scheduler = kor(async (_ids, out) => {
+      out.failed?.("prod-1", "valami egészen más szöveg");
+      return 1;
+    });
+    assert.equal(await scheduler.runOnce(), "FAILED");
+    assert.deepEqual(scheduler.allapot().lastRound!.priceFailures, {
+      other: 1,
+    });
+  });
+});

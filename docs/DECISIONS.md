@@ -930,6 +930,19 @@ termékre is 0-val lép ki, a MEGÁLLT sor (és benne a `--forget-link` útmutat
 (`if (stoppedProductIsRunFailure(...)) failed += 1`) kód-olvasat, nem unit-tesztelt: a `runProjectionCli` teljes láncát (leképezés,
 Medusa-kliens, 404) helyben nem lehet kis dublákkal futtatni; a predikátum tesztelt.
 
+**KIEGÉSZÍTÉS (2026-11-17, acrobot 54976 és 54985, kártya 7ee90727).** A stage-en 17:44Z-kor a kör az ÁR-FÉL miatt volt FAILED
+(`priceFailures {"price-not-whole-forint": 1, "own-price-missing": 2}`, `pricingExit 1`, `orphanedLinks 1`, `projectionExit null`): három
+termék, amelynél egy ember dönt az adatról. Ugyanaz a minta, mint az árvánál, és a pontosítás 11-16-án már mért egyet (`ambiguous-price`).
+**Döntés.** Az ár-megállások EMBERI ADAT-ÁLLAPOTOT jelentő fajtái nem teszik FAILED-dé a kört: `price-not-whole-forint`,
+`own-price-missing`, `mirror-price-missing`, `mirror-row-missing`, `authority-unknown`, `price-negative`, `ambiguous-price`,
+`foreign-currency-price-present`, `ambiguous-variant` (`priceFailureIsRunFailure`). A megállás marad (az ár nem megy ki, a termék újra
+próbálkozik), a fajta és a szám a `lastRound.priceFailures`-ben látszik, a nyers kód a `pricingExit`-ben. **A lista zárt, és a tévedés
+iránya a hangos:** minden más FAILED-dé teszi a kört, így a bolt olvasása/írása, az `other`, a `run-failed`, a `run-threw`, és a bolti oldali
+variáns-állapotok (`variant-not-found`, `variant-identity-chain-broken`, acrobot 54985: a bolt és az OS elcsúszását jelezhetik).
+**Amit nem tettünk:** a kézi `medusa-pricing` parancs kilépési kódja nem változott (egy megállt termékre továbbra is 1). **Mért határ:**
+a besorolás a kudarc-üzenetek fajtájára épül (`priceFailureKind`); egy új megállási fajta, amit a lista nem ismer, FAILED marad, amíg ide
+fel nem veszik.
+
 ## ADR-018 – Díjbekérő, előleg és végszámla az ajánlat mérföldköveivel: mikor fizetett az előleg, mi kerül a végszámlára, mi törölhető
 
 **Dátum:** 2026-11-16 (PR-ek: #2638, #2639, #2640, #2641, #2642; kártyák: 00926d89, 2650d371, 6a75f15c, d0f56ac0)

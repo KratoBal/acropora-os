@@ -198,6 +198,32 @@ export function priceFailureKind(reason: string): string {
   return ok ? ok[1]! : "other";
 }
 
+/**
+ * AZ ÁR-MEGÁLLÁSOK, AMIK EMBERI ADAT-ÁLLAPOTOT JELENTENEK, ÉS NEM TESZIK FAILED-DÉ A KÖRT (t-20261117-vetito-ar-megallas, kártya 7ee90727,
+ * acrobot 54976 és 54985; ADR-017 szelleme). A megállás szándékos és marad: a termék ára nem megy ki, a fajta a `priceFailures`-ben látszik,
+ * és a termék a következő körben újra próbálkozik. A KÖR FAILED-je viszont a valódi futási hibát jelentse: egy ilyen állapot, amíg az adatot
+ * egy ember nem javítja, minden körben ugyanaz, és elfedné a valódi hibát (2026-11-17 17:44Z a stage-en három ilyen termék volt, a kör FAILED).
+ *
+ * A LISTA ZÁRT, ÉS A TÉVEDÉS IRÁNYA A HANGOS: ami nincs itt (új fajta, `other`, `run-failed`, `run-threw`, a bolt olvasása/írása, a bolti
+ * oldali variáns-állapotok: `variant-not-found`, `variant-identity-chain-broken`) futási hibának számít, és FAILED-dé teszi a kört.
+ */
+const PRICE_DATA_STOPS: ReadonlySet<string> = new Set([
+  "price-not-whole-forint",
+  "own-price-missing",
+  "mirror-price-missing",
+  "mirror-row-missing",
+  "authority-unknown",
+  "price-negative",
+  "ambiguous-price",
+  "foreign-currency-price-present",
+  "ambiguous-variant",
+]);
+
+/** Egy ár-kudarc fajtája (lásd `priceFailureKind`) futási hiba-e: minden, ami nem emberi adat-állapot. */
+export function priceFailureIsRunFailure(kind: string): boolean {
+  return !PRICE_DATA_STOPS.has(kind);
+}
+
 /** A kör ár-kudarcai fajtánként: minden üzenet egyszer számít (egy termék több változata többször). */
 export function priceFailureCounts(
   failures: ReadonlyMap<string, readonly string[]>,

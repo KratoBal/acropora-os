@@ -19,6 +19,8 @@ import { runPricingCli } from "./medusa-pricing.cli.js";
 import {
   addPriceConflictShape,
   priceFailureCounts,
+  priceFailureIsRunFailure,
+  priceFailureKind,
   priceRetryProducts,
   recordPriceAttempt,
   type PriceConflictShape,
@@ -937,7 +939,17 @@ export class MedusaProjectionScheduler
         startedAt: kezdet,
         failure: kudarc.get(id)?.join("; ") ?? null,
       });
-    return kod === 0 && arKod === 0 ? "APPLIED" : "FAILED";
+    /*
+      AZ ÁR-FÉL CSAK FUTÁSI HIBÁVAL BUKTATJA A KÖRT (t-20261117-vetito-ar-megallas). Az `arKod` nem nulla, ha BÁRMELY termék megállt,
+      az emberi adat-állapotok (`price-not-whole-forint`, `own-price-missing`, ...) viszont nem futási hibák: a nyers kód a
+      `pricingExit`-ben marad, a fajták a `priceFailures`-ben, de a kör kimenetét csak a futási hiba rontja el.
+    */
+    const arFutasiHiba =
+      arKod !== 0 &&
+      [...kudarc.values()].some((okok) =>
+        okok.some((ok) => priceFailureIsRunFailure(priceFailureKind(ok))),
+      );
+    return kod === 0 && !arFutasiHiba ? "APPLIED" : "FAILED";
   }
 
   /**
