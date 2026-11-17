@@ -314,15 +314,15 @@ function RootNavigator() {
         name="operations-log/index"
         options={{ title: "Üzemeltetési napló" }}
       />
-      {/* Üzemeltetési napló csoportos rögzítés: több azonos sablonú eszköz egy űrlapon (kártya 1a35e8f3); az eszközlistáról nyílik. */}
+      {/* Üzemeltetési napló csoportos rögzítés: több azonos sablonú eszköz egy űrlapon (kártya 1a35e8f3); az eszközlistáról nyílik. A két rögzítő képernyő a SAJÁT fejlécét (Mégse / cím / Kész) rajzolja, ezért a Stack fejléce kikapcsolt: kettős cím volt (task t-20261117-csoportos-kijeloles). */}
       <Stack.Screen
         name="operations-log/group"
-        options={{ title: "Csoportos rögzítés" }}
+        options={{ title: "Csoportos rögzítés", headerShown: false }}
       />
       {/* Üzemeltetési napló: bejegyzés rögzítése (task os-uzemeltetesi-naplo, S2c); az eszköz lapjáról és a kezdőképernyőről nyílik. */}
       <Stack.Screen
         name="operations-log/record"
-        options={{ title: "Üzemeltetési napló" }}
+        options={{ title: "Üzemeltetési napló", headerShown: false }}
       />
     </Stack>
   );

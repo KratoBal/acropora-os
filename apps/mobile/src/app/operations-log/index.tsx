@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -29,6 +29,11 @@ import {
   toggleGroupSelection,
 } from "@/lib/operations-log/start-picker";
 import { GROUP_MAX_ASSETS } from "@/lib/operations-log/group-form";
+import {
+  groupRowStates,
+  groupSelectionReady,
+  type TemplateListState,
+} from "@/lib/operations-log/group-selection";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 
@@ -73,6 +78,45 @@ export default function OperationsLogStartScreen() {
     queryKey: ["operations-templates", params.assetId],
     queryFn: () => loadOperationsTemplates(params.assetId!),
     enabled: enabled && step === "templates",
+  });
+
+  /*
+    A CSOPORTOS KIJELÖLÉS SZŰKÍTÉSE (Balázs, 2026-11-17; `group-selection.ts`): az ELSŐ kijelölés után a megnyitott helyszín eszközeinek
+    sablon-listája kell, eszközönként egy hívás, UGYANAZZAL a kulccsal és betöltővel, mint a csoportos képernyőn és az eszköz lapján (a
+    lista ott nem tölt újra, térerő nélkül a mentett másolatból jön). Addig (nincs kijelölés) egyetlen plusz hívás sincs.
+  */
+  const deviceAssets =
+    step === "devices" && catalogue.data
+      ? assetsInLocation(
+          catalogue.data.assets,
+          params.partnerId!,
+          params.locationId!,
+        )
+      : [];
+  const deviceTemplates = useQueries({
+    queries: deviceAssets.map((asset) => ({
+      queryKey: ["operations-templates", asset.id],
+      queryFn: () => loadOperationsTemplates(asset.id),
+      enabled: enabled && selected.length > 0,
+    })),
+  });
+  const templateStates: Record<string, TemplateListState> = {};
+  deviceAssets.forEach((asset, index) => {
+    const query = deviceTemplates[index];
+    templateStates[asset.id] = query?.data
+      ? query.data.items
+      : query?.isError
+        ? "failed"
+        : undefined;
+  });
+  const rowStates = groupRowStates({
+    assetIds: deviceAssets.map((asset) => asset.id),
+    selected,
+    templates: templateStates,
+  });
+  const groupReady = groupSelectionReady({
+    selected,
+    templates: templateStates,
   });
 
   const decision =
@@ -243,6 +287,16 @@ export default function OperationsLogStartScreen() {
           const checked = row.selectId
             ? selected.includes(row.selectId)
             : false;
+          const rowState = row.selectId ? rowStates[row.selectId] : undefined;
+          // nem jelölhető: másik sablonú, még töltődő vagy be nem töltött eszköz (a kijelölt mindig kivehető)
+          const checkDisabled =
+            rowState?.kind === "blocked" || rowState?.kind === "loading";
+          const blockedText =
+            rowState?.kind === "blocked"
+              ? rowState.reason
+              : rowState?.kind === "loading"
+                ? "Sablon ellenőrzése…"
+                : null;
           return (
             <View key={row.key} style={styles.rowLine}>
               <Pressable
@@ -260,12 +314,16 @@ export default function OperationsLogStartScreen() {
                   {row.meta ? (
                     <Text style={styles.rowMeta}>{row.meta}</Text>
                   ) : null}
+                  {blockedText ? (
+                    <Text style={styles.rowBlocked}>{blockedText}</Text>
+                  ) : null}
                 </View>
               </Pressable>
               {row.selectId ? (
                 <Pressable
                   accessibilityRole="checkbox"
-                  accessibilityState={{ checked }}
+                  accessibilityState={{ checked, disabled: checkDisabled }}
+                  disabled={checkDisabled}
                   accessibilityLabel={`${row.title}: kijelölés a csoportos rögzítéshez`}
                   onPress={() =>
                     setSelected((prev) =>
@@ -276,7 +334,11 @@ export default function OperationsLogStartScreen() {
                       ),
                     )
                   }
-                  style={[styles.check, checked && styles.checkOn]}
+                  style={[
+                    styles.check,
+                    checked && styles.checkOn,
+                    checkDisabled && styles.checkOff,
+                  ]}
                 >
                   <Text
                     style={[styles.checkText, checked && styles.checkTextOn]}
@@ -291,6 +353,8 @@ export default function OperationsLogStartScreen() {
         {step === "devices" && groupButtonLabel(selected.length) ? (
           <Pressable
             accessibilityRole="button"
+            accessibilityState={{ disabled: !groupReady }}
+            disabled={!groupReady}
             onPress={() =>
               router.push({
                 pathname: "/operations-log/group",
@@ -304,7 +368,7 @@ export default function OperationsLogStartScreen() {
                 },
               })
             }
-            style={styles.groupButton}
+            style={[styles.groupButton, !groupReady && styles.groupButtonOff]}
           >
             <Text style={styles.groupButtonText}>
               {groupButtonLabel(selected.length)}
@@ -353,6 +417,7 @@ function createStyles(t: ThemeTokens) {
       justifyContent: "center",
     },
     checkOn: { backgroundColor: t.accent, borderColor: t.accent },
+    checkOff: { opacity: 0.35 },
     checkText: { color: t.textPrimary, fontSize: 18, fontWeight: "900" },
     checkTextOn: { color: t.background },
     groupButton: {
@@ -361,6 +426,7 @@ function createStyles(t: ThemeTokens) {
       paddingVertical: 14,
       alignItems: "center",
     },
+    groupButtonOff: { opacity: 0.4 },
     groupButtonText: { color: t.background, fontSize: 15, fontWeight: "800" },
     groupHint: { color: t.textMuted, fontSize: 12 },
     row: {
@@ -373,6 +439,7 @@ function createStyles(t: ThemeTokens) {
     pressed: { opacity: 0.75 },
     rowTitle: { color: t.textPrimary, fontSize: 16, fontWeight: "800" },
     rowMeta: { color: t.textMuted, fontSize: 12, marginTop: 3 },
+    rowBlocked: { color: t.textMuted, fontSize: 12, marginTop: 3 },
     empty: { color: t.textSecondary },
     error: {
       color: t.danger,
