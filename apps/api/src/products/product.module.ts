@@ -71,6 +71,11 @@ import {
   prismaRedirectTransactor,
 } from "./redirect/url-redirect.service.js";
 import { WebshopSlugController } from "./slug/webshop-slug.controller.js";
+import { WebshopSlugPlanController } from "./slug/webshop-slug-plan.controller.js";
+import {
+  SLUG_PLAN_DB,
+  WebshopSlugPlanService,
+} from "./slug/webshop-slug-plan.service.js";
 import { PrismaWebshopSlugStore } from "./slug/webshop-slug.repository.js";
 import {
   WEBSHOP_SLUG_STORE,
@@ -102,6 +107,7 @@ import { CustomerCandidateSource } from "../aquariums/recommendation/customer-ca
     AttributeController,
     ProductAttributeSetController,
     WebshopSlugController,
+    WebshopSlugPlanController,
     UrlRedirectController,
     CategoryRedirectBackfillController,
     ProductRedirectBackfillController,
@@ -143,6 +149,8 @@ import { CustomerCandidateSource } from "../aquariums/recommendation/customer-ca
     { provide: CATEGORY_BACKFILL_DB, useValue: prisma },
     ProductRedirectBackfillService,
     { provide: PRODUCT_BACKFILL_DB, useValue: prisma },
+    { provide: SLUG_PLAN_DB, useValue: prisma },
+    WebshopSlugPlanService,
     RedirectUndoService,
     { provide: REDIRECT_UNDO_DB, useValue: prisma },
   ],

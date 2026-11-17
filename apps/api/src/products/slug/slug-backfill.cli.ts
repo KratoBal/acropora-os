@@ -2,7 +2,8 @@ import { pathToFileURL } from "node:url";
 
 import { prisma } from "@acropora/database";
 
-import { describeSlugBackfill, planSlugBackfill } from "./slug-backfill.js";
+import { describeSlugBackfill } from "./slug-backfill.js";
+import { loadSlugBackfillPlan } from "./slug-backfill.load.js";
 
 /**
  * A SLUG-BACKFILL PARANCSA (SEO P0 PR 5). Alapból SZÁRAZFUTÁS: kiírja a tervet, és
@@ -22,38 +23,7 @@ export async function main(
     out.stderr(`Ismeretlen kapcsolo: ${ismeretlen.join(" ")} (csak --apply)\n`);
     return 1;
   }
-  const [termekek, regi] = await Promise.all([
-    db.product.findMany({
-      orderBy: { id: "asc" },
-      select: {
-        id: true,
-        name: true,
-        variants: {
-          where: { isActive: true },
-          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-          take: 1,
-          select: { sku: true },
-        },
-        channelListings: {
-          where: { channel: "WEBSHOP" },
-          select: { slug: true },
-        },
-      },
-    }),
-    db.slugHistory.findMany({
-      where: { entityType: "PRODUCT" },
-      select: { slug: true },
-    }),
-  ]);
-  const plan = planSlugBackfill(
-    termekek.map((t) => ({
-      id: t.id,
-      name: t.name,
-      primarySku: t.variants[0]?.sku ?? null,
-      slug: t.channelListings[0]?.slug ?? null,
-    })),
-    regi.map((r) => r.slug),
-  );
+  const { plan } = await loadSlugBackfillPlan(db);
   out.stdout(describeSlugBackfill(plan));
   if (!args.includes("--apply")) {
     out.stdout("SZARAZFUTAS: semmi nem irodott. Alkalmazas: --apply\n");
