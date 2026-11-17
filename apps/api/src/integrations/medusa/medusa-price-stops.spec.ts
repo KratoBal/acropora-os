@@ -107,8 +107,24 @@ describe("storedPriceStops reads what recordPriceAttempt writes", () => {
           "SKU-2: MEGÁLLT (price-not-whole-forint) 12,5",
         ],
         kinds: ["own-price-missing", "price-not-whole-forint"],
+        reasonCut: false,
       },
     ]);
+  });
+
+  it("a stored reason cut at 300 characters marks the cut and reads the unreadable last kind as truncated, not as a run failure called other", async () => {
+    const { db } = tableWrittenBy();
+    // the first message is 288 characters, the separator 2: the 300-character cut lands inside the SECOND message ("SKU-2: MEG")
+    const first = "SKU-1: MEGÁLLT (own-price-missing) " + "x".repeat(253);
+    await recordPriceAttempt(db, {
+      productId: "cut",
+      medusaProductId: "m",
+      startedAt: at("2026-11-17T17:44:00Z"),
+      failure: `${first}; SKU-2: MEGÁLLT (price-not-whole-forint) y`,
+    });
+    const [stop] = await storedPriceStops(db);
+    assert.equal(stop!.reasonCut, true);
+    assert.deepEqual(stop!.kinds, ["own-price-missing", "truncated"]);
   });
 
   it("lists a kind once when several variants of one product stopped for the same reason", async () => {
@@ -261,6 +277,42 @@ describe("the list the endpoint serves", () => {
       { kind: "medusa-write-failed", needsPerson: false },
     ]);
     assert.equal(view.stops[0]!.name, "Emberi");
+  });
+
+  it("asks for the products of the shown page only: the in list is at most the limit long, however many stops are stored, and the person's work is in it", async () => {
+    const asked: number[] = [];
+    const stored = Array.from({ length: 1200 }, (_, i) =>
+      stopRow(
+        `p${i}`,
+        i === 1199
+          ? "H: MEGÁLLT (own-price-missing) y"
+          : "R: MEGÁLLT (medusa-write-failed) z",
+        `2026-11-17T10:${String(i % 60).padStart(2, "0")}:00.000Z`,
+      ),
+    );
+    const db: PriceStopsDatabase = {
+      externalReference: {
+        findMany: async () => stored,
+        upsert: async () => ({}),
+      },
+      product: {
+        findMany: async (args: unknown) => {
+          const ids = (args as { where: { id: { in: string[] } } }).where.id.in;
+          asked.push(ids.length);
+          assert.ok(
+            ids.includes("p1199"),
+            "the one human data state is among the asked ids",
+          );
+          return [];
+        },
+      },
+    };
+    const view = await new MedusaPriceStopsService(db).list();
+    assert.deepEqual(asked, [PRICE_STOPS_LIMIT]);
+    assert.deepEqual(
+      [view.total, view.needingPerson, view.truncated, view.stops.length],
+      [1200, 1, true, PRICE_STOPS_LIMIT],
+    );
   });
 
   it("a reference whose product is gone is listed with a null sku and name, not dropped and not an error", async () => {

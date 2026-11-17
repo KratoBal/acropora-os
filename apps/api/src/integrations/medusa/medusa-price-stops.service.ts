@@ -32,6 +32,8 @@ export interface PriceStopView {
   /** one entry per failure kind: `needsPerson` is true for the human data states (the round is not failed for them), false for a run failure that retries by itself */
   kinds: { kind: string; needsPerson: boolean }[];
   reasons: string[];
+  /** the stored reason reached the write's 300-character cut: the last message may be cut and its kind then reads `truncated` */
+  reasonCut: boolean;
 }
 
 export interface PriceStopsView {
@@ -63,36 +65,39 @@ export class MedusaPriceStopsService {
 
   async list(): Promise<PriceStopsView> {
     const stored = await storedPriceStops(this.db);
-    const products = stored.length
+    // THE KINDS ARE KNOWN WITHOUT THE PRODUCT ROW, so the order (a person's work first, then the newest) and the cut come BEFORE the product query: the
+    // `in` list is at most `PRICE_STOPS_LIMIT` long, however many references stopped (a `run-threw` round writes a failure for every priceable product;
+    // Prisma sends every element as its own parameter and a query over 32767 fails, measured on #2019; barracuda, #2666)
+    const needsPerson = (kinds: string[]) =>
+      kinds.some((kind) => !priceFailureIsRunFailure(kind));
+    // `storedPriceStops` sorts newest first and this sort is stable
+    const ordered = [...stored].sort(
+      (a, b) => Number(needsPerson(b.kinds)) - Number(needsPerson(a.kinds)),
+    );
+    const page = ordered.slice(0, PRICE_STOPS_LIMIT);
+    const products = page.length
       ? await this.db.product.findMany({
-          where: { id: { in: stored.map((stop) => stop.productId) } },
+          where: { id: { in: page.map((stop) => stop.productId) } },
           select: { id: true, sku: true, name: true },
         })
       : [];
     const byId = new Map(products.map((product) => [product.id, product]));
-    const views: PriceStopView[] = stored.map((stop) => ({
-      productId: stop.productId,
-      sku: byId.get(stop.productId)?.sku ?? null,
-      name: byId.get(stop.productId)?.name ?? null,
-      failedAt: stop.failedAt,
-      kinds: stop.kinds.map((kind) => ({
-        kind,
-        needsPerson: !priceFailureIsRunFailure(kind),
-      })),
-      reasons: stop.reasons,
-    }));
-    // a person's work first, then the newest (`storedPriceStops` already sorts newest first and the sort is stable)
-    views.sort(
-      (a, b) =>
-        Number(b.kinds.some((k) => k.needsPerson)) -
-        Number(a.kinds.some((k) => k.needsPerson)),
-    );
     return {
-      total: views.length,
-      needingPerson: views.filter((v) => v.kinds.some((k) => k.needsPerson))
-        .length,
-      truncated: views.length > PRICE_STOPS_LIMIT,
-      stops: views.slice(0, PRICE_STOPS_LIMIT),
+      total: stored.length,
+      needingPerson: stored.filter((stop) => needsPerson(stop.kinds)).length,
+      truncated: stored.length > PRICE_STOPS_LIMIT,
+      stops: page.map((stop) => ({
+        productId: stop.productId,
+        sku: byId.get(stop.productId)?.sku ?? null,
+        name: byId.get(stop.productId)?.name ?? null,
+        failedAt: stop.failedAt,
+        kinds: stop.kinds.map((kind) => ({
+          kind,
+          needsPerson: !priceFailureIsRunFailure(kind),
+        })),
+        reasons: stop.reasons,
+        reasonCut: stop.reasonCut,
+      })),
     };
   }
 }

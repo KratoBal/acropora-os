@@ -248,9 +248,17 @@ export interface StoredPriceStop {
   failedAt: string;
   /** a tárolt üzenetek egyenként (legfeljebb 300 karakter az egészből, ahogy az írás vágja) */
   reasons: string[];
-  /** az üzenetek fajtái egyszer-egyszer (`priceFailureKind`) */
+  /** az üzenetek fajtái egyszer-egyszer (`priceFailureKind`); egy VÁGOTT utolsó üzenet, aminek a fajtája nem olvasható, `truncated` (nem `other`) */
   kinds: string[];
+  /**
+   * A tárolt ok eléri a 300 karaktert, amire a `recordPriceAttempt` vág: az UTOLSÓ üzenet vége levágódhatott, és a `: <fajta>` végződés nélkül a fajtája
+   * nem olvasható (barracuda, #2666). Egy emberi adat-állapot így nem látszik futási hibának: a fajta `truncated`, és ez a jelző mondja ki.
+   */
+  reasonCut: boolean;
 }
+
+/** A `recordPriceAttempt` ennyi karakternél vágja a tárolt okot (`input.failure.slice(0, 300)`). */
+export const PRICE_REASON_STORED_LIMIT = 300;
 
 export async function storedPriceStops(
   db: Pick<PriceSyncDatabase, "externalReference">,
@@ -268,11 +276,21 @@ export async function storedPriceStops(
       typeof text === "string"
         ? text.split("; ").filter((r) => r.trim() !== "")
         : [];
+    const reasonCut =
+      typeof text === "string" && text.length >= PRICE_REASON_STORED_LIMIT;
+    const kinds = reasons.map((reason, index) => {
+      const kind = priceFailureKind(reason);
+      // only the LAST message can be the cut one; an unreadable kind there is `truncated`, not a run failure called `other`
+      return reasonCut && index === reasons.length - 1 && kind === "other"
+        ? "truncated"
+        : kind;
+    });
     stops.push({
       productId: row.entityId,
       failedAt: failedAt.toISOString(),
       reasons,
-      kinds: [...new Set(reasons.map(priceFailureKind))],
+      kinds: [...new Set(kinds)],
+      reasonCut,
     });
   }
   return stops.sort((a, b) => b.failedAt.localeCompare(a.failedAt));
