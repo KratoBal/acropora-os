@@ -365,6 +365,37 @@ describe("a sablon szerkesztője", () => {
     expect(screen.queryByText("V2197 · Másik szűrő")).toBeNull();
   });
 
+  it("a gyors keresés mezőjének szövege rövid, hogy 1440 px-en se vágódjon le (acrobot, 2026-11-17: a hosszú szöveg levágódott)", async () => {
+    api.get.mockResolvedValue(TEMPLATE);
+    render(<OperationsTemplateEditorPage templateId="t1" />);
+    const field = (await screen.findByLabelText(
+      "Eszköz keresése",
+    )) as HTMLInputElement;
+    expect(field.placeholder).toMatch(/^Keresés számra vagy névre/);
+    expect(field.placeholder.length).toBeLessThanOrEqual(50);
+    // a doboz a szélesebb max-w-md, nem a szűk max-w-sm
+    expect(field.closest(".max-w-md")).not.toBeNull();
+  });
+
+  it("a gyors keresés csak az üzemben lévő eszközt kéri (az archiváltat a szerver mentéskor úgyis elutasítaná), és a találat a listára kerül", async () => {
+    assets.list.mockResolvedValue({
+      items: [{ id: "a9", assetNumber: "V2300", name: "Új szűrő" }],
+      pagination: { page: 1, pageSize: 20, totalItems: 1, totalPages: 1 },
+    });
+    api.get.mockResolvedValue(TEMPLATE);
+    render(<OperationsTemplateEditorPage templateId="t1" />);
+    fireEvent.change(await screen.findByLabelText("Eszköz keresése"), {
+      target: { value: "V23" },
+    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: "V2300 · Új szűrő" }),
+    );
+    expect(await screen.findByText("A sablon eszközei (2)")).toBeTruthy();
+    const query = assets.list.mock.calls.at(-1)![1] as URLSearchParams;
+    expect(query.get("search")).toBe("V23");
+    expect(query.get("status")).toBe("IN_PLACE");
+  });
+
   it("egy eszköz eltávolítható a listából, és az utolsó eltávolítása után a mentés tiltott (cél nélkül nem menthető)", async () => {
     api.get.mockResolvedValue(TEMPLATE);
     render(<OperationsTemplateEditorPage templateId="t1" />);

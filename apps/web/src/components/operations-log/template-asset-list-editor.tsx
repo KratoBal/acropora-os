@@ -135,7 +135,12 @@ export function TemplateAssetListEditor({
       assetsApi
         .list(
           token,
-          new URLSearchParams({ search: needle, pageSize: "20" }),
+          // csak az üzemben lévő eszközt kínáljuk (az archivált eszközt a szerver mentéskor elutasítaná: felesleges kör)
+          new URLSearchParams({
+            search: needle,
+            pageSize: "20",
+            status: "IN_PLACE",
+          }),
           controller.signal,
         )
         .then((response) => setFound(response.items))
@@ -323,10 +328,10 @@ export function TemplateAssetListEditor({
             ) : null}
           </div>
 
-          <div className="max-w-sm space-y-2">
+          <div className="max-w-md space-y-2">
             <PilotInput
               aria-label="Eszköz keresése"
-              placeholder="Egy eszköz hozzáadása szám vagy név szerint (legalább 2 karakter)…"
+              placeholder="Keresés számra vagy névre (legalább 2 karakter)…"
               value={search}
               onChange={setSearch}
             />

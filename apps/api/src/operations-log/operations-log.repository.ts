@@ -1,7 +1,8 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { prisma, type Prisma } from "@acropora/database";
 import { assetOwnerScopeWhere } from "../service-assets/service-assets.types.js";
 import { buildUnitPaths } from "../service-assets/unit-path.js";
+import { targetOfRow } from "./template-target.js";
 import type {
   OperationsMeterRole,
   OperationsTaskFieldDto,
@@ -65,7 +66,15 @@ export interface OperationsTaskTemplateWrite {
 /** A mezőt módosította-e közben más: a betöltött `updatedAt` már nem egyezik (409). */
 export class OperationsTemplateConflictError extends Error {}
 
+const templateLog = new Logger("OperationsTemplates");
+
 function toDto(row: TemplateRow): OperationsTaskTemplateDto {
+  const target = targetOfRow(row);
+  // egy közvetlen írás (import, kézi SQL) kategóriát ÉS eszközlistát is hagyhatott: a felület a kategóriát mutatja, a rögzítés mindkettőt engedi
+  if (target.both)
+    templateLog.error(
+      `A sablon (${row.id}) kategória-célú ÉS eszközlistát is hordoz: szabálysértő sor, a felület csak a kategóriát mutatja, a rögzítés mindkettőt engedi.`,
+    );
   const all: OperationsTaskFieldDto[] = row.fields.map((field) => ({
     id: field.id,
     key: field.key,
@@ -85,22 +94,7 @@ function toDto(row: TemplateRow): OperationsTaskTemplateDto {
     description: row.description,
     frequency: row.frequency,
     // a szolgáltatás tartja: kategória XOR nem üres eszközlista; a lista az eszköz száma szerint rendezett
-    target: row.assetCategory
-      ? {
-          kind: "CATEGORY",
-          categoryId: row.assetCategory.id,
-          name: row.assetCategory.name,
-        }
-      : {
-          kind: "ASSETS",
-          assets: row.assets
-            .map(({ asset }) => ({
-              assetId: asset.id,
-              assetNumber: asset.assetNumber,
-              name: asset.name,
-            }))
-            .sort((a, b) => a.assetNumber.localeCompare(b.assetNumber, "hu")),
-        },
+    target: target.target,
     isActive: row.isActive,
     fields,
     retiredFields,
