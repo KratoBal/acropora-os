@@ -343,6 +343,28 @@ describe("a sablon szerkesztője", () => {
     });
   });
 
+  it("a kételemű listából a megnevezett eszköz megy el, nem az első (a másik marad)", async () => {
+    api.get.mockResolvedValue({
+      ...TEMPLATE,
+      target: {
+        kind: "ASSETS",
+        assets: [
+          { assetId: "a1", assetNumber: "V2196", name: "Homokszűrő" },
+          { assetId: "a2", assetNumber: "V2197", name: "Másik szűrő" },
+        ],
+      },
+    });
+    render(<OperationsTemplateEditorPage templateId="t1" />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Eltávolítás a listából: V2197 · Másik szűrő",
+      }),
+    );
+    expect(screen.getByText("A sablon eszközei (1)")).toBeTruthy();
+    expect(screen.getByText("V2196 · Homokszűrő")).toBeTruthy();
+    expect(screen.queryByText("V2197 · Másik szűrő")).toBeNull();
+  });
+
   it("egy eszköz eltávolítható a listából, és az utolsó eltávolítása után a mentés tiltott (cél nélkül nem menthető)", async () => {
     api.get.mockResolvedValue(TEMPLATE);
     render(<OperationsTemplateEditorPage templateId="t1" />);
