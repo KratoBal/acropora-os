@@ -30,10 +30,11 @@ export class TicketMailController {
    */
   @Get("auth-measure")
   authMeasureRead(
+    @CurrentUser() user: AuthenticatedUser,
     @Query("limit") limit?: unknown,
     @Query("query") query?: unknown,
   ) {
     const parsed = parseMeasureQuery({ limit, query });
-    return this.authMeasure.measure(parsed.limit, parsed.query);
+    return this.authMeasure.measure(user, parsed.limit, parsed.query);
   }
 }

@@ -113,6 +113,18 @@ describe("TicketMailGmailClient", () => {
     assert.equal(process.env.GMAIL_TICKET_READ_QUERY, "in:inbox newer_than:3d");
   });
 
+  it("with max: ONE request for the first page, asked for at most max, however many pages the query has", async () => {
+    const { fetcher, calls } = fakeGmail({ pages: 3 });
+    const ids = await new TicketMailGmailClient(fetcher).listMessageIds(
+      undefined,
+      { max: 3 },
+    );
+    const listCalls = calls.filter((c) => c.url.pathname.endsWith("/messages"));
+    assert.equal(listCalls.length, 1);
+    assert.equal(listCalls[0]!.url.searchParams.get("maxResults"), "3");
+    assert.equal(ids.length, 3);
+  });
+
   it("CONTROL: the token exchange carries the READ credentials, not the sender's", async () => {
     process.env.GMAIL_TICKET_CLIENT_ID = "send-id";
     process.env.GMAIL_TICKET_CLIENT_SECRET = "send-secret";

@@ -1,6 +1,5 @@
 import {
   ConflictException,
-  ForbiddenException,
   Inject,
   Injectable,
   Logger,
@@ -31,6 +30,7 @@ import {
   cleanSubject,
   skipReason,
 } from "./ticket-mail-message.js";
+import { requireInternalAdmin } from "./ticket-mail-internal-admin.js";
 import { TicketMailRepository } from "./ticket-mail.repository.js";
 import {
   TICKET_MAIL_AI_CLIENT,
@@ -123,14 +123,10 @@ export class TicketMailIntakeService {
 
   /** The status for the admins: the switch and the settings, and the last run. */
   status(user: AuthenticatedUser) {
-    if (
-      !["OWNER", "ADMIN"].includes(user.role) ||
-      user.customerId ||
-      user.supplierId
-    )
-      throw new ForbiddenException(
-        "A ticket levelek állapota csak belső adminisztrátoroknak érhető el.",
-      );
+    requireInternalAdmin(
+      user,
+      "A ticket levelek állapota csak belső adminisztrátoroknak érhető el.",
+    );
     const c = ticketMailConfig();
     return {
       enabled: c.enabled,

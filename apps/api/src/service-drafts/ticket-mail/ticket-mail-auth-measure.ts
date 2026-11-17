@@ -157,7 +157,7 @@ export function missingCredentialNames(config: {
 
 /** What the measurement reads from the mailbox: the read-only client's two reads, nothing else (a test hands in a fake). */
 export interface MeasureSource {
-  listMessageIds(query?: string): Promise<string[]>;
+  listMessageIds(query?: string, options?: { max?: number }): Promise<string[]>;
   getMessage(
     id: string,
     options?: { attachments?: boolean },
@@ -179,10 +179,10 @@ export async function measureMailbox(input: {
   query?: string;
   onItem?: (item: MessageMeasure) => void;
 }): Promise<{ items: MessageMeasure[]; summary: RunSummary }> {
-  const ids = (await input.client.listMessageIds(input.query)).slice(
-    0,
-    input.limit,
-  );
+  // only the first page, the newest `limit`: a wide query must not walk every page of the mailbox
+  const ids = (
+    await input.client.listMessageIds(input.query, { max: input.limit })
+  ).slice(0, input.limit);
   const items: MessageMeasure[] = [];
   for (const id of ids) {
     const message = await input.client.getMessage(id, { attachments: false });

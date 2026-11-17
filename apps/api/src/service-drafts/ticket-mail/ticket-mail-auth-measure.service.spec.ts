@@ -6,7 +6,8 @@ import {
   BadRequestException,
   ConflictException,
 } from "@nestjs/common";
-import { PERMISSIONS } from "@acropora/types";
+import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
+import { ForbiddenException } from "@nestjs/common";
 
 import {
   REQUIRED_ANY_PERMISSIONS_KEY,
@@ -27,6 +28,12 @@ import { TicketMailController } from "./ticket-mail.controller.js";
  */
 const PASS =
   "mx.google.com; dkim=pass header.i=@acropora.hu; spf=pass (google.com: domain of anna.kovacs@acropora.hu designates 209.85.220.41 as permitted sender) smtp.mailfrom=anna.kovacs@acropora.hu; dmarc=pass (p=REJECT) header.from=acropora.hu";
+
+const ADMIN = {
+  role: "ADMIN",
+  customerId: null,
+  supplierId: null,
+} as AuthenticatedUser;
 
 const KEYS = [
   "GMAIL_TICKET_READ_CLIENT_ID",
@@ -52,10 +59,17 @@ function fakeClient(
   ids: string[],
   options: { fail?: unknown; gate?: Promise<void> } = {},
 ) {
-  const calls = { query: undefined as string | undefined, get: 0 };
+  const calls = {
+    query: undefined as string | undefined,
+    max: undefined as number | undefined,
+    list: 0,
+    get: 0,
+  };
   const client = {
-    listMessageIds: async (query?: string) => {
+    listMessageIds: async (query?: string, listOptions?: { max?: number }) => {
+      calls.list++;
       calls.query = query;
+      calls.max = listOptions?.max;
       if (options.gate) await options.gate;
       if (options.fail) throw options.fail;
       return ids;
@@ -111,9 +125,56 @@ describe("parseMeasureQuery", () => {
 });
 
 describe("TicketMailAuthMeasureService", () => {
+  it("CONTROL: only an internal OWNER or ADMIN: another role (with service.manage or not), a customer account and a supplier account get 403, BEFORE the configuration and the mailbox are touched", async () => {
+    for (const user of [
+      { role: "MANAGER", customerId: null, supplierId: null },
+      { role: "SERVICE", customerId: null, supplierId: null },
+      { role: "PARTNER_SERVICE", customerId: null, supplierId: null },
+      { role: "VIEWER", customerId: null, supplierId: null },
+      { role: "ADMIN", customerId: "c1", supplierId: null },
+      { role: "OWNER", customerId: null, supplierId: "s1" },
+    ]) {
+      const { client, calls } = fakeClient(["a"]);
+      // not configured on purpose: a 403 must come before the 409 of the configuration check
+      delete process.env.GMAIL_TICKET_READ_CLIENT_SECRET;
+      await assert.rejects(
+        () =>
+          new TicketMailAuthMeasureService(client).measure(
+            user as AuthenticatedUser,
+            5,
+            null,
+          ),
+        ForbiddenException,
+        JSON.stringify(user),
+      );
+      assert.equal(calls.list, 0);
+      assert.equal(calls.get, 0);
+      process.env.GMAIL_TICKET_READ_CLIENT_SECRET = "secret-secret-2";
+    }
+  });
+
+  it("an OWNER and an ADMIN (internal) are let in", async () => {
+    for (const role of ["OWNER", "ADMIN"]) {
+      const { client } = fakeClient(["a"]);
+      const result = await new TicketMailAuthMeasureService(client).measure(
+        { role, customerId: null, supplierId: null } as AuthenticatedUser,
+        5,
+        null,
+      );
+      assert.equal(result.summary.messages, 1);
+    }
+  });
+
+  it("asks the client for the first page only: max equals the limit", async () => {
+    const { client, calls } = fakeClient(["a", "b", "c"]);
+    await new TicketMailAuthMeasureService(client).measure(ADMIN, 2, null);
+    assert.equal(calls.max, 2);
+  });
+
   it("answers the masked measure: the summary, the items, the mailbox DOMAIN, and nothing personal or secret", async () => {
     const { client } = fakeClient(["gmail-id-1", "gmail-id-2"]);
     const result = await new TicketMailAuthMeasureService(client).measure(
+      ADMIN,
       5,
       "from:anna.kovacs@acropora.hu",
     );
@@ -136,6 +197,7 @@ describe("TicketMailAuthMeasureService", () => {
   it("hands the limit and the query to the client, and leaves the process environment alone", async () => {
     const { client, calls } = fakeClient(["a", "b", "c"]);
     const result = await new TicketMailAuthMeasureService(client).measure(
+      ADMIN,
       2,
       "newer_than:2d",
     );
@@ -149,7 +211,7 @@ describe("TicketMailAuthMeasureService", () => {
     delete process.env.GMAIL_TICKET_READ_CLIENT_SECRET;
     const { client, calls } = fakeClient(["a"]);
     await assert.rejects(
-      () => new TicketMailAuthMeasureService(client).measure(5, null),
+      () => new TicketMailAuthMeasureService(client).measure(ADMIN, 5, null),
       (error: ConflictException) => {
         assert.ok(error instanceof ConflictException);
         const body = JSON.stringify(error.getResponse());
@@ -166,11 +228,11 @@ describe("TicketMailAuthMeasureService", () => {
     const gate = new Promise<void>((resolve) => (open = resolve));
     const { client } = fakeClient(["a"], { gate });
     const service = new TicketMailAuthMeasureService(client);
-    const first = service.measure(5, null);
+    const first = service.measure(ADMIN, 5, null);
     try {
       // without the guard the second call would wait on the same gate: the race turns that into a plain failed assertion, not a hung test
       const outcome = await Promise.race([
-        service.measure(5, null).then(
+        service.measure(ADMIN, 5, null).then(
           () => "ran",
           (error: unknown) => error,
         ),
@@ -184,7 +246,7 @@ describe("TicketMailAuthMeasureService", () => {
       open();
     }
     await first;
-    assert.equal((await service.measure(5, null)).summary.messages, 1);
+    assert.equal((await service.measure(ADMIN, 5, null)).summary.messages, 1);
   });
 
   it("a failed read is 502 with the client's fixed code only, never its text, and releases the guard", async () => {
@@ -193,7 +255,7 @@ describe("TicketMailAuthMeasureService", () => {
     });
     const service = new TicketMailAuthMeasureService(failing.client);
     await assert.rejects(
-      () => service.measure(5, null),
+      () => service.measure(ADMIN, 5, null),
       (error: BadGatewayException) => {
         assert.ok(error instanceof BadGatewayException);
         assert.deepEqual(error.getResponse(), {
@@ -204,9 +266,9 @@ describe("TicketMailAuthMeasureService", () => {
     );
     // the guard is free: a later call is not 409
     const ok = new TicketMailAuthMeasureService(fakeClient(["a"]).client);
-    assert.equal((await ok.measure(5, null)).summary.messages, 1);
+    assert.equal((await ok.measure(ADMIN, 5, null)).summary.messages, 1);
     await assert.rejects(
-      () => service.measure(5, null),
+      () => service.measure(ADMIN, 5, null),
       (error: unknown) => !(error instanceof ConflictException),
     );
   });
@@ -242,13 +304,16 @@ describe("TicketMailController.authMeasureRead", () => {
         },
       } as never,
     );
-    controller.authMeasureRead("3", " newer_than:2d ");
-    controller.authMeasureRead();
+    controller.authMeasureRead(ADMIN, "3", " newer_than:2d ");
+    controller.authMeasureRead(ADMIN);
     assert.deepEqual(calls, [
-      [3, "newer_than:2d"],
-      [5, null],
+      [ADMIN, 3, "newer_than:2d"],
+      [ADMIN, 5, null],
     ]);
-    assert.throws(() => controller.authMeasureRead("99"), BadRequestException);
+    assert.throws(
+      () => controller.authMeasureRead(ADMIN, "99"),
+      BadRequestException,
+    );
     assert.equal(calls.length, 2);
   });
 });

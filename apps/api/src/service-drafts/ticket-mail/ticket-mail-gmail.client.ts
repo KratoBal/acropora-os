@@ -101,10 +101,14 @@ export class TicketMailGmailClient {
   }
 
   /**
-   * The ids the query matches, newest first, all pages (at most 100 pages of 100). `queryOverride` replaces the configured query for THIS call only
+   * The ids the query matches, newest first, all pages (at most 100 pages of 100), or with `options.max` only the first `max` of the first page.
+   * `queryOverride` replaces the configured query for THIS call only
    * (the measurement uses it: nothing is written to the process environment, so concurrent calls cannot see each other's query).
    */
-  async listMessageIds(queryOverride?: string): Promise<string[]> {
+  async listMessageIds(
+    queryOverride?: string,
+    options: { max?: number } = {},
+  ): Promise<string[]> {
     const s = await this.settings();
     const ids: string[] = [];
     let pageToken: string | undefined;
@@ -113,7 +117,10 @@ export class TicketMailGmailClient {
         `${s.base}/users/${encodeURIComponent(s.user)}/messages`,
       );
       url.searchParams.set("q", queryOverride ?? s.query);
-      url.searchParams.set("maxResults", "100");
+      url.searchParams.set(
+        "maxResults",
+        String(Math.min(100, options.max ?? 100)),
+      );
       if (pageToken) url.searchParams.set("pageToken", pageToken);
       const r = await this.json<{
         messages?: Array<{ id: string }>;
@@ -121,6 +128,9 @@ export class TicketMailGmailClient {
       }>(url, { headers: s.headers });
       ids.push(...(r.messages ?? []).map((m) => m.id));
       pageToken = r.nextPageToken;
+      // `max` asks for the first page only: a measurement needs the newest few, not every page the query matches (quota and time)
+      if (options.max !== undefined)
+        return [...new Set(ids)].slice(0, options.max);
       if (!pageToken) return [...new Set(ids)];
     }
     throw new TicketMailGmailError("TICKET_MAIL_GMAIL_PAGE_LIMIT");

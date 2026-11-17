@@ -245,6 +245,7 @@ describe("main (the printed output, with a fake mailbox)", () => {
       list: 0,
       get: [] as string[],
       query: undefined as string | undefined,
+      max: undefined as number | undefined,
       options: [] as Array<{ attachments?: boolean } | undefined>,
     };
     return {
@@ -253,9 +254,13 @@ describe("main (the printed output, with a fake mailbox)", () => {
       calls,
       io: {
         client: {
-          listMessageIds: async (query?: string) => {
+          listMessageIds: async (
+            query?: string,
+            listOptions?: { max?: number },
+          ) => {
             calls.list++;
             calls.query = query;
+            calls.max = listOptions?.max;
             if (failWith) throw failWith;
             return ids;
           },
@@ -320,6 +325,7 @@ describe("main (the printed output, with a fake mailbox)", () => {
       );
       assert.deepEqual(f.calls.get, ["m1", "m2"]);
       assert.equal(f.calls.query, "newer_than:2d");
+      assert.equal(f.calls.max, 2);
       assert.equal(process.env.GMAIL_TICKET_READ_QUERY, undefined);
     } finally {
       restore();

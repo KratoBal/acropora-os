@@ -1,3 +1,4 @@
+import type { AuthenticatedUser } from "@acropora/types";
 import {
   BadGatewayException,
   BadRequestException,
@@ -6,6 +7,7 @@ import {
 } from "@nestjs/common";
 
 import { ticketMailConfig } from "./ticket-mail.config.js";
+import { requireInternalAdmin } from "./ticket-mail-internal-admin.js";
 import {
   measureMailbox,
   missingCredentialNames,
@@ -66,7 +68,12 @@ export class TicketMailAuthMeasureService {
 
   constructor(private readonly client: TicketMailGmailClient) {}
 
-  async measure(limit: number, query: string | null) {
+  async measure(user: AuthenticatedUser, limit: number, query: string | null) {
+    // BEFORE anything else (the configuration, the guard, the mailbox): only an internal OWNER or ADMIN, like the status
+    requireInternalAdmin(
+      user,
+      "A ticket postafiók fejléc-mérése csak belső adminisztrátoroknak érhető el.",
+    );
     const config = ticketMailConfig();
     if (!config.configured)
       throw new ConflictException({
