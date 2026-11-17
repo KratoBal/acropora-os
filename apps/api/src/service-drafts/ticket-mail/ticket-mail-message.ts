@@ -57,7 +57,7 @@ export type AuthenticationReason =
  * `smtp.mailfrom`), and its local part is the attacker's: it can be a quoted string holding "; dmarc=pass header.from=acropora.hu". A search for
  * `dmarc=` over the whole line finds that text first, ahead of the real (failing) dmarc result.
  */
-function parseAuthenticationResults(header: string): {
+export function parseAuthenticationResults(header: string): {
   authservId: string;
   results: Array<{
     method: string;
