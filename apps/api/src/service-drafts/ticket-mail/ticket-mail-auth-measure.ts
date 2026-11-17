@@ -44,8 +44,8 @@ export interface MessageMeasure {
   skip: SkipReason | null;
 }
 
-// the local part is either a quoted string (it may hold spaces: `"anna kovacs"@acropora.hu`) or a run of plain characters
-const EMAIL = /(?:"[^"]*"|[^\s@<>()[\]",;:]+)@([^\s<>()[\]",;:]+)/g;
+// the local part is either a quoted string (it may hold spaces and escaped characters: `"anna kovacs"@acropora.hu`, `"a\"b"@acropora.hu`) or a run of plain characters
+const EMAIL = /(?:"(?:[^"\\]|\\.)*"|[^\s@<>()[\]",;:]+)@([^\s<>()[\]",;:]+)/g;
 const IPV4 = /\b\d{1,3}(?:\.\d{1,3}){3}\b/g;
 // an IPv6 address (hex groups with colons, at least two colons), and the compressed forms
 const IPV6 = /\b(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}\b/gi;
