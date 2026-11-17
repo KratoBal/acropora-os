@@ -18,13 +18,15 @@ runs:
         node-version: 22
         cache: pnpm
 
+    # A STALL IS CUT AND RETRIED ONCE (retry-on-timeout.sh, next to this file): 8 minutes each, where an install takes about one or
+    # two. Only a command the LIMIT cut is run again; one that fails by itself (a lockfile that does not match) fails once.
     - name: Install dependencies
       shell: bash
-      run: pnpm install --frozen-lockfile
+      run: bash "${{ github.action_path }}/retry-on-timeout.sh" 480 pnpm install --frozen-lockfile
 
     - name: Install mobile dependencies
       shell: bash
-      run: npm --prefix apps/mobile ci --ignore-scripts --no-audit --no-fund
+      run: bash "${{ github.action_path }}/retry-on-timeout.sh" 480 npm --prefix apps/mobile ci --ignore-scripts --no-audit --no-fund
 
     - name: Generate Prisma Client
       shell: bash
