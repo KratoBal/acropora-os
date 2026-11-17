@@ -219,6 +219,24 @@ const PRICE_DATA_STOPS: ReadonlySet<string> = new Set([
   "ambiguous-variant",
 ]);
 
+/**
+ * A LISTÁN AZ EMBERNEK SZÓLÓ FAJTÁK, a kör kimenetétől KÜLÖN (task t-20261117-arstop-web; acrobot 55273, barracuda 55276). A `tax-inclusive-not-set` a
+ * bolt régiójának beállítása: egyszerre MINDEN terméket megállít, és az újrapróba nem javítja, tehát a listán emberi teendő (a Medusa ár-beállításán
+ * kell javítani, nem a termékeken). A KÖR FAILED-JE VISZONT MARAD rá, ezért NEM a `PRICE_DATA_STOPS`-ban áll: oda téve a kör APPLIED lenne, és egy
+ * bolt-szintű kiesés csendben maradna (#2665). A kettő két külön kérdés: ki cselekszen (ez), és riasztunk-e (a `priceFailureIsRunFailure`).
+ */
+const PRICE_STOP_PERSON_BUT_ROUND_FAILS: ReadonlySet<string> = new Set([
+  "tax-inclusive-not-set",
+]);
+
+/** A listán EMBERI teendő-e a fajta: az adat-állapotok és a bolt-szintű beállítási hiba. */
+export function priceStopNeedsPerson(kind: string): boolean {
+  return (
+    !priceFailureIsRunFailure(kind) ||
+    PRICE_STOP_PERSON_BUT_ROUND_FAILS.has(kind)
+  );
+}
+
 /** Egy ár-kudarc fajtája (lásd `priceFailureKind`) futási hiba-e: minden, ami nem emberi adat-állapot. */
 export function priceFailureIsRunFailure(kind: string): boolean {
   return !PRICE_DATA_STOPS.has(kind);

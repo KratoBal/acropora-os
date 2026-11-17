@@ -125,6 +125,29 @@ describe("MedusaPriceStopsPage", () => {
     ).toBeGreaterThan(0);
   });
 
+  it("shows the shop setting stop as a person's work: amber, with the Medusa price settings hint, not the grey retry note", async () => {
+    api.get.mockResolvedValue(
+      list([
+        stop({ kinds: [{ kind: "tax-inclusive-not-set", needsPerson: true }] }),
+      ]),
+    );
+    render(<MedusaPriceStopsPage />);
+    const badge = (
+      await screen.findAllByText(
+        "A bolt régiójában nincs bruttó árképzés beállítva",
+      )
+    )[0]!;
+    expect(badge.className).toContain("amber");
+    expect(
+      screen.getAllByText(
+        "A Medusa ár-beállításán (adóval együtt értett ár) kell javítani, nem a termékeken.",
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByText(/A szürke jelzés nem árbeviteli hiba/),
+    ).toBeNull();
+  });
+
   it("shows an unknown kind as it is, with no invented text", async () => {
     api.get.mockResolvedValue(
       list([

@@ -3,7 +3,7 @@ import { prisma, type Prisma } from "@acropora/database";
 import type { MedusaPriceStopsView } from "@acropora/types";
 
 import {
-  priceFailureIsRunFailure,
+  priceStopNeedsPerson,
   storedPriceStops,
   type PriceSyncDatabase,
 } from "./medusa-price-sync.js";
@@ -47,7 +47,7 @@ export class MedusaPriceStopsService {
     // `in` list is at most `PRICE_STOPS_LIMIT` long, however many references stopped (a `run-threw` round writes a failure for every priceable product;
     // Prisma sends every element as its own parameter and a query over 32767 fails, measured on #2019; barracuda, #2666)
     const needsPerson = (kinds: string[]) =>
-      kinds.some((kind) => !priceFailureIsRunFailure(kind));
+      kinds.some((kind) => priceStopNeedsPerson(kind));
     // `storedPriceStops` sorts newest first and this sort is stable
     const ordered = [...stored].sort(
       (a, b) => Number(needsPerson(b.kinds)) - Number(needsPerson(a.kinds)),
@@ -80,7 +80,7 @@ export class MedusaPriceStopsService {
         failedAt: stop.failedAt,
         kinds: stop.kinds.map((kind) => ({
           kind,
-          needsPerson: !priceFailureIsRunFailure(kind),
+          needsPerson: priceStopNeedsPerson(kind),
         })),
         reasons: stop.reasons,
         reasonCut: stop.reasonCut,

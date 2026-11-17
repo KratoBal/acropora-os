@@ -12,6 +12,8 @@ import {
   type PriceStopsDatabase,
 } from "./medusa-price-stops.service.js";
 import {
+  priceFailureIsRunFailure,
+  priceStopNeedsPerson,
   recordPriceAttempt,
   storedPriceStops,
   type PriceSyncDatabase,
@@ -365,6 +367,46 @@ describe("the list the endpoint serves", () => {
     );
     // the one human data state is the OLDEST row by index, and still first: the cut takes run failures
     assert.equal(view.stops[0]!.productId, `p${PRICE_STOPS_LIMIT}`);
+  });
+});
+
+describe("a shop-wide setting stop is a person's work on the list, and still fails the round", () => {
+  it("tax-inclusive-not-set needs a person on the list while the ROUND keeps failing for it (the two are separate sets; acrobot 55273, barracuda 55276)", async () => {
+    // the round: a run failure (not in PRICE_DATA_STOPS), so the projection round stays FAILED and a shop-wide outage is never silent (#2665)
+    assert.equal(priceFailureIsRunFailure("tax-inclusive-not-set"), true);
+    // the list: a person's work, the fix is in the Medusa price settings
+    assert.equal(priceStopNeedsPerson("tax-inclusive-not-set"), true);
+    // the other run failures stay grey, the human data states stay amber
+    assert.equal(priceStopNeedsPerson("medusa-write-failed"), false);
+    assert.equal(priceStopNeedsPerson("own-price-missing"), true);
+    const { service } = serviceOver(
+      [
+        stopRow(
+          "run",
+          "R: MEGÁLLT (medusa-write-failed) x",
+          "2026-11-17T12:00:00.000Z",
+        ),
+        stopRow(
+          "tax",
+          "T: MEGÁLLT (tax-inclusive-not-set) y",
+          "2026-11-17T09:00:00.000Z",
+        ),
+      ],
+      [
+        { id: "run", name: "Futási", variants: [{ sku: "R-1" }] },
+        { id: "tax", name: "Beállítás", variants: [{ sku: "T-1" }] },
+      ],
+    );
+    const view = await service.list();
+    assert.deepEqual([view.total, view.needingPerson], [2, 1]);
+    // a person's work first, although the run failure is the newer
+    assert.deepEqual(
+      view.stops.map((s) => s.skus[0]),
+      ["T-1", "R-1"],
+    );
+    assert.deepEqual(view.stops[0]!.kinds, [
+      { kind: "tax-inclusive-not-set", needsPerson: true },
+    ]);
   });
 });
 

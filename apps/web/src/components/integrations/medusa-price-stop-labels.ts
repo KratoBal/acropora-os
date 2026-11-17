@@ -44,6 +44,8 @@ export const PRICE_STOP_KIND_HINTS: Readonly<Record<string, string>> = {
   "mirror-price-missing":
     "A termék UNAS-beli bruttó ára hiányzik: a UNAS-ban kell megadni, a következő import áthozza.",
   "mirror-row-missing": "A UNAS importnak kell lefutnia erre a termékre.",
+  "tax-inclusive-not-set":
+    "A Medusa ár-beállításán (adóval együtt értett ár) kell javítani, nem a termékeken.",
   "authority-unknown": "Dönteni kell, melyik rendszer a termék gazdája.",
   "price-negative": "Az ár nem lehet negatív.",
 };
