@@ -100,8 +100,11 @@ export class TicketMailGmailClient {
     };
   }
 
-  /** The ids the query matches, newest first, all pages (at most 100 pages of 100). */
-  async listMessageIds(): Promise<string[]> {
+  /**
+   * The ids the query matches, newest first, all pages (at most 100 pages of 100). `queryOverride` replaces the configured query for THIS call only
+   * (the measurement uses it: nothing is written to the process environment, so concurrent calls cannot see each other's query).
+   */
+  async listMessageIds(queryOverride?: string): Promise<string[]> {
     const s = await this.settings();
     const ids: string[] = [];
     let pageToken: string | undefined;
@@ -109,7 +112,7 @@ export class TicketMailGmailClient {
       const url = new URL(
         `${s.base}/users/${encodeURIComponent(s.user)}/messages`,
       );
-      url.searchParams.set("q", s.query);
+      url.searchParams.set("q", queryOverride ?? s.query);
       url.searchParams.set("maxResults", "100");
       if (pageToken) url.searchParams.set("pageToken", pageToken);
       const r = await this.json<{
@@ -123,7 +126,14 @@ export class TicketMailGmailClient {
     throw new TicketMailGmailError("TICKET_MAIL_GMAIL_PAGE_LIMIT");
   }
 
-  async getMessage(id: string): Promise<TicketMailMessage> {
+  /**
+   * One message by id. `options.attachments: false` reads the same message (the same `format=full` request, the same headers) but downloads no
+   * attachment: the measurement needs the headers only, and a server process must not pull 25 MB of files for it.
+   */
+  async getMessage(
+    id: string,
+    options: { attachments?: boolean } = {},
+  ): Promise<TicketMailMessage> {
     const s = await this.settings();
     const base = `${s.base}/users/${encodeURIComponent(s.user)}/messages/${encodeURIComponent(id)}`;
     const m = await this.json<{
@@ -153,7 +163,9 @@ export class TicketMailGmailClient {
     const attachments: TicketMailMessage["attachments"] = [];
     const droppedAttachments: TicketMailMessage["droppedAttachments"] = [];
     let total = 0;
-    for (const p of parts.filter((part) => part.filename)) {
+    for (const p of options.attachments === false
+      ? []
+      : parts.filter((part) => part.filename)) {
       const fileName = p.filename!;
       const declared = p.body?.size ?? 0;
       if (declared > DOCUMENT_UPLOAD_LIMITS.fileSizeBytes) {

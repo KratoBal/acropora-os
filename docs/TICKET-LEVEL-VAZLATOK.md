@@ -59,9 +59,11 @@ A `--limit` 1 és 50 közötti (alapérték 10, legújabb elöl), a `--query` cs
 
 A kimenetben nincs tárgy, szöveg, csatolmány-név, token, e-mail cím helyi része és IP-cím. A maszkolás mintákra épül: egy szokatlan alakú, a fejléc megjegyzésébe írt személynév nem biztos, hogy kimarad, ezért a kimenetet ugyanúgy kezeljük, mint a belső naplót.
 
+**Olvasható út: a végpont.** A parancs kimenete egy Coolify-feladat naplója lenne, azt nem lehet kiolvasni (a feladat-API csak sikert vagy hibát ad), és a bukott feladat értesítést küld. Ezért ugyanez a mérés csak olvasó végpontként is elérhető: `GET /service/drafts/ticket-mail/auth-measure?limit=5&query=...` (belső OWNER és ADMIN, a `service.manage` jog, ugyanaz, mint a státusznál). Az olvasó Gmail-kliens GET kéréseit használja, semmit nem ír, **csatolmányt nem tölt le**, egyszerre egy futás megy (a második 409), a `limit` legfeljebb 20 (alapérték 5), a `query` legfeljebb 300 karakter és csak erre a hívásra szól (nem kerül a folyamat környezetébe). A válasz: `mailboxDomain`, `summary` és az `items` ugyanazzal a maszkolt tartalommal, mint a parancsé; a `query` értékét sem adja vissza. Hiba esetén a kliens fix kódját adja (502, `{"code": ...}`), hiányzó változónál 409-et a változók NEVÉVEL.
+
 **Mit kell kiolvasni belőle:** hány `mx.google.com` fejléc van egy levélen (a szabály mindegyikre ugyanazt várja), és a valódi tesztlevél `verdict`-je `DMARC_PASS`-e. Ha minden levél `FOREIGN_AUTHSERV`, a Gmail API a ticket@ postafiókban nem ezt a szerkesztő-azonosítót adja, és a szabályt a mért alakra kell igazítani, nem a beolvasást bekapcsolni.
 
-**Állapot:** a parancs a valódi postafiókra még nem futott. A tesztek hamis adatokon mennek (a maszkolás, a fejléc-bontás, az összesítés, az argumentumok).
+**Állapot:** sem a parancs, sem a végpont a valódi postafiókra még nem futott. A tesztek hamis adatokon mennek (a maszkolás, a fejléc-bontás, az összesítés, az argumentumok, a végpont védelme és korlátai). Nem mértük: hogy a Gmail API a ticket@ postafiókban milyen alakú fejlécet ad, és a végpont a valódi OS-en (a hívónak a teszt OS-en `service.manage` jog kell).
 
 ## Beállítás (env)
 

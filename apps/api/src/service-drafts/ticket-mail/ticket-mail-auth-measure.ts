@@ -141,3 +141,59 @@ export function summarizeRun(items: readonly MessageMeasure[]): RunSummary {
   }
   return summary;
 }
+
+/** The names (never the values) of the empty `GMAIL_TICKET_READ_*` variables. */
+export function missingCredentialNames(config: {
+  credentials: { clientId: string; clientSecret: string; refreshToken: string };
+}): string[] {
+  return Object.entries({
+    GMAIL_TICKET_READ_CLIENT_ID: config.credentials.clientId,
+    GMAIL_TICKET_READ_CLIENT_SECRET: config.credentials.clientSecret,
+    GMAIL_TICKET_READ_REFRESH_TOKEN: config.credentials.refreshToken,
+  })
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
+}
+
+/** What the measurement reads from the mailbox: the read-only client's two reads, nothing else (a test hands in a fake). */
+export interface MeasureSource {
+  listMessageIds(query?: string): Promise<string[]>;
+  getMessage(
+    id: string,
+    options?: { attachments?: boolean },
+  ): Promise<{
+    id: string;
+    fromAddress: string | null;
+    headers: TicketMailHeaders;
+  }>;
+}
+
+/**
+ * THE READ LOOP of the measurement, shared by the command and the admin endpoint: the newest `limit` messages of the query, each read WITHOUT its
+ * attachments, measured, and summarised. `onItem` sees each measured message as soon as it is read (the command prints it then).
+ */
+export async function measureMailbox(input: {
+  client: MeasureSource;
+  ownAddress: string;
+  limit: number;
+  query?: string;
+  onItem?: (item: MessageMeasure) => void;
+}): Promise<{ items: MessageMeasure[]; summary: RunSummary }> {
+  const ids = (await input.client.listMessageIds(input.query)).slice(
+    0,
+    input.limit,
+  );
+  const items: MessageMeasure[] = [];
+  for (const id of ids) {
+    const message = await input.client.getMessage(id, { attachments: false });
+    const item = measureMessage({
+      id: message.id,
+      fromAddress: message.fromAddress,
+      ownAddress: input.ownAddress,
+      headers: message.headers,
+    });
+    items.push(item);
+    input.onItem?.(item);
+  }
+  return { items, summary: summarizeRun(items) };
+}

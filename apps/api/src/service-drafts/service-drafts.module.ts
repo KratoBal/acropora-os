@@ -8,6 +8,7 @@ import { CapasuliGmailClient } from "./capasuli-gmail.client.js";
 import { CapasuliGmailSyncScheduler } from "./capasuli-gmail-sync.scheduler.js";
 import { CapasuliItemJevService } from "./capasuli-item-jev.service.js";
 import { TicketMailController } from "./ticket-mail/ticket-mail.controller.js";
+import { TicketMailAuthMeasureService } from "./ticket-mail/ticket-mail-auth-measure.service.js";
 import { TicketMailGmailClient } from "./ticket-mail/ticket-mail-gmail.client.js";
 import { TicketMailIntakeScheduler } from "./ticket-mail/ticket-mail-intake.scheduler.js";
 import { TicketMailIntakeService } from "./ticket-mail/ticket-mail-intake.service.js";
@@ -26,6 +27,7 @@ import {
     CapasuliGmailSyncScheduler,
     CapasuliItemJevService,
     TicketMailGmailClient,
+    TicketMailAuthMeasureService,
     TicketMailRepository,
     TicketMailIntakeService,
     TicketMailIntakeScheduler,

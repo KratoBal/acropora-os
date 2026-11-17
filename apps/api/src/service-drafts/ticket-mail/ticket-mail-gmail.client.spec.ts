@@ -97,6 +97,22 @@ describe("TicketMailGmailClient", () => {
     );
   });
 
+  it("a per-call query replaces the configured one for that call only, and the environment is untouched", async () => {
+    process.env.GMAIL_TICKET_READ_QUERY = "in:inbox newer_than:3d";
+    const { fetcher, calls } = fakeGmail({});
+    const client = new TicketMailGmailClient(fetcher);
+    await client.listMessageIds("from:someone newer_than:1d");
+    await client.listMessageIds();
+    const queries = calls
+      .filter((c) => c.url.pathname.endsWith("/messages"))
+      .map((c) => c.url.searchParams.get("q"));
+    assert.deepEqual(queries, [
+      "from:someone newer_than:1d",
+      "in:inbox newer_than:3d",
+    ]);
+    assert.equal(process.env.GMAIL_TICKET_READ_QUERY, "in:inbox newer_than:3d");
+  });
+
   it("CONTROL: the token exchange carries the READ credentials, not the sender's", async () => {
     process.env.GMAIL_TICKET_CLIENT_ID = "send-id";
     process.env.GMAIL_TICKET_CLIENT_SECRET = "send-secret";
@@ -208,6 +224,37 @@ describe("TicketMailGmailClient", () => {
     assert.equal(
       calls.filter((c) => c.url.pathname.includes("/attachments/")).length,
       2,
+    );
+  });
+
+  it("with attachments: false the same message is read, the headers and text are kept, and NO attachment is downloaded or listed", async () => {
+    const { fetcher, calls } = fakeGmail({
+      attachments: { a1: b64(PNG) },
+      message: {
+        id: "m9",
+        payload: {
+          headers: [header("From", "Anna <anna@acropora.hu>")],
+          parts: [
+            { mimeType: "text/plain", body: { data: b64("Szöveg.") } },
+            {
+              mimeType: "image/png",
+              filename: "csepeg.png",
+              body: { attachmentId: "a1", size: PNG.length },
+            },
+          ],
+        },
+      },
+    });
+    const message = await new TicketMailGmailClient(fetcher).getMessage("m9", {
+      attachments: false,
+    });
+    assert.equal(message.fromAddress, "anna@acropora.hu");
+    assert.equal(message.text, "Szöveg.");
+    assert.deepEqual(message.attachments, []);
+    assert.deepEqual(message.droppedAttachments, []);
+    assert.equal(
+      calls.filter((c) => c.url.pathname.includes("/attachments/")).length,
+      0,
     );
   });
 
