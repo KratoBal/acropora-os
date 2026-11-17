@@ -282,13 +282,17 @@ describe("the list the endpoint serves", () => {
   it("asks for the products of the shown page only: the in list is at most the limit long, however many stops are stored, and the person's work is in it", async () => {
     const asked: number[] = [];
     const stored = Array.from({ length: 1200 }, (_, i) =>
-      stopRow(
-        `p${i}`,
-        i === 1199
-          ? "H: MEGÁLLT (own-price-missing) y"
-          : "R: MEGÁLLT (medusa-write-failed) z",
-        `2026-11-17T10:${String(i % 60).padStart(2, "0")}:00.000Z`,
-      ),
+      i === 0
+        ? stopRow(
+            "p0",
+            "H: MEGÁLLT (own-price-missing) y",
+            "2026-11-16T00:00:00.000Z",
+          )
+        : stopRow(
+            `p${i}`,
+            "R: MEGÁLLT (medusa-write-failed) z",
+            `2026-11-17T10:${String(i % 60).padStart(2, "0")}:00.000Z`,
+          ),
     );
     const db: PriceStopsDatabase = {
       externalReference: {
@@ -300,8 +304,8 @@ describe("the list the endpoint serves", () => {
           const ids = (args as { where: { id: { in: string[] } } }).where.id.in;
           asked.push(ids.length);
           assert.ok(
-            ids.includes("p1199"),
-            "the one human data state is among the asked ids",
+            ids.includes("p0"),
+            "the one human data state is the OLDEST row and is among the asked ids: only the person-first order keeps it in the page",
           );
           return [];
         },
