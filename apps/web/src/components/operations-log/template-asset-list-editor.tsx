@@ -135,7 +135,12 @@ export function TemplateAssetListEditor({
       assetsApi
         .list(
           token,
-          new URLSearchParams({ search: needle, pageSize: "20" }),
+          // csak az üzemben lévő eszközt kínáljuk (az archivált eszközt a szerver mentéskor elutasítaná: felesleges kör)
+          new URLSearchParams({
+            search: needle,
+            pageSize: "20",
+            status: "IN_PLACE",
+          }),
           controller.signal,
         )
         .then((response) => setFound(response.items))

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { targetShapeOf, templateAppliesTo } from "./template-target.js";
+import {
+  targetOfRow,
+  targetShapeOf,
+  templateAppliesTo,
+} from "./template-target.js";
 
 /*
   A SABLON CÉLJA ÉS AZ ESZKÖZ. MI PIROSIT: ha a listában szereplő eszköz kimaradna; ha egy kategória-célú sablon más kategóriájú eszközre
@@ -47,5 +51,44 @@ describe("targetShapeOf", () => {
       targetShapeOf({ kind: "CATEGORY", categoryId: "c1", name: "K" }),
       { assetIds: [], categoryId: "c1" },
     );
+  });
+});
+
+describe("targetOfRow", () => {
+  const asset = (id: string, assetNumber: string, name: string) => ({
+    asset: { id, assetNumber, name },
+  });
+
+  it("a kategória-sor CATEGORY, az eszközlista-sor ASSETS (szám szerint rendezve), egyik sem jelez", () => {
+    assert.deepEqual(
+      targetOfRow({
+        assetCategory: { id: "c1", name: "Vízkezelés" },
+        assets: [],
+      }),
+      {
+        target: { kind: "CATEGORY", categoryId: "c1", name: "Vízkezelés" },
+        both: false,
+      },
+    );
+    const list = targetOfRow({
+      assetCategory: null,
+      assets: [asset("a2", "V2", "Kettő"), asset("a1", "V1", "Egy")],
+    });
+    assert.equal(list.both, false);
+    assert.deepEqual(
+      list.target.kind === "ASSETS"
+        ? list.target.assets.map((a) => a.assetId)
+        : [],
+      ["a1", "a2"],
+    );
+  });
+
+  it("CONTROL: a kategóriát ÉS eszközlistát is hordozó sor a kategóriát adja (mint eddig), és jelzi, hogy szabálysértő", () => {
+    const both = targetOfRow({
+      assetCategory: { id: "c1", name: "Vízkezelés" },
+      assets: [asset("a1", "V1", "Egy")],
+    });
+    assert.equal(both.target.kind, "CATEGORY");
+    assert.equal(both.both, true);
   });
 });
