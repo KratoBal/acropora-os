@@ -33,7 +33,10 @@ import { readQueuedWorksheetLine } from "@/lib/worksheets/worksheet-line";
 import { ApiError } from "@/lib/api/client";
 
 import { readQueuedAssetUpdate } from "./asset-update-queue";
+import { subscribeToAppState } from "@/lib/auth/app-state";
+
 import { drainOfflineQueue } from "./drain-offline-queue";
+import { startDrainTriggers } from "./drain-triggers";
 import type { SyncQueueRow } from "./sync-queue";
 import { readPhotoPayload } from "./queue-order";
 import {
@@ -61,6 +64,22 @@ import {
 export function useQueueDrain(isOnline: boolean): string | null {
   const [uzenet, setUzenet] = useState<string | null>(null);
   const fut = useRef(false);
+  /**
+   * EGY KOR SORSZAMA: a halozat visszaterese mellett az eloterbe kerules es egy idozito is inditja a kiuritest
+   * (`drain-triggers.ts`, Balazs 2026-11-17: a sor csak az app ujranyitasa utan ment fel).
+   */
+  const [kor, setKor] = useState(0);
+
+  useEffect(
+    () =>
+      startDrainTriggers(isOnline, () => setKor((k) => k + 1), {
+        subscribeForeground: subscribeToAppState,
+        setInterval: (run, ms) => setInterval(run, ms),
+        clearInterval: (handle) =>
+          clearInterval(handle as ReturnType<typeof setInterval>),
+      }),
+    [isOnline],
+  );
 
   useEffect(() => {
     if (!isOnline || fut.current) return;
@@ -143,6 +162,8 @@ export function useQueueDrain(isOnline: boolean): string | null {
             }
           },
         });
+        // egy kor, aminek nem volt esedekes sora, nem torli az elozo kor mondatat: arrol szol, ami meg all
+        if (report.attempted === 0) return;
         const mondatok = [
           describeQueueRun(report),
           describeStalled(report),
@@ -153,7 +174,7 @@ export function useQueueDrain(isOnline: boolean): string | null {
         fut.current = false;
       }
     })();
-  }, [isOnline]);
+  }, [isOnline, kor]);
 
   return uzenet;
 }

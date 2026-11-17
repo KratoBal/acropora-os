@@ -281,3 +281,56 @@ describe("a címzetlen képek kimondása", () => {
     assert.match(s ?? "", /fényképeket nem tudjuk feltölteni/);
   });
 });
+
+/**
+ * A HALOZATI ES A SZERVER-HIBA KULON MONDAT (Balazs 2026-11-17). Eddig minden nem-utkozo kudarcra "A telefon nem érte
+ * el a szervert" jott ki, akkor is, ha a szerver valaszolt. MI PIROSIT: egy valaszolt hiba halozatinak mondva; egy
+ * halozati hiba szerverhibanak; a mondat nem mondja ki, hogy magatol ujraprobalja.
+ */
+describe("a futás jelentése: hálózati vagy szerver-hiba", () => {
+  it("a szerver válaszolt, de hibával: a futtató megszámolja, a halózati hibát nem", async () => {
+    const valaszok: Record<
+      string,
+      { httpStatus: number | null; error: string | null }
+    > = {
+      h1: { httpStatus: null, error: "A szerver jelenleg nem érhető el." },
+      s1: { httpStatus: 500, error: "API request failed (500)." },
+      s2: { httpStatus: 401, error: "Unauthorized" },
+    };
+    const { d } = deps(
+      [sor("h1"), sor("s1"), sor("s2")],
+      (id) => valaszok[id]!,
+    );
+    const r = await drainQueue(d);
+    assert.equal(r.retried, 3);
+    assert.equal(r.answeredFailed, 2);
+  });
+
+  it("csak hálózati hiba: nem érte el a szervert, és magától újrapróbálja", () => {
+    const s = describeQueueRun({
+      attempted: 1,
+      done: 0,
+      retried: 1,
+      conflicted: 0,
+      stalled: 0,
+      unresolved: 0,
+      answeredFailed: 0,
+    });
+    assert.match(s ?? "", /nem érte el a szervert/);
+    assert.match(s ?? "", /magától újrapróbálja/);
+  });
+
+  it("a szerver hibát adott: NEM hálózati mondat", () => {
+    const s = describeQueueRun({
+      attempted: 1,
+      done: 0,
+      retried: 1,
+      conflicted: 0,
+      stalled: 0,
+      unresolved: 0,
+      answeredFailed: 1,
+    });
+    assert.match(s ?? "", /A szerver hibát adott/);
+    assert.doesNotMatch(s ?? "", /nem érte el/);
+  });
+});

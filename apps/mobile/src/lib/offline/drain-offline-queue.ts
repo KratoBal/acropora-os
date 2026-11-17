@@ -69,6 +69,10 @@ export async function drainOfflineQueue(
     conflicted: elso.conflicted + masodik.conflicted + harmadik.conflicted,
     stalled: elso.stalled + masodik.stalled + harmadik.stalled,
     unresolved: elso.unresolved + masodik.unresolved + harmadik.unresolved,
+    answeredFailed:
+      (elso.answeredFailed ?? 0) +
+      (masodik.answeredFailed ?? 0) +
+      (harmadik.answeredFailed ?? 0),
   };
 }
 
