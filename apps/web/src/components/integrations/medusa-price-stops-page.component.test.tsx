@@ -85,7 +85,9 @@ describe("MedusaPriceStopsPage", () => {
       screen.getAllByText("Nincs saját eladási ár megadva").length,
     ).toBeGreaterThan(0);
     expect(
-      screen.getAllByText("Add meg a termék saját bruttó eladási árát.").length,
+      screen.getAllByText(
+        "Add meg a változat saját bruttó eladási árát (a változat az ok szövegében, a cikkszámánál áll).",
+      ).length,
     ).toBeGreaterThan(0);
     expect(screen.getByTestId("price-stops-summary").textContent).toBe(
       "1 megállt termék, ebből 1 vár emberi döntésre.",
@@ -118,7 +120,7 @@ describe("MedusaPriceStopsPage", () => {
     expect(run.className).toContain("grey");
     expect(
       screen.getAllByText(
-        "A szürke jelzésű hibát a vetítés magától újrapróbálja.",
+        "A szürke jelzés nem árbeviteli hiba: a vetítés újrapróbálja, de ha az ok a bolt beállítása vagy a kapcsolat, az újrapróba magától nem javítja.",
       ).length,
     ).toBeGreaterThan(0);
   });
@@ -142,6 +144,36 @@ describe("MedusaPriceStopsPage", () => {
       (await screen.findAllByText("A termék sora már nincs meg")).length,
     ).toBeGreaterThan(0);
     expect(screen.getAllByText("nincs").length).toBeGreaterThan(0);
+  });
+
+  it("shows the stored reason text: the hint points at it for the variant's SKU", async () => {
+    api.get.mockResolvedValue(
+      list([
+        stop({
+          skus: ["M-1", "M-2"],
+          reasons: ["M-2: MEGÁLLT (own-price-missing) üres"],
+        }),
+      ]),
+    );
+    render(<MedusaPriceStopsPage />);
+    expect(
+      (await screen.findAllByText("M-2: MEGÁLLT (own-price-missing) üres"))
+        .length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("the hints say no more than the code: the UNAS price is given in the UNAS, the own price is the variant's, a fractional or unrepresentable price is fixed at its source", () => {
+    expect(priceStopKindHint("mirror-price-missing")).toBe(
+      "A termék UNAS-beli bruttó ára hiányzik: a UNAS-ban kell megadni, a következő import áthozza.",
+    );
+    expect(priceStopKindHint("own-price-missing")).toContain("változat");
+    expect(priceStopKindHint("price-not-whole-forint")).toContain(
+      "ábrázolhatatlanul nagy",
+    );
+    expect(priceStopKindHint("price-not-whole-forint")).toContain("forrásánál");
+    // the word "bolt" means the Medusa shop on this page: no hint sends a person there to enter a price
+    for (const hint of Object.values(PRICE_STOP_KIND_HINTS))
+      expect(hint).not.toMatch(/\bboltnak\b/);
   });
 
   it("lists every SKU of a product with several variants", async () => {

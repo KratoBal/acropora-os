@@ -37,11 +37,12 @@ export const PRICE_STOP_KIND_LABELS: Readonly<Record<string, string>> = {
  * nem egyértelmű (a boltban álló több ár, a változat-azonosítás), a felirat nem állít javítást.
  */
 export const PRICE_STOP_KIND_HINTS: Readonly<Record<string, string>> = {
-  "own-price-missing": "Add meg a termék saját bruttó eladási árát.",
+  "own-price-missing":
+    "Add meg a változat saját bruttó eladási árát (a változat az ok szövegében, a cikkszámánál áll).",
   "price-not-whole-forint":
-    "A tört forintos árra nincs kerekítési szabály: egész forintra kell javítani.",
+    "Az ár tört forint vagy ábrázolhatatlanul nagy: a forrásánál (saját ár vagy UNAS) egész forintra kell javítani.",
   "mirror-price-missing":
-    "A UNAS-tükörben nincs ár: a UNAS importnak vagy a boltnak kell megadnia.",
+    "A termék UNAS-beli bruttó ára hiányzik: a UNAS-ban kell megadni, a következő import áthozza.",
   "mirror-row-missing": "A UNAS importnak kell lefutnia erre a termékre.",
   "authority-unknown": "Dönteni kell, melyik rendszer a termék gazdája.",
   "price-negative": "Az ár nem lehet negatív.",

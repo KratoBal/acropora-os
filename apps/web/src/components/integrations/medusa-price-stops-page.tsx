@@ -68,7 +68,24 @@ function ProblemCell({ stop }: { stop: MedusaPriceStopView }) {
         ))}
       {stop.kinds.some((kind) => !kind.needsPerson) ? (
         <span className="text-xs text-pilot-grey-500">
-          A szürke jelzésű hibát a vetítés magától újrapróbálja.
+          A szürke jelzés nem árbeviteli hiba: a vetítés újrapróbálja, de ha az
+          ok a bolt beállítása vagy a kapcsolat, az újrapróba magától nem
+          javítja.
+        </span>
+      ) : null}
+      {stop.reasons.length > 0 ? (
+        <span
+          className="flex flex-col gap-0.5"
+          data-testid="price-stop-reasons"
+        >
+          {stop.reasons.map((reason) => (
+            <span
+              key={reason}
+              className="break-words font-mono text-[11px] text-pilot-grey-500"
+            >
+              {reason}
+            </span>
+          ))}
         </span>
       ) : null}
       {stop.reasonCut ? (
