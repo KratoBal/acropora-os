@@ -6,7 +6,9 @@ import { TicketMailGmailError } from "./ticket-mail-gmail.client.js";
 import {
   headerShape,
   maskHeader,
+  measureMailbox,
   measureMessage,
+  missingCredentialNames,
   summarizeRun,
 } from "./ticket-mail-auth-measure.js";
 
@@ -239,20 +241,35 @@ describe("main (the printed output, with a fake mailbox)", () => {
   const fake = (ids: string[], failWith?: unknown) => {
     const out: string[] = [];
     const err: string[] = [];
-    const calls = { list: 0, get: [] as string[] };
+    const calls = {
+      list: 0,
+      get: [] as string[],
+      query: undefined as string | undefined,
+      max: undefined as number | undefined,
+      options: [] as Array<{ attachments?: boolean } | undefined>,
+    };
     return {
       out,
       err,
       calls,
       io: {
         client: {
-          listMessageIds: async () => {
+          listMessageIds: async (
+            query?: string,
+            listOptions?: { max?: number },
+          ) => {
             calls.list++;
+            calls.query = query;
+            calls.max = listOptions?.max;
             if (failWith) throw failWith;
             return ids;
           },
-          getMessage: async (id: string) => {
+          getMessage: async (
+            id: string,
+            options?: { attachments?: boolean },
+          ) => {
             calls.get.push(id);
+            calls.options.push(options);
             return message(id) as never;
           },
         },
@@ -297,16 +314,33 @@ describe("main (the printed output, with a fake mailbox)", () => {
     }
   });
 
-  it("reads at most --limit messages and sets the query for the run", async () => {
+  it("reads at most --limit messages, hands the query to the client and leaves the environment alone", async () => {
     try {
       configure();
+      delete process.env.GMAIL_TICKET_READ_QUERY;
       const f = fake(["m1", "m2", "m3", "m4", "m5"]);
       assert.equal(
         await main(["--limit", "2", "--query", "newer_than:2d"], f.io),
         0,
       );
       assert.deepEqual(f.calls.get, ["m1", "m2"]);
-      assert.equal(process.env.GMAIL_TICKET_READ_QUERY, "newer_than:2d");
+      assert.equal(f.calls.query, "newer_than:2d");
+      assert.equal(f.calls.max, 2);
+      assert.equal(process.env.GMAIL_TICKET_READ_QUERY, undefined);
+    } finally {
+      restore();
+    }
+  });
+
+  it("reads every message WITHOUT its attachments", async () => {
+    try {
+      configure();
+      const f = fake(["m1", "m2"]);
+      await main([], f.io);
+      assert.deepEqual(f.calls.options, [
+        { attachments: false },
+        { attachments: false },
+      ]);
     } finally {
       restore();
     }
@@ -335,5 +369,69 @@ describe("main (the printed output, with a fake mailbox)", () => {
     const f = fake(["m1"]);
     assert.equal(await main(["--limit", "0"], f.io), 2);
     assert.equal(f.calls.list, 0);
+  });
+});
+
+describe("measureMailbox and missingCredentialNames", () => {
+  const source = (ids: string[]) => {
+    const seen: string[] = [];
+    return {
+      seen,
+      client: {
+        listMessageIds: async () => ids,
+        getMessage: async (id: string) => {
+          seen.push(id);
+          return {
+            id,
+            fromAddress: "anna.kovacs@acropora.hu" as string | null,
+            headers: { ...HEADERS, authenticationResults: [PASS] },
+          };
+        },
+      },
+    };
+  };
+
+  it("measures the newest `limit` messages, reports each through onItem, and summarises them", async () => {
+    const { client, seen } = source(["a", "b", "c"]);
+    const told: string[] = [];
+    const result = await measureMailbox({
+      client,
+      ownAddress: "ticket@acropora.hu",
+      limit: 2,
+      onItem: (item) => told.push(item.idHash),
+    });
+    assert.deepEqual(seen, ["a", "b"]);
+    assert.equal(result.items.length, 2);
+    assert.deepEqual(
+      told,
+      result.items.map((i) => i.idHash),
+    );
+    assert.equal(result.summary.messages, 2);
+    assert.equal(result.summary.verified, 2);
+  });
+
+  it("an empty mailbox is an empty measure, not an error", async () => {
+    const result = await measureMailbox({
+      client: source([]).client,
+      ownAddress: "ticket@acropora.hu",
+      limit: 5,
+    });
+    assert.equal(result.summary.messages, 0);
+    assert.deepEqual(result.items, []);
+  });
+
+  it("names the EMPTY credential variables and never a value", () => {
+    assert.deepEqual(
+      missingCredentialNames({
+        credentials: { clientId: "id", clientSecret: "", refreshToken: "" },
+      }),
+      ["GMAIL_TICKET_READ_CLIENT_SECRET", "GMAIL_TICKET_READ_REFRESH_TOKEN"],
+    );
+    assert.deepEqual(
+      missingCredentialNames({
+        credentials: { clientId: "a", clientSecret: "b", refreshToken: "c" },
+      }),
+      [],
+    );
   });
 });

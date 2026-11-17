@@ -97,6 +97,34 @@ describe("TicketMailGmailClient", () => {
     );
   });
 
+  it("a per-call query replaces the configured one for that call only, and the environment is untouched", async () => {
+    process.env.GMAIL_TICKET_READ_QUERY = "in:inbox newer_than:3d";
+    const { fetcher, calls } = fakeGmail({});
+    const client = new TicketMailGmailClient(fetcher);
+    await client.listMessageIds("from:someone newer_than:1d");
+    await client.listMessageIds();
+    const queries = calls
+      .filter((c) => c.url.pathname.endsWith("/messages"))
+      .map((c) => c.url.searchParams.get("q"));
+    assert.deepEqual(queries, [
+      "from:someone newer_than:1d",
+      "in:inbox newer_than:3d",
+    ]);
+    assert.equal(process.env.GMAIL_TICKET_READ_QUERY, "in:inbox newer_than:3d");
+  });
+
+  it("with max: ONE request for the first page, asked for at most max, however many pages the query has", async () => {
+    const { fetcher, calls } = fakeGmail({ pages: 3 });
+    const ids = await new TicketMailGmailClient(fetcher).listMessageIds(
+      undefined,
+      { max: 3 },
+    );
+    const listCalls = calls.filter((c) => c.url.pathname.endsWith("/messages"));
+    assert.equal(listCalls.length, 1);
+    assert.equal(listCalls[0]!.url.searchParams.get("maxResults"), "3");
+    assert.equal(ids.length, 3);
+  });
+
   it("CONTROL: the token exchange carries the READ credentials, not the sender's", async () => {
     process.env.GMAIL_TICKET_CLIENT_ID = "send-id";
     process.env.GMAIL_TICKET_CLIENT_SECRET = "send-secret";
@@ -208,6 +236,37 @@ describe("TicketMailGmailClient", () => {
     assert.equal(
       calls.filter((c) => c.url.pathname.includes("/attachments/")).length,
       2,
+    );
+  });
+
+  it("with attachments: false the same message is read, the headers and text are kept, and NO attachment is downloaded or listed", async () => {
+    const { fetcher, calls } = fakeGmail({
+      attachments: { a1: b64(PNG) },
+      message: {
+        id: "m9",
+        payload: {
+          headers: [header("From", "Anna <anna@acropora.hu>")],
+          parts: [
+            { mimeType: "text/plain", body: { data: b64("Szöveg.") } },
+            {
+              mimeType: "image/png",
+              filename: "csepeg.png",
+              body: { attachmentId: "a1", size: PNG.length },
+            },
+          ],
+        },
+      },
+    });
+    const message = await new TicketMailGmailClient(fetcher).getMessage("m9", {
+      attachments: false,
+    });
+    assert.equal(message.fromAddress, "anna@acropora.hu");
+    assert.equal(message.text, "Szöveg.");
+    assert.deepEqual(message.attachments, []);
+    assert.deepEqual(message.droppedAttachments, []);
+    assert.equal(
+      calls.filter((c) => c.url.pathname.includes("/attachments/")).length,
+      0,
     );
   });
 

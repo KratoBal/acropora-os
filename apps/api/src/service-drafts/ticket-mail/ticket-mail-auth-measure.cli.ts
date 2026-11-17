@@ -2,7 +2,11 @@ import { pathToFileURL } from "node:url";
 
 import { ticketMailConfig } from "./ticket-mail.config.js";
 import { TicketMailGmailClient } from "./ticket-mail-gmail.client.js";
-import { measureMessage, summarizeRun } from "./ticket-mail-auth-measure.js";
+import {
+  measureMailbox,
+  missingCredentialNames,
+  type MeasureSource,
+} from "./ticket-mail-auth-measure.js";
 
 /**
  * READ-ONLY MEASUREMENT OF THE `AUTHENTICATION-RESULTS` OF THE TICKET@ MAILBOX (task t-20261117-authres-mero, card ec7b947b). It reads the mailbox
@@ -43,7 +47,7 @@ export function parseArguments(args: readonly string[]): {
 
 /** What `main` talks to, so a test can hand it a fake mailbox and read what would be printed. */
 export interface MeasureIo {
-  client: Pick<TicketMailGmailClient, "listMessageIds" | "getMessage">;
+  client: MeasureSource;
   log: (line: string) => void;
   error: (line: string) => void;
 }
@@ -63,35 +67,22 @@ export async function main(
     io.error((error as Error).message);
     return 2;
   }
-  if (parsed.query) process.env.GMAIL_TICKET_READ_QUERY = parsed.query;
   const config = ticketMailConfig();
   if (!config.configured) {
-    const missing = Object.entries({
-      GMAIL_TICKET_READ_CLIENT_ID: config.credentials.clientId,
-      GMAIL_TICKET_READ_CLIENT_SECRET: config.credentials.clientSecret,
-      GMAIL_TICKET_READ_REFRESH_TOKEN: config.credentials.refreshToken,
-    })
-      .filter(([, value]) => !value)
-      .map(([name]) => name);
+    const missing = missingCredentialNames(config);
     io.error(`not configured: ${missing.join(", ")} is empty`);
     return 3;
   }
   try {
-    const ids = (await io.client.listMessageIds()).slice(0, parsed.limit);
-    const measured = [];
-    for (const id of ids) {
-      const message = await io.client.getMessage(id);
-      const item = measureMessage({
-        id: message.id,
-        fromAddress: message.fromAddress,
-        ownAddress: config.user,
-        headers: message.headers,
-      });
-      measured.push(item);
-      io.log(`AUTH-MEASURE ${JSON.stringify(item)}`);
-    }
+    const { summary } = await measureMailbox({
+      client: io.client,
+      ownAddress: config.user,
+      limit: parsed.limit,
+      query: parsed.query ?? undefined,
+      onItem: (item) => io.log(`AUTH-MEASURE ${JSON.stringify(item)}`),
+    });
     io.log(
-      `AUTH-MEASURE-SUMMARY ${JSON.stringify({ mailboxDomain: config.user.slice(config.user.lastIndexOf("@") + 1), ...summarizeRun(measured) })}`,
+      `AUTH-MEASURE-SUMMARY ${JSON.stringify({ mailboxDomain: config.user.slice(config.user.lastIndexOf("@") + 1), ...summary })}`,
     );
     return 0;
   } catch (error) {
