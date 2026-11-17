@@ -11,6 +11,7 @@ import {
   Text,
   TextInput,
   View,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -31,6 +32,7 @@ import {
   enqueueOperationsEntry,
   enqueuePhoto,
 } from "@/lib/offline/queue-store";
+import { confirmQueuedAndLeave } from "@/lib/offline/queued-confirmation";
 import { saveOrQueue } from "@/lib/offline/save-or-queue";
 import {
   buildOperationsEntry,
@@ -176,8 +178,13 @@ export default function RecordOperationsEntryScreen() {
         return;
       }
       if (outcome.type === "queued") {
-        setNotice([outcome.message, photoMessage].filter(Boolean).join(" "));
+        // Balázs 2026-11-17: not an empty form in place, but a confirmation and back to where the recording started
         setForm(emptyOperationsEntryForm());
+        confirmQueuedAndLeave(
+          [outcome.message, photoMessage].filter(Boolean).join(" "),
+          () => router.back(),
+          Alert.alert,
+        );
         return;
       }
       // "rejected" vagy "lost": az űrlap tartalma megmarad, a szerelő javíthat és újra próbálkozhat.
