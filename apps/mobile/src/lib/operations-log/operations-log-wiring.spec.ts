@@ -153,3 +153,36 @@ describe("az üzemeltetési napló bekötése", () => {
     );
   });
 });
+
+describe("a csoportos kijelölés és a rögzítő képernyők fejléce (task t-20261117-csoportos-kijeloles)", () => {
+  const list = read("app/operations-log/index.tsx");
+  const group = read("app/operations-log/group.tsx");
+
+  it("az eszközlista a kijelölést a közös sablon szerint szűkíti: a döntést a modul hozza, a jelölő és a gomb letiltható", () => {
+    assert.match(list, /groupRowStates\(\{/);
+    assert.match(list, /groupSelectionReady\(\{/);
+    assert.match(list, /disabled=\{checkDisabled\}/);
+    assert.match(list, /disabled=\{!groupReady\}/);
+  });
+
+  it("a sablon-listák az első kijelölés UTÁN töltődnek, ugyanazzal a kulccsal és betöltővel, mint a csoportos képernyőn", () => {
+    assert.match(list, /enabled: enabled && selected\.length > 0/);
+    for (const source of [list, group]) {
+      assert.match(source, /queryKey: \["operations-templates", [a-z.]+\]/);
+      assert.match(source, /loadOperationsTemplates\(/);
+    }
+  });
+
+  it("a két rögzítő képernyő a SAJÁT fejlécét rajzolja: a Stack fejléce ki van kapcsolva, a felső sáv a képernyőé, a Mégse marad", () => {
+    for (const name of ["operations-log/group", "operations-log/record"]) {
+      const at = layout.indexOf(`name="${name}"`);
+      assert.ok(at > 0, name);
+      assert.match(layout.slice(at, at + 160), /headerShown: false/);
+    }
+    for (const source of [group, record]) {
+      assert.match(source, /edges=\{\["top", "bottom", "left", "right"\]\}/);
+      assert.match(source, /router\.back\(\)/);
+      assert.match(source, /Mégse/);
+    }
+  });
+});
