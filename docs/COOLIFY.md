@@ -5,6 +5,10 @@ Field-by-field Coolify setup for Acropora OS's two applications (`web`,
 and the end-to-end process this plugs into, see
 [`docs/DEPLOYMENT.md`](./DEPLOYMENT.md).
 
+> **From 2026-11-17 the images are built on GitHub and only pulled by Coolify** (an application of the "Docker Image" type): see
+> [`docs/GHCR-IMAGES.md`](./GHCR-IMAGES.md). The build-pack settings below describe the build that image replaces; they stay as the rollback
+> reference, together with `exchange/ghcr/coolify-beallitas-elotte-2026-11-17.json`.
+
 This assumes Coolify's GitHub App integration, connected to
 `KratoBal/acropora-os`, and Coolify's own Docker Engine on a Hetzner Cloud
 server.
