@@ -116,6 +116,27 @@ export function describeUnresolvedRecordings(
   );
 }
 
+/**
+ * A KEZDOLAP MONDATA EGY KOR UTAN.
+ *
+ * Volt esedekes sor: a kor mondata (vagy semmi, ha nincs mit mondani). Nem volt: az elozo mondat marad, mert az arrol
+ * szol, ami meg all -- KIVEVE, ha mar nincs elkuldheto sor sem (barracuda, #2653): ha a sor kozben mas uton kiurult, a
+ * "nem ment fel" mondat mar hamis, es ott maradna, amig egy kovetkezo kor nem mozdit valamit.
+ */
+export function nextQueueMessage(
+  previous: string | null,
+  report: QueueRunReport,
+  pendingLeft: number,
+): string | null {
+  if (report.attempted === 0) return pendingLeft === 0 ? null : previous;
+  const mondatok = [
+    describeQueueRun(report),
+    describeStalled(report),
+    describeUnresolvedRecordings(report),
+  ].filter((m): m is string => m !== null);
+  return mondatok.length > 0 ? mondatok.join(" ") : null;
+}
+
 export interface QueueRunnerDeps {
   /** A sorbol azok, amiket EL LEHET kuldeni. */
   pendingRows(): Promise<SyncQueueRow[]>;

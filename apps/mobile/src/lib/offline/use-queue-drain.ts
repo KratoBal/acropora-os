@@ -36,14 +36,11 @@ import { readQueuedAssetUpdate } from "./asset-update-queue";
 import { subscribeToAppState } from "@/lib/auth/app-state";
 
 import { drainOfflineQueue } from "./drain-offline-queue";
+import { pendingQueueRows } from "./queue-store";
 import { startDrainTriggers } from "./drain-triggers";
 import type { SyncQueueRow } from "./sync-queue";
 import { readPhotoPayload } from "./queue-order";
-import {
-  describeQueueRun,
-  describeStalled,
-  describeUnresolvedRecordings,
-} from "./queue-runner";
+import { nextQueueMessage } from "./queue-runner";
 
 /**
  * A SOR KIURITESE, AMIKOR VISSZAJON A HALOZAT.
@@ -162,14 +159,10 @@ export function useQueueDrain(isOnline: boolean): string | null {
             }
           },
         });
-        // egy kor, aminek nem volt esedekes sora, nem torli az elozo kor mondatat: arrol szol, ami meg all
-        if (report.attempted === 0) return;
-        const mondatok = [
-          describeQueueRun(report),
-          describeStalled(report),
-          describeUnresolvedRecordings(report),
-        ].filter((m): m is string => m !== null);
-        setUzenet(mondatok.length > 0 ? mondatok.join(" ") : null);
+        // a kor mondata; egy ures kor az elozot hagyja, hacsak a sor kozben ki nem urult (`nextQueueMessage`)
+        const megmaradt =
+          report.attempted === 0 ? (await pendingQueueRows()).length : 0;
+        setUzenet((elozo) => nextQueueMessage(elozo, report, megmaradt));
       } finally {
         fut.current = false;
       }
