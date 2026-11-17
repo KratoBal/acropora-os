@@ -55,6 +55,14 @@ describe("maskHeader", () => {
     );
     assert.ok(!masked.includes("anna"));
   });
+  it("masks a quoted local part that holds an escaped quote (barracuda, #2660)", () => {
+    const masked = maskHeader(
+      'mx.google.com; spf=pass smtp.mailfrom="secretname\\"tail"@tamado.hu',
+    );
+    assert.ok(!masked.includes("secretname"));
+    assert.ok(!masked.includes("tail"));
+    assert.ok(masked.includes("***@tamado.hu"));
+  });
   it("cuts the text at 700 characters and collapses white space", () => {
     const masked = maskHeader(`mx.google.com;\r\n\t${"a".repeat(2000)}`);
     assert.equal(masked.length, 700);
