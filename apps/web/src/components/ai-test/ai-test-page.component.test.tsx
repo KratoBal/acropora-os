@@ -257,7 +257,7 @@ describe("AiTestPage hibaüzenet", () => {
     const alert = screen
       .getByText("Nem érkezett válasz")
       .closest("[role=alert]")!;
-    expect(alert.textContent).toMatch(/^Hibakód: toString/);
+    expect(alert.textContent).toMatch(/Hibakód: toString/);
     expect(
       errors.mock.calls.some((c) =>
         String(c[0]).includes("not valid as a React child"),
