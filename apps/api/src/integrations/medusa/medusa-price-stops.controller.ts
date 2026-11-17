@@ -1,11 +1,8 @@
 import { Controller, Get } from "@nestjs/common";
-import { PERMISSIONS } from "@acropora/types";
+import { PERMISSIONS, type MedusaPriceStopsView } from "@acropora/types";
 
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
-import {
-  MedusaPriceStopsService,
-  type PriceStopsView,
-} from "./medusa-price-stops.service.js";
+import { MedusaPriceStopsService } from "./medusa-price-stops.service.js";
 
 /**
  * THE STORED PRICE STOPS, READ ONLY (task t-20261117-arstop-lista; acrobot 55208). The same permission as the projection queue status
@@ -18,7 +15,7 @@ export class MedusaPriceStopsController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.INVENTORY_VIEW)
-  list(): Promise<PriceStopsView> {
+  list(): Promise<MedusaPriceStopsView> {
     return this.service.list();
   }
 }

@@ -362,6 +362,7 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         alsoActiveOn: [
           "/admin/integrations/unas",
           "/admin/integrations/medusa/connection",
+          "/admin/integrations/medusa/price-stops",
           "/beallitasok/rendeles-elavulas",
         ],
       },

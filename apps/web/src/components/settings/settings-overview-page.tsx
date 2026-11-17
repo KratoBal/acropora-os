@@ -306,6 +306,14 @@ export const WEBSHOP_SETTINGS_AREAS: SettingsArea[] = [
         href: "/admin/integrations/medusa/connection",
         entryId: "medusa-connection",
       },
+      {
+        // a vetítő ár-felének tárolt megállásai (task t-20261117-arstop-web): menüpont nincs, a végpont INVENTORY_VIEW-t kér
+        label: "Ár-megállások",
+        description:
+          "Azok a termékek, amelyeknek az ára nem megy ki a webshopba, és miért.",
+        href: "/admin/integrations/medusa/price-stops",
+        permission: PERMISSIONS.INVENTORY_VIEW,
+      },
     ],
   },
   {

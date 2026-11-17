@@ -964,6 +964,11 @@ export type {
   MedusaIntegrationStateKind,
 } from "./integrations/medusa-connection.js";
 export type {
+  MedusaPriceStopKindView,
+  MedusaPriceStopsView,
+  MedusaPriceStopView,
+} from "./integrations/medusa-price-stops.js";
+export type {
   NavConnectionCredentialInput,
   NavConnectionVerificationStatus,
   NavConnectionView,
