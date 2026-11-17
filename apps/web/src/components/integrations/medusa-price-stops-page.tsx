@@ -46,7 +46,10 @@ function friendlyMessage(cause: unknown): string {
 
 function ProblemCell({ stop }: { stop: MedusaPriceStopView }) {
   return (
-    <span className="flex min-w-0 flex-col gap-1">
+    <span
+      data-stop-long
+      className="flex min-w-0 flex-col gap-1 max-md:w-full max-md:text-left"
+    >
       <span className="flex flex-wrap gap-1">
         {stop.kinds.map((kind) => (
           <PilotBadge
@@ -104,7 +107,7 @@ const COLUMNS: PilotTableColumn<MedusaPriceStopView>[] = [
     width: "18%",
     cell: (stop) =>
       stop.skus.length > 0 ? (
-        <span className="flex flex-col font-mono text-xs text-pilot-grey-900">
+        <span className="flex flex-col font-mono text-xs text-pilot-grey-900 max-md:text-left">
           {stop.skus.map((sku) => (
             <span key={sku}>{sku}</span>
           ))}
@@ -119,9 +122,19 @@ const COLUMNS: PilotTableColumn<MedusaPriceStopView>[] = [
     width: "26%",
     cell: (stop) =>
       stop.name !== null ? (
-        <span className="font-semibold text-pilot-grey-900">{stop.name}</span>
+        <span
+          data-stop-long
+          className="font-semibold text-pilot-grey-900 max-md:w-full max-md:text-left"
+        >
+          {stop.name}
+        </span>
       ) : (
-        <span className="text-pilot-grey-500">A termék sora már nincs meg</span>
+        <span
+          data-stop-long
+          className="text-pilot-grey-500 max-md:w-full max-md:text-left"
+        >
+          A termék sora már nincs meg
+        </span>
       ),
   },
   {
@@ -195,12 +208,20 @@ export function MedusaPriceStopsPage() {
               title={`A lista csonka: ${view.stops.length} sor látszik a ${view.total}-ból, az emberi döntésre váró termékek elöl.`}
             />
           ) : null}
-          <PilotDataTable
-            columns={COLUMNS}
-            rows={view.stops}
-            rowKey={(stop) => stop.productId}
-            minWidth={820}
-          />
+          {/*
+            ON A PHONE THE LONG VALUES GET THE CARD'S FULL WIDTH (acrobot 55327, stage 390 px). The shared card pattern puts every value
+            right of its label, right-aligned, which is fine for a date and breaks a badge plus a sentence into three-word lines. The
+            cells that hold long text carry `data-stop-long`; this wrapper lets exactly those cells wrap, so the label sits above its
+            value, left-aligned. It is a rule of this page: the shared table component and every other list stay as they were.
+          */}
+          <div className="max-md:[&_td:has(>[data-stop-long])]:flex-wrap max-md:[&_td:has(>[data-stop-long])]:gap-y-1">
+            <PilotDataTable
+              columns={COLUMNS}
+              rows={view.stops}
+              rowKey={(stop) => stop.productId}
+              minWidth={820}
+            />
+          </div>
         </div>
       )}
     </div>
