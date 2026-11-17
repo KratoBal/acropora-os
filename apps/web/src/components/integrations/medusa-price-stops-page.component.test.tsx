@@ -339,4 +339,45 @@ describe("the price stop labels", () => {
     expect(priceStopKindHint("valami-uj-fajta")).toBeNull();
     expect(priceStopKindHint("own-price-missing")).toBeTruthy();
   });
+  it("marks the long cells for the phone card: the problem and the name of every row, and no other cell", async () => {
+    auth.session = session("OWNER");
+    api.get.mockResolvedValue(
+      list([
+        stop({ productId: "a", skus: ["A-1"], name: "Egy" }),
+        stop({ productId: "b", skus: ["B-1"], name: null }),
+      ]),
+    );
+    const { container } = render(<MedusaPriceStopsPage />);
+    await screen.findByText("Egy");
+    const rows = container.querySelectorAll("tbody tr");
+    expect(rows.length).toBe(2);
+    for (const row of Array.from(rows)) {
+      const cells = Array.from(row.querySelectorAll("td"));
+      // sku, name, problem, since: only the name and the problem hold long text
+      expect(
+        cells.map(
+          (cell) => cell.querySelector(":scope > [data-stop-long]") !== null,
+        ),
+      ).toEqual([false, true, true, false]);
+    }
+  });
+
+  it("lets exactly the marked cells wrap on a phone, with a rule that lives on this page's wrapper and not on the shared table", async () => {
+    auth.session = session("OWNER");
+    api.get.mockResolvedValue(list([stop()]));
+    const { container } = render(<MedusaPriceStopsPage />);
+    await screen.findByText("Teszt termék");
+    const wrapper = container.querySelector(
+      '[class*="has(>[data-stop-long])"]',
+    );
+    expect(wrapper).not.toBeNull();
+    expect(wrapper!.querySelector("table")).not.toBeNull();
+    expect(wrapper!.className).toContain(
+      "max-md:[&_td:has(>[data-stop-long])]:flex-wrap",
+    );
+    // the shared table's own root carries no such rule
+    expect(
+      wrapper!.querySelector("table")!.parentElement!.className,
+    ).not.toContain("data-stop-long");
+  });
 });
