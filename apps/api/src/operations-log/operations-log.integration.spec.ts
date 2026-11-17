@@ -307,7 +307,7 @@ describe(
           },
           ids.user || "system",
         );
-        assert.equal(created.target.kind, "ASSET");
+        assert.equal(created.target.kind, "ASSETS");
         assert.deepEqual(
           created.fields.map((f) => [f.key, f.sortOrder]),
           [
