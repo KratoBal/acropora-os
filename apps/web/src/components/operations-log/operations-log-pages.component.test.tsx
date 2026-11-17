@@ -42,6 +42,29 @@ vi.mock("@/lib/api/asset-categories", () => ({
 }));
 const assets = vi.hoisted(() => ({ list: vi.fn() }));
 vi.mock("@/lib/api/assets", () => ({ assetsApi: assets }));
+const worksheets = vi.hoisted(() => ({ departments: vi.fn() }));
+vi.mock("@/lib/api/worksheets", () => ({ worksheetsApi: worksheets }));
+// a partner-választó saját tesztje megvan: itt egy gomb, ami egy partnert választ
+vi.mock("@/components/service-jobs/partner-picker", () => ({
+  PartnerPicker: ({
+    onPick,
+  }: {
+    onPick: (partner: {
+      customerId: string;
+      name: string;
+      partnerCode: string;
+    }) => void;
+  }) => (
+    <button
+      type="button"
+      onClick={() =>
+        onPick({ customerId: "c-fank", name: "Fánk", partnerCode: "FA" })
+      }
+    >
+      Partner kiválasztása
+    </button>
+  ),
+}));
 
 const auth = vi.hoisted(() => ({
   role: "ADMIN" as UserRole,
@@ -234,13 +257,109 @@ describe("a sablon szerkesztője", () => {
     fireEvent.change(await screen.findByLabelText("Sablon neve"), {
       target: { value: "Új név" },
     });
-    expect(screen.getByText("Kiválasztva: 2 eszköz")).toBeTruthy();
+    expect(screen.getByText("A sablon eszközei (2)")).toBeTruthy();
+    expect(screen.getByText("V2196 · Homokszűrő")).toBeTruthy();
+    expect(screen.getByText("V2197 · Másik szűrő")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Sablon mentése" }));
     await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
     expect(api.update.mock.calls[0]![2]).toMatchObject({
       assetIds: ["a1", "a2"],
       assetCategoryId: null,
     });
+  });
+
+  it("helyszínről adható hozzá: partner, helyszín, jelölés, hozzáadás; a már a listában lévő nem jelölhető újra, és a mentés a teljes listát küldi (task t-20261117-sablon-eszkozlista)", async () => {
+    worksheets.departments.mockResolvedValue({
+      items: [
+        {
+          id: "d1",
+          parentId: null,
+          code: "BIO",
+          name: "Biodom",
+          isActive: true,
+        },
+      ],
+    });
+    assets.list.mockImplementation(
+      async (_token: string, query: URLSearchParams) =>
+        query.get("departmentId") === "d1"
+          ? {
+              items: [
+                { id: "a1", assetNumber: "V2196", name: "Homokszűrő" },
+                { id: "a5", assetNumber: "V2200", name: "Fehérjeleválasztó" },
+                { id: "a6", assetNumber: "V2201", name: "UV előtét" },
+              ],
+              pagination: {
+                page: 1,
+                pageSize: 100,
+                totalItems: 3,
+                totalPages: 1,
+              },
+            }
+          : {
+              items: [],
+              pagination: {
+                page: 1,
+                pageSize: 20,
+                totalItems: 0,
+                totalPages: 0,
+              },
+            },
+    );
+    api.get.mockResolvedValue(TEMPLATE);
+    api.update.mockResolvedValue(TEMPLATE);
+    render(<OperationsTemplateEditorPage templateId="t1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Partner kiválasztása" }),
+    );
+    fireEvent.change(await listedSelect("Helyszín", "d1"), {
+      target: { value: "d1" },
+    });
+    // a lista már tartalmazza az a1-et: az nem jelölhető újra
+    const listed = (await screen.findByLabelText(
+      /V2196 · Homokszűrő\s*\(már a listában\)/,
+    )) as HTMLInputElement;
+    expect(listed.disabled).toBe(true);
+    // csak a bejelölt kerül be: előbb egy, aztán a másik
+    fireEvent.click(await screen.findByLabelText("V2200 · Fehérjeleválasztó"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Kijelöltek hozzáadása (1)" }),
+    );
+    expect(await screen.findByText("A sablon eszközei (2)")).toBeTruthy();
+    expect(screen.getByText("1 eszköz bekerült a listába.")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("V2201 · UV előtét"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Kijelöltek hozzáadása (1)" }),
+    );
+    expect(await screen.findByText("A sablon eszközei (3)")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Sablon neve"), {
+      target: { value: "Új név" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Sablon mentése" }));
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    expect(api.update.mock.calls[0]![2]).toMatchObject({
+      assetIds: ["a1", "a5", "a6"],
+      assetCategoryId: null,
+    });
+  });
+
+  it("egy eszköz eltávolítható a listából, és az utolsó eltávolítása után a mentés tiltott (cél nélkül nem menthető)", async () => {
+    api.get.mockResolvedValue(TEMPLATE);
+    render(<OperationsTemplateEditorPage templateId="t1" />);
+    const save = (await screen.findByRole("button", {
+      name: "Sablon mentése",
+    })) as HTMLButtonElement;
+    fireEvent.change(await screen.findByLabelText("Sablon neve"), {
+      target: { value: "Új név" },
+    });
+    expect(save.disabled).toBe(false);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Eltávolítás a listából: V2196 · Homokszűrő",
+      }),
+    );
+    expect(screen.getByText("A sablon eszközei (0)")).toBeTruthy();
+    expect(save.disabled).toBe(true);
   });
 
   it("a kivezetett mezők olvashatóan állnak a sablon alatt", async () => {
