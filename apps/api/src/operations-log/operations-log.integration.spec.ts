@@ -105,7 +105,7 @@ describe(
         data: {
           name: name(label),
           frequency: "WEEKLY",
-          assetId: ids.asset,
+          assets: { create: [{ assetId: ids.asset }] },
           ...over,
         },
         select: { id: true },
@@ -115,19 +115,62 @@ describe(
       it("az eszközre és a kategóriára szóló sablon is felvehető", async () => {
         await template("cel-eszkoz");
         await template("cel-kategoria", {
-          assetId: null,
+          assets: undefined,
           assetCategoryId: ids.category,
         });
       });
 
-      it("a kettő egyszerre, vagy egyik sem: a CHECK elutasítja", async () => {
+      it("az adatbázis a kategória XOR lista szabályt NEM tartja (táblák közti CHECK nincs), a szolgáltatás igen: a kettő egyszerre vagy egyik sem elutasítva", async () => {
         await assert.rejects(
-          template("cel-mindketto", { assetCategoryId: ids.category }),
-          /OperationsTaskTemplate_one_target/,
+          service.create(
+            {
+              name: name("cel-mindketto"),
+              frequency: "WEEKLY",
+              assetIds: [ids.asset],
+              assetCategoryId: ids.category,
+              fields: [],
+            },
+            ids.user,
+          ),
+          /pontosan egy célra/,
         );
         await assert.rejects(
-          template("cel-egyik-sem", { assetId: null }),
-          /OperationsTaskTemplate_one_target/,
+          service.create(
+            {
+              name: name("cel-egyik-sem"),
+              frequency: "WEEKLY",
+              assetIds: [],
+              fields: [],
+            },
+            ids.user,
+          ),
+          /pontosan egy célra/,
+        );
+        // és egy elutasított felvétel nem hagy sablont maga után
+        assert.equal(
+          await prisma.operationsTaskTemplate.count({
+            where: {
+              name: { in: [name("cel-mindketto"), name("cel-egyik-sem")] },
+            },
+          }),
+          0,
+        );
+      });
+
+      it("ugyanaz az eszköz ugyanarra a sablonra kétszer nem vehető fel (egyedi index), a sablon törlése viszi a lista sorait", async () => {
+        const bound = await template("lista-egyedi");
+        await assert.rejects(
+          prisma.operationsTaskTemplateAsset.create({
+            data: { templateId: bound.id, assetId: ids.asset },
+          }),
+          /Unique constraint|templateId_assetId/,
+        );
+        await prisma.operationsTaskTemplate.delete({ where: { id: bound.id } });
+        assert.equal(
+          await prisma.operationsTaskTemplateAsset.count({
+            where: { templateId: bound.id },
+          }),
+          0,
         );
       });
 
@@ -151,7 +194,9 @@ describe(
           },
           select: { id: true },
         });
-        const bound = await template("restrict", { assetId: holder.id });
+        const bound = await template("restrict", {
+          assets: { create: [{ assetId: holder.id }] },
+        });
         await assert.rejects(prisma.asset.delete({ where: { id: holder.id } }));
         await prisma.operationsTaskTemplate.delete({ where: { id: bound.id } });
         await prisma.asset.delete({ where: { id: holder.id } });
@@ -243,7 +288,7 @@ describe(
             name: name("korut"),
             description: "heti visszamosás",
             frequency: "WEEKLY",
-            assetId: ids.asset,
+            assetIds: [ids.asset],
             fields: [
               {
                 label: "Vízóra előtte",
@@ -262,7 +307,7 @@ describe(
           },
           ids.user || "system",
         );
-        assert.equal(created.target.kind, "ASSET");
+        assert.equal(created.target.kind, "ASSETS");
         assert.deepEqual(
           created.fields.map((f) => [f.key, f.sortOrder]),
           [
@@ -279,7 +324,7 @@ describe(
           {
             name: name("korut"),
             frequency: "DAILY",
-            assetId: ids.asset,
+            assetIds: [ids.asset],
             fields: [
               {
                 key: after!.key,
@@ -330,7 +375,7 @@ describe(
             expectedUpdatedAt: updated.updatedAt,
             name: name("korut"),
             frequency: "DAILY",
-            assetId: ids.asset,
+            assetIds: [ids.asset],
             fields: [
               ...updated.fields.map((f) => ({
                 key: f.key,
@@ -359,7 +404,7 @@ describe(
               expectedUpdatedAt: updated.updatedAt,
               name: name("korut-felulirva"),
               frequency: "DAILY",
-              assetId: ids.asset,
+              assetIds: [ids.asset],
               fields: [],
             },
             "system",
@@ -388,7 +433,7 @@ describe(
           {
             name: name("szerep-megtartas"),
             frequency: "WEEKLY",
-            assetId: ids.asset,
+            assetIds: [ids.asset],
             fields: [
               {
                 label: "Vízóra előtte",
@@ -413,7 +458,7 @@ describe(
             expectedUpdatedAt: created.updatedAt,
             name: name("szerep-megtartas"),
             frequency: "WEEKLY",
-            assetId: ids.asset,
+            assetIds: [ids.asset],
             fields: [
               {
                 key: after.key,
@@ -454,7 +499,7 @@ describe(
           {
             name: name("tipusvaltas"),
             frequency: "WEEKLY",
-            assetId: ids.asset,
+            assetIds: [ids.asset],
             fields: [
               {
                 label: "Vízóra",
@@ -473,7 +518,7 @@ describe(
             expectedUpdatedAt: created.updatedAt,
             name: name("tipusvaltas"),
             frequency: "WEEKLY",
-            assetId: ids.asset,
+            assetIds: [ids.asset],
             fields: [{ key: old.key, label: "Vízóra", type: "TEXT" }],
           },
           "system",
@@ -548,14 +593,22 @@ describe(
           categoryId: ids.category,
           archivedAt: new Date(),
         });
-        await template("sz-kozvetlen", { assetId: direct.id });
+        await template("sz-kozvetlen", {
+          assets: { create: [{ assetId: direct.id }] },
+        });
         await template("sz-kategoria", {
-          assetId: null,
+          assets: undefined,
           assetCategoryId: ids.category,
         });
         await template("sz-kivezetett", {
-          assetId: retired.id,
+          assets: { create: [{ assetId: retired.id }] },
           isActive: false,
+        });
+        // egy TÖBBESZKÖZÖS lista: mindkét eszköze felkerül (task t-20261117-sablon-eszkozlista)
+        const listA = await make("SZ-LISTA-A");
+        const listB = await make("SZ-LISTA-B");
+        await template("sz-lista", {
+          assets: { create: [{ assetId: listA.id }, { assetId: listB.id }] },
         });
 
         // a katalógus csak a SZERVIZ-partnerek eszközeit adja (mint az eszköz-lista ownerScope=SERVICE_PARTNER)
@@ -577,6 +630,8 @@ describe(
         });
         assert.deepEqual(byId.get(direct.id)?.unit.path, [name("hely")]);
         assert.equal(byId.has(byCategory.id), true);
+        assert.equal(byId.has(listA.id), true);
+        assert.equal(byId.has(listB.id), true);
         assert.equal(byId.has(retired.id), false);
         assert.equal(byId.has(bare.id), false);
         assert.equal(byId.has(archived.id), false);
@@ -584,9 +639,173 @@ describe(
         const found = new Set(await repository.assetIdsWithActiveTemplates());
         assert.equal(found.has(direct.id), true);
         assert.equal(found.has(byCategory.id), true);
+        assert.equal(found.has(listA.id), true);
+        assert.equal(found.has(listB.id), true);
         assert.equal(found.has(retired.id), false);
         assert.equal(found.has(bare.id), false);
         assert.equal(found.has(archived.id), false);
+      });
+    });
+
+    describe("az eszközlista-cél (task t-20261117-sablon-eszkozlista)", () => {
+      it("a lista cseréje megtartja a maradó eszköz sorát, elveszi a kimaradtat, felveszi az újat; a sablon csak a listán lévő eszközre szól; kategóriára váltva a lista sorai elmennek", async () => {
+        const department = await prisma.worksheetDepartment.findFirstOrThrow({
+          where: { name: name("hely") },
+          select: { id: true },
+        });
+        const supplier = await prisma.supplier.findFirstOrThrow({
+          where: { code: { startsWith: "UZNI" } },
+          select: { id: true },
+        });
+        const make = (label: string) =>
+          prisma.asset.create({
+            data: {
+              assetNumber: name(label),
+              name: name(label),
+              departmentId: department.id,
+              supplierId: supplier.id,
+            },
+            select: { id: true },
+          });
+        const a = await make("LC-A");
+        const b = await make("LC-B");
+        const c = await make("LC-C");
+        const d = await make("LC-D");
+        const base = {
+          name: name("lista-csere"),
+          frequency: "WEEKLY" as const,
+          fields: [],
+        };
+
+        const created = await service.create(
+          { ...base, assetIds: [a.id, b.id] },
+          ids.user,
+        );
+        assert.equal(created.target.kind, "ASSETS");
+        const rowsBefore = await prisma.operationsTaskTemplateAsset.findMany({
+          where: { templateId: created.id },
+          select: { id: true, assetId: true },
+        });
+        assert.deepEqual(
+          rowsBefore.map((r) => r.assetId).sort(),
+          [a.id, b.id].sort(),
+        );
+        const keptRowId = rowsBefore.find((r) => r.assetId === b.id)!.id;
+
+        // csere: a kimarad, b marad, c új
+        const replaced = await service.update(
+          created.id,
+          {
+            ...base,
+            assetIds: [b.id, c.id],
+            expectedUpdatedAt: created.updatedAt,
+          },
+          ids.user,
+        );
+        const rowsAfter = await prisma.operationsTaskTemplateAsset.findMany({
+          where: { templateId: created.id },
+          select: { id: true, assetId: true },
+        });
+        assert.deepEqual(
+          rowsAfter.map((r) => r.assetId).sort(),
+          [b.id, c.id].sort(),
+        );
+        assert.equal(
+          rowsAfter.find((r) => r.assetId === b.id)!.id,
+          keptRowId,
+          "a maradó eszköz sora nem újraíródik",
+        );
+        assert.equal(replaced.target.kind, "ASSETS");
+
+        // a sablon a listán lévő eszközre szól, a kimaradtra és a kívülállóra nem
+        for (const [asset, expected] of [
+          [a, false],
+          [b, true],
+          [c, true],
+          [d, false],
+        ] as const) {
+          const offered = await repository.activeTemplatesForAsset({
+            id: asset.id,
+            categoryId: null,
+          });
+          assert.equal(
+            offered.some((t) => t.id === created.id),
+            expected,
+            `eszköz ${asset.id}`,
+          );
+        }
+
+        // kategóriára váltva a lista sorai elmennek, és vissza
+        const toCategory = await service.update(
+          created.id,
+          {
+            ...base,
+            assetIds: [],
+            assetCategoryId: ids.category,
+            expectedUpdatedAt: replaced.updatedAt,
+          },
+          ids.user,
+        );
+        assert.equal(toCategory.target.kind, "CATEGORY");
+        assert.equal(
+          await prisma.operationsTaskTemplateAsset.count({
+            where: { templateId: created.id },
+          }),
+          0,
+        );
+        const toList = await service.update(
+          created.id,
+          {
+            ...base,
+            assetIds: [d.id],
+            expectedUpdatedAt: toCategory.updatedAt,
+          },
+          ids.user,
+        );
+        assert.equal(toList.target.kind, "ASSETS");
+        assert.equal(
+          toList.target.kind === "ASSETS" ? toList.target.assets.length : -1,
+          1,
+        );
+      });
+
+      it("az archivált eszköz nem vehető fel a listába, és a fel nem vett lista nem hagy sablont", async () => {
+        const department = await prisma.worksheetDepartment.findFirstOrThrow({
+          where: { name: name("hely") },
+          select: { id: true },
+        });
+        const supplier = await prisma.supplier.findFirstOrThrow({
+          where: { code: { startsWith: "UZNI" } },
+          select: { id: true },
+        });
+        const gone = await prisma.asset.create({
+          data: {
+            assetNumber: name("LC-ARCH"),
+            name: name("LC-ARCH"),
+            departmentId: department.id,
+            supplierId: supplier.id,
+            archivedAt: new Date(),
+          },
+          select: { id: true },
+        });
+        await assert.rejects(
+          service.create(
+            {
+              name: name("lista-archivalt"),
+              frequency: "WEEKLY",
+              assetIds: [ids.asset, gone.id],
+              fields: [],
+            },
+            ids.user,
+          ),
+          /archivált/,
+        );
+        assert.equal(
+          await prisma.operationsTaskTemplate.count({
+            where: { name: name("lista-archivalt") },
+          }),
+          0,
+        );
       });
     });
   },

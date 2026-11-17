@@ -126,7 +126,7 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
       data: {
         name: `${PREFIX}${suffix}-sablon`,
         frequency: "WEEKLY",
-        assetId: withTemplate,
+        assets: { create: [{ assetId: withTemplate }] },
         isActive: false,
       },
     });

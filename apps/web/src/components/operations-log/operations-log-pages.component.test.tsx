@@ -72,10 +72,8 @@ const TEMPLATE: OperationsTaskTemplateDto = {
   description: "Heti rutin",
   frequency: "WEEKLY",
   target: {
-    kind: "ASSET",
-    assetId: "a1",
-    assetNumber: "V2196",
-    name: "Homokszűrő",
+    kind: "ASSETS",
+    assets: [{ assetId: "a1", assetNumber: "V2196", name: "Homokszűrő" }],
   },
   isActive: true,
   fields: [
@@ -196,7 +194,7 @@ describe("a sablon szerkesztője", () => {
       name: "Új név",
       description: "Heti rutin",
       frequency: "WEEKLY",
-      assetId: "a1",
+      assetIds: ["a1"],
       assetCategoryId: null,
       fields: [
         {
@@ -216,6 +214,32 @@ describe("a sablon szerkesztője", () => {
           meterRole: "AFTER",
         },
       ],
+    });
+  });
+
+  it("a többeszközös lista megmarad mentéskor, és a cél felirata a darabszámot mondja (task t-20261117-sablon-eszkozlista)", async () => {
+    const LIST: OperationsTaskTemplateDto = {
+      ...TEMPLATE,
+      target: {
+        kind: "ASSETS",
+        assets: [
+          { assetId: "a1", assetNumber: "V2196", name: "Homokszűrő" },
+          { assetId: "a2", assetNumber: "V2197", name: "Másik szűrő" },
+        ],
+      },
+    };
+    api.get.mockResolvedValue(LIST);
+    api.update.mockResolvedValue({ ...LIST, name: "Új név" });
+    render(<OperationsTemplateEditorPage templateId="t1" />);
+    fireEvent.change(await screen.findByLabelText("Sablon neve"), {
+      target: { value: "Új név" },
+    });
+    expect(screen.getByText("Kiválasztva: 2 eszköz")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Sablon mentése" }));
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    expect(api.update.mock.calls[0]![2]).toMatchObject({
+      assetIds: ["a1", "a2"],
+      assetCategoryId: null,
     });
   });
 

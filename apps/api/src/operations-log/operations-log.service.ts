@@ -7,6 +7,7 @@ import {
 import {
   assignOperationsFieldKeys,
   normalizeOperationsText,
+  OPERATIONS_TEMPLATE_LIMITS,
   operationsFieldErrors,
   type OperationsTaskTemplateDto,
   type OperationsTaskTemplateInput,
@@ -22,8 +23,8 @@ import {
 const NEM_TALALHATO = "A sablon nem található.";
 
 /**
- * AZ ÜZEMELTETÉSI NAPLÓ SABLONJAI (task os-uzemeltetesi-naplo, S1). A szabályok: egy sablon PONTOSAN egy célra szól (egy élő
- * eszközre VAGY egy aktív eszköz-kategóriára), a mezők szabályai a közös `operationsFieldErrors`-ban állnak (a szerkesztő is
+ * AZ ÜZEMELTETÉSI NAPLÓ SABLONJAI (task os-uzemeltetesi-naplo, S1). A szabályok: egy sablon PONTOSAN egy célra szól (kézzel választott
+ * élő eszközök listájára, egy eszköz egy elemű lista, VAGY egy aktív eszköz-kategóriára), a mezők szabályai a közös `operationsFieldErrors`-ban állnak (a szerkesztő is
  * ezt futtatja), és a mezők kulcsait a szerver osztja ki (a meglévő mező megtartja a kulcsát: a bejegyzés, S2, az értéket
  * ezzel tárolja).
  */
@@ -119,16 +120,34 @@ export class OperationsLogService {
     if (name === "")
       throw new BadRequestException("A sablon nevét meg kell adni.");
 
-    const assetId = normalizeOperationsText(input.assetId);
+    // A CÉL: kategória XOR nem üres eszközlista (a táblák között nincs CHECK, ez a szabály őrzi; lásd a sémát). Az ismétlődő azonosító egyszer számít.
+    const assetIds = [
+      ...new Set(
+        (input.assetIds ?? []).flatMap((id) => {
+          const trimmed = normalizeOperationsText(id);
+          return trimmed === null ? [] : [trimmed];
+        }),
+      ),
+    ];
     const assetCategoryId = normalizeOperationsText(input.assetCategoryId);
-    if ((assetId === null) === (assetCategoryId === null))
+    if ((assetIds.length === 0) === (assetCategoryId === null))
       throw new BadRequestException(
-        "A sablon pontosan egy célra szól: adj meg egy eszközt VAGY egy eszköz-kategóriát.",
+        "A sablon pontosan egy célra szól: adj meg eszközlistát (legalább egy eszközt) VAGY egy eszköz-kategóriát.",
       );
-    if (assetId !== null && !(await this.repository.assetIsLive(assetId)))
+    if (assetIds.length > OPERATIONS_TEMPLATE_LIMITS.assetsMax)
       throw new BadRequestException(
-        "Az eszköz nem található, vagy már archivált.",
+        `Egy sablonban legfeljebb ${OPERATIONS_TEMPLATE_LIMITS.assetsMax} eszköz lehet.`,
       );
+    if (assetIds.length > 0) {
+      const live = await this.repository.liveAssetIds(assetIds);
+      const gone = assetIds.filter((id) => !live.has(id));
+      if (gone.length > 0)
+        throw new BadRequestException(
+          gone.length === 1
+            ? "Az eszköz nem található, vagy már archivált."
+            : `${gone.length} eszköz nem található, vagy már archivált.`,
+        );
+    }
     if (
       assetCategoryId !== null &&
       !(await this.repository.categoryIsActive(assetCategoryId))
@@ -145,7 +164,7 @@ export class OperationsLogService {
       name,
       description: normalizeOperationsText(input.description),
       frequency: input.frequency,
-      assetId,
+      assetIds,
       assetCategoryId,
       fields: input.fields.map((field, index) => ({
         key: keys[index]!,

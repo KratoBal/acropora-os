@@ -1041,7 +1041,9 @@ export class ServiceAssetsRepository extends Repository {
         prisma.worksheetLine.count({ where: { assetId } }),
         prisma.asset.count({ where: { parentAssetId: assetId } }),
         // a kivezetett sablon is akadaly (a bejegyzesek ra hivatkoznak majd, a sema `Restrict`)
-        prisma.operationsTaskTemplate.count({ where: { assetId } }),
+        prisma.operationsTaskTemplate.count({
+          where: { assets: { some: { assetId } } },
+        }),
       ]);
     return { serviceJobs, worksheetLines, childAssets, operationsTemplates };
   }

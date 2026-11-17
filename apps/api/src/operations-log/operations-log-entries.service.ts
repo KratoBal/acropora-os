@@ -23,6 +23,7 @@ import {
   type OperationsLogEntryValueWrite,
 } from "./operations-log-entries.repository.js";
 import { ServiceJobsService } from "../service-jobs/service-jobs.service.js";
+import { targetShapeOf, templateAppliesTo } from "./template-target.js";
 import type { CreateServiceJobDto } from "../service-jobs/dto.js";
 import {
   OperationsLogRepository,
@@ -250,9 +251,7 @@ export class OperationsLogEntriesService {
     template: OperationsTaskTemplateDto,
     asset: { id: string; categoryId: string | null },
   ): boolean {
-    return template.target.kind === "ASSET"
-      ? template.target.assetId === asset.id
-      : template.target.categoryId === asset.categoryId;
+    return templateAppliesTo(targetShapeOf(template.target), asset);
   }
 
   /** A rögzítő mindig résztvevő; a többieknek aktív belső kollégának kell lenniük. */

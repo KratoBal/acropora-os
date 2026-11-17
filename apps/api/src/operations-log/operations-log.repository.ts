@@ -15,11 +15,12 @@ const TEMPLATE_SELECT = {
   name: true,
   description: true,
   frequency: true,
-  assetId: true,
   assetCategoryId: true,
   isActive: true,
   updatedAt: true,
-  asset: { select: { id: true, assetNumber: true, name: true } },
+  assets: {
+    select: { asset: { select: { id: true, assetNumber: true, name: true } } },
+  },
   assetCategory: { select: { id: true, name: true } },
   fields: {
     select: {
@@ -55,7 +56,8 @@ export interface OperationsTaskTemplateWrite {
   name: string;
   description: string | null;
   frequency: OperationsTaskFrequency;
-  assetId: string | null;
+  /** A kézzel választott eszközlista (az azonosítók egyediek); üres, ha a cél kategória. */
+  assetIds: string[];
   assetCategoryId: string | null;
   fields: OperationsTaskFieldWrite[];
 }
@@ -82,18 +84,22 @@ function toDto(row: TemplateRow): OperationsTaskTemplateDto {
     name: row.name,
     description: row.description,
     frequency: row.frequency,
-    // a CHECK tartja: a kettő közül pontosan egy kitöltött
-    target: row.asset
+    // a szolgáltatás tartja: kategória XOR nem üres eszközlista; a lista az eszköz száma szerint rendezett
+    target: row.assetCategory
       ? {
-          kind: "ASSET",
-          assetId: row.asset.id,
-          assetNumber: row.asset.assetNumber,
-          name: row.asset.name,
+          kind: "CATEGORY",
+          categoryId: row.assetCategory.id,
+          name: row.assetCategory.name,
         }
       : {
-          kind: "CATEGORY",
-          categoryId: row.assetCategory!.id,
-          name: row.assetCategory!.name,
+          kind: "ASSETS",
+          assets: row.assets
+            .map(({ asset }) => ({
+              assetId: asset.id,
+              assetNumber: asset.assetNumber,
+              name: asset.name,
+            }))
+            .sort((a, b) => a.assetNumber.localeCompare(b.assetNumber, "hu")),
         },
     isActive: row.isActive,
     fields,
@@ -103,16 +109,19 @@ function toDto(row: TemplateRow): OperationsTaskTemplateDto {
 }
 
 /**
- * A SABLONOK CÉLJAI: az eszközök és a kategóriák azonosítói, ismétlés nélkül. A sablon PONTOSAN egy célra szól (a migráció CHECK-je
- * tartja), de a függvény a mindkettő-null sort is elbírja: egyiket sem veszi fel.
+ * A SABLONOK CÉLJAI: az eszközök és a kategóriák azonosítói, ismétlés nélkül. A sablon PONTOSAN egy célra szól (kategória VAGY nem üres
+ * eszközlista, a szolgáltatás tartja), de a függvény az üres listájú és kategória nélküli sort is elbírja: semmit nem vesz fel.
  */
 export function templateTargets(
-  rows: readonly { assetId: string | null; assetCategoryId: string | null }[],
+  rows: readonly {
+    assets: readonly { assetId: string }[];
+    assetCategoryId: string | null;
+  }[],
 ): { assetIds: string[]; categoryIds: string[] } {
   const assetIds = new Set<string>();
   const categoryIds = new Set<string>();
   for (const row of rows) {
-    if (row.assetId) assetIds.add(row.assetId);
+    for (const entry of row.assets) assetIds.add(entry.assetId);
     if (row.assetCategoryId) categoryIds.add(row.assetCategoryId);
   }
   return { assetIds: [...assetIds], categoryIds: [...categoryIds] };
@@ -157,7 +166,7 @@ export class OperationsLogRepository {
       where: {
         isActive: true,
         OR: [
-          { assetId: asset.id },
+          { assets: { some: { assetId: asset.id } } },
           ...(asset.categoryId ? [{ assetCategoryId: asset.categoryId }] : []),
         ],
       },
@@ -179,7 +188,7 @@ export class OperationsLogRepository {
   async assetIdsWithActiveTemplates(): Promise<string[]> {
     const templates = await prisma.operationsTaskTemplate.findMany({
       where: { isActive: true },
-      select: { assetId: true, assetCategoryId: true },
+      select: { assets: { select: { assetId: true } }, assetCategoryId: true },
     });
     const { assetIds, categoryIds } = templateTargets(templates);
     const targets: Prisma.AssetWhereInput[] = [
@@ -208,7 +217,7 @@ export class OperationsLogRepository {
   async startCatalogue(): Promise<OperationsStartAsset[]> {
     const templates = await prisma.operationsTaskTemplate.findMany({
       where: { isActive: true },
-      select: { assetId: true, assetCategoryId: true },
+      select: { assets: { select: { assetId: true } }, assetCategoryId: true },
     });
     const { assetIds, categoryIds } = templateTargets(templates);
     const targets: Prisma.AssetWhereInput[] = [
@@ -300,13 +309,13 @@ export class OperationsLogRepository {
     };
   }
 
-  /** Létezik-e az eszköz, és nem archivált (a sablon csak élő eszközre szólhat). */
-  async assetIsLive(assetId: string): Promise<boolean> {
-    const row = await prisma.asset.findUnique({
-      where: { id: assetId },
-      select: { archivedAt: true },
+  /** Az átadott azonosítók közül azok, amelyek eszköze létezik és nem archivált (a sablon csak élő eszközre szólhat). */
+  async liveAssetIds(assetIds: readonly string[]): Promise<Set<string>> {
+    const rows = await prisma.asset.findMany({
+      where: { id: { in: [...assetIds] }, archivedAt: null },
+      select: { id: true },
     });
-    return row !== null && row.archivedAt === null;
+    return new Set(rows.map((row) => row.id));
   }
 
   /** Létezik-e az eszköz-kategória, és aktív. */
@@ -327,10 +336,12 @@ export class OperationsLogRepository {
         name: input.name,
         description: input.description,
         frequency: input.frequency,
-        assetId: input.assetId,
         assetCategoryId: input.assetCategoryId,
         createdById: actorId,
         updatedById: actorId,
+        assets: {
+          create: input.assetIds.map((assetId) => ({ assetId })),
+        },
         fields: {
           create: input.fields.map((field, index) => ({
             ...field,
@@ -409,20 +420,37 @@ export class OperationsLogRepository {
             data: { ...field, templateId: id, sortOrder: index },
           });
       }
-      const updated = await tx.operationsTaskTemplate.update({
+      await tx.operationsTaskTemplate.update({
         where: { id },
         data: {
           name: input.name,
           description: input.description,
           frequency: input.frequency,
-          assetId: input.assetId,
           assetCategoryId: input.assetCategoryId,
           ...(input.isActive === undefined ? {} : { isActive: input.isActive }),
           updatedById: actorId,
         },
+        select: { id: true },
+      });
+      // A CÉL CSERÉJE ugyanabban a tranzakcióban, a sor zárja alatt: a lista a megadottra áll (a kategória-célnál üres)
+      await tx.operationsTaskTemplateAsset.deleteMany({
+        where: {
+          templateId: id,
+          ...(input.assetIds.length > 0
+            ? { assetId: { notIn: input.assetIds } }
+            : {}),
+        },
+      });
+      if (input.assetIds.length > 0)
+        await tx.operationsTaskTemplateAsset.createMany({
+          data: input.assetIds.map((assetId) => ({ templateId: id, assetId })),
+          skipDuplicates: true,
+        });
+      const reread = await tx.operationsTaskTemplate.findUniqueOrThrow({
+        where: { id },
         select: TEMPLATE_SELECT,
       });
-      return toDto(updated);
+      return toDto(reread);
     });
   }
 

@@ -19,24 +19,37 @@ describe("a sablonok céljai", () => {
   it("az eszköz- és a kategória-azonosítók külön halmazba kerülnek, ismétlés nélkül", () => {
     assert.deepEqual(
       templateTargets([
-        { assetId: "a1", assetCategoryId: null },
-        { assetId: "a1", assetCategoryId: null },
-        { assetId: null, assetCategoryId: "c1" },
-        { assetId: null, assetCategoryId: "c1" },
-        { assetId: "a2", assetCategoryId: null },
+        { assets: [{ assetId: "a1" }], assetCategoryId: null },
+        { assets: [{ assetId: "a1" }], assetCategoryId: null },
+        { assets: [], assetCategoryId: "c1" },
+        { assets: [], assetCategoryId: "c1" },
+        { assets: [{ assetId: "a2" }], assetCategoryId: null },
       ]),
       { assetIds: ["a1", "a2"], categoryIds: ["c1"] },
     );
   });
 
-  it("a cél nélküli sor egyik halmazba sem kerül, és az üres lista üres halmazokat ad", () => {
+  it("egy többeszközös lista minden eszközét felveszi, ismétlés nélkül, a másik sablonéval együtt", () => {
     assert.deepEqual(
-      templateTargets([{ assetId: null, assetCategoryId: null }]),
-      {
-        assetIds: [],
-        categoryIds: [],
-      },
+      templateTargets([
+        {
+          assets: [{ assetId: "a1" }, { assetId: "a2" }, { assetId: "a3" }],
+          assetCategoryId: null,
+        },
+        {
+          assets: [{ assetId: "a2" }, { assetId: "a4" }],
+          assetCategoryId: null,
+        },
+      ]),
+      { assetIds: ["a1", "a2", "a3", "a4"], categoryIds: [] },
     );
+  });
+
+  it("a cél nélküli sor egyik halmazba sem kerül, és az üres lista üres halmazokat ad", () => {
+    assert.deepEqual(templateTargets([{ assets: [], assetCategoryId: null }]), {
+      assetIds: [],
+      categoryIds: [],
+    });
     assert.deepEqual(templateTargets([]), { assetIds: [], categoryIds: [] });
   });
 });

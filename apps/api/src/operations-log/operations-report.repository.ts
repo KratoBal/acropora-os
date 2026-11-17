@@ -9,6 +9,7 @@ import {
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
 import { collectUnitSubtreeIds } from "../service-assets/unit-subtree.js";
 import { templateTargets } from "./operations-log.repository.js";
+import { templateAppliesTo } from "./template-target.js";
 
 /** Melyik bejegyzések kerülnek a kimutatás SORAI közé. */
 export type OperationsReportEntryFilter =
@@ -210,7 +211,11 @@ export class OperationsReportRepository {
       where: {
         frequency: { in: ["DAILY", "WEEKLY"] },
         OR: [
-          { assetId: { in: assets.map((asset) => asset.id) } },
+          {
+            assets: {
+              some: { assetId: { in: assets.map((asset) => asset.id) } },
+            },
+          },
           ...(categoryIds.length > 0
             ? [{ assetCategoryId: { in: categoryIds } }]
             : []),
@@ -222,17 +227,20 @@ export class OperationsReportRepository {
         frequency: true,
         isActive: true,
         createdAt: true,
-        assetId: true,
+        assets: { select: { assetId: true } },
         assetCategoryId: true,
       },
     });
     return templates.flatMap((template) =>
       assets
         .filter((asset) =>
-          template.assetId
-            ? template.assetId === asset.id
-            : template.assetCategoryId !== null &&
-              template.assetCategoryId === asset.categoryId,
+          templateAppliesTo(
+            {
+              assetIds: template.assets.map((entry) => entry.assetId),
+              categoryId: template.assetCategoryId,
+            },
+            asset,
+          ),
         )
         .map((asset) => ({
           templateId: template.id,
@@ -275,7 +283,7 @@ export class OperationsReportRepository {
     if (unitIds.length === 0) return new Set();
     const templates = await prisma.operationsTaskTemplate.findMany({
       where: { isActive: true },
-      select: { assetId: true, assetCategoryId: true },
+      select: { assets: { select: { assetId: true } }, assetCategoryId: true },
     });
     const { assetIds, categoryIds } = templateTargets(templates);
     const targets: Prisma.AssetWhereInput[] = [

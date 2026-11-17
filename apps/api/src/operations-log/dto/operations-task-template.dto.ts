@@ -80,10 +80,14 @@ class OperationsTaskTemplateBodyDto {
 
   @IsIn(OPERATIONS_TASK_FREQUENCIES) frequency!: OperationsTaskFrequency;
 
-  /** A sablon pontosan egy célra szól: ezek közül PONTOSAN az egyik (a szolgáltatás ellenőrzi). */
+  /** A sablon pontosan egy célra szól: az eszközlista (`assetIds`) és a kategória (`assetCategoryId`) közül PONTOSAN az egyik (a szolgáltatás ellenőrzi). */
   @ValidateIf((_object, value) => value !== undefined && value !== null)
-  @IsString()
-  assetId?: string | null;
+  @IsArray()
+  @ArrayMaxSize(L.assetsMax, {
+    message: `Egy sablonban legfeljebb ${L.assetsMax} eszköz lehet.`,
+  })
+  @IsString({ each: true })
+  assetIds?: string[] | null;
 
   @ValidateIf((_object, value) => value !== undefined && value !== null)
   @IsString()
