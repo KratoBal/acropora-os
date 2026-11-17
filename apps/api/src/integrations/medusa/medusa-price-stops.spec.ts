@@ -196,7 +196,7 @@ describe("storedPriceStops reads what recordPriceAttempt writes", () => {
 
 function serviceOver(
   stored: Row[],
-  products: { id: string; sku: string; name: string }[],
+  products: { id: string; name: string; variants: { sku: string }[] }[],
 ) {
   const calls: string[] = [];
   const db: PriceStopsDatabase = {
@@ -231,7 +231,7 @@ const stopRow = (
 });
 
 describe("the list the endpoint serves", () => {
-  it("gives sku and name from the product row, marks what a person has to do, and puts a person's work first", async () => {
+  it("gives the name from the product row and the SKUs from its variants, marks what a person has to do, and puts a person's work first", async () => {
     const { service } = serviceOver(
       [
         stopRow(
@@ -251,9 +251,13 @@ describe("the list the endpoint serves", () => {
         ),
       ],
       [
-        { id: "run", sku: "SKU-R", name: "Futási" },
-        { id: "human", sku: "SKU-H", name: "Emberi" },
-        { id: "mixed", sku: "SKU-M", name: "Vegyes" },
+        { id: "run", name: "Futási", variants: [{ sku: "SKU-R" }] },
+        { id: "human", name: "Emberi", variants: [{ sku: "SKU-H" }] },
+        {
+          id: "mixed",
+          name: "Vegyes",
+          variants: [{ sku: "SKU-M1" }, { sku: "SKU-M2" }],
+        },
       ],
     );
     const view = await service.list();
@@ -263,8 +267,8 @@ describe("the list the endpoint serves", () => {
     );
     // a person's work first (human, mixed), the run failure last although it is the newest
     assert.deepEqual(
-      view.stops.map((s) => s.sku),
-      ["SKU-H", "SKU-M", "SKU-R"],
+      view.stops.map((s) => s.skus.join("+")),
+      ["SKU-H", "SKU-M1+SKU-M2", "SKU-R"],
     );
     assert.deepEqual(view.stops[0]!.kinds, [
       { kind: "own-price-missing", needsPerson: true },
@@ -319,15 +323,15 @@ describe("the list the endpoint serves", () => {
     );
   });
 
-  it("a reference whose product is gone is listed with a null sku and name, not dropped and not an error", async () => {
+  it("a reference whose product is gone is listed with no skus and a null name, not dropped and not an error", async () => {
     const { service } = serviceOver(
       [stopRow("gone", "X: MEGÁLLT (own-price-missing) y")],
       [],
     );
     const view = await service.list();
     assert.deepEqual(
-      [view.stops[0]!.sku, view.stops[0]!.name, view.total],
-      [null, null, 1],
+      [view.stops[0]!.skus, view.stops[0]!.name, view.total],
+      [[], null, 1],
     );
   });
 
