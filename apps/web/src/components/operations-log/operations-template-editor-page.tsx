@@ -24,7 +24,6 @@ import {
   operationsFieldErrors,
   PERMISSIONS,
   type AssetCategory,
-  type AssetListItem,
   type OperationsMeterRole,
   type OperationsTaskFieldType,
   type OperationsTaskFrequency,
@@ -37,7 +36,6 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { assetCategoriesApi } from "@/lib/api/asset-categories";
-import { assetsApi } from "@/lib/api/assets";
 import { operationsLogApi } from "@/lib/api/operations-log";
 
 import {
@@ -47,6 +45,8 @@ import {
   OPERATIONS_FREQUENCY_LABELS,
   OPERATIONS_TEMPLATES_PATH,
 } from "./operations-format";
+import { TemplateAssetListEditor } from "./template-asset-list-editor";
+import { assetLabel, type ListedAsset } from "./template-asset-list";
 
 /** Egy mező a szerkesztőben: a `rowKey` csak a listához kell, a `key` a meglévő mező tárolt azonosítója. */
 interface DraftField {
@@ -63,12 +63,10 @@ interface Draft {
   name: string;
   description: string;
   frequency: OperationsTaskFrequency;
-  /** "ASSET": a kézzel választott eszközlista (ma egy eszköz, a lista-szerkesztő a következő PR); "CATEGORY": az eszköz-kategória. */
+  /** "ASSET": a kézzel választott eszközlista; "CATEGORY": az eszköz-kategória. */
   targetKind: "ASSET" | "CATEGORY";
-  /** A cél eszközlistája (azonosítók); a szerkesztő ma egy eszközt választ, a többeszközös listát megtartja, amíg nem választ újat. */
-  assetIds: string[];
-  /** A kiválasztott eszköz felirata (szám és név; több eszköznél a darabszám), a keresőmező alatt. */
-  assetText: string;
+  /** A cél eszközlistája (azonosító és felirat), a hozzáadás sorrendjében. */
+  assets: ListedAsset[];
   categoryId: string;
   fields: DraftField[];
 }
@@ -81,8 +79,7 @@ const EMPTY: Draft = {
   description: "",
   frequency: "WEEKLY",
   targetKind: "ASSET",
-  assetIds: [],
-  assetText: "",
+  assets: [],
   categoryId: "",
   fields: [],
 };
@@ -103,16 +100,13 @@ function draftOf(template: OperationsTaskTemplateDto): Draft {
     description: template.description ?? "",
     frequency: template.frequency,
     targetKind: template.target.kind === "ASSETS" ? "ASSET" : "CATEGORY",
-    assetIds:
+    assets:
       template.target.kind === "ASSETS"
-        ? template.target.assets.map((asset) => asset.assetId)
+        ? template.target.assets.map((asset) => ({
+            id: asset.assetId,
+            label: assetLabel(asset),
+          }))
         : [],
-    assetText:
-      template.target.kind === "ASSETS"
-        ? template.target.assets.length === 1
-          ? `${template.target.assets[0]!.assetNumber} ${template.target.assets[0]!.name}`
-          : `${template.target.assets.length} eszköz`
-        : "",
     categoryId:
       template.target.kind === "CATEGORY" ? template.target.categoryId : "",
     fields: template.fields.map((field) => ({
@@ -151,7 +145,10 @@ function inputOf(
     name: draft.name.trim(),
     description: draft.description.trim() || null,
     frequency: draft.frequency,
-    assetIds: draft.targetKind === "ASSET" ? draft.assetIds : null,
+    assetIds:
+      draft.targetKind === "ASSET"
+        ? draft.assets.map((asset) => asset.id)
+        : null,
     assetCategoryId: draft.targetKind === "CATEGORY" ? draft.categoryId : null,
     fields: fieldInputs(draft),
   };
@@ -161,14 +158,14 @@ function inputOf(
 export function draftErrors(draft: Draft): string[] {
   const errors: string[] = [];
   if (draft.name.trim() === "") errors.push("A sablon nevét meg kell adni.");
-  if (draft.targetKind === "ASSET" && draft.assetIds.length === 0)
-    errors.push("Válassz eszközt, amelyre a sablon szól.");
+  if (draft.targetKind === "ASSET" && draft.assets.length === 0)
+    errors.push("Adj a listához legalább egy eszközt, amelyre a sablon szól.");
   if (draft.targetKind === "CATEGORY" && draft.categoryId === "")
     errors.push("Válassz eszköz-kategóriát, amelyre a sablon szól.");
   return [...errors, ...operationsFieldErrors(fieldInputs(draft))];
 }
 
-const TARGET_OPTIONS = ["Eszköz", "Eszköz-kategória"] as const;
+const TARGET_OPTIONS = ["Eszközlista", "Eszköz-kategória"] as const;
 const L = OPERATIONS_TEMPLATE_LIMITS;
 
 /**
@@ -199,8 +196,6 @@ export function OperationsTemplateEditorPage({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [retiring, setRetiring] = useState(false);
-  const [search, setSearch] = useState("");
-  const [found, setFound] = useState<AssetListItem[]>([]);
 
   useEffect(() => {
     if (!canManage) return;
@@ -225,26 +220,6 @@ export function OperationsTemplateEditorPage({
     }
     return () => controller.abort();
   }, [canManage, templateId, token]);
-
-  useEffect(() => {
-    const needle = search.trim();
-    if (!canManage || needle.length < 2) {
-      setFound([]);
-      return;
-    }
-    const controller = new AbortController();
-    const query = new URLSearchParams({ search: needle, pageSize: "20" });
-    const timer = setTimeout(() => {
-      assetsApi
-        .list(token, query, controller.signal)
-        .then((response) => setFound(response.items))
-        .catch(() => setFound([]));
-    }, 250);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [canManage, search, token]);
 
   if (!canManage)
     return (
@@ -440,56 +415,23 @@ export function OperationsTemplateEditorPage({
               <PilotSegmentedControl
                 options={TARGET_OPTIONS}
                 value={
-                  draft.targetKind === "ASSET" ? "Eszköz" : "Eszköz-kategória"
+                  draft.targetKind === "ASSET"
+                    ? "Eszközlista"
+                    : "Eszköz-kategória"
                 }
                 onChange={(value) =>
                   change({
-                    targetKind: value === "Eszköz" ? "ASSET" : "CATEGORY",
+                    targetKind: value === "Eszközlista" ? "ASSET" : "CATEGORY",
                   })
                 }
               />
               {draft.targetKind === "ASSET" ? (
-                <div className="space-y-3">
-                  <p className="text-sm text-pilot-grey-700">
-                    {draft.assetIds.length
-                      ? `Kiválasztva: ${draft.assetText}`
-                      : "Még nincs eszköz kiválasztva."}
-                  </p>
-                  {readOnly ? null : (
-                    <>
-                      <div className="w-full max-w-sm">
-                        <PilotInput
-                          aria-label="Eszköz keresése"
-                          placeholder="Keresés számra vagy névre (legalább 2 karakter)…"
-                          value={search}
-                          onChange={setSearch}
-                        />
-                      </div>
-                      {found.length ? (
-                        <ul className="max-w-xl divide-y divide-pilot-grey-200 rounded-md ring-1 ring-pilot-grey-200">
-                          {found.map((asset) => (
-                            <li key={asset.id}>
-                              <button
-                                type="button"
-                                className="block w-full px-3 py-2 text-left text-sm text-pilot-grey-800 hover:bg-pilot-grey-50"
-                                onClick={() => {
-                                  change({
-                                    assetIds: [asset.id],
-                                    assetText: `${asset.assetNumber} ${asset.name}`,
-                                  });
-                                  setSearch("");
-                                  setFound([]);
-                                }}
-                              >
-                                {asset.assetNumber} · {asset.name}
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </>
-                  )}
-                </div>
+                <TemplateAssetListEditor
+                  token={token}
+                  assets={draft.assets}
+                  readOnly={readOnly}
+                  onChange={(assets) => change({ assets })}
+                />
               ) : (
                 <PilotFormField label="Eszköz-kategória" className="max-w-sm">
                   <PilotSelect
