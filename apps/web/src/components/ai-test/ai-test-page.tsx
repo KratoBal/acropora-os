@@ -81,6 +81,16 @@ const ERROR_SENTENCES: Record<string, string> = {
   ai_not_configured: "Az AI kapcsolat ezen a környezeten nincs beállítva.",
 };
 
+/**
+ * A kód mondata, csak a táblázat SAJÁT kulcsaiból (barracuda, #2634): egy sima objektum indexelése a prototípust is
+ * eléri, egy "toString" vagy "constructor" kód egy függvényt kapna mondat helyett.
+ */
+function errorSentence(code: string | null): string | null {
+  return code !== null && Object.hasOwn(ERROR_SENTENCES, code)
+    ? ERROR_SENTENCES[code]!
+    : null;
+}
+
 function formatMs(value: number | null): string {
   if (value === null) return "-";
   return `${formatNumber(value / 1000, 1)} mp (${formatNumber(value, 0)} ms)`;
@@ -283,9 +293,8 @@ export function AiTestPage() {
                   A hibakód mellett a VÁRAKOZÁS HOSSZA a leghasznosabb szám:
                   abból derül ki, hogy időtúllépés történt-e, és hol.
                 */}
-                {exchange.reply.errorCode &&
-                ERROR_SENTENCES[exchange.reply.errorCode] ? (
-                  <>{ERROR_SENTENCES[exchange.reply.errorCode]} </>
+                {errorSentence(exchange.reply.errorCode) ? (
+                  <>{errorSentence(exchange.reply.errorCode)} </>
                 ) : null}
                 Hibakód:{" "}
                 <strong>{exchange.reply.errorCode ?? "ismeretlen"}</strong>
