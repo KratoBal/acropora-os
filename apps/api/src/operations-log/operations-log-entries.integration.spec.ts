@@ -141,7 +141,7 @@ describe(
         data: {
           name: name("sablon"),
           frequency: "WEEKLY",
-          assetId: ids.asset,
+          assets: { create: [{ assetId: ids.asset }] },
           fields: {
             create: [
               {

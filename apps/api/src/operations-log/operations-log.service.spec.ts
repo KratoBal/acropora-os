@@ -29,7 +29,7 @@ type FakeRepository = Pick<
   | "listTemplates"
   | "templateById"
   | "fieldKeys"
-  | "assetIsLive"
+  | "liveAssetIds"
   | "categoryIsActive"
   | "createTemplate"
   | "replaceTemplate"
@@ -66,7 +66,8 @@ function fixture(
               ]),
             ),
           },
-    assetIsLive: async () => over.assetLive ?? true,
+    liveAssetIds: async (ids) =>
+      over.assetLive === false ? new Set<string>() : new Set(ids),
     categoryIsActive: async () => over.categoryActive ?? true,
     createTemplate: async (write) => {
       calls.write = write;
@@ -93,7 +94,7 @@ const input = (
 ): OperationsTaskTemplateInput => ({
   name: "Homokszűrő visszamosás",
   frequency: "WEEKLY",
-  assetId: "asset-1",
+  assetIds: ["asset-1"],
   fields: [],
   ...over,
 });
@@ -107,21 +108,53 @@ const field = (
 });
 
 describe("a sablon célja", () => {
-  it("pontosan egy cél kell: egy eszköz VAGY egy kategória", async () => {
+  it("pontosan egy cél kell: eszközlista VAGY egy kategória", async () => {
     const { service } = fixture();
     await assert.rejects(
-      service.create(input({ assetId: null, assetCategoryId: null }), "u1"),
+      service.create(input({ assetIds: [], assetCategoryId: null }), "u1"),
       BadRequestException,
     );
     await assert.rejects(
-      service.create(input({ assetId: "a", assetCategoryId: "c" }), "u1"),
+      service.create(input({ assetIds: null, assetCategoryId: null }), "u1"),
+      BadRequestException,
+    );
+    await assert.rejects(
+      service.create(input({ assetIds: ["a"], assetCategoryId: "c" }), "u1"),
       BadRequestException,
     );
     // az érvényes pár: a kitöltött cél átmegy (kategóriával is)
     const { service: ok, calls } = fixture();
-    await ok.create(input({ assetId: null, assetCategoryId: "c" }), "u1");
+    await ok.create(input({ assetIds: [], assetCategoryId: "c" }), "u1");
     assert.equal(calls.write?.assetCategoryId, "c");
-    assert.equal(calls.write?.assetId, null);
+    assert.deepEqual(calls.write?.assetIds, []);
+  });
+
+  it("az eszközlista több eszközt is elbír: az ismétlődő és az üres azonosító kiesik, a sorrend marad, és a lista mérete korlátos", async () => {
+    const { service, calls } = fixture();
+    await service.create(
+      input({
+        assetIds: ["a2", " a1 ", "a2", "  ", "a3"],
+        assetCategoryId: null,
+      }),
+      "u1",
+    );
+    assert.deepEqual(calls.write?.assetIds, ["a2", "a1", "a3"]);
+    assert.equal(calls.write?.assetCategoryId, null);
+    const tooMany = Array.from({ length: 201 }, (_, i) => `a${i}`);
+    await assert.rejects(
+      fixture().service.create(input({ assetIds: tooMany }), "u1"),
+      /legfeljebb 200/,
+    );
+  });
+
+  it("CONTROL: ha a lista egy eszköze nem él, a felvétel elutasítva, a hiányzók számával többes listánál", async () => {
+    await assert.rejects(
+      fixture({ assetLive: false }).service.create(
+        input({ assetIds: ["a", "b"] }),
+        "u1",
+      ),
+      /2 eszköz nem található/,
+    );
   });
 
   it("archivált eszközre és kivezetett kategóriára nem vehető fel", async () => {
@@ -131,7 +164,7 @@ describe("a sablon célja", () => {
     );
     await assert.rejects(
       fixture({ categoryActive: false }).service.create(
-        input({ assetId: null, assetCategoryId: "c" }),
+        input({ assetIds: [], assetCategoryId: "c" }),
         "u1",
       ),
       /kivezetett/,
@@ -148,13 +181,13 @@ describe("a sablon célja", () => {
       input({
         name: "  Visszamosás ",
         description: "  ",
-        assetId: " asset-1 ",
+        assetIds: [" asset-1 "],
       }),
       "u1",
     );
     assert.equal(calls.write?.name, "Visszamosás");
     assert.equal(calls.write?.description, null);
-    assert.equal(calls.write?.assetId, "asset-1");
+    assert.deepEqual(calls.write?.assetIds, ["asset-1"]);
   });
 });
 

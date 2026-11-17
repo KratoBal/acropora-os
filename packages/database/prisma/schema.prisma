@@ -5001,7 +5001,7 @@ model Asset {
   worksheetLines  WorksheetLine[]
   label           AssetLabel?
   /// Az üzemeltetési napló sablonjai, amelyek erre az eszközre szólnak (task os-uzemeltetesi-naplo).
-  operationsTaskTemplates OperationsTaskTemplate[]
+  operationsTemplateTargets OperationsTaskTemplateAsset[]
   /// Az üzemeltetési napló bejegyzései erről az eszközről (task os-uzemeltetesi-naplo, S2).
   operationsLogEntries    OperationsLogEntry[]
 
@@ -12893,9 +12893,10 @@ model OperationsTaskTemplate {
   name            String                  @db.VarChar(120)
   description     String?                 @db.VarChar(1000)
   frequency       OperationsTaskFrequency
-  /// A SABLON PONTOSAN EGY CÉLRA SZÓL: egy eszközre VAGY egy eszköz-kategóriára (a kategóriára szóló sablon minden ilyen
-  /// kategóriájú eszköznél megnyílik). A migráció CHECK-je tartja: a kettő közül PONTOSAN egy van kitöltve.
-  assetId         String?
+  /// A SABLON PONTOSAN EGY CÉLTÍPUSRA SZÓL: egy eszköz-kategóriára (a kategóriára szóló sablon minden ilyen kategóriájú eszköznél
+  /// megnyílik) VAGY kézzel választott eszközlistára (`assets`, legalább egy eszköz; egy eszköz egy elemű lista). A két cél
+  /// kizárja egymást: kategória XOR nem üres lista. Táblák közti CHECK nincs, ezt a szolgáltatás tartja ugyanabban a tranzakcióban,
+  /// amelyben a sablon szerkesztése a sor zárját veszi (`replaceTemplate`), integrációs teszttel (task t-20261117-sablon-eszkozlista).
   assetCategoryId String?
   /// A kivezetett sablon nem törlődik (a bejegyzések hivatkozni fognak rá): a kínálatból esik ki, a régi bejegyzések mellett
   /// olvasható marad.
@@ -12905,14 +12906,29 @@ model OperationsTaskTemplate {
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
 
-  asset         Asset?                @relation(fields: [assetId], references: [id], onDelete: Restrict)
   assetCategory AssetCategory?        @relation(fields: [assetCategoryId], references: [id], onDelete: Restrict)
+  assets        OperationsTaskTemplateAsset[]
   fields        OperationsTaskField[]
   entries       OperationsLogEntry[]
 
   @@index([isActive, frequency])
-  @@index([assetId])
   @@index([assetCategoryId])
+}
+
+/// A KÉZZEL VÁLASZTOTT ESZKÖZLISTA EGY ELEME (task t-20261117-sablon-eszkozlista, kártya 42bc1c67; Balázs, 2026-11-17): a sablon erre az
+/// eszközre szól. A sablon törlésekor a sorok mennek vele; az eszköz törlését a sor MEGTAGADJA (`Restrict`, ugyanaz, mint a régi egy-eszközös
+/// célnál: egy hangos elutasítás jobb, mint egy csendben összezsugorodó lista).
+model OperationsTaskTemplateAsset {
+  id         String   @id @default(cuid())
+  templateId String
+  assetId    String
+  createdAt  DateTime @default(now())
+
+  template OperationsTaskTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  asset    Asset                  @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@unique([templateId, assetId])
+  @@index([assetId])
 }
 
 model OperationsTaskField {

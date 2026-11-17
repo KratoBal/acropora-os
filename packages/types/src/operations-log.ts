@@ -64,6 +64,8 @@ export const OPERATIONS_TEMPLATE_LIMITS = {
   unitMax: 16,
   keyMax: 40,
   fieldsMax: 30,
+  /** Egy eszközlista-célú sablonban legfeljebb ennyi eszköz (a kérés mérete és a lista áttekinthetősége). */
+  assetsMax: 200,
 } as const;
 
 export interface OperationsTaskFieldDto {
@@ -82,9 +84,15 @@ export interface OperationsTaskFieldDto {
   removedAt: string | null;
 }
 
-/** A sablon célja: egy eszköz VAGY egy eszköz-kategória (pontosan az egyik). */
+/**
+ * A sablon célja: kézzel választott eszközlista (legalább egy eszköz; egy eszköz egy elemű lista) VAGY egy eszköz-kategória (pontosan az
+ * egyik). A lista elemei az eszköz száma szerint rendezettek.
+ */
 export type OperationsTaskTarget =
-  | { kind: "ASSET"; assetId: string; assetNumber: string; name: string }
+  | {
+      kind: "ASSETS";
+      assets: { assetId: string; assetNumber: string; name: string }[];
+    }
   | { kind: "CATEGORY"; categoryId: string; name: string };
 
 export interface OperationsTaskTemplateDto {
@@ -128,7 +136,8 @@ export interface OperationsTaskTemplateInput {
   name: string;
   description?: string | null;
   frequency: OperationsTaskFrequency;
-  assetId?: string | null;
+  /** A cél: eszközlista (legalább egy azonosító) VAGY kategória, pontosan az egyik; egy eszköz egy elemű lista. */
+  assetIds?: string[] | null;
   assetCategoryId?: string | null;
   /** A mezők a megadott sorrendben állnak; a lista a TELJES mezőkészletet adja (ami nincs benne, kikerül). */
   fields: OperationsTaskFieldInput[];

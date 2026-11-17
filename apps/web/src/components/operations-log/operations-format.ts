@@ -25,9 +25,11 @@ export const OPERATIONS_FREQUENCY_VARIANT: Record<
 
 /** A sablon célja a felületen: „Eszköz · V2196 Homokszűrő” vagy „Kategória · Vízkezelés”. */
 export function targetLabel(target: OperationsTaskTarget): string {
-  return target.kind === "ASSET"
-    ? `Eszköz · ${target.assetNumber} ${target.name}`
-    : `Kategória · ${target.name}`;
+  if (target.kind === "CATEGORY") return `Kategória · ${target.name}`;
+  const [only] = target.assets;
+  return target.assets.length === 1 && only
+    ? `Eszköz · ${only.assetNumber} ${only.name}`
+    : `Eszközlista · ${target.assets.length} eszköz`;
 }
 
 export function errorText(cause: unknown, fallback: string): string {

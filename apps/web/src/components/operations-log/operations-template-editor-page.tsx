@@ -63,9 +63,11 @@ interface Draft {
   name: string;
   description: string;
   frequency: OperationsTaskFrequency;
+  /** "ASSET": a kézzel választott eszközlista (ma egy eszköz, a lista-szerkesztő a következő PR); "CATEGORY": az eszköz-kategória. */
   targetKind: "ASSET" | "CATEGORY";
-  assetId: string;
-  /** A kiválasztott eszköz felirata (szám és név), a keresőmező alatt. */
+  /** A cél eszközlistája (azonosítók); a szerkesztő ma egy eszközt választ, a többeszközös listát megtartja, amíg nem választ újat. */
+  assetIds: string[];
+  /** A kiválasztott eszköz felirata (szám és név; több eszköznél a darabszám), a keresőmező alatt. */
   assetText: string;
   categoryId: string;
   fields: DraftField[];
@@ -79,7 +81,7 @@ const EMPTY: Draft = {
   description: "",
   frequency: "WEEKLY",
   targetKind: "ASSET",
-  assetId: "",
+  assetIds: [],
   assetText: "",
   categoryId: "",
   fields: [],
@@ -100,11 +102,16 @@ function draftOf(template: OperationsTaskTemplateDto): Draft {
     name: template.name,
     description: template.description ?? "",
     frequency: template.frequency,
-    targetKind: template.target.kind,
-    assetId: template.target.kind === "ASSET" ? template.target.assetId : "",
+    targetKind: template.target.kind === "ASSETS" ? "ASSET" : "CATEGORY",
+    assetIds:
+      template.target.kind === "ASSETS"
+        ? template.target.assets.map((asset) => asset.assetId)
+        : [],
     assetText:
-      template.target.kind === "ASSET"
-        ? `${template.target.assetNumber} ${template.target.name}`
+      template.target.kind === "ASSETS"
+        ? template.target.assets.length === 1
+          ? `${template.target.assets[0]!.assetNumber} ${template.target.assets[0]!.name}`
+          : `${template.target.assets.length} eszköz`
         : "",
     categoryId:
       template.target.kind === "CATEGORY" ? template.target.categoryId : "",
@@ -144,7 +151,7 @@ function inputOf(
     name: draft.name.trim(),
     description: draft.description.trim() || null,
     frequency: draft.frequency,
-    assetId: draft.targetKind === "ASSET" ? draft.assetId : null,
+    assetIds: draft.targetKind === "ASSET" ? draft.assetIds : null,
     assetCategoryId: draft.targetKind === "CATEGORY" ? draft.categoryId : null,
     fields: fieldInputs(draft),
   };
@@ -154,7 +161,7 @@ function inputOf(
 export function draftErrors(draft: Draft): string[] {
   const errors: string[] = [];
   if (draft.name.trim() === "") errors.push("A sablon nevét meg kell adni.");
-  if (draft.targetKind === "ASSET" && draft.assetId === "")
+  if (draft.targetKind === "ASSET" && draft.assetIds.length === 0)
     errors.push("Válassz eszközt, amelyre a sablon szól.");
   if (draft.targetKind === "CATEGORY" && draft.categoryId === "")
     errors.push("Válassz eszköz-kategóriát, amelyre a sablon szól.");
@@ -444,7 +451,7 @@ export function OperationsTemplateEditorPage({
               {draft.targetKind === "ASSET" ? (
                 <div className="space-y-3">
                   <p className="text-sm text-pilot-grey-700">
-                    {draft.assetId
+                    {draft.assetIds.length
                       ? `Kiválasztva: ${draft.assetText}`
                       : "Még nincs eszköz kiválasztva."}
                   </p>
@@ -467,7 +474,7 @@ export function OperationsTemplateEditorPage({
                                 className="block w-full px-3 py-2 text-left text-sm text-pilot-grey-800 hover:bg-pilot-grey-50"
                                 onClick={() => {
                                   change({
-                                    assetId: asset.id,
+                                    assetIds: [asset.id],
                                     assetText: `${asset.assetNumber} ${asset.name}`,
                                   });
                                   setSearch("");

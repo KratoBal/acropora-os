@@ -58,7 +58,10 @@ function template(
     name: "Homokszűrő visszamosás",
     description: null,
     frequency: "WEEKLY",
-    target: { kind: "ASSET", assetId: "a1", assetNumber: "E-1", name: "Szűrő" },
+    target: {
+      kind: "ASSETS",
+      assets: [{ assetId: "a1", assetNumber: "E-1", name: "Szűrő" }],
+    },
     isActive: true,
     fields: [
       field("elotte", "NUMBER", {
