@@ -5,6 +5,7 @@ import type { MedusaOrderOverviewRow } from "../../integrations/medusa/medusa-ad
 import {
   NO_FACTS,
   applyFilters,
+  shortageCountsOf,
   countersOf,
   inView,
   isStale,
@@ -309,6 +310,7 @@ describe("stage", () => {
       proformaExpired: false,
       transferReceived: false,
       proformaMissing: false,
+      stockShortage: null,
     };
     const shipped = {
       invoiceNumber: "ACR-2026-1",
@@ -318,6 +320,7 @@ describe("stage", () => {
       proformaExpired: false,
       transferReceived: false,
       proformaMissing: false,
+      stockShortage: null,
     };
     assert.deepEqual(
       [
@@ -620,5 +623,61 @@ describe("the store pickup marker follows the option id (task t-20261116-bolti-j
       if (before === undefined) delete process.env.ACROPORA_SO_PICKUP;
       else process.env.ACROPORA_SO_PICKUP = before;
     }
+  });
+});
+
+describe("the active stock shortage on the list item (card ac167fc2)", () => {
+  it("toListItem carries the facts' shortage, and no fact means null", () => {
+    assert.equal(
+      toListItem(row({ id: "x" }), NO_FACTS, NOW).stockShortage,
+      null,
+    );
+    assert.deepEqual(
+      toListItem(
+        row({ id: "x" }),
+        { ...NO_FACTS, stockShortage: { open: 1, agreed: 2 } },
+        NOW,
+      ).stockShortage,
+      { open: 1, agreed: 2 },
+    );
+  });
+
+  it("the shortage filter keeps only the items with an active shortage, and no filter keeps all", () => {
+    const withShortage = toListItem(
+      row({ id: "a" }),
+      { ...NO_FACTS, stockShortage: { open: 1, agreed: 0 } },
+      NOW,
+    );
+    const without = toListItem(row({ id: "b" }), NO_FACTS, NOW);
+    assert.deepEqual(
+      applyFilters([withShortage, without], { shortage: "active" }).map(
+        (item) => item.id,
+      ),
+      ["a"],
+    );
+    assert.equal(applyFilters([withShortage, without], {}).length, 2);
+  });
+});
+
+describe("the counts of the active stock shortages by order (card ac167fc2)", () => {
+  it("folds the grouped rows into open and agreed per order, merging an order's rows", () => {
+    const counts = shortageCountsOf([
+      { orderId: "a", status: "OPEN", _count: { _all: 2 } },
+      { orderId: "a", status: "AGREED", _count: { _all: 1 } },
+      { orderId: "b", status: "AGREED", _count: { _all: 3 } },
+    ]);
+    assert.deepEqual(Object.fromEntries(counts), {
+      a: { open: 2, agreed: 1 },
+      b: { open: 0, agreed: 3 },
+    });
+  });
+
+  it("only OPEN and AGREED count: a done or withdrawn row is no active shortage even if it were handed in", () => {
+    const counts = shortageCountsOf([
+      { orderId: "a", status: "DONE", _count: { _all: 4 } },
+      { orderId: "b", status: "WITHDRAWN", _count: { _all: 1 } },
+      { orderId: "c", status: "OPEN", _count: { _all: 1 } },
+    ]);
+    assert.deepEqual([...counts.keys()], ["c"]);
   });
 });

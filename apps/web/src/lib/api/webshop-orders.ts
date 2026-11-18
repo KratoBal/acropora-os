@@ -47,6 +47,7 @@ export const WEBSHOP_ORDER_QUERY_KEYS = [
   "invoice",
   "customerType",
   "newCustomer",
+  "shortage",
   "sort",
   "direction",
   "page",

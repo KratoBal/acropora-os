@@ -266,6 +266,11 @@ export interface WebshopOrderListItem {
   proformaMissing: boolean;
   /** Az előre utalás pénze megjött (bb3a6bd5): a listán „Kifizetve”. */
   transferReceived: boolean;
+  /**
+   * AKTÍV KÉSZLETHIÁNY a rendelésen (card ac167fc2): a nyitott (OPEN) és a megállapodott (AGREED) hiányok száma; `null`, ha nincs.
+   * Az OS saját rekordja (`WebshopOrderShortage`), a rendelés a webshopban marad.
+   */
+  stockShortage: { open: number; agreed: number } | null;
   status: {
     code: WebshopOrderStatus | null;
     label: string | null;
@@ -295,6 +300,8 @@ export interface WebshopOrderListQuery {
   invoice?: "issued" | "missing";
   customerType?: "registered" | "guest";
   newCustomer?: boolean;
+  /** `active`: csak a nyitott (OPEN vagy AGREED) készlethiányos rendelések (card ac167fc2). */
+  shortage?: "active";
   sort?: WebshopOrderSortField;
   direction?: "asc" | "desc";
   page?: number;
@@ -309,6 +316,8 @@ export interface WebshopOrderListResponse {
   pageSize: number;
   /** A számlálók a nézet szerint (Nyitott/Összes), a többi szűrőtől függetlenül. */
   counters: Record<WebshopOrderStage, number>;
+  /** A nyitott (OPEN vagy AGREED) készlethiányos rendelések száma a nézetben, a többi szűrőtől függetlenül (card ac167fc2). */
+  shortageOrders: number;
   /** A szűrők választéka: a ténylegesen előforduló módok. */
   shippingMethods: string[];
   paymentMethods: string[];

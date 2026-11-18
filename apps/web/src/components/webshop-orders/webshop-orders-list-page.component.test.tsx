@@ -89,6 +89,7 @@ const order = (
   proformaExpired: false,
   proformaMissing: false,
   transferReceived: false,
+  stockShortage: null,
   status: {
     code: "confirmed",
     label: "Visszaigazolva",
@@ -109,6 +110,7 @@ const response = (
   page: 1,
   pageSize: 50,
   counters: { processing: 3, invoice: 5, dispatch: 4, pickup: 2, stale: 1 },
+  shortageOrders: 0,
   shippingMethods: ["Foxpost csomagpont"],
   paymentMethods: ["Stripe"],
   truncated: false,
@@ -340,6 +342,79 @@ describe("WebshopOrdersListPage", () => {
       const label = screen.getByText(text).closest("label")!;
       expect(label.querySelector(`input[aria-label="${aria}"]`)).not.toBeNull();
     }
+  });
+
+  describe("the active stock shortage (card ac167fc2, third slice)", () => {
+    /*
+      WHAT TURNS IT RED: the flag missing on an order with an active shortage, or on every order; the open and agreed counts swapped or a zero
+      count printed; the shortage tile without the count of the response, or a click that does not set (and a second click does not clear) the
+      shortage filter; "Szűrők törlése" that keeps the shortage filter.
+    */
+    it("flags only the order that has an active shortage, with its open and agreed counts", async () => {
+      api.list.mockResolvedValue(
+        response([
+          order({ stockShortage: { open: 1, agreed: 2 } }),
+          order({ id: "order_39", displayId: 39 }),
+        ]),
+      );
+      render(createElement(WebshopOrdersListPage));
+      const flags = await screen.findAllByTestId("keszlethiany-jelzes");
+      expect(flags).toHaveLength(1);
+      expect(flags[0]!.textContent).toBe(
+        "Készlethiány: 1 nyitott · 2 megállapodott",
+      );
+    });
+
+    it("prints only the count that is not zero", async () => {
+      api.list.mockResolvedValue(
+        response([
+          order({ stockShortage: { open: 0, agreed: 1 } }),
+          order({
+            id: "order_39",
+            displayId: 39,
+            stockShortage: { open: 3, agreed: 0 },
+          }),
+        ]),
+      );
+      render(createElement(WebshopOrdersListPage));
+      const flags = await screen.findAllByTestId("keszlethiany-jelzes");
+      expect(flags.map((f) => f.textContent).sort()).toEqual([
+        "Készlethiány: 1 megállapodott",
+        "Készlethiány: 3 nyitott",
+      ]);
+    });
+
+    it("the shortage tile shows the response's count, filters on a click, and clears on the second click", async () => {
+      api.list.mockResolvedValue(response([order()], { shortageOrders: 3 }));
+      const { rerender } = render(createElement(WebshopOrdersListPage));
+      const counters = await screen.findByRole("group", {
+        name: "Feldolgozási számlálók",
+      });
+      fireEvent.click(
+        await within(counters).findByRole("button", {
+          name: /Készlethiány\s*3/,
+        }),
+      );
+      expect(nav.replace).toHaveBeenLastCalledWith(
+        "/webshop/rendelesek?shortage=active",
+      );
+      nav.params = new URLSearchParams("shortage=active");
+      rerender(createElement(WebshopOrdersListPage));
+      const active = await screen.findByRole("button", {
+        name: /Készlethiány\s*3/,
+      });
+      expect(active.getAttribute("aria-pressed")).toBe("true");
+      fireEvent.click(active);
+      expect(nav.replace).toHaveBeenLastCalledWith("/webshop/rendelesek");
+    });
+
+    it('"Szűrők törlése" clears the shortage filter too', async () => {
+      nav.params = new URLSearchParams("shortage=active");
+      api.list.mockResolvedValue(response([order()], { shortageOrders: 1 }));
+      render(createElement(WebshopOrdersListPage));
+      fireEvent.click(await screen.findByText("Szűrők törlése"));
+      expect(nav.replace).toHaveBeenLastCalledWith("/webshop/rendelesek");
+    });
   });
 
   it("a counter filters, and the same counter clicked again clears it", async () => {

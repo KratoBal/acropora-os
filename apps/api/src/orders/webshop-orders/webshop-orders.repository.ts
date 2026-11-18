@@ -13,6 +13,7 @@ import {
   huBase,
 } from "../../partner-duplicates/partner-duplicate-groups.js";
 import type { OrderTaxKey } from "./webshop-order-invoice.rules.js";
+import { shortageCountsOf } from "./webshop-orders.rules.js";
 
 import {
   linkExternalInvoices,
@@ -381,6 +382,25 @@ export class WebshopOrdersRepository {
         ];
       }),
     );
+  }
+
+  /**
+   * AZ AKTÍV KÉSZLETHIÁNYOK a megadott rendelésekre (card ac167fc2): rendelésenként a nyitott (OPEN) és a megállapodott (AGREED) hiányok
+   * száma. EGY kötegelt olvasás az oldal összes azonosítójára; hiány nélküli rendelés nincs a térképben.
+   */
+  async activeShortages(
+    orderIds: string[],
+  ): Promise<Map<string, { open: number; agreed: number }>> {
+    if (!orderIds.length) return new Map();
+    const rows = await prisma.webshopOrderShortage.groupBy({
+      by: ["orderId", "status"],
+      where: {
+        orderId: { in: orderIds },
+        status: { in: ["OPEN", "AGREED"] },
+      },
+      _count: { _all: true },
+    });
+    return shortageCountsOf(rows);
   }
 
   /**

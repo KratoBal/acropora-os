@@ -473,15 +473,23 @@ export class WebshopOrdersService {
   ): Promise<WebshopOrderListResponse> {
     const { rows, truncated } = await this.readAll();
     const ids = rows.map((row) => row.id);
-    const [invoices, parcels, thresholds, proformas, receipts, externals] =
-      await Promise.all([
-        this.repository.invoices(ids),
-        this.parcels.activeParcelsFor(ids),
-        this.repository.staleThresholds(),
-        this.repository.proformas(ids),
-        this.repository.transferReceipts(ids),
-        this.repository.externalInvoices(ids),
-      ]);
+    const [
+      invoices,
+      parcels,
+      thresholds,
+      proformas,
+      receipts,
+      externals,
+      shortages,
+    ] = await Promise.all([
+      this.repository.invoices(ids),
+      this.parcels.activeParcelsFor(ids),
+      this.repository.staleThresholds(),
+      this.repository.proformas(ids),
+      this.repository.transferReceipts(ids),
+      this.repository.externalInvoices(ids),
+      this.repository.activeShortages(ids),
+    ]);
     const hours = staleHoursOf(thresholds);
     const items = rows.map((row) =>
       toListItem(
@@ -501,6 +509,7 @@ export class WebshopOrdersService {
               receipts.has(row.id) || !!externals.get(row.id)?.paid,
             now,
           }),
+          shortages.get(row.id) ?? null,
         ),
         now,
         hours,
@@ -520,6 +529,7 @@ export class WebshopOrdersService {
       page,
       pageSize,
       counters: countersOf(viewed),
+      shortageOrders: viewed.filter((item) => item.stockShortage).length,
       shippingMethods: distinctSorted(
         items.map((item) => item.shipping.method),
       ),
