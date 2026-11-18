@@ -84,9 +84,12 @@ export function listServiceJobs(
   kind: "REPAIR" | "MAINTENANCE" | "ALL" = "ALL",
   /** A szerver keres (szám, cím, partner); az Üzenetek kapcsolása szám szerint keres. */
   search?: string,
+  /** A karbantartás füle (#2711): a szerver szűr, csak `kind=MAINTENANCE` mellett hat. Hiányában minden lap. */
+  maintenanceState?: "progress" | "done",
 ) {
   const query = new URLSearchParams({ scope, kind });
   if (search?.trim()) query.set("search", search.trim());
+  if (maintenanceState) query.set("maintenanceState", maintenanceState);
   return apiRequest<ServiceJobListResponse>(`${BASE}?${query}`);
 }
 

@@ -27,6 +27,9 @@ export const MAINTENANCE_LIST_COPY = {
     done: "Kész karbantartási lap még nincs.",
     all: "Nincs karbantartási lap.",
   },
+  /** A szerver a legújabb lapokat adja: ha több van, ezt kimondjuk (a fül száma a teljes darabszám). */
+  truncatedNotice:
+    "A lista a legújabb karbantartási lapokat mutatja, a régebbiek nem fértek bele.",
   /** A mentett sorok közül ennyinek a készsége nem ismert, ezért csak az Összes fülön látszanak. */
   unknownNotice: (count: number) =>
     `${count} mentett karbantartási lap készsége kapcsolat nélkül nem ismert: ezek csak az Összes fülön látszanak.`,

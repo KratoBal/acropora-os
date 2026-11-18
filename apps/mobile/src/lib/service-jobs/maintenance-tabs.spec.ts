@@ -7,6 +7,9 @@ import {
   MAINTENANCE_TABS,
   maintenanceItemsForTab,
   maintenanceRowsOf,
+  maintenanceStateOf,
+  maintenanceTabLabel,
+  maintenanceTabTotal,
 } from "./maintenance-tabs";
 import type { ServiceJobListItem } from "./types";
 
@@ -137,5 +140,44 @@ describe("a mentett másolat fülei", () => {
       items: [],
       unknown: 0,
     });
+  });
+});
+
+/*
+  A FÜLEK A SZERVEREN SZŰRNEK ÉS SZÁMOLNAK (#2711, acrobot 56256): a lista a legújabb kétszázat adja, tehát a kliensoldali szűrés a vágás felett kevesebbet mutatna, mint amit a fül ígér. MI PIROSÍT: ha a Folyamatban vagy a Kész
+  fül nem a megfelelő szerver-állapotot kéri; ha az Összes állapotot küld (az a teljes lista, és a másolat is ebből íródik); ha a fül száma nem a szerver számlálójából jön; ha az Összes nem a két szám összege; ha a számláló nélküli
+  (régi szerver, offline) fül kitalált számot ír a felirat mellé.
+*/
+describe("a fül a szerver szűrőjével és számlálójával", () => {
+  it("a Folyamatban és a Kész a saját szerver-állapotát kéri, az Összes egyiket sem", () => {
+    assert.equal(maintenanceStateOf("progress"), "progress");
+    assert.equal(maintenanceStateOf("done"), "done");
+    assert.equal(maintenanceStateOf("all"), undefined);
+  });
+
+  it("a fül száma a szerver számlálójából jön, az Összes az összeg", () => {
+    const counts = { progress: 3, done: 5 };
+    assert.equal(maintenanceTabTotal(counts, "progress"), 3);
+    assert.equal(maintenanceTabTotal(counts, "done"), 5);
+    assert.equal(maintenanceTabTotal(counts, "all"), 8);
+  });
+
+  it("számláló nélkül nincs szám, és nulla is szám", () => {
+    assert.equal(maintenanceTabTotal(undefined, "progress"), null);
+    assert.equal(maintenanceTabTotal({ progress: 0, done: 0 }, "done"), 0);
+  });
+
+  it("a felirat a számmal együtt, számláló nélkül a puszta felirat", () => {
+    const counts = { progress: 3, done: 0 };
+    assert.equal(
+      maintenanceTabLabel("Folyamatban", "progress", counts),
+      "Folyamatban (3)",
+    );
+    assert.equal(maintenanceTabLabel("Kész", "done", counts), "Kész (0)");
+    assert.equal(maintenanceTabLabel("Összes", "all", counts), "Összes (3)");
+    assert.equal(
+      maintenanceTabLabel("Folyamatban", "progress", undefined),
+      "Folyamatban",
+    );
   });
 });

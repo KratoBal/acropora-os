@@ -64,3 +64,37 @@ export function cachedMaintenanceForTab(
     unknown,
   };
 }
+
+/**
+ * A FÜL SZERVER-ÁLLAPOTA (#2711): a Folyamatban és a Kész a saját állapotát kéri, az Összes egyiket sem (a teljes lista, és a mentett másolat is ebből íródik).
+ */
+export function maintenanceStateOf(
+  tab: MaintenanceTab,
+): "progress" | "done" | undefined {
+  return tab === "all" ? undefined : tab;
+}
+
+export interface MaintenanceCounts {
+  progress: number;
+  done: number;
+}
+
+/** A fül teljes száma a szerver számlálójából; `null`, ha nincs számláló (régi szerver, mentett másolat): kitalált szám nem kerül a felirat mellé. */
+export function maintenanceTabTotal(
+  counts: MaintenanceCounts | undefined,
+  tab: MaintenanceTab,
+): number | null {
+  if (!counts) return null;
+  if (tab === "progress") return counts.progress;
+  if (tab === "done") return counts.done;
+  return counts.progress + counts.done;
+}
+
+export function maintenanceTabLabel(
+  label: string,
+  tab: MaintenanceTab,
+  counts: MaintenanceCounts | undefined,
+): string {
+  const total = maintenanceTabTotal(counts, tab);
+  return total === null ? label : `${label} (${total})`;
+}

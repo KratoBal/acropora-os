@@ -22,6 +22,7 @@ describe("a karbantartás lista szövegei", () => {
       MAINTENANCE_LIST_COPY.emptyOffline,
       MAINTENANCE_LIST_COPY.capabilities,
       MAINTENANCE_LIST_COPY.noticeListName,
+      MAINTENANCE_LIST_COPY.truncatedNotice,
       MAINTENANCE_LIST_COPY.empty.progress,
       MAINTENANCE_LIST_COPY.empty.done,
       MAINTENANCE_LIST_COPY.empty.all,
@@ -54,14 +55,24 @@ describe("a karbantartás lista szövegei", () => {
 describe("a karbantartás lista képernyője", () => {
   const kep = olvas("app", "maintenance", "index.tsx");
 
-  it("a karbantartási fajtát kéri, az összes hatókörrel, és csak ezt a hívást", () => {
+  it("a karbantartási fajtát kéri az összes hatókörrel: a fül szerver-állapotával, és a másolatnak a teljes listát", () => {
+    assert.match(
+      kep,
+      /listServiceJobs\(\s*"all",\s*"MAINTENANCE",\s*undefined,\s*maintenanceStateOf\(tab\),?\s*\)/,
+    );
     assert.match(kep, /listServiceJobs\("all", "MAINTENANCE"\)/);
     assert.equal(
       (kep.match(/listServiceJobs\(/g) ?? []).length,
-      1,
-      "egy hívás: a fülek a kliensen szűrnek",
+      2,
+      "két hívás: a fül, és (ha a fül nem az Összes) a másolat teljes listája",
     );
     assert.doesNotMatch(kep, /listServiceJobs\([^)]*"ALL"/);
+  });
+
+  it("a fül száma a szerver számlálójából jön, és a vágást kimondja", () => {
+    assert.match(kep, /maintenanceTabLabel\(/);
+    assert.match(kep, /maintenanceCounts/);
+    assert.match(kep, /MAINTENANCE_LIST_COPY\.truncatedNotice/);
   });
 
   it("a fülek a közös függvényből jönnek, a mentett ág az ismeretlent számolja", () => {
@@ -84,7 +95,12 @@ describe("a karbantartás lista képernyője", () => {
   });
 
   it("a mentett másolatba csak a szerver válasza kerül, a lap megnyitása a közös adatlapra visz", () => {
-    assert.match(kep, /rememberServiceJobs\(query\.data\.items\)/);
+    assert.match(kep, /rememberServiceJobs\(copySource\.items\)/);
+    // a másolat az Összes fül válaszából, különben a teljes listából íródik (egy szűrt fül válaszából egy már kész lap folyamatban maradna)
+    assert.match(
+      kep,
+      /const copySource = tab === "all" \? query\.data : fullList\.data;/,
+    );
     assert.equal(
       (kep.match(/rememberServiceJobs\(/g) ?? []).length,
       1,
@@ -102,6 +118,17 @@ describe("a karbantartás lista képernyője", () => {
       "empty",
     ])
       assert.match(kep, new RegExp(`MAINTENANCE_LIST_COPY\\.${kulcs}`), kulcs);
+  });
+});
+
+describe("a kliens a fül állapotát küldi", () => {
+  it("a lista-hívás a negyedik paraméterként viszi a szerver-állapotot, csak ha van", () => {
+    const kliens = olvas("lib", "api", "service-jobs.ts");
+    assert.match(kliens, /maintenanceState\?: "progress" \| "done"/);
+    assert.match(
+      kliens,
+      /if \(maintenanceState\) query\.set\("maintenanceState", maintenanceState\);/,
+    );
   });
 });
 

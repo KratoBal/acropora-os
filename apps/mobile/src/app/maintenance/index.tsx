@@ -33,6 +33,8 @@ import {
   MAINTENANCE_TABS,
   maintenanceItemsForTab,
   maintenanceRowsOf,
+  maintenanceStateOf,
+  maintenanceTabLabel,
   type MaintenanceTab,
 } from "@/lib/service-jobs/maintenance-tabs";
 import { shortPath } from "@/lib/service-jobs/service-job-status";
@@ -47,9 +49,8 @@ const CACHE_KEY = ["offline-service-jobs"] as const;
 /**
  * A KARBANTARTÁS LISTÁJA A TELEFONON (acrobot 56224; Balázs 2026-11-18 11:31: a karbantartási lap nem hibajegy).
  *
- * A FÜLEK A WEBES LISTA LOGIKÁJÁVAL (#2710): Folyamatban (alap), Kész, Összes, a `maintenanceDone` mezőre. Egyetlen szerver-hívás van, `kind=MAINTENANCE` és `scope=all`: a fülek a kliensen szűrnek, ezért egy fül
- * átkapcsolása nem hív újra, és a hívás csak karbantartási lapokat hoz, tehát a szerver kétszáz soros vágása nem osztozik hibajegyekkel. (A szerveroldali `maintenanceState` szűrő a #2711-gyel jön; a mobil azt a
- * beolvadás után sem kéri, amíg erre szükség nincs.)
+ * A FÜLEK A WEBES LISTA LOGIKÁJÁVAL (#2710, #2711): Folyamatban (alap), Kész, Összes. A SZERVER szűr a fülre (`maintenanceState`) és számolja a füleket (`maintenanceCounts`): a lista a legújabb kétszázat adja, tehát egy kliensoldali
+ * szűrés a vágás felett kevesebbet mutatna, mint amit a fül ígér. A hívás `kind=MAINTENANCE` és `scope=all`, a vágást a `truncated` mondja ki.
  *
  * A MENTETT MÁSOLAT A HIBAJEGYEK MÁSOLATA IS, EGY TÁBLA (`cached_service_jobs`): ezt a képernyő CSAK a szerver válaszából frissíti, soronként felülírva, és semmit nem töröl belőle, tehát a másolat nem zsugorodik, és a
  * Hibajegyek lista teljes másolata sem. Térerő nélkül a másolatból a karbantartási sorok látszanak (`cachedMaintenanceForTab`), az ismeretlen készségűek csak az Összes fülön, és ezt a szám kimondja.
@@ -69,12 +70,29 @@ export default function MaintenanceListScreen() {
   );
 
   const query = useQuery({
-    queryKey: ["service-jobs", "all", "MAINTENANCE"],
-    queryFn: () => listServiceJobs("all", "MAINTENANCE"),
+    // A FÜL RÉSZE A KULCSNAK: a szerver szűr a fülre, tehát egy fül-váltás új kérés, nem a régi halmaz átszűrése.
+    queryKey: ["service-jobs", "all", "MAINTENANCE", tab],
+    queryFn: () =>
+      listServiceJobs("all", "MAINTENANCE", undefined, maintenanceStateOf(tab)),
     enabled:
       status === "authenticated" && Boolean(capabilities?.serviceJobsView),
     placeholderData: keepPreviousData,
   });
+
+  /*
+    A MÁSOLATNAK A TELJES LISTA KELL, HA A FÜL NEM AZ (ugyanaz a minta, mint a Hibajegyek listán): egy szűrt fül válaszából a másolaton egy MÁR KÉSZ lap folyamatban maradna (a sor csak felülíródik, ahol megjelenik). Ugyanaz a kulcs, mint az Összes
+    fülé, tehát arra váltva nincs új kör; a `staleTime` miatt egy lap megnyitása és a visszalépés sem kér újra.
+  */
+  const fullList = useQuery({
+    queryKey: ["service-jobs", "all", "MAINTENANCE", "all"],
+    queryFn: () => listServiceJobs("all", "MAINTENANCE"),
+    enabled:
+      tab !== "all" &&
+      status === "authenticated" &&
+      Boolean(capabilities?.serviceJobsView),
+    staleTime: 60_000,
+  });
+  const copySource = tab === "all" ? query.data : fullList.data;
 
   const cached = useQuery({
     queryKey: CACHE_KEY,
@@ -84,9 +102,9 @@ export default function MaintenanceListScreen() {
   });
 
   useEffect(() => {
-    if (!query.data) return;
-    void rememberServiceJobs(query.data.items);
-  }, [query.data]);
+    if (!copySource) return;
+    void rememberServiceJobs(copySource.items);
+  }, [copySource]);
 
   if (status === "unauthenticated") return <Redirect href="/login" />;
   if (status === "authenticated" && !capabilities?.serviceJobsView)
@@ -98,9 +116,11 @@ export default function MaintenanceListScreen() {
 
   const cachedItems = cached.data?.items ?? [];
   const fromCache = cachedMaintenanceForTab(cachedItems, tab);
+  // A szerver már a fülre szűrt; a kliensoldali szűrés ezen NEM szűkít tovább, csak egy régebbi szervert fog meg, amelyik a `maintenanceState`-et még nem ismeri (akkor az egész listát adná).
   const items: ServiceJobListItem[] = query.data
     ? maintenanceItemsForTab(query.data.items, tab)
     : fromCache.items;
+  const counts = (query.data ?? fullList.data)?.maintenanceCounts;
   const unknown = query.data ? 0 : fromCache.unknown;
   const now = new Date();
   const notice = describeOfflineNotice({
@@ -138,7 +158,7 @@ export default function MaintenanceListScreen() {
                         selected && styles.tabLabelSelected,
                       ]}
                     >
-                      {option.label}
+                      {maintenanceTabLabel(option.label, option.id, counts)}
                     </Text>
                   </Pressable>
                 );
@@ -147,6 +167,11 @@ export default function MaintenanceListScreen() {
             {unknown > 0 ? (
               <Text style={styles.hint}>
                 {MAINTENANCE_LIST_COPY.unknownNotice(unknown)}
+              </Text>
+            ) : null}
+            {query.data?.truncated ? (
+              <Text style={styles.hint}>
+                {MAINTENANCE_LIST_COPY.truncatedNotice}
               </Text>
             ) : null}
             <Text style={styles.hint}>

@@ -86,6 +86,10 @@ export interface ServiceJobListResponse {
    * reason as `truncated`: a saved or older answer may not carry it.
    */
   counts?: Record<ServiceJobStatusValue, number>;
+  /**
+   * A KARBANTARTÁS FÜLEINEK SZÁMA (`kind=MAINTENANCE` kérésnél, #2711): a még nem kész és a kész lapok. A láthatóság és a keresés beleszámít, a hatókör nem. A hibajegy-listán hiányzik, és régebbi szervernél is.
+   */
+  maintenanceCounts?: { progress: number; done: number };
 }
 
 /**
