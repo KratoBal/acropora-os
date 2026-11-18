@@ -20,6 +20,8 @@
  * nézel, miért nem megy. Ez akkor is igaz marad, ha a képesség egyszer megjön:
  * akkor ez az ág egyszerűen nem áll elő többé.
  */
+import { jobWords, type JobWordsKind } from "./job-words";
+
 export const OFFLINE_COPY_NOTICE = {
   /** A léptetés kiesik: a szerver a LÁTOTT állapotra ír feltételesen. */
   step: "Mentett másolatot nézel, ezért a léptetés most nem megy. A jegy állapotát térerőnél tudod átírni.",
@@ -37,3 +39,19 @@ export const OFFLINE_COPY_NOTICE = {
   caption:
     "Mentett másolatot nézel, ezért a felirat most nem írható. Térerőnél tudod megnevezni a képet.",
 } as const;
+
+/**
+ * A MENTETT MÁSOLAT MONDATAI A LAP FAJTÁJA SZERINT (hibajegy-maradek lista, acrobot 56196): a karbantartási lapon "a karbantartási lap állapotát", "a karbantartási lapra", a hibajegyén (és fajta
+ * nélkül) a táblázat mai szövege. Ugyanazok a kulcsok, ugyanaz a szerkezet: a képernyő minden mondatot kitesz.
+ */
+export function offlineCopyNoticeFor(
+  kind: JobWordsKind,
+): Readonly<Record<keyof typeof OFFLINE_COPY_NOTICE, string>> {
+  if (kind !== "MAINTENANCE") return OFFLINE_COPY_NOTICE;
+  const words = jobWords(kind);
+  return {
+    step: `Mentett másolatot nézel, ezért a léptetés most nem megy. A ${words.noun} állapotát térerőnél tudod átírni.`,
+    photo: `Mentett másolatot nézel, ezért a fénykép most nem tölthető fel. Térerőnél tudsz képet tenni a ${words.onto}.`,
+    caption: OFFLINE_COPY_NOTICE.caption,
+  };
+}

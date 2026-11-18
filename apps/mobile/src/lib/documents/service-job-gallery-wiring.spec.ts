@@ -241,7 +241,7 @@ describe("a hibajegy csatolmány-szakasza", () => {
    * ki, mint egy elromlott.
    */
   it("másolatból a felirat kiesését kimondja", () => {
-    assert.match(kodSzoveg(olvas(KEPERNYO)), /OFFLINE_COPY_NOTICE\.caption/);
+    assert.match(kodSzoveg(olvas(KEPERNYO)), /copyNotice\.caption/);
   });
 
   /**

@@ -1,6 +1,7 @@
 /**
  * RELATIV UT, NEM `@/` ALIAS: ez a modul spec-bol is behuzodik.
  */
+import { jobWords, type JobWordsKind } from "./job-words";
 import { shortWhen } from "./list-card";
 import { serviceJobStatusLabel } from "./service-job-status";
 import type { ServiceJobTimelineEntry } from "./types";
@@ -24,22 +25,30 @@ export interface TimelineRow {
 
 function statusTitle(
   entry: Extract<ServiceJobTimelineEntry, { kind: "status" }>,
+  noun: string,
 ): string {
   const event = entry.event;
   if (!event) return "Állapotváltás";
   if (event.toStatus) {
     const to = serviceJobStatusLabel(event.toStatus);
-    if (!event.fromStatus) return `A hibajegy létrejött (${to})`;
+    if (!event.fromStatus) return `A ${noun} létrejött (${to})`;
     return `${serviceJobStatusLabel(event.fromStatus)} → ${to}`;
   }
-  if (event.isCreation) return "A hibajegy létrejött";
+  if (event.isCreation) return `A ${noun} létrejött`;
   return event.partnerStatusLabel ?? "Állapotváltás";
 }
 
+/**
+ * A `kind` a lap fajtája (a részletlapon ismert): a karbantartási lap naplója a saját nevét viseli (hibajegy-maradek lista, acrobot 56196). A fajta nélküli hívás (egy régi mentett
+ * sor) a hibajegy szavait tartja, ahogy eddig.
+ */
 export function timelineRows(
   timeline: readonly ServiceJobTimelineEntry[],
   now: Date,
+  kind?: JobWordsKind,
 ): TimelineRow[] {
+  const maintenance = kind === "MAINTENANCE";
+  const noun = jobWords(kind).noun;
   return timeline.map((entry) => {
     const base = {
       key: `${entry.kind}-${entry.sortKey}`,
@@ -52,20 +61,24 @@ export function timelineRows(
         );
         return {
           ...base,
-          title: statusTitle(entry),
+          title: statusTitle(entry, noun),
           detail: parts.length ? parts.join(" · ") : null,
         };
       }
       case "worksheet":
         return {
           ...base,
-          title: "Munkalap a jegy alatt",
+          title: maintenance
+            ? `Munkalap a ${jobWords(kind).under}`
+            : "Munkalap a jegy alatt",
           detail: entry.worksheet.number ?? entry.worksheet.subject,
         };
       case "asset":
         return {
           ...base,
-          title: "Eszköz a jegyen",
+          title: maintenance
+            ? `Eszköz a ${jobWords(kind).on}`
+            : "Eszköz a jegyen",
           detail: `${entry.asset.assetNumber} · ${entry.asset.assetName}`,
         };
       case "document":

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type * as ImagePicker from "expo-image-picker";
-import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import { Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -64,7 +64,8 @@ import {
   readCachedServiceJob,
   rememberServiceJobDetail,
 } from "@/lib/offline/service-job-cache";
-import { OFFLINE_COPY_NOTICE } from "@/lib/service-jobs/offline-copy-notice";
+import { offlineCopyNoticeFor } from "@/lib/service-jobs/offline-copy-notice";
+import { BOTH_NOUN, jobWords } from "@/lib/service-jobs/job-words";
 import {
   serviceJobStatusLabel,
   shortPath,
@@ -366,8 +367,8 @@ export default function ServiceJobDetailScreen() {
         ) : (
           <Text style={styles.empty}>
             {online
-              ? "Ez a hibajegy nem tölthető be."
-              : "Nincs kapcsolat, és ez a jegy nincs mentve erre a készülékre. Térerőnél nyisd meg egyszer."}
+              ? `Ez a ${BOTH_NOUN} nem tölthető be.`
+              : `Nincs kapcsolat, és ez a ${BOTH_NOUN} nincs mentve erre a készülékre. Térerőnél nyisd meg egyszer.`}
           </Text>
         )}
       </SafeAreaView>
@@ -382,10 +383,16 @@ export default function ServiceJobDetailScreen() {
    */
   const fejlec = jegyFejlec(detail, masolatbol, serviceJobStatusLabel);
   const lephet = masolatbol || partnerAlak(detail) ? [] : detail.allowedSteps;
-  const naplo = timelineRows(detail.timeline, new Date());
+  // A lap fajtája (a partner alakból hiányzik: ott hibajegy): a szavak, a mentett másolat mondatai és a napló ehhez igazodnak (hibajegy-maradek lista, acrobot 56196)
+  const kind = "kind" in detail ? detail.kind : undefined;
+  const words = jobWords(kind);
+  const copyNotice = offlineCopyNoticeFor(kind);
+  const naplo = timelineRows(detail.timeline, new Date(), kind);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
+      {/* a fejléc címe a lap fajtáját követi: a navigátorban a "Hibajegy" az alapértelmezés, a karbantartási lapon "Karbantartási lap" */}
+      <Stack.Screen options={{ title: words.nounCap }} />
       <ScrollView contentContainerStyle={styles.page}>
         {offlineNotice ? <OfflineNoticeCard notice={offlineNotice} /> : null}
 
@@ -528,7 +535,7 @@ export default function ServiceJobDetailScreen() {
           <View style={styles.block}>
             <SectionTitle>Fénykép</SectionTitle>
             {masolatbol ? (
-              <Text style={styles.meta}>{OFFLINE_COPY_NOTICE.photo}</Text>
+              <Text style={styles.meta}>{copyNotice.photo}</Text>
             ) : null}
             <Pressable
               accessibilityRole="button"
@@ -561,7 +568,9 @@ export default function ServiceJobDetailScreen() {
             `undefined.length`-en omlott ossze, MEGNYITASKOR.
           */}
           {worksheetsOf(detail.timeline).length === 0 ? (
-            <Text style={styles.meta}>Még nincs munkalap ezen a jegyen.</Text>
+            <Text style={styles.meta}>
+              Még nincs munkalap ezen a {words.on}.
+            </Text>
           ) : (
             worksheetsOf(detail.timeline).map((sheet) => (
               <Pressable
@@ -628,7 +637,7 @@ export default function ServiceJobDetailScreen() {
           {user && belsosIrasEngedett(user) ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Új munkalap ehhez a jegyhez"
+              accessibilityLabel={`Új munkalap ehhez a ${words.to}`}
               onPress={() =>
                 router.push({
                   pathname: "/worksheets/new",
@@ -645,7 +654,7 @@ export default function ServiceJobDetailScreen() {
             </Pressable>
           ) : (
             <Text style={styles.meta}>
-              A munkalapot a szerviz készíti ehhez a hibajegyhez.
+              A munkalapot a szerviz készíti ehhez a {words.to}.
             </Text>
           )}
         </View>
@@ -658,7 +667,7 @@ export default function ServiceJobDetailScreen() {
           <SectionTitle>Ami történt</SectionTitle>
           {naplo.length === 0 ? (
             <Text style={styles.meta}>
-              Ezen a jegyen még nem történt semmi.
+              Ezen a {words.on} még nem történt semmi.
             </Text>
           ) : (
             naplo.map((row) => (
@@ -691,7 +700,7 @@ export default function ServiceJobDetailScreen() {
               Csak az engedélyezett állapotváltás jelenik meg.
             </Text>
             {masolatbol ? (
-              <Text style={styles.meta}>{OFFLINE_COPY_NOTICE.step}</Text>
+              <Text style={styles.meta}>{copyNotice.step}</Text>
             ) : lephet.length === 0 ? (
               <Text style={styles.meta}>
                 Ebből az állapotból nincs több lépés.
@@ -799,7 +808,7 @@ export default function ServiceJobDetailScreen() {
 
           {capabilities?.serviceJobsManage && nagyKepSor ? (
             masolatbol ? (
-              <Text style={styles.meta}>{OFFLINE_COPY_NOTICE.caption}</Text>
+              <Text style={styles.meta}>{copyNotice.caption}</Text>
             ) : (
               <>
                 <TextInput

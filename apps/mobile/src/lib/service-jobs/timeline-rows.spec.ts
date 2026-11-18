@@ -110,4 +110,73 @@ describe("az Ami történt sorai", () => {
       ],
     );
   });
+
+  /*
+    A KARBANTARTÁSI LAP NAPLÓJA A SAJÁT NEVÉN SZÓL (hibajegy-maradek lista, 4. fejezet, acrobot 56196): a "A hibajegy létrejött", "Munkalap a jegy alatt" és "Eszköz a jegyen" sorok a lap
+    fajtáját követik; a fajta nélküli hívás (a régi, mentett sor) a hibajegy szavait tartja. MI PIROSÍT: ha a MAINTENANCE lap naplója újra hibajegyet mond; ha a hibajegyé megváltozik.
+  */
+  const entries: ServiceJobTimelineEntry[] = [
+    {
+      kind: "status",
+      at: at(8, 14),
+      sortKey: "e1",
+      event: { fromStatus: null, toStatus: "NEW", note: null, actorName: null },
+    },
+    {
+      kind: "status",
+      at: at(8, 15),
+      sortKey: "e0",
+      event: { isCreation: true } as never,
+    },
+    {
+      kind: "worksheet",
+      at: at(9, 14),
+      sortKey: "w",
+      worksheet: {
+        id: "w",
+        number: "ML-2026-00814",
+        subject: "Tömítéscsere",
+        createdAt: at(9, 14),
+        handedOverAt: null,
+      },
+    },
+    {
+      kind: "asset",
+      at: at(9, 15),
+      sortKey: "a",
+      asset: {
+        assetNumber: "ESZK-1",
+        assetName: "Szűrő",
+      } as never,
+    },
+  ];
+
+  it("a karbantartási lap naplója a karbantartási lapot nevezi meg", () => {
+    const rows = timelineRows(entries, now, "MAINTENANCE");
+    assert.deepEqual(
+      rows.map((row) => row.title),
+      [
+        "A karbantartási lap létrejött (Új)",
+        "A karbantartási lap létrejött",
+        "Munkalap a karbantartási lap alatt",
+        "Eszköz a karbantartási lapon",
+      ],
+    );
+    for (const row of rows) assert.doesNotMatch(row.title, /jegy/i);
+  });
+
+  it("a hibajegy és a fajta nélküli hívás naplója hibajegyet mond", () => {
+    for (const kind of ["REPAIR", undefined] as const) {
+      const rows = timelineRows(entries, now, kind);
+      assert.deepEqual(
+        rows.map((row) => row.title),
+        [
+          "A hibajegy létrejött (Új)",
+          "A hibajegy létrejött",
+          "Munkalap a jegy alatt",
+          "Eszköz a jegyen",
+        ],
+      );
+    }
+  });
 });
