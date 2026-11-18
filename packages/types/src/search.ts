@@ -1,5 +1,7 @@
 export const SEARCH_GROUPS = [
   "tickets",
+  // a karbantartási lap NEM hibajegy: saját csoport, saját felirat és útvonal (Balázs, 2026-11-18)
+  "maintenance",
   "worksheets",
   "assets",
   "partners",

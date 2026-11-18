@@ -4013,6 +4013,11 @@ model BillingDocumentMailDelivery {
 model ServiceJob {
   id                 String           @id @default(cuid())
   jobNumber          String           @unique
+  /// A RÉGI SZÁM, HA A JEGY SZÁMA MEGVÁLTOZOTT: a szerződésből keletkező karbantartási lap száma KT-ÉÉÉÉ-NNN (Balázs, 2026-11-18, Luca-Balázs-Acrobot szál),
+  /// a korábban HJ-számon felvett karbantartások átszámozódtak, a régi szám itt marad, hogy a keresés a régi számra is megtalálja a lapot (és egy régi
+  /// levél, PDF vagy emlék hivatkozása ne vesszen el). `NULL`, ha a szám sosem változott. A felszabadult HJ-szám a `ServiceJobDeletion` táblába
+  /// kerül, hogy a HJ sorozat ne használja újra.
+  previousNumber     String?          @unique
   /// A HELYSZÍNI BEJELENTÉS IDEMPOTENCIA-KULCSA -- UGYANAZ A MINTA, MINT AZ
   /// `Asset.clientOperationId` ÉS A `Worksheet.clientOperationId` MEZŐNÉL.
   ///
@@ -5529,6 +5534,23 @@ model WorksheetDocument {
 enum ServiceJobDocumentType {
   PHOTO
   OTHER
+}
+
+/// A TÖRÖLT HIBAJEGYEK SZÁMAI: A SORSZÁM SOHA NEM HASZNOSUL ÚJRA.
+///
+/// A hibajegy végleges törlése (Balázs, 2026-11-18, Luca-Balázs-Acrobot szál) után a következő szám kiosztása
+/// (`ServiceJobsRepository.lastNumberOfYear`) az élő jegyek legnagyobb számát nézné, tehát a legmagasabb számok törlése után
+/// a KÖVETKEZŐ jegy ugyanazt a számot kapná, amelyiket egy levél, egy PDF vagy egy emlék már hivatkozhat. Ez a tábla az egyetlen,
+/// ami a törlés után a jegyből megmarad, és SZÁNDÉKOSAN SZEMÉLYES TARTALOM NÉLKÜL: a szám, az idő és az, ki törölte. A jegy
+/// tartalma (cím, partner, leírás, fájlok, címzettek) a törléssel együtt eltűnik; a számláló a két tábla közös maximumát nézi.
+///
+/// `deletedById` SZÁNDÉKOSAN NEM KAPCSOLAT: a törlés tényét az `AuditLog` is hordozza (ott a felhasználó törlése `SetNull`), ez a tábla
+/// pedig csak a számot védi. Egy kapcsolat egy másik táblához kötné a számláló élettartamát.
+model ServiceJobDeletion {
+  id          String   @id @default(cuid())
+  jobNumber   String   @unique
+  deletedAt   DateTime @default(now())
+  deletedById String?
 }
 
 /// HIBAJEGYHEZ CSATOLT FENYKEP VAGY EGYEB FAJL.

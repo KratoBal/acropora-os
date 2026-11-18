@@ -11,6 +11,7 @@ import { assetsOutsideDepartment } from "../common/assets-in-department.js";
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
 import { assignableUserWhere } from "../common/service-assignment.js";
 import { DOCUMENT_DELETED_ACTION } from "./service-job-documents.repository.js";
+import { lastServiceJobNumber } from "./service-job-last-number.js";
 import {
   serviceJobScopeWhere,
   type ServiceJobListScope,
@@ -43,12 +44,16 @@ const LIST_LIMIT = 200;
  * A HAROM MEZO UGYANAZ, MINT A MUNKALAP-LISTAN: azonosito, partner neve, es a
  * sajat szoveg (ott a targy, itt a cim). Ket szerviz-lista, egy szabaly.
  */
-function searchWhere(search: string | undefined): Prisma.ServiceJobWhereInput {
+export function serviceJobSearchWhere(
+  search: string | undefined,
+): Prisma.ServiceJobWhereInput {
   const trimmed = search?.trim();
   if (!trimmed) return {};
   return {
     OR: [
       { jobNumber: { contains: trimmed, mode: "insensitive" } },
+      // a karbantartások régi (HJ) száma: az átszámozás után is megtalálható
+      { previousNumber: { contains: trimmed, mode: "insensitive" } },
       { title: { contains: trimmed, mode: "insensitive" } },
       {
         customer: {
@@ -82,6 +87,8 @@ export interface ServiceJobRow {
   worksheetCount: number;
   /** A jegy egyetlen munkalapjanak azonositoja, ha PONTOSAN egy van; kulonben `null`. */
   soleWorksheetId?: string | null;
+  /** MAINTENANCE sornal: minden munkalap legutolso verzioja alairt (nincs munkalap: false); hibajegynel hianyzik. */
+  maintenanceDone?: boolean;
   /** A rejtes idopontja, vagy `null`. A felulet ebbol csinal jelolot. */
   hiddenAt: Date | null;
   /**
@@ -983,7 +990,7 @@ export class ServiceJobsRepository {
         // feltételek szerkezete mindkét kérésnél azonos legyen.
         kind === "ALL" ? {} : { kind },
         serviceJobScopeWhere(scope, viewerUserId),
-        searchWhere(search),
+        serviceJobSearchWhere(search),
       ],
     };
 
@@ -1093,6 +1100,29 @@ export class ServiceJobsRepository {
     const soleTerkep = new Map(
       soleRows.map((sor) => [sor.serviceJobId, sor.id] as const),
     );
+    // A KARBANTARTAS ALLAPOTA: minden munkalap LEGUTOLSO verzioja alairt (a lista ebbol nem tud hibajegy-allapotot mutatni:
+    // a karbantartasnak nincs allapotgepe). Egy kotegelt lekerdezes csak a MAINTENANCE sorok munkalapjaira.
+    const maintenanceIds = lap
+      .filter((row) => row.kind === "MAINTENANCE" && row._count.worksheets > 0)
+      .map((row) => row.id);
+    const maintenanceSheets = maintenanceIds.length
+      ? await this.database.worksheet.findMany({
+          where: { serviceJobId: { in: maintenanceIds } },
+          select: {
+            serviceJobId: true,
+            versions: {
+              orderBy: { version: "desc" },
+              take: 1,
+              select: { status: true },
+            },
+          },
+        })
+      : [];
+    const notSigned = new Set(
+      maintenanceSheets
+        .filter((sheet) => sheet.versions[0]?.status !== "SIGNED")
+        .flatMap((sheet) => (sheet.serviceJobId ? [sheet.serviceJobId] : [])),
+    );
 
     const openerIds = [
       ...new Set(
@@ -1127,6 +1157,12 @@ export class ServiceJobsRepository {
         createdAt: row.createdAt,
         worksheetCount: row._count.worksheets,
         soleWorksheetId: soleTerkep.get(row.id) ?? null,
+        ...(row.kind === "MAINTENANCE"
+          ? {
+              maintenanceDone:
+                row._count.worksheets > 0 && !notSigned.has(row.id),
+            }
+          : {}),
         hiddenAt: row.hiddenAt,
       })),
       truncated: rows.length > LIST_LIMIT,
@@ -1187,7 +1223,11 @@ export class ServiceJobsRepository {
     const rows = await this.database.serviceJob.groupBy({
       by: ["status"],
       where: {
-        AND: [visibility, kind === "ALL" ? {} : { kind }, searchWhere(search)],
+        AND: [
+          visibility,
+          kind === "ALL" ? {} : { kind },
+          serviceJobSearchWhere(search),
+        ],
       },
       _count: { _all: true },
     });
@@ -1205,14 +1245,9 @@ export class ServiceJobsRepository {
     return counts;
   }
 
-  /** Az idei legnagyobb sorszám, a következő szám kiosztásához. */
+  /** Az idei legnagyobb sorszám (élő ÉS törölt/felszabadított szám), a következő szám kiosztásához. */
   async lastNumberOfYear(prefix: string): Promise<string | null> {
-    const row = await this.database.serviceJob.findFirst({
-      where: { jobNumber: { startsWith: prefix } },
-      orderBy: { jobNumber: "desc" },
-      select: { jobNumber: true },
-    });
-    return row?.jobNumber ?? null;
+    return lastServiceJobNumber(this.database, prefix);
   }
 
   /**
@@ -1329,6 +1364,7 @@ export class ServiceJobsRepository {
       select: {
         id: true,
         jobNumber: true,
+        previousNumber: true,
         kind: true,
         title: true,
         description: true,

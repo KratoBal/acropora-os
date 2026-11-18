@@ -43,6 +43,8 @@ const LISTS: Record<
   Array<{ controller: Function; handler: string }>
 > = {
   tickets: [{ controller: ServiceJobsController, handler: "list" }],
+  // a Karbantartás menüpont ugyanazt a listát (és jogot) kéri
+  maintenance: [{ controller: ServiceJobsController, handler: "list" }],
   worksheets: [{ controller: WorksheetsController, handler: "list" }],
   assets: [{ controller: ServiceAssetsController, handler: "list" }],
   partners: [{ controller: SuppliersController, handler: "list" }],

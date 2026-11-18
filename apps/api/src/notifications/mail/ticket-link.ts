@@ -25,8 +25,11 @@
 export function internalTicketLink(input: {
   readonly webUrl: string | undefined;
   readonly serviceJobId: string;
+  /** A jegy fajtaja: a karbantartasi lap NEM hibajegy, a linkje a Karbantartas alatt all (Balazs, 2026-11-18). Elhagyva: hibajegy. */
+  readonly kind?: "REPAIR" | "MAINTENANCE";
 }): string {
   const alap = input.webUrl?.trim();
   if (!alap) return "";
-  return `${alap.replace(/\/+$/, "")}/szerviz/hibajegyek/${input.serviceJobId}`;
+  const utvonal = input.kind === "MAINTENANCE" ? "karbantartas" : "hibajegyek";
+  return `${alap.replace(/\/+$/, "")}/szerviz/${utvonal}/${input.serviceJobId}`;
 }

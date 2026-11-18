@@ -37,10 +37,17 @@ export const STALE_MEASUREMENT_AFTER_DAYS = 14;
  */
 export const UPCOMING_MAINTENANCE_WINDOW_DAYS = 30;
 
-const openTicketStatus: Prisma.ServiceJobWhereInput = {
+/**
+ * A NYITOTT HIBAJEGY: CSAK A HIBAJEGY (`kind: "REPAIR"`). A szerződésből keletkező karbantartási lap a háttérben ServiceJob(MAINTENANCE), de a
+ * felhasználó sehol nem láthatja hibajegyként (Balázs és Luca, 2026-11-18; acrobot 55785): a kezdőlap "nyitott hibajegy" csempéje és száma nem
+ * számolja és nem sorolja fel. Egy közös feltétel mind a két lekérdezésre.
+ */
+export const OPEN_TICKET_WHERE: Prisma.ServiceJobWhereInput = {
+  kind: "REPAIR",
   status: { notIn: ["COMPLETED", "CANCELLED"] },
   hiddenAt: null,
 };
+const openTicketStatus = OPEN_TICKET_WHERE;
 
 function dateOnly(value: Date): string {
   return value.toISOString().slice(0, 10);
