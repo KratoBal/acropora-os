@@ -80,6 +80,8 @@ export interface ServiceJobRow {
   departmentCode: string | null;
   createdAt: Date;
   worksheetCount: number;
+  /** A jegy egyetlen munkalapjanak azonositoja, ha PONTOSAN egy van; kulonben `null`. */
+  soleWorksheetId?: string | null;
   /** A rejtes idopontja, vagy `null`. A felulet ebbol csinal jelolot. */
   hiddenAt: Date | null;
   /**
@@ -1077,6 +1079,21 @@ export class ServiceJobsRepository {
       delegaltTerkep.set(sor.serviceJobId, lista);
     }
 
+    // A PONTOSAN EGY MUNKALAPOS JEGYEK EGYETLEN MUNKALAPJA (a Karbantartas lista sora azt nyitja): egy kotegelt lekerdezes csak
+    // azokra, amelyeknek a szamlaloja egy
+    const singleIds = lap
+      .filter((row) => row._count.worksheets === 1)
+      .map((row) => row.id);
+    const soleRows = singleIds.length
+      ? await this.database.worksheet.findMany({
+          where: { serviceJobId: { in: singleIds } },
+          select: { id: true, serviceJobId: true },
+        })
+      : [];
+    const soleTerkep = new Map(
+      soleRows.map((sor) => [sor.serviceJobId, sor.id] as const),
+    );
+
     const openerIds = [
       ...new Set(
         lap.map((r) => r.openedById).filter((id): id is string => !!id),
@@ -1109,6 +1126,7 @@ export class ServiceJobsRepository {
         assignees: delegaltTerkep.get(row.id) ?? [],
         createdAt: row.createdAt,
         worksheetCount: row._count.worksheets,
+        soleWorksheetId: soleTerkep.get(row.id) ?? null,
         hiddenAt: row.hiddenAt,
       })),
       truncated: rows.length > LIST_LIMIT,

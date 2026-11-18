@@ -1152,6 +1152,7 @@ export class ServiceJobsService {
         assignedAt: assignee.assignedAt.toISOString(),
       })),
       worksheetCount: row.worksheetCount,
+      soleWorksheetId: row.soleWorksheetId ?? null,
       createdAt: row.createdAt.toISOString(),
       hidden: row.hiddenAt !== null,
     }));

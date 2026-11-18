@@ -27,6 +27,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { worksheetsApi } from "@/lib/api/worksheets";
+import { serviceJobRef } from "../service-job-ref";
 import {
   formatLaborHours,
   worksheetDisplayLabel,
@@ -282,7 +283,7 @@ export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
     cell: (worksheet) =>
       worksheet.serviceJob ? (
         <Link
-          href={`/szerviz/hibajegyek/${worksheet.serviceJob.id}`}
+          href={serviceJobRef(worksheet.serviceJob).href}
           onClick={(event) => event.stopPropagation()}
           className="font-mono text-xs text-pilot-aqua-700 hover:text-pilot-aqua-800"
         >

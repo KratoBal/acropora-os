@@ -31,6 +31,7 @@ import { WorksheetMaterialRequests } from "../worksheet-material-requests";
 import { WorksheetAssetEditor } from "../worksheet-asset-editor";
 import { WorksheetAssigneeEditor } from "../worksheet-assignee-editor";
 import { WorksheetDocuments } from "../worksheet-documents";
+import { serviceJobRef } from "../service-job-ref";
 import {
   formatDate,
   formatDateTime,
@@ -651,10 +652,12 @@ export function PilotWorksheetDetailPage({
                   : `${worksheet.department.code}: ${current.unitName ?? "—"}`,
               )}
               {fieldRow(
-                "Hibajegy",
+                worksheet.serviceJob
+                  ? serviceJobRef(worksheet.serviceJob).label
+                  : "Hibajegy",
                 worksheet.serviceJob ? (
                   <Link
-                    href={`/szerviz/hibajegyek/${worksheet.serviceJob.id}`}
+                    href={serviceJobRef(worksheet.serviceJob).href}
                     className="text-pilot-aqua-700 hover:text-pilot-aqua-800"
                   >
                     {worksheet.serviceJob.jobNumber}

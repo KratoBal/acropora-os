@@ -62,14 +62,27 @@ export const MAINTENANCE_JOB_TABLE_MIN_WIDTH = 1040;
   A PARTNER MÁST LÁT, és ez itt is látszik: a belső állapot a jelvényen, a partneré alatta. Enélkül
   a kezelő nem tudja, mit olvas a másik fél.
 */
+/**
+ * HOVÁ VISZ A KARBANTARTÁS-LISTA SORA (Luca és Balázs, 2026-11-18; acrobot 55781): ha a lapnak PONTOSAN EGY munkalapja van, közvetlenül azt
+ * nyitja (a karbantartás munkalapként jelenik meg, nincs kitérő); több (vagy nulla) munkalapnál a karbantartási lap adatlapját. A
+ * karbantartási lap nem hibajegy: a sor sosem a `/szerviz/hibajegyek` alá visz.
+ */
+export const maintenanceSheetHref = (job: {
+  id: string;
+  soleWorksheetId?: string | null;
+}): string =>
+  job.soleWorksheetId
+    ? `/szerviz/munkalapok/${job.soleWorksheetId}`
+    : `/szerviz/karbantartas/${job.id}`;
+
 export const MAINTENANCE_JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
   {
     id: "job",
-    header: "Hibajegy",
+    header: "Karbantartási lap",
     width: "280px",
     cell: (job) => (
       <>
-        <Link href={`/szerviz/hibajegyek/${job.id}`} className={sv.rowTitle}>
+        <Link href={maintenanceSheetHref(job)} className={sv.rowTitle}>
           {job.title}
         </Link>
         <div className={sv.rowMeta}>{job.jobNumber}</div>

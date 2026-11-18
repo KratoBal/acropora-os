@@ -1264,9 +1264,11 @@ describe(
       );
       const item = items.find((row) => row.id === worksheetId);
       assert.ok(item, "the new sheet is not on the list");
+      // a jegy fajtája is megy (a karbantartási lap hivatkozása a Karbantartás alá visz; ez a jegy hibajegy, az alapértelmezés)
       assert.deepEqual(item.serviceJob, {
         id: job.id,
         jobNumber: job.jobNumber,
+        kind: "REPAIR",
       });
       const detailRow = await repository.detail(worksheetId, {
         kind: "internal",

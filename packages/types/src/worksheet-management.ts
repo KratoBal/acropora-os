@@ -576,7 +576,12 @@ export interface WorksheetDetail {
    * mondani - és a SZÁM is kell hozzá, nem csak az azonosító: egy azonosító
    * nem mond semmit annak, aki nézi.
    */
-  serviceJob: { id: string; jobNumber: string } | null;
+  serviceJob: {
+    id: string;
+    jobNumber: string;
+    /** A jegy fajtája: a karbantartási lap nem hibajegy, a hivatkozás ennek megfelelően megy (Balázs, 2026-11-18). Hiányzik a régi válaszból. */
+    kind?: "REPAIR" | "MAINTENANCE";
+  } | null;
   /**
    * A lap felelősei. A munkalap azonosságához tartozik, nem a verzióhoz:
    * lezárt lapon is javítható, és nem jelenik meg a verzió-eltérésben.
@@ -661,7 +666,12 @@ export interface WorksheetListItem {
    * `serviceJob`, so a partner sees nothing here that its sheet detail does
    * not already show.
    */
-  serviceJob: { id: string; jobNumber: string } | null;
+  serviceJob: {
+    id: string;
+    jobNumber: string;
+    /** A jegy fajtája: a karbantartási lap nem hibajegy, a hivatkozás ennek megfelelően megy (Balázs, 2026-11-18). Hiányzik a régi válaszból. */
+    kind?: "REPAIR" | "MAINTENANCE";
+  } | null;
   updatedAt: string;
   /**
    * EL VAN-E REJTVE. Alapból egyetlen listán sem szerepel rejtett sor, tehát

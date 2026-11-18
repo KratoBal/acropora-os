@@ -209,3 +209,66 @@ describe("a hibajegy-lista partner alakja", () => {
     assert.equal("assigneeNames" in item, false);
   });
 });
+
+/*
+  A KARBANTARTÁS-LISTA SORA PONTOSAN EGY MUNKALAPNÁL A MUNKALAPOT NYITJA (Luca és Balázs, 2026-11-18, Luca-Balázs-Acrobot szál; acrobot
+  55781): a lista sora ehhez a jegy egyetlen munkalapjának azonosítóját kapja. MI PIROSÍT: ha a mező nem megy át a belső listába; ha több
+  vagy nulla munkalapnál nem `null`; ha a partner a munkalap azonosítóját is megkapja (a partner a saját utján éri el a lapjait).
+*/
+describe("a hibajegy-lista egyetlen munkalapja", () => {
+  const sor = (id: string, soleWorksheetId: string | null, count: number) => ({
+    id,
+    jobNumber: `HJ-2026-${id}`,
+    title: "Karbantartás",
+    kind: "MAINTENANCE" as const,
+    status: "NEW" as const,
+    customerName: "Cápárium",
+    departmentPath: null,
+    departmentCode: null,
+    assignees: [],
+    createdAt: new Date("2026-11-18T09:00:00.000Z"),
+    worksheetCount: count,
+    soleWorksheetId,
+    hiddenAt: null,
+  });
+  const counts = {
+    NEW: 3,
+    TRIAGED: 0,
+    SCHEDULED: 0,
+    IN_PROGRESS: 0,
+    WAITING_FOR_PARTS: 0,
+    WAITING_FOR_CUSTOMER: 0,
+    COMPLETED: 0,
+    CANCELLED: 0,
+  };
+  const service = () =>
+    new ServiceJobsService({
+      list: async () => ({
+        rows: [sor("1", "ws-1", 1), sor("2", null, 2), sor("3", null, 0)],
+        truncated: false,
+      }),
+      countsByStatus: async () => counts,
+      assignedUnitIds: async () => [],
+    } as unknown as ServiceJobsRepository);
+
+  it("a belső lista hordozza az egyetlen munkalap azonosítóját, több vagy nulla munkalapnál null", async () => {
+    const response = await service().list({}, {
+      id: "office-user",
+      role: "ADMIN",
+    } as AuthenticatedUser);
+    assert.deepEqual(
+      response.items.map((item) => item.soleWorksheetId),
+      ["ws-1", null, null],
+    );
+  });
+
+  it("a partner válaszában a munkalap azonosítója nem szerepel", async () => {
+    const response = await service().list({}, {
+      id: "partner-user",
+      role: "PARTNER_SERVICE",
+      customerId: "c-1",
+    } as unknown as AuthenticatedUser);
+    for (const item of response.items)
+      assert.equal("soleWorksheetId" in item, false);
+  });
+});

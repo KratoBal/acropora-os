@@ -6,5 +6,5 @@ export default async function ServiceJobDetailRoute({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <PilotServiceJobDetailPage jobId={id} />;
+  return <PilotServiceJobDetailPage jobId={id} route="hibajegyek" />;
 }

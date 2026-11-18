@@ -140,6 +140,11 @@ vi.mock("@/components/navigation-history", () => ({
   useListHref: (listPath: string) => `${listPath}?tab=closed&partner=Alfa`,
 }));
 vi.mock("@/lib/api/worksheets", () => ({ worksheetsApi: sheets }));
+// the page redirects a job to the route of its kind (maintenance sheet / ticket), so it needs the router
+const nav = vi.hoisted(() => ({ replace: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: nav.replace, push: vi.fn() }),
+}));
 
 function sessionAs(role: Session["user"]["role"]): Session {
   return {
@@ -915,5 +920,169 @@ describe("PilotServiceJobDetailPage -- a régi lapról áthozott őrök", () => 
         ).toBeNull(),
       );
     });
+  });
+});
+
+/*
+  A KARBANTARTÁSI ADATLAP (Balázs és Luca, 2026-11-18, Luca-Balázs-Acrobot szál; acrobot 55781-55783): a szerződésből keletkező
+  karbantartási lap NEM hibajegy. Balázs szavai: „a karbantartási lapból megnyílik a munkalap, ha az alá van írva, akkor kész a
+  karbantartás, nem kell olyan, mint a hibajegynél, hogy elkészült, ügyfélre vár és egyebek”; a Kezelés blokk (Helyszín, Elrejtés) „ez se
+  kell rá”. MI PIROSÍT: ha a karbantartási lapon megjelenik a hibajegy-állapotgép (Következő lépés), a Kezelés blokk, a partner-állapot, a
+  csomag-letöltés/e-mail; ha az állapot nem a munkalapok aláírásából jön (minden aláírva = Kész, különben Folyamatban); ha a
+  munkalapok nem az első blokk; ha a hibajegy (REPAIR) bármelyiket elveszti; ha egy lap a másik fajta útvonalán marad.
+*/
+describe("PilotServiceJobDetailPage -- a karbantartási adatlap nem hibajegy", () => {
+  beforeEach(() => {
+    auth.session = sessionAs("SERVICE");
+    api.detail.mockReset();
+    api.documents.mockReset().mockResolvedValue({ items: [] });
+    api.uploadDocument.mockReset().mockResolvedValue([]);
+    sheets.attachable.mockReset().mockResolvedValue({ items: [] });
+    sheets.assignableUsers.mockReset().mockResolvedValue({ items: [] });
+    sheets.departments.mockReset().mockResolvedValue({ items: [] });
+    nav.replace.mockReset();
+  });
+
+  const sheetEntry = (
+    id: string,
+    status: "DRAFT" | "AWAITING_SIGNATURE" | "SIGNED" | "REJECTED",
+  ) => ({
+    kind: "worksheet" as const,
+    at: "2026-11-18T09:14:00.000Z",
+    sortKey: id,
+    worksheet: {
+      id,
+      number: `NMD-${id}`,
+      subject: `Tétel ${id}`,
+      createdAt: "2026-11-18T09:14:00.000Z",
+      handedOverAt: null,
+      status,
+      lineCount: 1,
+      laborHours: "0",
+    },
+  });
+  const maintenance = (
+    statuses: Parameters<typeof sheetEntry>[1][],
+    over: Partial<ServiceJobDetail> = {},
+  ) =>
+    detail({
+      kind: "MAINTENANCE",
+      timeline: statuses.map((status, index) =>
+        sheetEntry(`ws-${index + 1}`, status),
+      ),
+      ...over,
+    });
+
+  it("nincs hibajegy-állapotgép, Kezelés blokk, partner-állapot, csomag-letöltés", async () => {
+    api.detail.mockResolvedValue(
+      maintenance(["DRAFT"], {
+        partnerStatus: "COMPLETED",
+        status: "TRIAGED",
+      }),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" route="karbantartas" />);
+    await screen.findByText("Negyedéves ellenőrzés");
+    expect(
+      screen.queryByRole("region", { name: "Következő lépés" }),
+    ).toBeNull();
+    expect(screen.queryByText("Kezelés")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Elrejtés" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Helyszín" })).toBeNull();
+    expect(screen.queryByText("A partner ezt látja")).toBeNull();
+    expect(screen.queryByText(/^Partner: /)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Csomag letöltése/ }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Küldés e-mailben" }),
+    ).toBeNull();
+    // worksheets come from the contract: no attaching of an existing one, no detaching
+    expect(screen.queryByText("Meglévő munkalap csatolása")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Leválasztás" })).toBeNull();
+    // only the internal conversation: the partner-facing one belonged to the ticket's partner status
+    expect(
+      screen
+        .getAllByTestId("context-conversation-button")
+        .map((button) => button.getAttribute("data-partner")),
+    ).toEqual(["false"]);
+  });
+
+  it("az állapot a munkalapok aláírásából jön: minden aláírva = Kész, különben (üresen is) Folyamatban", async () => {
+    for (const [statuses, label] of [
+      [["SIGNED", "SIGNED"], "Kész"],
+      [["SIGNED", "AWAITING_SIGNATURE"], "Folyamatban"],
+      [["DRAFT"], "Folyamatban"],
+      [["REJECTED"], "Folyamatban"],
+      [[], "Folyamatban"],
+    ] as const) {
+      api.detail.mockResolvedValue(maintenance([...statuses]));
+      const { unmount } = render(
+        <PilotServiceJobDetailPage jobId="job-1" route="karbantartas" />,
+      );
+      await screen.findByText("Negyedéves ellenőrzés");
+      expect(screen.getByTestId("maintenance-status")).toHaveTextContent(label);
+      // the ticket's own state labels are not shown
+      expect(screen.queryByText("Szortírozva")).toBeNull();
+      unmount();
+    }
+  });
+
+  it("a szövegek karbantartásiak: vissza a Karbantartás listához, Munkalapok az első blokk", async () => {
+    api.detail.mockResolvedValue(maintenance(["SIGNED"]));
+    render(<PilotServiceJobDetailPage jobId="job-1" route="karbantartas" />);
+    await screen.findByText("Negyedéves ellenőrzés");
+    const back = screen.getByRole("link", { name: /Karbantartás/ });
+    expect(back.getAttribute("href")).toMatch(/^\/szerviz\/karbantartas\?/);
+    expect(screen.queryByText(/Munkalapok a jegy mögött/)).toBeNull();
+    const heading = screen.getByText("Munkalapok");
+    // the worksheets card leads the left column
+    expect(
+      heading.closest("section, div[class*='order-first']"),
+    ).not.toBeNull();
+    expect(screen.queryByText(/hibajegy/i)).toBeNull();
+  });
+
+  it("a hibajegy (REPAIR) mindezt megtartja", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        kind: "REPAIR",
+        partnerStatus: "COMPLETED",
+        status: "COMPLETED",
+        allowedSteps: [],
+      }),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" route="hibajegyek" />);
+    await screen.findByText("Negyedéves ellenőrzés");
+    expect(
+      screen.getByRole("region", { name: "Következő lépés" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Kezelés")).toBeInTheDocument();
+    expect(screen.getByText("A partner ezt látja")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Csomag letöltése/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("maintenance-status")).toBeNull();
+    expect(screen.getByText("Meglévő munkalap csatolása")).toBeInTheDocument();
+    expect(nav.replace).not.toHaveBeenCalled();
+  });
+
+  it("a lap a saját fajtájának útvonalára tér át: karbantartás a hibajegyek útvonalán és fordítva", async () => {
+    api.detail.mockResolvedValue(maintenance(["DRAFT"]));
+    const first = render(
+      <PilotServiceJobDetailPage jobId="job-1" route="hibajegyek" />,
+    );
+    await waitFor(() =>
+      expect(nav.replace).toHaveBeenCalledWith("/szerviz/karbantartas/job-1"),
+    );
+    // while it redirects, the wrong page's content is not drawn
+    expect(screen.queryByText("Negyedéves ellenőrzés")).toBeNull();
+    first.unmount();
+
+    nav.replace.mockReset();
+    api.detail.mockResolvedValue(detail({ kind: "REPAIR" }));
+    render(<PilotServiceJobDetailPage jobId="job-1" route="karbantartas" />);
+    await waitFor(() =>
+      expect(nav.replace).toHaveBeenCalledWith("/szerviz/hibajegyek/job-1"),
+    );
   });
 });

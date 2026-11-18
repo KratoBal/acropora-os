@@ -1111,7 +1111,9 @@ describe("PilotContractDetailPage -- lap megrendelőlap nélkül és vevői megr
     );
 
     await waitFor(() =>
-      expect(navigation.push).toHaveBeenCalledWith("/szerviz/hibajegyek/job-9"),
+      expect(navigation.push).toHaveBeenCalledWith(
+        "/szerviz/karbantartas/job-9",
+      ),
     );
     const [token, input] = createContractJob().mock.calls[0]!;
     expect(token).toBe("dev-token");
@@ -1182,7 +1184,9 @@ describe("PilotContractDetailPage -- lap megrendelőlap nélkül és vevői megr
     );
 
     await waitFor(() =>
-      expect(navigation.push).toHaveBeenCalledWith("/szerviz/hibajegyek/job-9"),
+      expect(navigation.push).toHaveBeenCalledWith(
+        "/szerviz/karbantartas/job-9",
+      ),
     );
     const [first, second] = createContractJob().mock.calls.map(
       (call) => call[1] as { clientOperationId: string; itemIds: string[] },
@@ -1233,7 +1237,7 @@ describe("PilotContractDetailPage -- lap megrendelőlap nélkül és vevői megr
       screen
         .getByRole("link", { name: "Karbantartási lap" })
         .getAttribute("href"),
-    ).toBe("/szerviz/hibajegyek/job-7");
+    ).toBe("/szerviz/karbantartas/job-7");
   });
 
   it("WEB-CONTRACT-CUSTOMER-FORM-EMPTY: kijelölés nélkül a feltöltés nem nyílik meg", async () => {
