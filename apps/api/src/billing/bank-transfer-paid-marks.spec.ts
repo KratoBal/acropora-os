@@ -979,8 +979,8 @@ describe("Luca's three bank rows", () => {
       [
         invoice("00084", "20000.00", { cancelled: true }),
         invoice("00084", "20000.00", {
-          documentNumber: "ACRD-2026/00084",
-          kindCode: "D",
+          documentNumber: "ACRL-2026/00084",
+          kindCode: "SL",
         }),
       ],
       [refund({ amount: "20000.00", narrative: "2026/00084 vissza" })],
