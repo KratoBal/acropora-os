@@ -50,8 +50,14 @@ const CONTINUATION = /\s*([,;+&-]|és)\s*(\d{1,6})/gu;
   credit naming `E-CRPR-2026-1` and one naming `D-CRPR-7` stood as "no reference", hidden. Only these known series are read:
   an invented pattern for any `XXX-2026-1` would name numbers that are not ours. EINV numbers are eBIZ's (`remittanceEbizNumbers`).
 */
+/*
+  SHORTENED NUMBERS AFTER A FULL ONE (Luca, 2026-11-18 14:57 UTC; acrobot 55990): the credit "HC0000007106 E-CRPRW-2026-6,5" names two invoices, the 6 and the 5, and only the first was read. The same
+  shapes as the year/number reference (a comma, ; + & or "és" list, a "-" range), but these serials are NOT zero-padded, so a further number is its OWN full serial (`,5` is the 5), it does not replace
+  the last digits of the first. What cannot be read without a guess is not read: a number SHORTER than the first (`12,3` is the 3 or the 13) ends the list, like a backward or too long range. A
+  following number is not a member when another digit, a "/" or a "-digit" follows it (a date `2026-11-18`, a `2026/00083` reference).
+*/
 const LITERAL = new RegExp(
-  String.raw`(?<![A-Za-z0-9])(E-CRPRW?-(?:19|20)\d{2}-\d{1,6}|CRPRW?-(?:19|20)\d{2}-\d{1,6}|D-CRPRW?-\d{1,6})(?![A-Za-z0-9])`,
+  String.raw`(?<![A-Za-z0-9])((?:E-CRPRW?|CRPRW?)-(?:19|20)\d{2}-|D-CRPRW?-)(\d{1,6})(?![A-Za-z0-9])((?:${SEPARATOR}\d{1,6}(?![\d/]|-\d|\s*\/))*)`,
   "giu",
 );
 const EBIZ_NUMBER = /(?<![A-Za-z0-9])(EINV\d{6,10})(?![A-Za-z0-9])/giu;
@@ -93,12 +99,30 @@ export function remittanceInvoiceRefs(text: string): RemittanceInvoiceRef[] {
       previous = next;
     }
   }
-  for (const match of text.matchAll(LITERAL)) {
-    const literal = match[1]!.toUpperCase();
+  const addLiteral = (literal: string) => {
     const key = `lit|${literal}`;
-    if (seen.has(key)) continue;
+    if (seen.has(key)) return;
     seen.add(key);
     out.push({ prefix: null, year: "", number: "", literal });
+  };
+  for (const match of text.matchAll(LITERAL)) {
+    const head = match[1]!.toUpperCase();
+    const base = match[2]!;
+    addLiteral(`${head}${base}`);
+    let previous = Number(base);
+    for (const part of (match[3] ?? "").matchAll(CONTINUATION)) {
+      const separator = part[1]!;
+      const digits = part[2]!;
+      // a shorter number than the first is the 3 or the 13: not guessed, the list ends
+      if (digits.length < base.length) break;
+      const next = Number(digits);
+      if (separator === "-") {
+        if (next < previous || next - previous + 1 > RANGE_LIMIT) break;
+        for (let value = previous + 1; value <= next; value += 1)
+          addLiteral(`${head}${value}`);
+      } else addLiteral(`${head}${next}`);
+      previous = next;
+    }
   }
   return out;
 }
