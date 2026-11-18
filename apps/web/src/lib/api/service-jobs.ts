@@ -36,9 +36,12 @@ export const serviceJobsApi = {
     search?: string,
     includeHidden?: boolean,
     kind: "REPAIR" | "MAINTENANCE" = "REPAIR",
+    /** A karbantartás füle: a szerver szűr rá (f4590db6). Hiányzik: minden lap. */
+    maintenanceState?: "progress" | "done",
   ) {
     const query = new URLSearchParams({ scope });
     query.set("kind", kind);
+    if (maintenanceState) query.set("maintenanceState", maintenanceState);
     const trimmed = search?.trim();
     if (trimmed) query.set("search", trimmed);
     /**

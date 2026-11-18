@@ -18,6 +18,10 @@ import {
 } from "./service-job-list-scope.js";
 import { ALL_SERVICE_JOB_STATUSES } from "./service-job-status.js";
 import {
+  doneMaintenanceJobIds,
+  type MaintenanceListState,
+} from "./maintenance-done.js";
+import {
   prisma,
   type Prisma,
   type ServiceJobStatus,
@@ -968,6 +972,11 @@ export class ServiceJobsRepository {
      * ugy nez ki, mint "nincs rad kiosztva semmi".
      */
     viewerUserId: string,
+    /**
+     * A KARBANTARTÁS FÜLE (f4590db6): csak a még nem kész vagy csak a kész lapok. A SZERVEREN szűr, mert a lista a legújabb kétszázat adja,
+     * és a karbantartási lap sosem zárul: kliensoldali szűrésnél épp a régi, beragadt "Folyamatban" lap esne ki elsőként (barracuda, #2710).
+     */
+    maintenanceState?: MaintenanceListState,
   ): Promise<{ rows: ServiceJobRow[]; truncated: boolean }> {
     /**
      * A LATHATOSAGI SZURO `AND` AGBAN ALL, nem kulcskent. Ugyanaz az indok, mint
@@ -991,6 +1000,15 @@ export class ServiceJobsRepository {
         serviceJobSearchWhere(search),
       ],
     };
+    if (maintenanceState && kind === "MAINTENANCE") {
+      const done = await this.doneMaintenanceIn(where);
+      (where.AND as Prisma.ServiceJobWhereInput[]).push({
+        id:
+          maintenanceState === "done"
+            ? { in: [...done] }
+            : { notIn: [...done] },
+      });
+    }
 
     /**
      * EGGYEL TOBBET KERUNK, MINT AMENNYIT ADUNK.
@@ -1089,24 +1107,7 @@ export class ServiceJobsRepository {
     const maintenanceIds = lap
       .filter((row) => row.kind === "MAINTENANCE" && row._count.worksheets > 0)
       .map((row) => row.id);
-    const maintenanceSheets = maintenanceIds.length
-      ? await this.database.worksheet.findMany({
-          where: { serviceJobId: { in: maintenanceIds } },
-          select: {
-            serviceJobId: true,
-            versions: {
-              orderBy: { version: "desc" },
-              take: 1,
-              select: { status: true },
-            },
-          },
-        })
-      : [];
-    const notSigned = new Set(
-      maintenanceSheets
-        .filter((sheet) => sheet.versions[0]?.status !== "SIGNED")
-        .flatMap((sheet) => (sheet.serviceJobId ? [sheet.serviceJobId] : [])),
-    );
+    const doneMaintenance = await this.doneMaintenanceOf(maintenanceIds);
 
     const openerIds = [
       ...new Set(
@@ -1142,8 +1143,7 @@ export class ServiceJobsRepository {
         worksheetCount: row._count.worksheets,
         ...(row.kind === "MAINTENANCE"
           ? {
-              maintenanceDone:
-                row._count.worksheets > 0 && !notSigned.has(row.id),
+              maintenanceDone: doneMaintenance.has(row.id),
             }
           : {}),
         hiddenAt: row.hiddenAt,
@@ -1187,6 +1187,61 @@ export class ServiceJobsRepository {
         ],
       },
     });
+  }
+
+  /** A megadott karbantartási lapok közül a készek (`doneMaintenanceJobIds`): egy kötegelt lekérdezés a munkalapjaik legutolsó verziójára. */
+  private async doneMaintenanceOf(
+    jobIds: readonly string[],
+  ): Promise<Set<string>> {
+    if (jobIds.length === 0) return new Set();
+    const sheets = await this.database.worksheet.findMany({
+      where: { serviceJobId: { in: [...jobIds] } },
+      select: {
+        serviceJobId: true,
+        versions: {
+          orderBy: { version: "desc" },
+          take: 1,
+          select: { status: true },
+        },
+      },
+    });
+    return doneMaintenanceJobIds(
+      jobIds,
+      sheets.map((sheet) => ({
+        serviceJobId: sheet.serviceJobId,
+        latestStatus: sheet.versions[0]?.status,
+      })),
+    );
+  }
+
+  /** A feltételnek megfelelő karbantartási lapok közül a készek, határ nélkül (a lap azonosítója, nem a sora). */
+  private async doneMaintenanceIn(
+    where: Prisma.ServiceJobWhereInput,
+  ): Promise<Set<string>> {
+    const jobs = await this.database.serviceJob.findMany({
+      where: { AND: [where, { kind: "MAINTENANCE" }] },
+      select: { id: true },
+    });
+    return this.doneMaintenanceOf(jobs.map((job) => job.id));
+  }
+
+  /**
+   * A KARBANTARTÁS FÜLEINEK SZÁMA (f4590db6): a látható, a keresésnek megfelelő karbantartási lapok közül hány van folyamatban és hány
+   * kész. Ugyanaz a szabály, mint a jelvényé; a scope nem számít bele, ugyanúgy, mint a `countsByStatus`-nál.
+   */
+  async maintenanceStateCounts(
+    visibility: Prisma.ServiceJobWhereInput,
+    search?: string,
+  ): Promise<{ progress: number; done: number }> {
+    const where: Prisma.ServiceJobWhereInput = {
+      AND: [visibility, { kind: "MAINTENANCE" }, serviceJobSearchWhere(search)],
+    };
+    const jobs = await this.database.serviceJob.findMany({
+      where,
+      select: { id: true },
+    });
+    const done = await this.doneMaintenanceOf(jobs.map((job) => job.id));
+    return { progress: jobs.length - done.size, done: done.size };
   }
 
   async countsByStatus(

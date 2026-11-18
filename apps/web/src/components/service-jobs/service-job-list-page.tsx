@@ -42,7 +42,7 @@ import {
   itemsForTab,
   listSummary,
   MAINTENANCE_TABS,
-  maintenanceItemsForTab,
+  maintenanceTotal,
   type MaintenanceTab,
   SERVICE_JOB_TABS,
   type ServiceJobTab,
@@ -218,6 +218,9 @@ export function ServiceJobListPage({
   );
   const token = session?.token ?? "";
   // the maintenance tabs filter the badge's field on the client: the list asks for everything
+  // the maintenance tab is the server's filter (f4590db6); a ticket's tab is not, so it does not reload the list
+  const maintenanceState =
+    maintenance && (tab === "progress" || tab === "done") ? tab : undefined;
   const scope = maintenance ? "all" : tabDefinition(tab as ServiceJobTab).scope;
 
   /*
@@ -244,6 +247,7 @@ export function ServiceJobListPage({
             appliedSearch,
             includeHidden,
             kind,
+            maintenanceState,
           ),
         );
       } catch (cause) {
@@ -259,7 +263,15 @@ export function ServiceJobListPage({
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [appliedSearch, canView, includeHidden, kind, scope, token],
+    [
+      appliedSearch,
+      canView,
+      includeHidden,
+      kind,
+      maintenanceState,
+      scope,
+      token,
+    ],
   );
 
   useEffect(() => {
@@ -272,7 +284,7 @@ export function ServiceJobListPage({
     () =>
       data
         ? maintenance
-          ? maintenanceItemsForTab(data.items, tab as MaintenanceTab)
+          ? data.items
           : itemsForTab(data.items, tab as ServiceJobTab)
         : [],
     [data, maintenance, tab],
@@ -448,7 +460,7 @@ export function ServiceJobListPage({
               shown={items.length}
               totalItems={
                 maintenance
-                  ? items.length
+                  ? maintenanceTotal(data.maintenanceCounts, tab, items.length)
                   : totalForTab(data.counts, tab as ServiceJobTab)
               }
               tail={{ kind: "capped", truncated: data.truncated }}

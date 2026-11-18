@@ -335,6 +335,14 @@ export class ServiceJobListQueryDto {
   scope?: ServiceJobListScope;
 
   /**
+   * A KARBANTARTÁS FÜLE (f4590db6): `progress` a még nem kész, `done` a kész lapok (minden munkalapjuk legutolsó verziója aláírt). Csak
+   * `kind=MAINTENANCE` mellett hat; a szerver szűr, nem a kliens, mert a lista a legújabb kétszázat adja.
+   */
+  @IsIn(["progress", "done"])
+  @IsOptional()
+  maintenanceState?: "progress" | "done";
+
+  /**
    * SZABAD SZAVAS KERESES, A SZERVEREN.
    *
    * A MUNKALAP-LISTA MAR IGY MUKODIK (worksheets.repository.ts), es ugyanaz a
