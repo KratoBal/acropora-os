@@ -350,6 +350,19 @@ describe("egységes rögzítés: a sablon kapcsolója", () => {
     assert.equal(sharedSectionTitle(t), "Közös értékek");
   });
 
+  it("bekapcsolva egy ismeretlen mezőtípus (újabb szerver) eszközönként marad: a közös a fehér lista, nem a fénykép kizárása", () => {
+    const t = uniform(true);
+    const unknown = {
+      ...field("datum", "TEXT"),
+      type: "DATE",
+    } as unknown as OperationsTemplateField;
+    const withUnknown = { ...t, fields: [...t.fields, unknown] };
+    assert.deepEqual(
+      perAssetFields(withUnknown).map((f) => f.key),
+      ["kep", "datum"],
+    );
+  });
+
   it("kikapcsolva és HIÁNYZÓ mezővel ugyanúgy, mint eddig: csak a vízóra közös", () => {
     for (const t of [uniform(false), uniform(undefined)]) {
       assert.deepEqual(
