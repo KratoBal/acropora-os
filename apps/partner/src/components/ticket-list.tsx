@@ -71,7 +71,14 @@ const dateFormatter = new Intl.DateTimeFormat("hu-HU", { dateStyle: "medium" });
  */
 export function TicketList({ kind = "REPAIR" }: { kind?: TicketKind }) {
   const words = TICKET_WORDING[kind];
-  const [scope, setScope] = useState<"open" | "closed" | "all">("open");
+  /*
+    A KARBANTARTÁS LISTÁN NINCS ÁLLAPOTSZŰRŐ (barracuda, #2698 review): a Nyitott / Lezárt fül a jegy STATUS mezőjén szűr (COMPLETED és CANCELLED = lezárt), egy karbantartási lap státusza viszont
+    sosem COMPLETED (nincs állapotgépe, a kézi állapotváltást a szerver tiltja), tehát a "Nyitott" fülön a KÉSZ lapok is ott állnának, a "Lezárt" fül pedig mindig üres volna. A lista mindent mutat
+    (`all`), a sor a Kész / Folyamatban jelzőt viseli, a lábléc az összest számolja.
+  */
+  const [scope, setScope] = useState<"open" | "closed" | "all">(
+    kind === "MAINTENANCE" ? "all" : "open",
+  );
   const [data, setData] = useState<Awaited<
     ReturnType<typeof partnerApi.tickets>
   > | null>(null);
@@ -124,22 +131,24 @@ export function TicketList({ kind = "REPAIR" }: { kind?: TicketKind }) {
         Ellenorizve az eles CSS-en (2026-09-25 16:2x): a `@layer base`
         maga helyesen all, a hianyzo darab ez az egy sor volt.
       */}
-      <div className="flex items-center gap-1 border-b border-pilot-grey-100 bg-white px-8 py-4">
-        {SCOPE_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setScope(tab.key)}
-            className={`cursor-pointer rounded-md px-4 py-2 text-sm font-medium transition-all ${
-              scope === tab.key
-                ? "bg-pilot-aqua-50 text-pilot-aqua-700"
-                : "bg-transparent text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {kind === "REPAIR" ? (
+        <div className="flex items-center gap-1 border-b border-pilot-grey-100 bg-white px-8 py-4">
+          {SCOPE_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setScope(tab.key)}
+              className={`cursor-pointer rounded-md px-4 py-2 text-sm font-medium transition-all ${
+                scope === tab.key
+                  ? "bg-pilot-aqua-50 text-pilot-aqua-700"
+                  : "bg-transparent text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {error ? (
         <div className="px-8 py-4">

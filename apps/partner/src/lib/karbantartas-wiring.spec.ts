@@ -68,6 +68,22 @@ describe("a karbantartás menüpont bekötése a partner portálon", () => {
     );
   });
 
+  /*
+    A KARBANTARTÁS LISTÁN NINCS ÁLLAPOTSZŰRŐ (barracuda, #2698 review): a Nyitott / Lezárt fül a jegy STATUS mezőjén szűr, egy karbantartási lap státusza viszont sosem COMPLETED, tehát a "Nyitott"
+    fülön a kész lapok is ott állnának, a "Lezárt" fül mindig üres volna. MI PIROSÍT: ha a karbantartás lista "open" szűrővel indul, vagy a fülsor megjelenik rajta.
+  */
+  it("a karbantartás lista mindent mutat (all), a fülsor csak a hibajegyeké", () => {
+    const lista = kod(LISTA);
+    assert.match(
+      lista,
+      /useState<"open" \| "closed" \| "all">\(\s*kind === "MAINTENANCE" \? "all" : "open",?\s*\)/,
+    );
+    assert.match(
+      lista,
+      /\{kind === "REPAIR" \? \(\s*<div className="flex items-center gap-1[^"]*">\s*\{SCOPE_TABS\.map/,
+    );
+  });
+
   it("a partner a karbantartás listán nem nyithat új hibajegyet", () => {
     assert.match(
       kod(LISTA),
