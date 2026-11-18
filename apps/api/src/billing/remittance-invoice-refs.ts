@@ -34,7 +34,7 @@ export const RANGE_LIMIT = 20;
 // "és" has no ASCII word boundary (`\b` is ASCII in JavaScript), so it stands as a plain separator
 const SEPARATOR = String.raw`\s*(?:[,;+&-]|és)\s*`;
 const REFERENCE = new RegExp(
-  String.raw`(?:\b(A(?:CR|RC)[A-Z])[-\s]?|(?<![A-Za-z]-?|[A-Za-z0-9]\/)\b)(20\d{2})\s*\/\s*(\d{3,6})(?!\d)((?:${SEPARATOR}\d{1,6}(?![\d/]|\s*\/))*)`,
+  String.raw`(?:\b(A(?:CR|RC)[A-Z])(?:\s*\/\s*|[-\s])?|(?<![A-Za-z]-?|[A-Za-z0-9]\/)\b)(20\d{2})\s*\/\s*(\d{3,6})(?!\d)((?:${SEPARATOR}\d{1,6}(?![\d/]|\s*\/))*)`,
   "giu",
 );
 const CONTINUATION = /\s*([,;+&-]|és)\s*(\d{1,6})/gu;

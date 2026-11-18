@@ -89,6 +89,14 @@ describe("the customer's own references are not ours", () => {
     assert.deepEqual(numbers("H/2026/001234"), []);
   });
 
+  it("our own prefix written with a slash is ours, with its prefix (barracuda, #2683)", () => {
+    // main read "ACRW/2026/00503" as a bare 2026/00503 (any series); the slash after OUR prefix is the customer's way of writing it
+    assert.deepEqual(numbers("ACRW/2026/00503"), ["ACRW-2026/00503"]);
+    assert.deepEqual(numbers("ARCW / 2026/00503"), ["ARCW-2026/00503"]);
+    // a foreign prefix with a slash stays foreign
+    assert.deepEqual(numbers("ABCD/2026/00503"), []);
+  });
+
   it("a seven-digit serial is not read as its first six digits, anywhere", () => {
     assert.deepEqual(numbers("2026/0005034"), []);
     assert.deepEqual(numbers("számla 2026/0000503 köszönjük"), []);
