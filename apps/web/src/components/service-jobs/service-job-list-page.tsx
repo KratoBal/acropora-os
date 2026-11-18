@@ -41,6 +41,9 @@ import {
 import {
   itemsForTab,
   listSummary,
+  MAINTENANCE_TABS,
+  maintenanceItemsForTab,
+  type MaintenanceTab,
   SERVICE_JOB_TABS,
   type ServiceJobTab,
   tabDefinition,
@@ -170,17 +173,22 @@ export function ServiceJobListPage({
     ténylegesen lekérdez.
   */
   const { params, update } = useUrlQuery();
-  const tab = urlChoice<ServiceJobTab>(
+  const maintenance = kind === "MAINTENANCE";
+  // a karbantartás saját fülei (a jelvény logikája), a hibajegyé a régi
+  const tabs: { id: ServiceJobTab | MaintenanceTab; label: string }[] =
+    maintenance ? MAINTENANCE_TABS : SERVICE_JOB_TABS;
+  const defaultTab = maintenance ? "progress" : "open";
+  const tab = urlChoice<ServiceJobTab | MaintenanceTab>(
     params,
     "tab",
-    SERVICE_JOB_TABS.map((entry) => entry.id),
-    "open",
+    tabs.map((entry) => entry.id),
+    defaultTab,
   );
   const appliedSearch = params.get("q") ?? "";
   const includeHidden = params.get("hidden") === "1";
   const [search, setSearch] = useState(appliedSearch);
-  const setTab = (next: ServiceJobTab) =>
-    update({ tab: next === "open" ? null : next });
+  const setTab = (next: ServiceJobTab | MaintenanceTab) =>
+    update({ tab: next === defaultTab ? null : next });
   const [data, setData] = useState<ServiceJobListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -209,7 +217,8 @@ export function ServiceJobListPage({
     session && hasPermission(session.user, PERMISSIONS.SERVICE_HIDE),
   );
   const token = session?.token ?? "";
-  const { scope } = tabDefinition(tab);
+  // the maintenance tabs filter the badge's field on the client: the list asks for everything
+  const scope = maintenance ? "all" : tabDefinition(tab as ServiceJobTab).scope;
 
   /*
     A GÉPELÉS NEM KÉRÉSENKÉNT MEGY LE. A keresés a SZERVEREN szűr, tehát minden
@@ -260,8 +269,13 @@ export function ServiceJobListPage({
   }, [load]);
 
   const items = useMemo(
-    () => (data ? itemsForTab(data.items, tab) : []),
-    [data, tab],
+    () =>
+      data
+        ? maintenance
+          ? maintenanceItemsForTab(data.items, tab as MaintenanceTab)
+          : itemsForTab(data.items, tab as ServiceJobTab)
+        : [],
+    [data, maintenance, tab],
   );
   const summary = data ? listSummary(data.counts) : null;
 
@@ -368,12 +382,12 @@ export function ServiceJobListPage({
       )}
       <div className={sv.panel}>
         <ServiceListTabs
-          tabs={SERVICE_JOB_TABS.map((entry) => ({
+          tabs={tabs.map((entry) => ({
             key: entry.id,
             label: entry.label,
           }))}
           active={tab}
-          onSelect={(key) => setTab(key as ServiceJobTab)}
+          onSelect={(key) => setTab(key as ServiceJobTab | MaintenanceTab)}
           label={
             kind === "MAINTENANCE"
               ? "Karbantartások szűrése"
@@ -432,7 +446,11 @@ export function ServiceJobListPage({
             */}
             <ServiceListFooter
               shown={items.length}
-              totalItems={totalForTab(data.counts, tab)}
+              totalItems={
+                maintenance
+                  ? items.length
+                  : totalForTab(data.counts, tab as ServiceJobTab)
+              }
               tail={{ kind: "capped", truncated: data.truncated }}
             />
           </>
@@ -443,7 +461,9 @@ export function ServiceJobListPage({
               ? `Erre a keresésre nincs ${thing} ezen a fülön.`
               : tab === "open"
                 ? `Nyitott ${thing} jelenleg nincs. A lezártakat a fenti füleken nézheted meg.`
-                : `Ezen a fülön most nincs ${thing}.`}
+                : tab === "progress"
+                  ? "Folyamatban lévő karbantartási lap jelenleg nincs. A készeket a fenti füleken nézheted meg."
+                  : `Ezen a fülön most nincs ${thing}.`}
           </p>
         ) : null}
       </div>

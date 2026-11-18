@@ -187,6 +187,8 @@ describe("ServiceJobListPage", () => {
         ],
       }),
     );
+    // a két sor együtt az "Összes" fülön áll: az alapértelmezett "Folyamatban" fül a kész lapot nem mutatja (acrobot 56182)
+    urlNavigation.reset("/szerviz/karbantartas", "tab=all");
     render(<ServiceJobListPage kind="MAINTENANCE" />);
     await screen.findAllByTestId("maintenance-job-row");
     const rows = screen.getAllByTestId("maintenance-job-row");
@@ -313,12 +315,59 @@ describe("ServiceJobListPage", () => {
 
     expect(
       await screen.findByText(
-        "Nyitott karbantartási lap jelenleg nincs. A lezártakat a fenti füleken nézheted meg.",
+        "Folyamatban lévő karbantartási lap jelenleg nincs. A készeket a fenti füleken nézheted meg.",
       ),
     ).toBeTruthy();
     // a hibajegy-állapot szerinti csempék a karbantartási listán nem jelennek meg (nincs állapotgép; Balázs, 2026-11-18)
     expect(screen.queryByText("Nyitott karbantartási lap")).toBeNull();
     expect(screen.queryByText("Nyitott hibajegy")).toBeNull();
+  });
+
+  /*
+    A KARBANTARTÁS FÜLEI A JELVÉNY LOGIKÁJÁVAL (Balázs, 2026-11-18 11:31 UTC; acrobot 56182): Folyamatban / Kész / Összes, a
+    `maintenanceDone` szerint; a hibajegy fülei (Nyitott, Várakozik, Lezárt) a karbantartáson nincsenek. A stage-bejárás lelete: a
+    "Nyitott" fül alatt "Kész" jelvényű lap állt. MI PIROSÍT: ha a régi fülek jönnek vissza; ha a Kész fül alatt nem kész lap áll, vagy
+    fordítva; ha a lista nem mindent kér (a fülek a kliensen szűrnek).
+  */
+  it("a karbantartás fülei Folyamatban, Kész, Összes, és a jelvény szerint szűrnek", async () => {
+    const base = response().items[0]!;
+    api.list.mockResolvedValue(
+      response({
+        items: [
+          {
+            ...base,
+            id: "kt-kesz",
+            jobNumber: "KT-2026-005",
+            kind: "MAINTENANCE",
+            maintenanceDone: true,
+          },
+          {
+            ...base,
+            id: "kt-fut",
+            jobNumber: "KT-2026-004",
+            kind: "MAINTENANCE",
+            maintenanceDone: false,
+          },
+        ],
+      }),
+    );
+    render(<ServiceJobListPage kind="MAINTENANCE" />);
+
+    expect(await screen.findByText("KT-2026-004")).toBeTruthy();
+    expect(screen.queryByText("KT-2026-005")).toBeNull();
+    expect(screen.getByRole("tab", { name: "Folyamatban" })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Nyitott" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Várakozik" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Lezárt" })).toBeNull();
+    expect(api.list.mock.calls.at(-1)?.[1]).toBe("all");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Kész" }));
+    expect(await screen.findByText("KT-2026-005")).toBeTruthy();
+    expect(screen.queryByText("KT-2026-004")).toBeNull();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Összes" }));
+    expect(await screen.findByText("KT-2026-004")).toBeTruthy();
+    expect(screen.getByText("KT-2026-005")).toBeTruthy();
   });
 
   it("a hibajegy-lista csempéje Nyitott hibajegy marad", async () => {
@@ -409,8 +458,9 @@ describe("ServiceJobListPage -- állapot az URL-ben", () => {
     render(<ServiceJobListPage kind="MAINTENANCE" />);
     await screen.findByText("Alkatrészre vár");
 
-    fireEvent.click(screen.getByRole("tab", { name: "Lezárt" }));
-    await waitFor(() => expect(urlNavigation.search).toBe("tab=closed"));
+    // a karbantartás fülei: Folyamatban / Kész / Összes (acrobot 56182)
+    fireEvent.click(screen.getByRole("tab", { name: "Kész" }));
+    await waitFor(() => expect(urlNavigation.search).toBe("tab=done"));
 
     fireEvent.change(screen.getByLabelText("Karbantartás keresése"), {
       target: { value: "szűrő" },
@@ -418,7 +468,7 @@ describe("ServiceJobListPage -- állapot az URL-ben", () => {
     await waitFor(() =>
       expect(new URLSearchParams(urlNavigation.search).get("q")).toBe("szűrő"),
     );
-    expect(new URLSearchParams(urlNavigation.search).get("tab")).toBe("closed");
+    expect(new URLSearchParams(urlNavigation.search).get("tab")).toBe("done");
   });
 });
 

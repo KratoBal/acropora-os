@@ -102,3 +102,25 @@ export function totalForTab(
     .filter((status) => !statuses || statuses.includes(status))
     .reduce((sum, status) => sum + counts[status], 0);
 }
+
+/**
+ * A KARBANTARTÁS LISTA FÜLEI A JELVÉNY LOGIKÁJÁVAL (Balázs, 2026-11-18 11:31 UTC; acrobot 56182): a karbantartásnak nincs hibajegy-állapota,
+ * a "Kész" az, hogy van munkalapja, és mind alá van írva (`maintenanceDone`, a szerver számolja). A hibajegy fülei (Nyitott, Várakozik,
+ * Lezárt) a háttérbeli státuszt szűrték, ezért a "Nyitott" fül alatt "Kész" jelvényű lap is állt (a stage-bejárás lelete).
+ */
+export type MaintenanceTab = "progress" | "done" | "all";
+
+export const MAINTENANCE_TABS: { id: MaintenanceTab; label: string }[] = [
+  { id: "progress", label: "Folyamatban" },
+  { id: "done", label: "Kész" },
+  { id: "all", label: "Összes" },
+];
+
+export function maintenanceItemsForTab(
+  items: readonly ServiceJobListItem[],
+  tab: MaintenanceTab,
+): ServiceJobListItem[] {
+  if (tab === "all") return [...items];
+  const done = tab === "done";
+  return items.filter((item) => Boolean(item.maintenanceDone) === done);
+}
