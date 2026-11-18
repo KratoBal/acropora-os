@@ -58,7 +58,13 @@ function formatDateTime(value?: string): string {
 const money = (value: string) =>
   formatMoney(value, "HUF", { fractionDigits: 2 });
 
-function payoutStatus(status: StripePayoutStatus) {
+function payoutStatus(
+  status: StripePayoutStatus,
+  errorCode?: StripePayoutError,
+) {
+  // a manual payout cannot settle by reading again: it is shown under its own name, not as "to check"
+  if (errorCode === "MANUAL_PAYOUT")
+    return <PilotBadge variant="grey">Kézi kifizetés</PilotBadge>;
   return status === "COMPLETED" ? (
     <PilotBadge variant="success">Kész</PilotBadge>
   ) : (
@@ -485,7 +491,7 @@ export function StripeSettlementsPage() {
       width: "24%",
       cell: (item) => (
         <div>
-          {payoutStatus(item.status)}
+          {payoutStatus(item.status, item.errorCode)}
           {item.errorCode ? (
             <p className="mt-1 text-xs text-pilot-grey-500">
               {PAYOUT_ERRORS[item.errorCode]}

@@ -201,6 +201,26 @@ describe("StripeSettlementsPage", () => {
     );
   });
 
+  it("a manual payout is shown under its own name, not as 'to check'", async () => {
+    api.list.mockResolvedValue({
+      ...payouts,
+      items: [
+        {
+          ...payouts.items[0]!,
+          errorCode: "MANUAL_PAYOUT",
+          lineCount: 0,
+          resolvedLineCount: 0,
+          unresolvedLineCount: 0,
+        },
+      ],
+    });
+    render(createElement(StripeSettlementsPage));
+    const [row] = await screen.findAllByTestId("stripe-kifizetes");
+    expect(row).toHaveTextContent("Kézi kifizetés");
+    expect(row).not.toHaveTextContent("Ellenőrzendő");
+    expect(row).toHaveTextContent("a Stripe ehhez nem listáz tételeket");
+  });
+
   it("shows each line's order and invoice, why one waits, and a fee as no order's payment", async () => {
     render(createElement(StripeSettlementsPage));
     fireEvent.click((await screen.findAllByTestId("stripe-kifizetes"))[0]!);
