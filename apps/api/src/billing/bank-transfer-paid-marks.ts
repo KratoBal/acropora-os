@@ -502,13 +502,7 @@ export function decideBankTransfer(
     if (rest > 0n) open.push({ invoice, cents: rest });
     else if (thatDay > 0n) paidBefore.push(invoice.documentNumber);
   }
-  if (
-    open.length === 0 &&
-    paidBefore.length === 0 &&
-    expected === 0n &&
-    amount !== null &&
-    amount > 0n
-  ) {
+  if (open.length === 0 && expected === 0n && amount !== null && amount > 0n) {
     // every named invoice was paid on another day: this credit is not their payment, and may be a second one
     const said = named
       .map((invoice) => {
