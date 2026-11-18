@@ -31,11 +31,13 @@ describe("Figyelmet igényel: the figures", () => {
           pickup: 1,
           stale: 53,
         },
+        shortageOrders: 2,
         truncated: false,
       }).map((i) => [i.key, i.count, i.tone, i.href]),
       [
         ["stale", 53, "danger", "/webshop/rendelesek?stage=stale"],
         ["processing", 4, "warning", "/webshop/rendelesek?stage=processing"],
+        ["shortage", 2, "warning", "/webshop/rendelesek?shortage=active"],
       ],
     );
     assert.deepEqual(
@@ -47,11 +49,13 @@ describe("Figyelmet igényel: the figures", () => {
           pickup: 0,
           stale: 9,
         },
+        shortageOrders: 1,
         truncated: true,
       }).map((i) => i.label),
       [
         "Elavult webshop rendelés (legalább)",
         "Feldolgozásra váró webshop rendelés (legalább)",
+        "Készlethiányos webshop rendelés (legalább)",
       ],
       "a truncated read is a floor, and the line says so",
     );
@@ -64,10 +68,26 @@ describe("Figyelmet igényel: the figures", () => {
           pickup: 0,
           stale: 0,
         },
+        shortageOrders: 0,
         truncated: false,
       }),
       [],
-      "nothing stale and nothing waiting is no line, not a zero",
+      "nothing stale, nothing waiting and no shortage is no line, not a zero",
+    );
+    assert.deepEqual(
+      attentionItemsOf("webshop-orders", {
+        counters: {
+          processing: 0,
+          invoice: 0,
+          dispatch: 0,
+          pickup: 0,
+          stale: 0,
+        },
+        shortageOrders: 5,
+        truncated: false,
+      }).map((i) => [i.key, i.count, i.href]),
+      [["shortage", 5, "/webshop/rendelesek?shortage=active"]],
+      "a shortage alone is a line: it needs a person even when nothing is stale",
     );
   });
 

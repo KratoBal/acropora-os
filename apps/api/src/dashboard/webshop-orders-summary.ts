@@ -14,5 +14,9 @@ export const WEBSHOP_ORDERS_CACHE_MS = 5 * 60 * 1000;
 export function toWebshopOrdersWidgetData(
   response: WebshopOrderListResponse,
 ): DashboardWebshopOrdersWidgetData {
-  return { counters: response.counters, truncated: response.truncated };
+  return {
+    counters: response.counters,
+    shortageOrders: response.shortageOrders,
+    truncated: response.truncated,
+  };
 }

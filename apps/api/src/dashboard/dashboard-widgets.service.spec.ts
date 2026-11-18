@@ -321,14 +321,15 @@ describe("Webshop rendelési sor", () => {
       webshopOrders: {
         list: async (query: unknown) => {
           queries.push(query);
-          return { counters, truncated: false } as never;
+          return { counters, shortageOrders: 3, truncated: false } as never;
         },
       },
     });
     const first = await svc.widgets(user("OWNER"), ["webshop-orders"]);
+    // the list's own count of orders with an active stock shortage rides along (card ac167fc2: one number, the list's)
     assert.deepEqual(first.results["webshop-orders"], {
       status: "ok",
-      data: { counters, truncated: false },
+      data: { counters, shortageOrders: 3, truncated: false },
     });
     await svc.widgets(user("OWNER"), ["webshop-orders"]);
     assert.deepEqual(queries, [{ view: "open", pageSize: 1 }]);

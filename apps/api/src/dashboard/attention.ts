@@ -134,6 +134,13 @@ function itemsOf(widgetId: AttentionSource, data: unknown): Item[] {
           href: "/webshop/rendelesek?stage=processing",
           tone: "warning",
         },
+        {
+          key: "shortage",
+          label: `Készlethiányos webshop rendelés${floor}`,
+          count: d.shortageOrders,
+          href: "/webshop/rendelesek?shortage=active",
+          tone: "warning",
+        },
       ];
     }
     case "messages": {

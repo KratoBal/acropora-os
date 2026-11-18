@@ -1228,6 +1228,12 @@ export interface DashboardMissingInvoicesWidgetData {
  */
 export interface DashboardWebshopOrdersWidgetData {
   counters: Record<WebshopOrderStage, number>;
+  /**
+   * Orders with an active stock shortage (open or agreed), the list's own `shortageOrders` for the open view (card ac167fc2): the
+   * number behind the list's "Készlethiányos" filter. It is a different cut from the stage counters (an order in any stage can have
+   * a shortage), so it is not one of them.
+   */
+  shortageOrders: number;
   /** The webshop holds more orders than the OS reads in one pass: the counts are a floor. */
   truncated: boolean;
 }
