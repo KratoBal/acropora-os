@@ -64,6 +64,7 @@ import {
   ScissorsIcon,
   SplitDialog,
 } from "./webshop-order-lines";
+import { ShortagesCard } from "./webshop-order-shortages";
 import { STATUS_TILE, orderNumber } from "./webshop-orders-list-page";
 
 /**
@@ -2405,6 +2406,12 @@ function OrderBody({
               </dl>
             </div>
           </Card>
+
+          <ShortagesCard
+            order={order}
+            canManage={canManage}
+            onSearchVariants={onSearchVariants}
+          />
         </div>
 
         <div className="min-w-0 space-y-6">

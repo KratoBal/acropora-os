@@ -22,6 +22,10 @@ import type {
   WebshopParcelTracking,
   WebshopOrderSplitInput,
   WebshopOrderSplitResult,
+  WebshopOrderShortageAgreementInput,
+  WebshopOrderShortageOpenInput,
+  WebshopOrderShortageResolveInput,
+  WebshopOrderShortageView,
   WebshopPickupPointSearch,
   WebshopTransferReceiptInput,
 } from "@acropora/types";
@@ -154,6 +158,52 @@ export const webshopOrdersApi = {
   split(token: string, id: string, input: WebshopOrderSplitInput) {
     return apiRequest<WebshopOrderSplitResult>(
       `/webshop-orders/${encodeURIComponent(id)}/split`,
+      token,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  },
+  /** A rendelés készlethiány-rekordjai (kártya ac167fc2; `GET webshop-orders/:id/shortages`). */
+  shortages(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<WebshopOrderShortageView[]>(
+      `/webshop-orders/${encodeURIComponent(id)}/shortages`,
+      token,
+      { signal },
+    );
+  },
+  /** Hiány felvétele a rendelés tételeire; a rendelt mennyiséget a szerver olvassa a rendelésből. */
+  openShortage(
+    token: string,
+    id: string,
+    input: WebshopOrderShortageOpenInput,
+  ) {
+    return apiRequest<WebshopOrderShortageView>(
+      `/webshop-orders/${encodeURIComponent(id)}/shortages`,
+      token,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  },
+  /** A vevővel kötött megállapodás rögzítése (újrarögzíthető, amíg nincs lezárva). */
+  agreeShortage(
+    token: string,
+    id: string,
+    shortageId: string,
+    input: WebshopOrderShortageAgreementInput,
+  ) {
+    return apiRequest<WebshopOrderShortageView>(
+      `/webshop-orders/${encodeURIComponent(id)}/shortages/${encodeURIComponent(shortageId)}/agreement`,
+      token,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
+  },
+  /** Lezárás (megállapodás végrehajtva) vagy visszavonás (indokkal). */
+  resolveShortage(
+    token: string,
+    id: string,
+    shortageId: string,
+    input: WebshopOrderShortageResolveInput,
+  ) {
+    return apiRequest<WebshopOrderShortageView>(
+      `/webshop-orders/${encodeURIComponent(id)}/shortages/${encodeURIComponent(shortageId)}/resolve`,
       token,
       { method: "POST", body: JSON.stringify(input) },
     );
