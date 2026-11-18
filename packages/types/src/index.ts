@@ -2346,3 +2346,14 @@ export type {
   WorksheetDeletePreview,
   WorksheetDeleteResult,
 } from "./service-job-delete.js";
+export {
+  parseWebshopCouponInput,
+  WEBSHOP_COUPON_LIMITS,
+} from "./webshop-coupons.js";
+export type {
+  WebshopCoupon,
+  WebshopCouponInput,
+  WebshopCouponKind,
+  WebshopCouponParse,
+  WebshopCouponState,
+} from "./webshop-coupons.js";
