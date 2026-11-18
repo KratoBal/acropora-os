@@ -89,7 +89,12 @@ export interface WorksheetListItem {
    * rather than "0 óra" or "no job".
    */
   laborHours?: string;
-  serviceJob?: { id: string; jobNumber: string } | null;
+  serviceJob?: {
+    id: string;
+    jobNumber: string;
+    /** A lap fajtája: a karbantartási lap nem hibajegy, a mondatok ennek megfelelően szólnak (Balázs, 2026-11-18). Hiányzik a régi válaszból. */
+    kind?: "REPAIR" | "MAINTENANCE";
+  } | null;
   updatedAt: string;
 }
 
@@ -258,7 +263,12 @@ export interface WorksheetDetail {
    * tipusabol hianyzott, tehat a mezo megerkezett es eldobodott -- nem hianyzo
    * kepesseg volt, hanem be nem kotott.
    */
-  serviceJob: { id: string; jobNumber: string } | null;
+  serviceJob: {
+    id: string;
+    jobNumber: string;
+    /** A lap fajtája: a karbantartási lap nem hibajegy, a mondatok ennek megfelelően szólnak (Balázs, 2026-11-18). Hiányzik a régi válaszból. */
+    kind?: "REPAIR" | "MAINTENANCE";
+  } | null;
   /**
    * AZ ATADAS: VISSZAKERULT-E AZ UGYFEL ESZKOZE, ES KITOL.
    *

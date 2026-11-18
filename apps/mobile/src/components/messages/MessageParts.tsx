@@ -3,7 +3,7 @@ import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { isAssistantConversation } from "@/lib/messages/assistant";
 import type { ConversationListItem } from "@/lib/messages/types";
 import { conversationTimeLabel, previewText } from "@/lib/messages/outbox";
-import { contextSubtitle } from "@/lib/messages/phase4";
+import { contextListSubtitle } from "@/lib/messages/phase4";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 
 import { SUTYERAK_FIGURE } from "./sutyerak-figure";
@@ -113,7 +113,7 @@ export function ConversationRow({
         </Text>
         {item.contextType ? (
           <Text style={styles.context} numberOfLines={1}>
-            {contextSubtitle(item.contextType)}
+            {contextListSubtitle(item.contextType)}
           </Text>
         ) : null}
         <Text style={styles.preview} numberOfLines={1}>

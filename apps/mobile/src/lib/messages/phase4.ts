@@ -13,15 +13,45 @@ import type {
  * alcíme. A képernyőn csak a bekötés marad.
  */
 
-export function contextSubtitle(type: ConversationContextType): string {
-  return type === "WORKSHEET"
-    ? "Munkalaphoz kapcsolva"
+/**
+ * A kapcsolt lap neve a lap fajtája szerint (hibajegy-maradek lista, 4. fejezet, acrobot 56196; Balázs 2026-11-18: a karbantartásnak semmi köze a hibajegyekhez): a szerver a kártyán
+ * `jobKind`-ot küld, a karbantartási lap a saját nevén szerepel. A fajta nélküli kártya (régi válasz) hibajegynek számít, ahogy a szerver is mondja.
+ */
+export function contextSubtitle(
+  type: ConversationContextType,
+  jobKind?: "REPAIR" | "MAINTENANCE" | null,
+): string {
+  if (type === "WORKSHEET") return "Munkalaphoz kapcsolva";
+  return jobKind === "MAINTENANCE"
+    ? "Karbantartási laphoz kapcsolva"
     : "Hibajegyhez kapcsolva";
 }
 
-export function contextCardTitle(type: ConversationContextType): string {
-  return type === "WORKSHEET" ? "KAPCSOLT MUNKALAP" : "KAPCSOLT HIBAJEGY";
+/** A beszélgetés-lista alcíme: ott a fajta nincs a soron, ezért a felirat mindkettőt megnevezi. */
+export function contextListSubtitle(type: ConversationContextType): string {
+  return type === "WORKSHEET"
+    ? "Munkalaphoz kapcsolva"
+    : "Hibajegyhez vagy karbantartási laphoz kapcsolva";
 }
+
+export function contextCardTitle(
+  type: ConversationContextType,
+  jobKind?: "REPAIR" | "MAINTENANCE" | null,
+): string {
+  if (type === "WORKSHEET") return "KAPCSOLT MUNKALAP";
+  return jobKind === "MAINTENANCE"
+    ? "KAPCSOLT KARBANTARTÁSI LAP"
+    : "KAPCSOLT HIBAJEGY";
+}
+
+/** A kapcsolás képernyőjének szövegei: a keresés a hibajegyeket ÉS a karbantartási lapokat együtt keresi (`kind=ALL`). */
+export const LINK_COPY = {
+  lead: "Keresd meg a munkalapot, a hibajegyet vagy a karbantartási lapot a száma szerint.",
+  serviceJobTab: "Hibajegy / karbantartás",
+  serviceJobPlaceholder: "a hibajegy vagy a karbantartási lap száma",
+  dataScreenLink:
+    "Kapcsolás munkalaphoz, hibajegyhez vagy karbantartási laphoz",
+} as const;
 
 /**
  * A „Megnyitás” képernyője a telefonon; korlátozott kártyánál nincs (a

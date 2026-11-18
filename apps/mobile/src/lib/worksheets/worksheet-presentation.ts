@@ -1,6 +1,7 @@
 // RELATÍV ÚT, NEM `@/`: a teszt-fordító nem ismeri az aliast
 // (`tsconfig.test.json`-ban szándékosan nincs `paths`).
 import type { UserRole } from "../auth/types";
+import { jobWords } from "../service-jobs/job-words";
 import type { StatusTone } from "../theme/label-styles";
 import { atadasAllapota, ATADAS_NINCS_ROGZITVE } from "./worksheet-handover";
 import type { WorksheetLineKind } from "./worksheet-line-kind";
@@ -81,7 +82,11 @@ export interface WorksheetDetailLike {
    * szerver EDDIG IS kuldte (`lib/api/worksheets.ts`), csak ez a szukebb,
    * sajat bemeneti tipus nem kerte.
    */
-  serviceJob: { id: string; jobNumber: string } | null;
+  serviceJob: {
+    id: string;
+    jobNumber: string;
+    kind?: "REPAIR" | "MAINTENANCE";
+  } | null;
   /**
    * AZ ATADAS KET MEZOJE. `null`, amig nalunk van az eszkoz.
    *
@@ -409,7 +414,8 @@ export function worksheetDetailRows(
    */
   const jegy = worksheet.serviceJob;
   rows.push({
-    label: "Hibajegy",
+    // a karbantartási lap a saját nevén szerepel (hibajegy-maradek lista, 4. fejezet, acrobot 56196); jegy nélkül és hibajegynél a mai felirat
+    label: jobWords(jegy?.kind).nounCap,
     value: clean(jegy?.jobNumber) || "Nincs mögötte hibajegy",
     ...(jegy ? { serviceJobId: jegy.id } : {}),
   });
