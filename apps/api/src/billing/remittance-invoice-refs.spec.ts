@@ -211,6 +211,137 @@ describe("our Számlázz.hu numbers written in full, and eBIZ's", () => {
   });
 });
 
+/*
+  A TELJES SZÁMLÁZZ.HU SZÁM UTÁN RÖVIDÍTETT LISTA ÉS TARTOMÁNY (Luca, 2026-11-18 14:57 UTC, acrobot 55990; az Acropora OS szál 1572626691002470542): a 3 001 010 Ft jóváírás közleménye
+  "HC0000007106 E-CRPRW-2026-6,5", ez az E-CRPRW-2026-6 (1 165 860) és az E-CRPRW-2026-5 (1 835 150) összege, de csak az elsőt olvastuk. Ugyanazok az alakok, mint a `2026/00083,86` esetén (vesszős
+  lista, "és", "+", tartomány), de a számok itt NEM nullával kitöltöttek: a további szám a SAJÁT teljes sorszáma (`,5` = az 5-ös), nem az utolsó számjegyeit cseréli. Amit nem lehet egyértelműen olvasni
+  (rövidebb szám a kiindulónál: `12,3` lehet 3 vagy 13), azt nem találgatjuk: egy kitalált szám más vevő számlájához párosítana. MI PIROSÍT: ha Luca közleményéből nem lesz két szám; ha a lista, az "és", a
+  "+" vagy a tartomány nem olvasódik; ha egy visszafelé vagy a korlátnál hosszabb tartomány, vagy egy kétértelmű rövidítés mégis szám lesz; ha a dátum vagy a másik formájú hivatkozás a lista tagja lesz.
+*/
+describe("shortened numbers after a full E-CRPR / CRPR / D-CRPR number", () => {
+  const literals = (text: string) =>
+    remittanceInvoiceRefs(text)
+      .filter((ref) => ref.literal !== undefined)
+      .map((ref) => ref.literal);
+
+  it("Luca's memo: E-CRPRW-2026-6,5 is two invoices, the 6 and the 5", () => {
+    assert.deepEqual(literals("HC0000007106 E-CRPRW-2026-6,5"), [
+      "E-CRPRW-2026-6",
+      "E-CRPRW-2026-5",
+    ]);
+  });
+
+  it("a comma list, 'és', '+', ';' and '&' read the same way, in the same series and year", () => {
+    assert.deepEqual(literals("E-CRPR-2026-1,2,3"), [
+      "E-CRPR-2026-1",
+      "E-CRPR-2026-2",
+      "E-CRPR-2026-3",
+    ]);
+    for (const text of [
+      "E-CRPR-2026-1 és 2",
+      "E-CRPR-2026-1 + 2",
+      "E-CRPR-2026-1; 2",
+      "E-CRPR-2026-1 & 2",
+    ])
+      assert.deepEqual(
+        literals(text),
+        ["E-CRPR-2026-1", "E-CRPR-2026-2"],
+        text,
+      );
+  });
+
+  it("a range, within its limit only", () => {
+    assert.deepEqual(literals("E-CRPRW-2026-5-8"), [
+      "E-CRPRW-2026-5",
+      "E-CRPRW-2026-6",
+      "E-CRPRW-2026-7",
+      "E-CRPRW-2026-8",
+    ]);
+    // backwards: only the base, nothing guessed
+    assert.deepEqual(literals("E-CRPRW-2026-8-5"), ["E-CRPRW-2026-8"]);
+    // longer than the limit: only the base
+    assert.deepEqual(literals(`E-CRPRW-2026-1-${RANGE_LIMIT + 5}`), [
+      "E-CRPRW-2026-1",
+    ]);
+  });
+
+  it("the series without a year (D-CRPR) and the CRPR series shorten the same way", () => {
+    assert.deepEqual(literals("D-CRPR-7,8"), ["D-CRPR-7", "D-CRPR-8"]);
+    assert.deepEqual(literals("CRPRW-2022-5,6"), [
+      "CRPRW-2022-5",
+      "CRPRW-2022-6",
+    ]);
+  });
+
+  it("a longer or equally long number is that number; a shorter one is ambiguous and is not read", () => {
+    assert.deepEqual(literals("E-CRPR-2026-9,10"), [
+      "E-CRPR-2026-9",
+      "E-CRPR-2026-10",
+    ]);
+    assert.deepEqual(literals("E-CRPR-2026-12,13"), [
+      "E-CRPR-2026-12",
+      "E-CRPR-2026-13",
+    ]);
+    // 12,3 is the 3 or the 13: a person decides
+    assert.deepEqual(literals("E-CRPR-2026-12,3"), ["E-CRPR-2026-12"]);
+  });
+
+  it("a date or a reference of another shape after the number is not a list member", () => {
+    assert.deepEqual(literals("E-CRPR-2026-1, 2026-11-18"), ["E-CRPR-2026-1"]);
+    assert.deepEqual(literals("E-CRPR-2026-1 2026-11-18"), ["E-CRPR-2026-1"]);
+    assert.deepEqual(literals("E-CRPR-2026-5,2026/00083"), ["E-CRPR-2026-5"]);
+    assert.deepEqual(numbers("E-CRPR-2026-5,2026/00083"), ["2026/00083"]);
+    // two full literals in a list stay two (each with its own prefix)
+    assert.deepEqual(literals("CRPR-2026-5, CRPRW-2022-5"), [
+      "CRPR-2026-5",
+      "CRPRW-2022-5",
+    ]);
+  });
+
+  /*
+    EGY ÖSSZEG NEM LISTATAG (barracuda, #2699): "E-CRPRW-2026-6, 5000 Ft" az 5000-es számlát, "E-CRPRW-2026-6, 3 001 010 Ft" a 3-ast nevezné (az első ezres csoport). A pontos összeg-kapu a
+    téves párosítást megfogná, de a kézi párosításnál egy idegen számla jelenhetne meg javaslatként. MI PIROSÍT: ha szóköz + számjegy vagy Ft / HUF / forint előtt álló szám taggá lesz.
+  */
+  it("an amount after the number is not a list member (a space and a digit, or Ft / HUF / forint after it)", () => {
+    for (const text of [
+      "E-CRPRW-2026-6, 5000 Ft",
+      "E-CRPRW-2026-6, 3 001 010 Ft",
+      "E-CRPRW-2026-6 + 5000 HUF",
+      "E-CRPRW-2026-6; 12000forint",
+      "E-CRPRW-2026-6,5000Ft",
+    ])
+      assert.deepEqual(literals(text), ["E-CRPRW-2026-6"], text);
+    // and a real list next to words stays a list
+    assert.deepEqual(literals("utalás E-CRPRW-2026-6,5 köszönöm"), [
+      "E-CRPRW-2026-6",
+      "E-CRPRW-2026-5",
+    ]);
+    // a date after the member is not an amount (4 digits, not a thousands group)
+    assert.deepEqual(literals("E-CRPRW-2026-6,5 2026.11.18"), [
+      "E-CRPRW-2026-6",
+      "E-CRPRW-2026-5",
+    ]);
+    assert.deepEqual(literals("E-CRPRW-2026-6, 5"), [
+      "E-CRPRW-2026-6",
+      "E-CRPRW-2026-5",
+    ]);
+  });
+
+  it("Luca's credit: 3 001 010 is exactly E-CRPRW-2026-6 (1 165 860) plus E-CRPRW-2026-5 (1 835 150)", () => {
+    const result = matchRemittance("HC0000007106 E-CRPRW-2026-6,5", "3001010", [
+      { invoiceNumber: "E-CRPRW-2026-6", open: "1165860" },
+      { invoiceNumber: "E-CRPRW-2026-5", open: "1835150" },
+      { invoiceNumber: "E-CRPRW-2026-4", open: "999" },
+    ]);
+    assert.equal(result.kind, "EXACT");
+    if (result.kind === "EXACT")
+      assert.deepEqual(
+        result.invoices.map((invoice) => invoice.invoiceNumber).sort(),
+        ["E-CRPRW-2026-5", "E-CRPRW-2026-6"],
+      );
+  });
+});
+
 describe("a reference against an invoice number", () => {
   it("without a prefix any series fits; with one, only that (ARCW is ACRW)", () => {
     const [bare] = remittanceInvoiceRefs("2026/00083");
