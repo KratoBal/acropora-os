@@ -148,8 +148,10 @@ export class ServiceJobsService {
     await this.requireAssignableUsers(assigneeIds);
 
     const year = now.getFullYear();
+    // a szám a létrehozáskor kapott FAJTA szerint keletkezik: a karbantartási lap KT-, a hibajegy HJ-sorozatból (Balázs, 2026-11-18)
+    const numberKind = input.kind ?? "REPAIR";
     const last = await this.repository.lastNumberOfYear(
-      serviceJobNumberPrefix(year),
+      serviceJobNumberPrefix(year, numberKind),
     );
     /**
      * AMIT A TELEFON NEM TUD MEGADNI, AZT AZ ESZKOZBOL VEZETJUK LE.
@@ -401,7 +403,11 @@ export class ServiceJobsService {
     }
     const title = input.title.trim();
     const created = await this.repository.create({
-      jobNumber: nextServiceJobNumber({ year, lastNumber: last }),
+      jobNumber: nextServiceJobNumber({
+        year,
+        lastNumber: last,
+        kind: numberKind,
+      }),
       title,
       description: input.description?.trim() || null,
       ...(input.reporterPersonName !== undefined
@@ -1222,6 +1228,7 @@ export class ServiceJobsService {
     const belso: ServiceJobDetail = {
       id: row.id,
       jobNumber: row.jobNumber,
+      previousNumber: row.previousNumber ?? null,
       kind: row.kind,
       title: row.title,
       description: row.description,

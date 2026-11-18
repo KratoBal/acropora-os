@@ -4013,6 +4013,11 @@ model BillingDocumentMailDelivery {
 model ServiceJob {
   id                 String           @id @default(cuid())
   jobNumber          String           @unique
+  /// A RÉGI SZÁM, HA A JEGY SZÁMA MEGVÁLTOZOTT: a szerződésből keletkező karbantartási lap száma KT-ÉÉÉÉ-NNN (Balázs, 2026-11-18, Luca-Balázs-Acrobot szál),
+  /// a korábban HJ-számon felvett karbantartások átszámozódtak, a régi szám itt marad, hogy a keresés a régi számra is megtalálja a lapot (és egy régi
+  /// levél, PDF vagy emlék hivatkozása ne vesszen el). `NULL`, ha a szám sosem változott. A felszabadult HJ-szám a `ServiceJobDeletion` táblába
+  /// kerül, hogy a HJ sorozat ne használja újra.
+  previousNumber     String?          @unique
   /// A HELYSZÍNI BEJELENTÉS IDEMPOTENCIA-KULCSA -- UGYANAZ A MINTA, MINT AZ
   /// `Asset.clientOperationId` ÉS A `Worksheet.clientOperationId` MEZŐNÉL.
   ///

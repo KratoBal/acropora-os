@@ -380,6 +380,11 @@ export interface ServiceJobDetail {
   hidden: boolean;
   jobNumber: string;
   /**
+   * A KARBANTARTÁSI LAP RÉGI HJ-SZÁMA (KT-átszámozás, 2026-11-18). Csak belső nézetben; a partner-részlet
+   * mezőnként másol, ezt nem viszi.
+   */
+  previousNumber?: string | null;
+  /**
    * A LAP ÜZLETI EREDETE. Ez dönti el, jár-e hozzá "Teljesítési igazolás
    * kiállítása" gomb (csak MAINTENANCE-hez) -- lásd a felület saját
    * feltételét, nem itt.

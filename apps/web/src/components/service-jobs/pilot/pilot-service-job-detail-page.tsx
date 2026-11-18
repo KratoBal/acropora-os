@@ -710,7 +710,11 @@ export function PilotServiceJobDetailPage({
         </Link>
         <PageHeader
           className="mt-4"
-          eyebrow={job.jobNumber}
+          eyebrow={
+            job.previousNumber
+              ? `${job.jobNumber} (régi szám: ${job.previousNumber})`
+              : job.jobNumber
+          }
           title={job.title}
           meta={
             <>

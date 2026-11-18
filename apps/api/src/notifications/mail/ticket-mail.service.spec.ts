@@ -541,6 +541,62 @@ describe("a nyito ertesitese levelben", () => {
   });
 });
 
+describe("a levél szava a jegy fajtája szerint", () => {
+  const KARBANTARTAS: TicketMailContext = {
+    ...JEGY,
+    jobNumber: "KT-2026-001",
+    kind: "MAINTENANCE",
+  };
+
+  it("karbantartási lapnál az aláírási levél karbantartási lapot mond, hibajegyet nem", async () => {
+    const { service, kuldott } = szolgaltatas({
+      mode: "live",
+      context: KARBANTARTAS,
+    });
+
+    assert.deepEqual(
+      await service.deliverWorksheetSigned({
+        serviceJobId: "job-1",
+        actorUserId: "user-2",
+      }),
+      { kind: "sent" },
+    );
+    const level = kuldott[0]!;
+    assert.match(level.text ?? "", /KT-2026-001 számú karbantartási laphoz/);
+    assert.match(level.text ?? "", /Karbantartási lap: /);
+    assert.doesNotMatch(level.text ?? "", /hibajegy/i);
+  });
+
+  it("karbantartási lapnál az új jegy levele is karbantartási lapot mond", async () => {
+    const { service, kuldott } = szolgaltatas({
+      mode: "live",
+      context: KARBANTARTAS,
+    });
+
+    await service.deliverServiceJobOpened({
+      serviceJobId: "job-1",
+      actorUserId: "user-2",
+      recipients: [{ email: "felelos@example.invalid" }],
+    });
+    assert.equal(kuldott.length, 1);
+    assert.doesNotMatch(kuldott[0]?.text ?? "", /hibajegy/i);
+  });
+
+  it("a hibajegy (REPAIR) levelének szava nem változik", async () => {
+    const { service, kuldott } = szolgaltatas({
+      mode: "live",
+      context: { ...JEGY, kind: "REPAIR" },
+    });
+
+    await service.deliverWorksheetSigned({
+      serviceJobId: "job-1",
+      actorUserId: "user-2",
+    });
+    assert.match(kuldott[0]?.text ?? "", /számú hibajegyhez tartozó/);
+    assert.match(kuldott[0]?.text ?? "", /Hibajegy: /);
+  });
+});
+
 /**
  * A NEGYEDIK UT SAJAT SEGEDJE. A `szolgaltatas()` a masik harom utat MERI, es
  * a `TicketMailRepository`-t alakitja; ez az ut nem er hozza a repository

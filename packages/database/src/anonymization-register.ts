@@ -670,6 +670,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
     requestId: "identifier",
   },
   ServiceJob: {
+    previousNumber: "identifier",
     jobNumber: "identifier",
     clientOperationId: "identifier",
     title: "freeText",
