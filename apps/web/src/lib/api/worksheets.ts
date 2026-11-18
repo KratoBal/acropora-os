@@ -22,7 +22,7 @@ import type {
   WorksheetSignerListResponse,
 } from "@acropora/types";
 
-import { apiAuthHeaders, apiRequest } from "./client";
+import { apiAuthHeaders, apiErrorOf, apiRequest } from "./client";
 import { API_PREFIX } from "./api-prefix";
 
 const base = "/service/worksheets";
@@ -175,7 +175,8 @@ export const worksheetsApi = {
       `${API_PREFIX}/service/worksheets/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}?${DOCUMENT_VARIANT_PARAM}=${DOCUMENT_THUMBNAIL_VARIANT}`,
       { credentials: "same-origin", headers: apiAuthHeaders(token) },
     );
-    if (!response.ok) throw new Error("A csatolmány nem tölthető le.");
+    // the server's own reason, the same error every apiRequest call gives (barracuda on #2695)
+    if (!response.ok) throw await apiErrorOf(response);
     return response.blob();
   },
   async downloadDocument(token: string, id: string, documentId: string) {
@@ -183,7 +184,8 @@ export const worksheetsApi = {
       `${API_PREFIX}/service/worksheets/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}`,
       { credentials: "same-origin", headers: apiAuthHeaders(token) },
     );
-    if (!response.ok) throw new Error("A csatolmány nem tölthető le.");
+    // the server's own reason, the same error every apiRequest call gives (barracuda on #2695)
+    if (!response.ok) throw await apiErrorOf(response);
     return response.blob();
   },
   /** A TÖRLÉS ELŐNÉZETE (a hibajegy-törlés 2. szelete): mit töröl a gomb, szabad-e. A törlés a szerveren újra dönt. */

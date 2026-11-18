@@ -18,7 +18,7 @@ import type {
   UpdateAssetInput,
 } from "@acropora/types";
 
-import { apiAuthHeaders, apiRequest } from "./client";
+import { apiAuthHeaders, apiErrorOf, apiRequest } from "./client";
 import { API_PREFIX } from "./api-prefix";
 import { readExport, type FileExport } from "./file-export";
 
@@ -337,7 +337,8 @@ export const assetsApi = {
       `${API_PREFIX}/service/assets/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}?${DOCUMENT_VARIANT_PARAM}=${DOCUMENT_THUMBNAIL_VARIANT}`,
       { credentials: "same-origin", headers: apiAuthHeaders(token) },
     );
-    if (!response.ok) throw new Error("A dokumentum nem tölthető le.");
+    // the server's own reason, the same error every apiRequest call gives (barracuda on #2695)
+    if (!response.ok) throw await apiErrorOf(response);
     return response.blob();
   },
   async downloadDocument(token: string, id: string, documentId: string) {
@@ -345,7 +346,8 @@ export const assetsApi = {
       `${API_PREFIX}/service/assets/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}`,
       { credentials: "same-origin", headers: apiAuthHeaders(token) },
     );
-    if (!response.ok) throw new Error("A dokumentum nem tölthető le.");
+    // the server's own reason, the same error every apiRequest call gives (barracuda on #2695)
+    if (!response.ok) throw await apiErrorOf(response);
     return response.blob();
   },
   deleteDocument(token: string, id: string, documentId: string) {
