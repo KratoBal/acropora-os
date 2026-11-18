@@ -30,7 +30,7 @@ export const HOME_PRESETS: Readonly<Record<HomePresetId, HomePreset>> = {
   service: {
     id: "service",
     label: "Szerviz nézet",
-    modules: ["HJ", "MU", "AI", "ES", "AK", "PA"],
+    modules: ["HJ", "KT", "MU", "AI", "ES", "AK", "PA"],
   },
   webshop: {
     id: "webshop",

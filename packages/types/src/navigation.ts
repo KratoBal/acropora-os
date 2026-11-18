@@ -216,7 +216,7 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   {
     /** A karbantartás a szervizmunka külön listája, nem új technikusi jog. */
     id: "maintenance",
-    surfaces: ["web"],
+    surfaces: ["web", "mobile"],
     visibility: permission(PERMISSIONS.SERVICE_VIEW),
   },
   {

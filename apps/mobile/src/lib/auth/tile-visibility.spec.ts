@@ -82,9 +82,11 @@ describe("a csempék a kiadott menüt követik", () => {
     // 49210cdd (a Capasuli ertesites a telefonos listara visz).
     // 2026-11-03: tizenegyrol tizenkettore nott a szamla-csempevel (`SZ`),
     // kartya 050e138b (csak olvaso lista es adatlap, billing.view).
-    // Mind az ot alkalommal ez az allitas ELSULT, es ez a helyes viselkedes --
+    // 2026-11-18: tizenkettorol tizenharomra nott a karbantartas-csempevel (`KT`),
+    // acrobot 56224 (a `maintenance` tetel mobil feluletet kapott).
+    // Mind a hat alkalommal ez az allitas ELSULT, es ez a helyes viselkedes --
     // egy uj belepesi pont ne csusszon be szo nelkul.
-    assert.equal(kodok.length, 12);
+    assert.equal(kodok.length, 13);
     assert.deepEqual([...new Set(tetelek)].sort(), [...tetelek].sort());
   });
 });
