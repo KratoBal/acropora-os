@@ -65,6 +65,56 @@ function jsonContentType(
   return typeof body === "string" ? { "Content-Type": "application/json" } : {};
 }
 
+/**
+ * A NEM SIKERES VÁLASZ HIBÁJA (a szerver mondata, vagy a közös szöveg), EGY HELYEN: az `apiRequest` és a karbantartási csomag letöltése ugyanezt hívja (Luca, 2026-11-18:
+ * a letöltés a szerver pontos okát, "nincs teljesítési igazolás", eldobta). A többi fájl-letöltő kliens ma még rögzített mondatot dob; ezt hívhatják.
+ */
+export async function apiErrorOf(response: Response): Promise<ApiError> {
+  if (response.status === 401) {
+    return new ApiError("A munkamenet lejárt. Jelentkezz be újra.", 401);
+  }
+  if (response.status === 403) {
+    return new ApiError("Nincs jogosultságod ehhez a művelethez.", 403);
+  }
+  let serverMessage: string | undefined;
+  try {
+    const payload = (await response.json()) as {
+      message?: string | string[];
+    };
+    // One line per complaint. Joined with a space, a failed form comes back
+    // as a single run-on sentence: three validator messages behind the
+    // first one, with nothing to say where one ends and the next begins.
+    serverMessage = Array.isArray(payload.message)
+      ? payload.message.join("\n")
+      : payload.message;
+  } catch {
+    serverMessage = undefined;
+  }
+  // 404 comes from every endpoint (an asset, a ticket, a measurement), so its
+  // sentence names no entity: it used to say "import batch" everywhere (219b4806).
+  const fallback: Record<number, string> = {
+    400: "A megadott adatok nem érvényesek.",
+    404: "A keresett elem nem található.",
+    409: "Az adat időközben megváltozott. Frissítsd a listát.",
+    422: "A művelet üzleti feltételei nem teljesülnek.",
+  };
+  /**
+   * AZ ÁLTALÁNOS HIBASZÖVEG KIÍRJA A STÁTUSZT IS (2026-10-21, Balázs egy
+   * bejövő számla jóváhagyásánál). Az API minden hibája JSON, tehát ez a
+   * szöveg csak akkor jelenik meg, ha a válasz NEM az API-tól jött vagy nem
+   * JSON: a Next rewrite-proxy időtúllépése (csupasz 500), egy megszakadt
+   * kapcsolat (szintén 500), vagy a Traefik 502/503/504 oldala. Státusz
+   * nélkül a három megkülönböztethetetlen volt, és a hibát nem lehetett
+   * visszakeresni.
+   */
+  return new ApiError(
+    serverMessage ??
+      fallback[response.status] ??
+      `A kérés feldolgozása nem sikerült (HTTP ${response.status}).`,
+    response.status,
+  );
+}
+
 export async function apiRequest<T>(
   path: string,
   token: string,
@@ -95,51 +145,7 @@ export async function apiRequest<T>(
     throw new ApiError("A szerver nem érhető el. Ellenőrizd a kapcsolatot.", 0);
   }
 
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new ApiError("A munkamenet lejárt. Jelentkezz be újra.", 401);
-    }
-    if (response.status === 403) {
-      throw new ApiError("Nincs jogosultságod ehhez a művelethez.", 403);
-    }
-    let serverMessage: string | undefined;
-    try {
-      const payload = (await response.json()) as {
-        message?: string | string[];
-      };
-      // One line per complaint. Joined with a space, a failed form comes back
-      // as a single run-on sentence: three validator messages behind the
-      // first one, with nothing to say where one ends and the next begins.
-      serverMessage = Array.isArray(payload.message)
-        ? payload.message.join("\n")
-        : payload.message;
-    } catch {
-      serverMessage = undefined;
-    }
-    // 404 comes from every endpoint (an asset, a ticket, a measurement), so its
-    // sentence names no entity: it used to say "import batch" everywhere (219b4806).
-    const fallback: Record<number, string> = {
-      400: "A megadott adatok nem érvényesek.",
-      404: "A keresett elem nem található.",
-      409: "Az adat időközben megváltozott. Frissítsd a listát.",
-      422: "A művelet üzleti feltételei nem teljesülnek.",
-    };
-    /**
-     * AZ ÁLTALÁNOS HIBASZÖVEG KIÍRJA A STÁTUSZT IS (2026-10-21, Balázs egy
-     * bejövő számla jóváhagyásánál). Az API minden hibája JSON, tehát ez a
-     * szöveg csak akkor jelenik meg, ha a válasz NEM az API-tól jött vagy nem
-     * JSON: a Next rewrite-proxy időtúllépése (csupasz 500), egy megszakadt
-     * kapcsolat (szintén 500), vagy a Traefik 502/503/504 oldala. Státusz
-     * nélkül a három megkülönböztethetetlen volt, és a hibát nem lehetett
-     * visszakeresni.
-     */
-    throw new ApiError(
-      serverMessage ??
-        fallback[response.status] ??
-        `A kérés feldolgozása nem sikerült (HTTP ${response.status}).`,
-      response.status,
-    );
-  }
+  if (!response.ok) throw await apiErrorOf(response);
 
   /**
    * A VÁLASZ TESTE LEHET ÜRES -- EGY `void`-OT VISSZAADÓ VÉGPONTNÁL EZ A
