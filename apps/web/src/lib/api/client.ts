@@ -66,8 +66,8 @@ function jsonContentType(
 }
 
 /**
- * A NEM SIKERES VÁLASZ HIBÁJA (a szerver mondata, vagy a közös szöveg), EGY HELYEN: az `apiRequest` és a fájl-letöltések (zip, PDF) ugyanezt hívják, hogy egy letöltés
- * hibája ne csak egy rögzített mondat legyen (Luca, 2026-11-18: a karbantartási csomag letöltése a szerver pontos okát, "nincs teljesítési igazolás", eldobta).
+ * A NEM SIKERES VÁLASZ HIBÁJA (a szerver mondata, vagy a közös szöveg), EGY HELYEN: az `apiRequest` és a karbantartási csomag letöltése ugyanezt hívja (Luca, 2026-11-18:
+ * a letöltés a szerver pontos okát, "nincs teljesítési igazolás", eldobta). A többi fájl-letöltő kliens ma még rögzített mondatot dob; ezt hívhatják.
  */
 export async function apiErrorOf(response: Response): Promise<ApiError> {
   if (response.status === 401) {
