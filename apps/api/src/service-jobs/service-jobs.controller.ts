@@ -153,11 +153,12 @@ export class ServiceJobsController {
    */
   @Post(":id/partner")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
-  setPartner(
+  async setPartner(
     @Param("id") id: string,
     @Body() input: SetServiceJobPartnerDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    await this.service.rejectIfMaintenance(id, "setPartner", user);
     return this.service.setPartner(id, input.customerId, user);
   }
 
@@ -169,11 +170,12 @@ export class ServiceJobsController {
    */
   @Post(":id/worksheets")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
-  attachWorksheet(
+  async attachWorksheet(
     @Param("id") id: string,
     @Body() input: AttachWorksheetDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    await this.service.rejectIfMaintenance(id, "attachWorksheet", user);
     return this.service.attachWorksheet(id, input.worksheetId, user);
   }
 
@@ -183,11 +185,12 @@ export class ServiceJobsController {
    */
   @Delete(":id/worksheets/:worksheetId")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
-  detachWorksheet(
+  async detachWorksheet(
     @Param("id") id: string,
     @Param("worksheetId") worksheetId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    await this.service.rejectIfMaintenance(id, "detachWorksheet", user);
     return this.service.detachWorksheet(id, worksheetId, user);
   }
 
@@ -278,21 +281,25 @@ export class ServiceJobsController {
    */
   @Post(":id/hidden")
   @RequirePermissions(PERMISSIONS.SERVICE_HIDE)
-  setHidden(
+  async setHidden(
     @Param("id") id: string,
     @Body() input: SetServiceJobHiddenDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    // csak az ELREJTÉS tiltott karbantartáson; a visszavonás nem, hogy egy már elrejtett lap ne ragadjon be (maintenance-guard.ts)
+    if (input.hidden) await this.service.rejectIfMaintenance(id, "hide", user);
     return this.service.setHidden(id, input.hidden, user);
   }
 
   @Post(":id/move")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
-  move(
+  async move(
     @Param("id") id: string,
     @Body() input: MoveServiceJobDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    // a HTTP-belépőn, nem a `move()` belsejében: a karbantartási rendelés belsőleg is lemond egy lapot (maintenance-guard.ts)
+    await this.service.rejectIfMaintenance(id, "move", user);
     return this.service.move(id, input, user.id, user);
   }
 }
