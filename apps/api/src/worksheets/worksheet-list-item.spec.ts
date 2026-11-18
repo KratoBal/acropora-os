@@ -27,7 +27,11 @@ function row(overrides: Partial<Record<string, unknown>> = {}) {
     customer: { displayName: "Kitalált Partner Kft." },
     department: { id: "unit-1", code: "KIT" },
     assignees: [],
-    serviceJob: { id: "job-1", jobNumber: "HJ-2026-0001" },
+    serviceJob: {
+      id: "job-1",
+      jobNumber: "HJ-2026-0001",
+      kind: "REPAIR" as const,
+    },
     _count: { versions: 1 },
     versions: [
       {
@@ -81,7 +85,24 @@ describe("a munkalap-lista sora", () => {
     assert.deepEqual(toWorksheetListItem(row()).serviceJob, {
       id: "job-1",
       jobNumber: "HJ-2026-0001",
+      kind: "REPAIR",
     });
+  });
+
+  // a karbantartási lap nem hibajegy: a jegy fajtája megy a sorban, hogy a hivatkozás a Karbantartás alá vigyen (Balázs, 2026-11-18)
+  it("a karbantartási lap fajtáját is kiadja", () => {
+    assert.equal(
+      toWorksheetListItem(
+        row({
+          serviceJob: {
+            id: "job-2",
+            jobNumber: "HJ-2026-0002",
+            kind: "MAINTENANCE",
+          },
+        }),
+      ).serviceJob?.kind,
+      "MAINTENANCE",
+    );
   });
 
   it("hibajegy nélküli lapnál a mező null", () => {
