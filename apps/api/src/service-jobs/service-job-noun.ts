@@ -9,6 +9,8 @@ export interface ServiceJobNoun {
   accusative: string;
   /** "Hibajegyet" / "Karbantartási lapot": a mondat elején */
   accusativeCapital: string;
+  /** "hibajegyről" / "karbantartási lapról": -ról/-ről (a lezárási kapu tanácsa, acrobot 56118) */
+  delative: string;
   /** "jegy" / "lap": a rövid, már megnevezett lapra */
   short: string;
 }
@@ -21,12 +23,14 @@ export function serviceJobNoun(
         nominative: "karbantartási lap",
         accusative: "karbantartási lapot",
         accusativeCapital: "Karbantartási lapot",
+        delative: "karbantartási lapról",
         short: "lap",
       }
     : {
         nominative: "hibajegy",
         accusative: "hibajegyet",
         accusativeCapital: "Hibajegyet",
+        delative: "hibajegyről",
         short: "jegy",
       };
 }

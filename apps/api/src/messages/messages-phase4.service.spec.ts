@@ -144,18 +144,6 @@ function fake() {
       "kt1",
       {
         id: "kt1",
-        jobNumber: "KT-2026-003",
-        status: "NEW",
-        kind: "MAINTENANCE",
-        createdAt: new Date("2026-11-18T10:00:00Z"),
-        assignedUserId: null,
-        customer: { displayName: "FANK" },
-      },
-    ],
-    [
-      "kt1",
-      {
-        id: "kt1",
         jobNumber: "KT-2026-004",
         kind: "MAINTENANCE",
         status: "IN_PROGRESS",
@@ -289,7 +277,7 @@ function fake() {
         const kind = jobs.get(id)?.kind;
         return kind ? [{ id, kind }] : [];
       }),
-    conversationsOf: async () => [...conversations.values()],
+    conversationsOf: async () => [...conversations.values()].map(row),
     unreadCounts: async () => new Map<string, number>(),
     messagesByIds: async () => [],
   };

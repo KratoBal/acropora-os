@@ -1032,23 +1032,17 @@ export class ServiceJobsService {
     throw new BadRequestException([nyito, ...reszek].join(" "));
   }
 
-  /** A jegy szavai a fajtája szerint: a karbantartási lap nem hibajegy (Balázs, 2026-11-18 11:31 UTC; acrobot 56118). */
+  /** A jegy szavai a fajtája szerint (a közös `serviceJobNoun`-ból): a karbantartási lap nem hibajegy (Balázs, 2026-11-18 11:31 UTC; acrobot 56118). */
   private async jobWords(
     id: string,
   ): Promise<{ a: string; ez: string; rol: string; alatt: string }> {
-    return (await this.repository.kindOf(id)) === "MAINTENANCE"
-      ? {
-          a: "A karbantartási lap",
-          ez: "Ez a karbantartási lap",
-          rol: "a karbantartási lapról",
-          alatt: "a karbantartási lap alatt",
-        }
-      : {
-          a: "A hibajegy",
-          ez: "Ez a hibajegy",
-          rol: "a hibajegyről",
-          alatt: "a hibajegy alatt",
-        };
+    const noun = serviceJobNoun(await this.repository.kindOf(id));
+    return {
+      a: `A ${noun.nominative}`,
+      ez: `Ez a ${noun.nominative}`,
+      rol: `a ${noun.delative}`,
+      alatt: `a ${noun.nominative} alatt`,
+    };
   }
 
   private async visibilityFor(
