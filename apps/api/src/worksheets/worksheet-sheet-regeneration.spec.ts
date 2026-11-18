@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   archiveOfIssuedSheet,
+  isSheetArchive,
   sheetToRegenerate,
   type IssuedSheetRow,
 } from "./worksheet-sheet-regeneration.js";
@@ -110,5 +111,45 @@ describe("a régi példány archívuma", () => {
     });
     assert.ok(archive.caption.length <= 500);
     assert.ok(archive.caption.includes(at));
+  });
+});
+
+/*
+  AZ ARCHÍV PÉLDÁNY FELISMERÉSE (acrobot 56329: a régi elrendezésű példány a partnernek ne látsszon). Az archív sor `OTHER` típusú, mint a kézzel feltöltött fájl, ezért a felirata a jele. MI PIROSÍT: ha az archív sor nem ismerhető fel
+  (a partner látná); ha egy kézzel feltöltött `OTHER` fájl vagy egy fénykép archívnak számítana (a partner nem látná a saját feltöltését); ha az `archiveOfIssuedSheet` felirata és a felismerés szétcsúszik.
+*/
+describe("az archív példány felismerése", () => {
+  const at = "2026-11-18 20:40";
+
+  it("az archiveOfIssuedSheet által írt sor archívként ismerszik fel", () => {
+    const archive = archiveOfIssuedSheet(row("GENERATED_SHEET"), {
+      at,
+      byName: "Kovács Anna",
+    });
+    assert.equal(
+      isSheetArchive({ type: "OTHER", caption: archive.caption }),
+      true,
+    );
+  });
+
+  it("a kézzel feltöltött fájl és a fénykép nem archív", () => {
+    assert.equal(isSheetArchive({ type: "OTHER", caption: null }), false);
+    assert.equal(
+      isSheetArchive({ type: "OTHER", caption: "Szivattyú előtte" }),
+      false,
+    );
+    const archive = archiveOfIssuedSheet(row("GENERATED_SHEET"), {
+      at,
+      byName: "N",
+    });
+    assert.equal(
+      isSheetArchive({ type: "PHOTO", caption: archive.caption }),
+      false,
+      "csak az OTHER típusú sor lehet archív",
+    );
+    assert.equal(
+      isSheetArchive({ type: "GENERATED_SHEET", caption: archive.caption }),
+      false,
+    );
   });
 });

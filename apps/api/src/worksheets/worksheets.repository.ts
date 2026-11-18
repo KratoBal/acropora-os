@@ -2629,6 +2629,8 @@ export class WorksheetsRepository extends Repository {
       where: { id: documentId, worksheetId },
       select: {
         id: true,
+        type: true,
+        caption: true,
         fileName: true,
         contentType: true,
         sizeBytes: true,

@@ -104,3 +104,75 @@ describe("a PDF újragenerálása", () => {
     assert.match(input.at, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
   });
 });
+
+/*
+  A PARTNER NEM LÁTJA AZ ARCHÍV PÉLDÁNYT (acrobot 56329): a régi elrendezésű PDF belső előzmény, a partner portál a lap összes csatolmányát listázza, ezért a szűrés a listában ÉS a letöltésben is áll. MI PIROSÍT: ha a partner listája az
+  archívot hozza; ha a belsős lista nem hozza (az előzmény eltűnne); ha a partner az archív azonosítóját közvetlenül letöltheti; ha a partner a SAJÁT feltöltött `OTHER` fájlját nem látja.
+*/
+describe("az archív példány a partner elől rejtve", () => {
+  const archiv = {
+    id: "doc-archiv",
+    type: "OTHER",
+    caption:
+      "A lap korábbi elrendezésű PDF-je, az újragenerálás előtti példány. Újragenerálva: 2026-11-18 20:40, Teszt Elek.",
+  };
+  const sajat = { id: "doc-sajat", type: "OTHER", caption: "Szivattyú előtte" };
+  const lap = { id: "worksheet-1", customerId: "customer-1" };
+
+  function listaSzolgaltatas() {
+    return new WorksheetsService({
+      detail: async () => lap,
+      documents: async () => [archiv, sajat],
+      document: async (_id: string, documentId: string) => ({
+        ...(documentId === archiv.id ? archiv : sajat),
+        fileName: "x.pdf",
+        contentType: "application/pdf",
+        sizeBytes: 3,
+        content: Buffer.from("pdf"),
+        storageKey: null,
+      }),
+    } as unknown as WorksheetsRepository);
+  }
+
+  it("a partner listája nem hozza az archívot, a saját fájlját igen", async () => {
+    const result = await listaSzolgaltatas().documents("worksheet-1", {
+      kind: "customer",
+      customerId: "customer-1",
+    } as never);
+    assert.deepEqual(
+      result.items.map((item) => item.id),
+      ["doc-sajat"],
+    );
+  });
+
+  it("a belsős lista mindkettőt hozza", async () => {
+    const result = await listaSzolgaltatas().documents("worksheet-1", {
+      kind: "internal",
+    } as never);
+    assert.deepEqual(
+      result.items.map((item) => item.id),
+      ["doc-archiv", "doc-sajat"],
+    );
+  });
+
+  it("a partner az archív azonosítójával sem tölti le: 404, a saját fájlja megy", async () => {
+    const partner = { kind: "customer", customerId: "customer-1" } as never;
+    await assert.rejects(
+      () =>
+        listaSzolgaltatas().documentBytes("worksheet-1", "doc-archiv", partner),
+      (error: unknown) => error instanceof NotFoundException,
+    );
+    const sajatLetoltes = await listaSzolgaltatas().documentBytes(
+      "worksheet-1",
+      "doc-sajat",
+      partner,
+    );
+    assert.equal(sajatLetoltes.bytes.toString(), "pdf");
+    const belsos = await listaSzolgaltatas().documentBytes(
+      "worksheet-1",
+      "doc-archiv",
+      { kind: "internal" } as never,
+    );
+    assert.equal(belsos.bytes.toString(), "pdf");
+  });
+});

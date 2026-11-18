@@ -80,6 +80,7 @@ import {
   type NormalizedWorksheetContent,
   type NormalizedWorksheetLine,
 } from "./worksheet-content.js";
+import { isSheetArchive } from "./worksheet-sheet-regeneration.js";
 import { diffWorksheetVersions } from "./worksheet-diff.js";
 import {
   WORKSHEET_NUMBER_ISSUE_MESSAGES,
@@ -289,7 +290,14 @@ export class WorksheetsService {
   async documents(id: string, scope: PartnerScope) {
     const lap = await this.repository.detail(id, scope);
     if (!lap) throw new NotFoundException("A munkalap nem található.");
-    return { items: await this.repository.documents(id) };
+    const items = await this.repository.documents(id);
+    // A régi elrendezésű (archív) példány belső előzmény: a partner portál a lap összes csatolmányát listázza, ezért itt szűrünk (és a letöltésben is, lásd `documentBytes`)
+    return {
+      items:
+        scope.kind === "internal"
+          ? items
+          : items.filter((item) => !isSheetArchive(item)),
+    };
   }
 
   /**
@@ -327,6 +335,9 @@ export class WorksheetsService {
 
     const document = await this.repository.document(id, documentId);
     if (!document) throw new NotFoundException("A csatolmány nem található.");
+    // az archív példány a partner elől rejtett: azonosítóval sem érhető el (ugyanaz a 404, mint a nem létezőé)
+    if (scope.kind !== "internal" && isSheetArchive(document))
+      throw new NotFoundException("A csatolmány nem található.");
 
     if (document.content) return { ...document, bytes: document.content };
 

@@ -67,6 +67,23 @@ export function sheetToRegenerate<T extends IssuedSheetRow>(
 
 const ARCHIVE_SUFFIX = " (korábbi elrendezés).pdf";
 const CAPTION_LIMIT = 500;
+const ARCHIVE_CAPTION_HEAD =
+  "A lap korábbi elrendezésű PDF-je, az újragenerálás előtti példány. Újragenerálva: ";
+
+/**
+ * AZ ARCHÍV PÉLDÁNY FELISMERÉSE (acrobot 56329): a régi elrendezésű példány belső előzmény, a partner elől rejtve marad. Az archív sor `OTHER` típusú, mint a kézzel feltöltött fájl, ezért a JELE a felirat eleje
+ * (`ARCHIVE_CAPTION_HEAD`, az `archiveOfIssuedSheet` írja): a partner a SAJÁT feltöltött `OTHER` fájlját továbbra is látja. A felirat szerkeszthető (`PATCH :id/documents/:documentId`), de ez csak rejtés: aki átírja, a partner
+ * elől rejtett példányt láthatóvá teszi, jogot nem szerez vele.
+ */
+export function isSheetArchive(document: {
+  type: string;
+  caption: string | null;
+}): boolean {
+  return (
+    document.type === "OTHER" &&
+    (document.caption?.startsWith(ARCHIVE_CAPTION_HEAD) ?? false)
+  );
+}
 
 /** A régi példány archív sora: név, felirat és az EREDETI idő (a dokumentum saját ideje, nem az újragenerálásé). */
 export function archiveOfIssuedSheet(
@@ -74,8 +91,7 @@ export function archiveOfIssuedSheet(
   regeneration: { at: string; byName: string },
 ): { fileName: string; caption: string; createdAt: Date } {
   const stem = old.fileName.replace(/\.pdf$/i, "").slice(0, 120);
-  const head =
-    "A lap korábbi elrendezésű PDF-je, az újragenerálás előtti példány. Újragenerálva: ";
+  const head = ARCHIVE_CAPTION_HEAD;
   const tail = `${regeneration.at}, ${regeneration.byName.slice(0, 200)}.`;
   return {
     fileName: `${stem}${ARCHIVE_SUFFIX}`,

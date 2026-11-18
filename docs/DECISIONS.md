@@ -1017,6 +1017,8 @@ lapokon a régi elrendezés áll (a hosszú tárgy a számra csúszik, "Összes 
 **Mérési korlátok (a döntés idején).** Az adatbázisos viselkedést (archív sor, feltételes csere, idempotencia) az integrációs készlet méri
 (`worksheet-sheet-regeneration.integration.spec.ts`), helyben nem futott. Az éles lapokon (például NMD-2026-028) nem próbáltuk.
 
-**Következmény.** A partner portál a lap ÖSSZES csatolmányát mutatja ("Munkalap fényképei és fájljai", `GET :id/documents`), tehát az újragenerált kiadott lapot
-azonnal látja (ugyanaz a sor), és az archív példányt is, "(korábbi elrendezés)" névvel. Hogy az archívumot el kell-e rejteni a partner elől, azt nem döntöttük el
-(nyitott kérdés acrobotnak): a rejtés a `documents` olvasás hatókörén múlna, nem az írás módján.
+**Következmény.** A partner portál a lap ÖSSZES csatolmányát mutatja ("Munkalap fényképei és fájljai", `GET :id/documents`), ezért az újragenerált kiadott lapot
+azonnal látja (ugyanaz a sor). Az archív példány belső előzmény: a partner NEM látja, sem a listában, sem azonosítóval letöltve (404), mert a szolgáltatás a
+partner hatókörű olvasásból kiszűri (`isSheetArchive`: `OTHER` típus és az archív felirat eleje). A partner a saját feltöltött `OTHER` fájlját továbbra is látja.
+Ismert határ: ha a kiadott sor tartalma a dokumentum-tárolóban áll (`storageKey`, `content` nélkül), az archív sor a tároló-kulcs miatt nem olvasható ki
+(a kulcs a régi azonosítót hordozza); ma a kiadott lapok a soron belül állnak.
