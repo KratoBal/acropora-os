@@ -200,11 +200,13 @@ function fake() {
         : null;
     },
     serviceJobForContext: async (id: string) =>
-      id === "job1"
+      id === "job1" || id === "job-karb"
         ? {
             id,
-            jobNumber: "HJ-2026-007",
+            jobNumber: id === "job1" ? "HJ-2026-007" : "KT-2026-001",
             status: "IN_PROGRESS",
+            // a karbantartási jegyen nincs partneres beszélgetés (t-20261118-karbantartas-szerver-tiltas)
+            kind: id === "job1" ? "REPAIR" : "MAINTENANCE",
             createdAt: new Date("2026-10-04T10:00:00Z"),
             assignedUserId: "a",
             customer: { displayName: "FANK" },
@@ -657,6 +659,23 @@ describe("the partner conversation on the internal side", () => {
       await status(f.service.openPartnerConversation(partnerUser, "job1")),
       403,
     );
+  });
+
+  // Balázs, 2026-11-18 11:31 UTC: a karbantartásnak nincs hibajegy-kezelése; a felület elrejti a gombot, a szerver is tartja. A fenti
+  // eset (javítási jegy) a kontroll: ott a megnyitás megy.
+  it("a MAINTENANCE job has no partner conversation: 409, and none is created", async () => {
+    const f = fake();
+    const before = f.conversations.size;
+    assert.equal(
+      await status(
+        f.service.openPartnerConversation(
+          user("vezeto", { role: "MANAGER" }),
+          "job-karb",
+        ),
+      ),
+      409,
+    );
+    assert.equal(f.conversations.size, before);
   });
 
   it("nobody can delete it, neither its creator nor an admin (acrobot, 15:46)", async () => {

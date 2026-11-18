@@ -1643,6 +1643,15 @@ export class ServiceJobsRepository {
     });
   }
 
+  /** A jegy fajtája, a karbantartás-őrhöz (`maintenance-guard.ts`); `null`, ha nincs ilyen jegy. */
+  async kindOf(id: string): Promise<"REPAIR" | "MAINTENANCE" | null> {
+    const row = await this.database.serviceJob.findUnique({
+      where: { id },
+      select: { kind: true },
+    });
+    return row?.kind ?? null;
+  }
+
   async statusOf(id: string): Promise<ServiceJobStatus | null> {
     const row = await this.database.serviceJob.findUnique({
       where: { id },

@@ -56,6 +56,7 @@ import { AssistantService } from "../assistant/assistant.service.js";
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { usersWithPermissionWhere } from "../auth/permission-holders.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
+import { maintenanceBlock } from "../service-jobs/maintenance-guard.js";
 import { AssistantThinkingState } from "./assistant-thinking.state.js";
 import { SutyerakInbox } from "./sutyerak-inbox.js";
 import { storageKeyFor } from "../service-assets/document-store/document-storage-key.js";
@@ -1439,6 +1440,13 @@ export class MessagesService {
     this.assertSeesService(user);
     const subject = await this.contextSubject("SERVICE_JOB", jobId);
     if (!subject) throw new NotFoundException("A hibajegy nem található.");
+    // A KARBANTARTÁSI JEGYEN NINCS PARTNERES BESZÉLGETÉS (t-20261118-karbantartas-szerver-tiltas): a felület elrejti, a szerver is tartja.
+    // Az ellenőrzés a létezés UTÁN áll, tehát a 409 nem árul el többet, mint a megnyitás egyébként.
+    const blocked = maintenanceBlock(
+      "kind" in subject ? subject.kind : null,
+      "partnerConversation",
+    );
+    if (blocked) throw new ConflictException(blocked);
     const conversationId = await this.partnerConversationFor(
       jobId,
       subject.title,
@@ -1736,6 +1744,7 @@ export class MessagesService {
     if (!job) return null;
     return {
       number: job.jobNumber,
+      kind: job.kind,
       title: [job.jobNumber, job.customer?.displayName]
         .filter(Boolean)
         .join(" · "),
