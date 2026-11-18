@@ -232,9 +232,21 @@ export class MessagesService {
         )
       ).map((row) => [row.id, row]),
     );
+    // the linked jobs' kind in one query: the list's subtitle names a maintenance sheet as one, not as a ticket (acrobot 56118)
+    const kinds = new Map(
+      (
+        await this.repository.serviceJobKinds(
+          rows.flatMap((row) =>
+            row.contextType === "SERVICE_JOB" && row.contextId
+              ? [row.contextId]
+              : [],
+          ),
+        )
+      ).map((job) => [job.id, job.kind]),
+    );
     return {
       items: rows.map((row) =>
-        toListItem(row, user.id, unread.get(row.id) ?? 0, last),
+        toListItem(row, user.id, unread.get(row.id) ?? 0, last, kinds),
       ),
     };
   }
@@ -256,13 +268,24 @@ export class MessagesService {
         )
       ).map((m) => [m.id, m]),
     );
+    const context = await this.contextCard(user, row);
     return {
-      ...toListItem(row, user.id, unread.get(row.id) ?? 0, last),
+      ...toListItem(
+        row,
+        user.id,
+        unread.get(row.id) ?? 0,
+        last,
+        new Map(
+          context?.type === "SERVICE_JOB" && context.jobKind
+            ? [[context.id, context.jobKind]]
+            : [],
+        ),
+      ),
       description: row.description,
       createdByUserId: row.createdByUserId,
       lastReadMessageId: membership.lastReadMessageId,
       notification: notificationState(membership),
-      context: await this.contextCard(user, row),
+      context,
       assistantThinking: this.thinking?.has(id) ?? false,
       canDelete: mayDeleteConversation(user, row),
     };
@@ -1271,7 +1294,7 @@ export class MessagesService {
     if (row.audience === "PARTNER") throw partnerFixed();
     if (row.type !== "GROUP")
       throw new BadRequestException(
-        "Csak csoportos beszélgetés köthető munkalaphoz vagy hibajegyhez.",
+        "Csak csoportos beszélgetés köthető munkalaphoz, hibajegyhez vagy karbantartási laphoz.",
       );
     if (row.contextId) {
       if (row.contextType === input.type && row.contextId === input.id)
@@ -1444,7 +1467,10 @@ export class MessagesService {
     this.assertInternal(user);
     this.assertSeesService(user);
     const subject = await this.contextSubject("SERVICE_JOB", jobId);
-    if (!subject) throw new NotFoundException("A hibajegy nem található.");
+    if (!subject)
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
     // A KARBANTARTÁSI JEGYEN NINCS PARTNERES BESZÉLGETÉS (t-20261118-karbantartas-szerver-tiltas): a felület elrejti, a szerver is tartja.
     // Az ellenőrzés a létezés UTÁN áll, tehát a 409 nem árul el többet, mint a megnyitás egyébként.
     const blocked = maintenanceBlock(
@@ -1567,7 +1593,10 @@ export class MessagesService {
       scope,
       userId: user.id,
     });
-    if (!job) throw new NotFoundException("A hibajegy nem található.");
+    if (!job)
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
     return job;
   }
 
@@ -1790,6 +1819,7 @@ export class MessagesService {
       type,
       id,
       number: job?.jobNumber ?? null,
+      jobKind: job?.kind ?? null,
       restricted: !sees,
       partnerName: sees ? (job?.customer?.displayName ?? null) : null,
       status: sees ? (job?.status ?? null) : null,
@@ -2003,6 +2033,7 @@ function toListItem(
   viewerId: string,
   unreadCount: number,
   lastMessages: ReadonlyMap<string, MessageRow>,
+  jobKinds: ReadonlyMap<string, "REPAIR" | "MAINTENANCE"> = new Map(),
 ): ConversationListItem {
   const last = row.lastMessageId
     ? lastMessages.get(row.lastMessageId)
@@ -2019,6 +2050,10 @@ function toListItem(
     lastMessageAt: row.lastMessageAt?.toISOString() ?? null,
     unreadCount,
     contextType: isContextType(row.contextType) ? row.contextType : null,
+    contextJobKind:
+      row.contextType === "SERVICE_JOB" && row.contextId
+        ? (jobKinds.get(row.contextId) ?? null)
+        : null,
   };
 }
 

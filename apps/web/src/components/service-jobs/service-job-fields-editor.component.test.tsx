@@ -39,6 +39,27 @@ describe("a bejelentés szerkesztője", () => {
     );
   });
 
+  // a karbantartási lap nem hibajegy, és nincs bejelentése (acrobot 56118)
+  it("karbantartási lapon a feliratok a lapot nevezik meg", async () => {
+    render(
+      <ServiceJobFieldsEditor
+        jobId="kt-1"
+        token="token-1"
+        title="Havi karbantartás"
+        description={null}
+        onSaved={() => {}}
+        open
+        onOpenChange={() => {}}
+        maintenance
+      />,
+    );
+    expect(screen.getByLabelText("A karbantartási lap címe")).toBeTruthy();
+    expect(screen.getByLabelText("A karbantartási lap leírása")).toBeTruthy();
+    expect(screen.getByText("A lap szerkesztése")).toBeTruthy();
+    expect(screen.queryByLabelText("A hibajegy címe")).toBeNull();
+    expect(screen.queryByText("A bejelentés szerkesztése")).toBeNull();
+  });
+
   it("W2: a mentés a beírt értékeket viszi", async () => {
     const user = userEvent.setup();
     nyit();

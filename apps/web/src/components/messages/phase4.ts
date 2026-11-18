@@ -15,16 +15,29 @@ import { serviceJobStatusLabel } from "@/components/service-jobs/service-job-lab
  * a lista alcíme és a rendszer-esemény sora. A képernyőn csak a bekötés marad.
  */
 
+/** A kapcsolt jegy fajtája: a karbantartási lap nem hibajegy (Balázs, 2026-11-18 11:31 UTC; acrobot 56118). Hiányzó érték: hibajegy. */
+type JobKind = "REPAIR" | "MAINTENANCE";
+
 /** A lista és a fejléc alcíme (Figma 450:323). */
-export function contextSubtitle(type: ConversationContextType): string {
-  return type === "WORKSHEET"
-    ? "Munkalaphoz kapcsolva"
+export function contextSubtitle(
+  type: ConversationContextType,
+  jobKind?: JobKind | null,
+): string {
+  if (type === "WORKSHEET") return "Munkalaphoz kapcsolva";
+  return jobKind === "MAINTENANCE"
+    ? "Karbantartási laphoz kapcsolva"
     : "Hibajegyhez kapcsolva";
 }
 
 /** A kártya címkéje: „KAPCSOLT MUNKALAP”. */
-export function contextCardTitle(type: ConversationContextType): string {
-  return type === "WORKSHEET" ? "KAPCSOLT MUNKALAP" : "KAPCSOLT HIBAJEGY";
+export function contextCardTitle(
+  type: ConversationContextType,
+  jobKind?: JobKind | null,
+): string {
+  if (type === "WORKSHEET") return "KAPCSOLT MUNKALAP";
+  return jobKind === "MAINTENANCE"
+    ? "KAPCSOLT KARBANTARTÁSI LAP"
+    : "KAPCSOLT HIBAJEGY";
 }
 
 /**
@@ -34,8 +47,9 @@ export function contextCardTitle(type: ConversationContextType): string {
 export function contextHref(card: ConversationContextCard): string | null {
   if (card.restricted) return null;
   const id = encodeURIComponent(card.id);
-  return card.type === "WORKSHEET"
-    ? `/szerviz/munkalapok/${id}`
+  if (card.type === "WORKSHEET") return `/szerviz/munkalapok/${id}`;
+  return card.jobKind === "MAINTENANCE"
+    ? `/szerviz/karbantartas/${id}`
     : `/szerviz/hibajegyek/${id}`;
 }
 
@@ -44,6 +58,9 @@ export function contextStatusLabel(
   card: ConversationContextCard,
 ): string | null {
   if (!card.status) return null;
+  // a karbantartási lapnak nincs hibajegy-állapota (Balázs, 2026-11-18 11:31 UTC): a kártya nem mond "Új"-at róla
+  if (card.type === "SERVICE_JOB" && card.jobKind === "MAINTENANCE")
+    return null;
   const labels: Record<string, string> =
     card.type === "WORKSHEET"
       ? (worksheetDisplayStatusLabel as Record<WorksheetDisplayStatus, string>)

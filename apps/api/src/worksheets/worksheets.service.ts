@@ -1582,6 +1582,7 @@ export class WorksheetsService {
       userId: actorUserId,
       worksheetCreatedById: data.worksheetCreatedById,
       serviceJobOpenedById: data.serviceJobOpenedById,
+      serviceJobKind: data.serviceJobKind,
     };
     const canEdit = canEditWorksheetEntry(context);
     const editRefusal = describeEntryEditRefusal(context);
@@ -1682,6 +1683,7 @@ export class WorksheetsService {
       userId: actorUserId,
       worksheetCreatedById: data.worksheetCreatedById,
       serviceJobOpenedById: data.serviceJobOpenedById,
+      serviceJobKind: data.serviceJobKind,
     };
     if (!canEditWorksheetEntry(context))
       throw new ForbiddenException(
@@ -1797,7 +1799,9 @@ export class WorksheetsService {
   private async requireTicketFor(serviceJobId: string, customerId: string) {
     const ticket = await this.repository.ticketPartner(serviceJobId);
     if (!ticket)
-      throw new NotFoundException("A megadott hibajegy nem található.");
+      throw new NotFoundException(
+        "A megadott hibajegy vagy karbantartási lap nem található.",
+      );
 
     const check = mayWorksheetJoinTicket({
       ticketCustomerId: ticket.customerId,
@@ -1805,9 +1809,14 @@ export class WorksheetsService {
     });
     if (!check.ok)
       throw new BadRequestException(
-        check.reason === "ticket-has-no-partner"
-          ? "Ehhez a hibajegyhez még nincs partner. Először állítsd be a hibajegy partnerét, és utána nyiss alá munkalapot."
-          : "A munkalap partnere nem egyezik a hibajegyével. Válassz másik hibajegyet, vagy javítsd a lap partnerét.",
+        ticket.kind === "MAINTENANCE"
+          ? // a karbantartási lap nem hibajegy, és a partnere nem cserélhető (maintenance-guard, acrobot 56118)
+            check.reason === "ticket-has-no-partner"
+            ? "Ehhez a karbantartási laphoz nincs partner, ezért munkalap sem nyitható alá."
+            : "A munkalap partnere nem egyezik a karbantartási lapéval. Javítsd a munkalap partnerét."
+          : check.reason === "ticket-has-no-partner"
+            ? "Ehhez a hibajegyhez még nincs partner. Először állítsd be a hibajegy partnerét, és utána nyiss alá munkalapot."
+            : "A munkalap partnere nem egyezik a hibajegyével. Válassz másik hibajegyet, vagy javítsd a lap partnerét.",
       );
   }
 

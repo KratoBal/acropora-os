@@ -40,6 +40,16 @@ describe("az önálló munkalap törlésének tiltásai", () => {
     assert.match(refusal, /le kell választani|jegyet kell törölni/);
   });
 
+  // a karbantartási lap nem hibajegy, és a lapról nem választható le (acrobot 56118): a mondat a lapot nevezi meg, és nem ad lehetetlen tanácsot
+  it("a karbantartási lap alatti lap nem törölhető innen, és a mondat a lapot nevezi meg", () => {
+    const refusal =
+      worksheetDeleteRefusal(
+        facts({ hasServiceJob: true, serviceJobKind: "MAINTENANCE" }),
+      ) ?? "";
+    assert.match(refusal, /karbantartási laphoz tartozik/);
+    assert.doesNotMatch(refusal, /hibajegy|le kell választani/);
+  });
+
   it("az aláírt, a lezárt (számozott) és az átadott lap tilt", () => {
     for (const over of [
       { signed: true },

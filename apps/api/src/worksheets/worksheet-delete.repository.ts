@@ -41,6 +41,7 @@ async function readSnapshot(
     select: {
       id: true,
       serviceJobId: true,
+      serviceJob: { select: { kind: true } },
       number: true,
       handedOverAt: true,
       versions: {
@@ -69,6 +70,7 @@ async function readSnapshot(
     label: sheet.number ?? sheet.versions[0]?.subject ?? sheet.id.slice(0, 8),
     facts: {
       hasServiceJob: sheet.serviceJobId !== null,
+      serviceJobKind: sheet.serviceJob?.kind ?? null,
       number: sheet.number,
       handedOver: sheet.handedOverAt !== null,
       signed: sheet.versions.some((version) => version.status === "SIGNED"),
