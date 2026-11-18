@@ -969,6 +969,25 @@ describe("Luca's three bank rows", () => {
     assert.equal(refusalFor([]), "UNRESOLVED");
   });
 
+  it("a number that fits a cancelled invoice AND another document is ambiguous: not 'refunded'", () => {
+    const decision = decideBankTransfer(
+      credit({
+        narrative: "2026/00084",
+        amount: "20000.00",
+        counterpartyName: "Fővárosi Állat- és Növénykert",
+      }),
+      [
+        invoice("00084", "20000.00", { cancelled: true }),
+        invoice("00084", "20000.00", {
+          documentNumber: "ACRD-2026/00084",
+          kindCode: "D",
+        }),
+      ],
+      [refund({ amount: "20000.00", narrative: "2026/00084 vissza" })],
+    );
+    assert.equal(!decision.markable && decision.refusal, "UNRESOLVED");
+  });
+
   it("a cancelled invoice and a live one in one text are not 'refunded' as a whole", () => {
     const decision = decideBankTransfer(
       returned({ narrative: "E-CRPR-2026-1 2026/00083" }),
