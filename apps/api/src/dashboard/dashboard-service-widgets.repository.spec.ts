@@ -103,6 +103,11 @@ describe("Nyitott hibajegyek", () => {
       "finished tickets must not be counted",
     );
     assert.match(where, /customer-1/, "the partner scope must be applied");
+    assert.match(
+      where,
+      /"kind":"REPAIR"/,
+      "a maintenance sheet is no ticket and must not be counted (acrobot 56109)",
+    );
     // the oldest one is read with the same filter
     assert.equal(
       json(

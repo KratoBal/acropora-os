@@ -11,6 +11,7 @@ import {
   serviceJobStatusLabel,
   serviceJobStatusTone,
 } from "@/components/service-jobs/service-job-labels";
+import { serviceJobRef } from "@/components/worksheets/service-job-ref";
 
 /**
  * A FELADATAIM SZERVIZES TÉTELEINEK SZÖVEGEI (kártya 041a3dd5, tervrajz:
@@ -19,13 +20,16 @@ import {
  * lássa, mint a listákon.
  */
 
-export const SERVICE_WORK_KIND_LABEL: Record<
-  MyServiceWorkItem["kind"],
-  string
-> = {
-  SERVICE_JOB: "Hibajegy",
-  WORKSHEET: "Munkalap",
-};
+/**
+ * A TÉTEL JELÖLÉSE: munkalap, hibajegy vagy karbantartási lap. A rám osztott karbantartási lap is `SERVICE_JOB` tételként jön, de nem
+ * hibajegy (Balázs, 2026-11-18 11:31 UTC; acrobot 56109): a jelölése és a linkje a jegy fajtájából jön (`serviceJobRef`, ugyanaz, mint a
+ * munkalap hivatkozása).
+ */
+export function serviceWorkKindLabel(item: MyServiceWorkItem): string {
+  return item.kind === "SERVICE_JOB"
+    ? serviceJobRef({ id: item.id, kind: item.jobKind }).label
+    : "Munkalap";
+}
 
 export function serviceWorkStatusLabel(item: MyServiceWorkItem): string {
   return item.kind === "SERVICE_JOB"
@@ -103,6 +107,7 @@ export function serviceWorkNextStep(item: MyServiceWorkItem): string {
 /** Az adatlap címe a tétel fajtája szerint. */
 export function serviceWorkHref(item: MyServiceWorkItem): string {
   return item.kind === "SERVICE_JOB"
-    ? `/szerviz/hibajegyek/${encodeURIComponent(item.id)}`
+    ? serviceJobRef({ id: encodeURIComponent(item.id), kind: item.jobKind })
+        .href
     : `/szerviz/munkalapok/${encodeURIComponent(item.id)}`;
 }

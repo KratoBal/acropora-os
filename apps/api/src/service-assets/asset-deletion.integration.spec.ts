@@ -61,6 +61,7 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
 
   let free: string;
   let withServiceJob: string;
+  let withMaintenanceSheet: string;
   let withWorksheetLine: string;
   let withChild: string;
   let withTemplate: string;
@@ -105,6 +106,7 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
 
     free = await asset("FREE");
     withServiceJob = await asset("JOB");
+    withMaintenanceSheet = await asset("KT");
     withWorksheetLine = await asset("LINE");
     withChild = await asset("PARENT");
     withTemplate = await asset("TEMPLATE");
@@ -120,6 +122,19 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
     });
     await prisma.serviceJobAsset.create({
       data: { serviceJobId: job.id, assetId: withServiceJob },
+    });
+    // a karbantartási lap külön akadály, külön szóval (acrobot 56109)
+    const sheet = await prisma.serviceJob.create({
+      data: {
+        jobNumber: `${PREFIX}${suffix}-KT`,
+        title: "Törlés teszt karbantartási lap",
+        kind: "MAINTENANCE",
+        customerId: customer.id,
+        departmentId: department.id,
+      },
+    });
+    await prisma.serviceJobAsset.create({
+      data: { serviceJobId: sheet.id, assetId: withMaintenanceSheet },
     });
     // a KIVEZETETT sablon is akadály (task os-uzemeltetesi-naplo, barracuda #2497)
     await prisma.operationsTaskTemplate.create({
@@ -286,6 +301,21 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
     assert.ok(
       await prisma.asset.findUnique({ where: { id: withServiceJob } }),
       "az őrző akkor őrző, ha nem történt semmi",
+    );
+  });
+
+  /* A karbantartási lap nem hibajegy (Balázs, 2026-11-18 11:31 UTC; acrobot 56109): akadály, de a saját szavával, és a valódi adatbázison
+     a REPAIR-számláló nem számolja. MI PIROSÍT: ha a lap hibajegyként jelenik meg, vagy ha a karbantartási lap nem tartja vissza a törlést. */
+  it("karbantartási laphoz tartozó eszköz NEM törölhető, és az ok karbantartási lap, nem hibajegy", async () => {
+    await assert.rejects(
+      () => assets.remove(withMaintenanceSheet),
+      (error: Error) =>
+        error instanceof ConflictException &&
+        /1 karbantartási lap/.test(error.message) &&
+        !/hibajegy/.test(error.message),
+    );
+    assert.ok(
+      await prisma.asset.findUnique({ where: { id: withMaintenanceSheet } }),
     );
   });
 

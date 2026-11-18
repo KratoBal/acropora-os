@@ -92,6 +92,7 @@ function job(
   });
   return {
     kind: "SERVICE_JOB",
+    jobKind: row.kind,
     id: row.id,
     number: row.jobNumber,
     status: row.status,
