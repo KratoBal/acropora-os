@@ -99,6 +99,32 @@ describe("a karbantartási lap dokumentumcsomagja", () => {
     (aláíratlan). A KIKÜLDÉS kapuja marad. MI PIROSÍT: ha az igazolás nélküli letöltés elutasít; ha a csomagba nem kerül be a kiállított igazolás aláírt hiányában; ha az aláírt mellett a
     kiállított is bekerül (az aláírt a csomag igazolása); ha a kiküldés már nem kéri az igazolást vagy az aláírt példányát.
   */
+  /*
+    A STAGE-VÉGIGJÁRÁS TALÁLTA (2026-11-18, KT-2026-004; mind a négy stage-lap "megrendelőlap és szerződés nélkül" jött létre): a csomag minden lapnál kérte a megrendelőlapot, és a
+    nélküle született lapra 503-at adott a "holott a karbantartási lap ebből jött létre" mondattal, ami hamis. MI PIROSÍT: ha a megrendelőlap nélküli lap letöltése hibával áll meg; ha
+    a csomagba üres megrendelőlap-elem kerül; ha egy VAN megrendelőlap, de a PDF-je hiányzik, és ez már nem áll meg hangosan.
+  */
+  it("megrendelőlap nélkül született lapnál a csomag megrendelőlap-elem nélkül áll össze", async () => {
+    const csomag = await serviceWith(job({ maintenanceOrder: null })).assemble(
+      "job-a",
+      "download",
+    );
+    assert.ok(csomag.bytes.includes(Buffer.from("munkalap.pdf")));
+    assert.ok(!csomag.bytes.includes(Buffer.from("megrendelolap")));
+  });
+
+  it("ha VAN megrendelőlap, de a PDF-je hiányzik, a csomag hangosan megáll", async () => {
+    await assert.rejects(
+      () =>
+        serviceWith(
+          job({
+            maintenanceOrder: { id: "order-1", number: "MR-1", documents: [] },
+          }),
+        ).assemble("job-a", "download"),
+      /megrendelőlap aláírt PDF-je nem érhető el/,
+    );
+  });
+
   it("teljesítési igazolás nélkül a LETÖLTÉS átmegy, a csomagban nincs igazolás", async () => {
     const csomag = await serviceWith(
       job({ completionCertificate: null }),

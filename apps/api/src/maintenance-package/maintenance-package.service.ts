@@ -147,14 +147,18 @@ export class MaintenancePackageService {
 
     const entries: ZipEntry[] = [];
 
-    const orderDocument = job.maintenanceOrder?.documents[0] ?? null;
-    entries.push({
-      name: orderDocument?.fileName ?? "megrendelolap.pdf",
-      bytes: this.inlineBytes(
-        orderDocument,
-        "A megrendelőlap aláírt PDF-je nem érhető el, holott a karbantartási lap ebből jött létre.",
-      ),
-    });
+    // a lap, ami megrendelőlap nélkül született ("megrendelőlap és szerződés nélkül"), nem hordoz megrendelőlapot: ott nincs elem. Ha VAN megrendelőlap, de a PDF-je hiányzik,
+    // az hangos hiba marad (a stage-végigjárás találta, 2026-11-18: a hamis "ebből jött létre" mondat 503-mal állította meg az ilyen lapok letöltését)
+    if (job.maintenanceOrder) {
+      const orderDocument = job.maintenanceOrder.documents[0] ?? null;
+      entries.push({
+        name: orderDocument?.fileName ?? "megrendelolap.pdf",
+        bytes: this.inlineBytes(
+          orderDocument,
+          "A megrendelőlap aláírt PDF-je nem érhető el, holott a karbantartási lap ebből jött létre.",
+        ),
+      });
+    }
 
     for (const worksheet of job.worksheets) {
       if (worksheet.hiddenAt !== null) continue;
