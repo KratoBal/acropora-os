@@ -3,7 +3,7 @@ import type {
   MaintenancePackageMailResult,
 } from "@acropora/types";
 
-import { apiAuthHeaders, apiRequest } from "./client";
+import { ApiError, apiAuthHeaders, apiErrorOf, apiRequest } from "./client";
 import { API_PREFIX } from "./api-prefix";
 
 const base = "/partners/maintenance-package";
@@ -14,12 +14,20 @@ function jobPath(id: string, suffix: string) {
 
 export const maintenancePackageApi = {
   async download(token: string, serviceJobId: string): Promise<Blob> {
-    const response = await fetch(
-      `${API_PREFIX}${jobPath(serviceJobId, "/download")}`,
-      { credentials: "same-origin", headers: apiAuthHeaders(token) },
-    );
-    if (!response.ok)
-      throw new Error("A karbantartási csomag nem tölthető le.");
+    let response: Response;
+    try {
+      response = await fetch(
+        `${API_PREFIX}${jobPath(serviceJobId, "/download")}`,
+        { credentials: "same-origin", headers: apiAuthHeaders(token) },
+      );
+    } catch {
+      throw new ApiError(
+        "A szerver nem érhető el. Ellenőrizd a kapcsolatot.",
+        0,
+      );
+    }
+    // the server's own reason (Luca, 2026-11-18: no completion certificate, not signed, not closed), the same error every apiRequest call gives
+    if (!response.ok) throw await apiErrorOf(response);
     return response.blob();
   },
 

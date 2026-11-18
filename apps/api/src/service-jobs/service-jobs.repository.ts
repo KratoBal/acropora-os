@@ -85,8 +85,6 @@ export interface ServiceJobRow {
   departmentCode: string | null;
   createdAt: Date;
   worksheetCount: number;
-  /** A jegy egyetlen munkalapjanak azonositoja, ha PONTOSAN egy van; kulonben `null`. */
-  soleWorksheetId?: string | null;
   /** MAINTENANCE sornal: minden munkalap legutolso verzioja alairt (nincs munkalap: false); hibajegynel hianyzik. */
   maintenanceDone?: boolean;
   /** A rejtes idopontja, vagy `null`. A felulet ebbol csinal jelolot. */
@@ -1086,20 +1084,6 @@ export class ServiceJobsRepository {
       delegaltTerkep.set(sor.serviceJobId, lista);
     }
 
-    // A PONTOSAN EGY MUNKALAPOS JEGYEK EGYETLEN MUNKALAPJA (a Karbantartas lista sora azt nyitja): egy kotegelt lekerdezes csak
-    // azokra, amelyeknek a szamlaloja egy
-    const singleIds = lap
-      .filter((row) => row._count.worksheets === 1)
-      .map((row) => row.id);
-    const soleRows = singleIds.length
-      ? await this.database.worksheet.findMany({
-          where: { serviceJobId: { in: singleIds } },
-          select: { id: true, serviceJobId: true },
-        })
-      : [];
-    const soleTerkep = new Map(
-      soleRows.map((sor) => [sor.serviceJobId, sor.id] as const),
-    );
     // A KARBANTARTAS ALLAPOTA: minden munkalap LEGUTOLSO verzioja alairt (a lista ebbol nem tud hibajegy-allapotot mutatni:
     // a karbantartasnak nincs allapotgepe). Egy kotegelt lekerdezes csak a MAINTENANCE sorok munkalapjaira.
     const maintenanceIds = lap
@@ -1156,7 +1140,6 @@ export class ServiceJobsRepository {
         assignees: delegaltTerkep.get(row.id) ?? [],
         createdAt: row.createdAt,
         worksheetCount: row._count.worksheets,
-        soleWorksheetId: soleTerkep.get(row.id) ?? null,
         ...(row.kind === "MAINTENANCE"
           ? {
               maintenanceDone:
