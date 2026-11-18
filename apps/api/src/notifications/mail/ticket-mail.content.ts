@@ -59,7 +59,10 @@ export function ticketMailContent(input: {
    * kivan ujrairast.
    */
   freeText?: string | null;
+  /** A jegy fajtája: karbantartási lapnál a szám sora "Karbantartási lap száma" (Balázs, 2026-11-18). */
+  kind?: "REPAIR" | "MAINTENANCE";
 }): TicketMailContent {
+  const szamSor = `${input.kind === "MAINTENANCE" ? "Karbantartási lap" : "Hibajegy"} száma: ${input.jobNumber}`;
   const szabad = input.freeText?.trim() || null;
   const leiras = input.description?.trim() || null;
 
@@ -68,7 +71,7 @@ export function ticketMailContent(input: {
     "",
     input.event,
     "",
-    `Hibajegy száma: ${input.jobNumber}`,
+    szamSor,
     `Tárgya: ${input.title}`,
   ];
 
@@ -95,7 +98,7 @@ export function ticketMailContent(input: {
   const html = [
     bekezdes(`Kedves ${input.recipientName}!`),
     input.eventHtml,
-    bekezdes(`Hibajegy száma: ${input.jobNumber}\nTárgya: ${input.title}`),
+    bekezdes(`${szamSor}\nTárgya: ${input.title}`),
     leiras ? bekezdes(`A bejelentés szövege:\n${leiras}`) : "",
     szabad ? bekezdes(szabad) : "",
     bekezdes("Üdvözlettel:\nAcropora Kft."),

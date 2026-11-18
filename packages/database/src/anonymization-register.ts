@@ -670,6 +670,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
     requestId: "identifier",
   },
   ServiceJob: {
+    previousNumber: "identifier",
     jobNumber: "identifier",
     clientOperationId: "identifier",
     title: "freeText",
@@ -1443,6 +1444,10 @@ export const ANONYMIZATION_REGISTER: Readonly<
     uploadedById: "identifier",
     decisionNote: "freeText",
     decidedById: "identifier",
+  },
+  ServiceJobDeletion: {
+    jobNumber: "identifier",
+    deletedById: "identifier",
   },
   TicketMailDelivery: {
     serviceJobId: "identifier",

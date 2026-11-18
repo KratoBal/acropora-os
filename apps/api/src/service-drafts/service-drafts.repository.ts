@@ -11,6 +11,7 @@ import {
   type ServiceDraftFilterState,
 } from "@acropora/database";
 import { ServiceJobsRepository } from "../service-jobs/service-jobs.repository.js";
+import { lastServiceJobNumber } from "../service-jobs/service-job-last-number.js";
 import {
   nextServiceJobNumber,
   serviceJobNumberPrefix,
@@ -335,18 +336,15 @@ export class ServiceDraftsRepository {
                 "Állítsd be a Cápasuli aktív partnerfelhasználóját (CAPASULI_OPENED_BY_USER_ID).",
               );
             const year = new Date().getFullYear();
-            const last = await tx.serviceJob.findFirst({
-              where: {
-                jobNumber: { startsWith: serviceJobNumberPrefix(year) },
-              },
-              orderBy: { jobNumber: "desc" },
-              select: { jobNumber: true },
-            });
+            const last = await lastServiceJobNumber(
+              tx,
+              serviceJobNumberPrefix(year),
+            );
             const job = await this.jobs.createInTransaction(
               {
                 jobNumber: nextServiceJobNumber({
                   year,
-                  lastNumber: last?.jobNumber ?? null,
+                  lastNumber: last,
                 }),
                 title: draft.title,
                 description: draft.originalProblem,
@@ -458,11 +456,7 @@ export class ServiceDraftsRepository {
       actorUserId: actorId,
     });
     const year = new Date().getFullYear();
-    const last = await tx.serviceJob.findFirst({
-      where: { jobNumber: { startsWith: serviceJobNumberPrefix(year) } },
-      orderBy: { jobNumber: "desc" },
-      select: { jobNumber: true },
-    });
+    const last = await lastServiceJobNumber(tx, serviceJobNumberPrefix(year));
     const reporter =
       reporterPersonName === undefined
         ? draft.reporterPersonName
@@ -471,7 +465,7 @@ export class ServiceDraftsRepository {
       {
         jobNumber: nextServiceJobNumber({
           year,
-          lastNumber: last?.jobNumber ?? null,
+          lastNumber: last,
         }),
         title: draft.title,
         description: draft.originalProblem,

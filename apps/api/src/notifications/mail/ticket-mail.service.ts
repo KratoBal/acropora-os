@@ -6,6 +6,7 @@ import { TICKET_MAIL_ENV } from "./gmail-mail.sender.js";
 import { mailBodyFields, renderMailBody } from "./mail-body.js";
 import { MAIL_SENDER, type MailSender } from "./mail.port.js";
 import { headerSafe } from "./mail-header.js";
+import { ticketTemplateForKind } from "./ticket-wording.js";
 import { internalTicketLink } from "./ticket-link.js";
 import { partnerWorksheetLink } from "./partner-portal-link.js";
 import { TicketMailRepository } from "./ticket-mail.repository.js";
@@ -345,7 +346,10 @@ export class TicketMailService {
     }
 
     const tarolt = await this.repository.template(WORKSHEET_SIGNED);
-    const sablon = tarolt ?? DEFAULT_WORKSHEET_SIGNED_TEMPLATE;
+    const sablon = ticketTemplateForKind(
+      tarolt ?? DEFAULT_WORKSHEET_SIGNED_TEMPLATE,
+      context.kind,
+    );
     const link = internalTicketLink({
       webUrl: this.environment.WEB_URL,
       serviceJobId: input.serviceJobId,
@@ -389,6 +393,7 @@ export class TicketMailService {
       event: torzs.text,
       ...(torzs.html === undefined ? {} : { eventHtml: torzs.html }),
       freeText: input.freeText ?? null,
+      ...(context.kind === undefined ? {} : { kind: context.kind }),
     });
 
     if (!this.sender) return { kind: "skipped", reason: "no-sender" };
@@ -482,7 +487,10 @@ export class TicketMailService {
     }
 
     const tarolt = await this.repository.template(SERVICE_JOB_OPENED);
-    const sablon = tarolt ?? DEFAULT_SERVICE_JOB_OPENED_TEMPLATE;
+    const sablon = ticketTemplateForKind(
+      tarolt ?? DEFAULT_SERVICE_JOB_OPENED_TEMPLATE,
+      context.kind,
+    );
     const link = internalTicketLink({
       webUrl: this.environment.WEB_URL,
       serviceJobId: input.serviceJobId,

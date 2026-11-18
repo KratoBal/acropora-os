@@ -25,6 +25,7 @@ export function serviceJobDetailRow(
   return {
     id: "job-1",
     jobNumber: "HJ-2026-001",
+    previousNumber: null,
     kind: "REPAIR" as const,
     title: "Szivattyú leállt",
     description: null,

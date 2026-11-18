@@ -1027,6 +1027,45 @@ describe("PilotServiceJobDetailPage -- a karbantartási adatlap nem hibajegy", (
     }
   });
 
+  it("a karbantartási lap látható szövegében nincs hibajegy-szó (üres leírás, nincs fájl, nincs eszköz, napló)", async () => {
+    api.detail.mockResolvedValue(
+      maintenance(["SIGNED"], { description: null, assets: [] }),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" route="karbantartas" />);
+    await screen.findByText("Negyedéves ellenőrzés");
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/hibajegy/i);
+    expect(text).not.toMatch(/bejelent/i);
+    expect(text).not.toMatch(/\bjegy/i);
+    expect(text).toMatch(/Létrehozta: /);
+    expect(text).toMatch(/A karbantartási laphoz nem írtak leírást\./);
+  });
+
+  it("az átszámozott karbantartási lap a régi HJ-számot is mutatja, a többi csak a sajátját", async () => {
+    api.detail.mockResolvedValue(
+      maintenance(["SIGNED"], {
+        jobNumber: "KT-2026-003",
+        previousNumber: "HJ-2026-041",
+      }),
+    );
+    const { unmount } = render(
+      <PilotServiceJobDetailPage jobId="job-1" route="karbantartas" />,
+    );
+    await screen.findByText("Negyedéves ellenőrzés");
+    expect(
+      screen.getByText("KT-2026-003 (régi szám: HJ-2026-041)"),
+    ).toBeTruthy();
+    unmount();
+
+    api.detail.mockResolvedValue(
+      maintenance(["SIGNED"], { jobNumber: "KT-2026-004" }),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" route="karbantartas" />);
+    await screen.findByText("Negyedéves ellenőrzés");
+    expect(screen.getByText("KT-2026-004")).toBeTruthy();
+    expect(screen.queryByText(/régi szám/)).toBeNull();
+  });
+
   it("a szövegek karbantartásiak: vissza a Karbantartás listához, Munkalapok az első blokk", async () => {
     api.detail.mockResolvedValue(maintenance(["SIGNED"]));
     render(<PilotServiceJobDetailPage jobId="job-1" route="karbantartas" />);

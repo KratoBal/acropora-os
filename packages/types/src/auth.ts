@@ -267,6 +267,16 @@ export const PERMISSIONS = {
    */
   SERVICE_HIDE: "service.hide",
   /**
+   * HIBAJEGY VÉGLEGES TÖRLÉSE (Balázs, Luca-Balázs-Acrobot szál, 2026-11-18 11:21 UTC: „egy gombnyomással törölni úgy, hogy feldob egy
+   * figyelmeztető ablakot", és a HJ-2026-039..043 jegyek „véglegesen" törlése).
+   *
+   * SAJÁT JOG, NEM A `SERVICE_MANAGE`, ugyanazért, amiért a `SERVICE_ASSET_DELETE` az: a saját szerelő kollégáink is kapják a
+   * `SERVICE_MANAGE`-et, a törlés viszont visszafordíthatatlan (a jegy, a nem lezárt munkalapjai, a fájljaik és az értesítő-nyom
+   * együtt tűnnek el). OWNER és ADMIN kapja, a MANAGER nem (lásd `BASE_ROLE_PERMISSIONS`). A rejtés (`SERVICE_HIDE`) a
+   * visszafordítható párja; a törlés NEM rejtés: a sor nem marad meg, csak a szám marad foglalva (`ServiceJobDeletion`).
+   */
+  SERVICE_JOB_DELETE: "service.job.delete",
+  /**
    * KI LATHATJA MELYIK ALEGYSEG HIBAJEGYEIT -- A LATHATOSAGI HOZZARENDELES.
    *
    * KULON JOGKOR, ES NEM A `service.manage` alatt, mert MAS FAJTA: a
@@ -391,6 +401,7 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
         permission !== PERMISSIONS.INVENTORY_RECONCILIATION_REPAIR &&
         permission !== PERMISSIONS.SERVICE_WORKSHEET_AMEND &&
         permission !== PERMISSIONS.SERVICE_ASSET_DELETE &&
+        permission !== PERMISSIONS.SERVICE_JOB_DELETE &&
         // A REJTES SEM VEZETOI JOG: Balazs "admin jogos felhasznalot" kert
         // (2026-09-18 11:09 UTC). Egy MANAGER, aki rejthet, csendben kivehetne
         // sorokat masok listajabol -- es a hianyt senki nem keresne, mert a

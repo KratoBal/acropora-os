@@ -1,0 +1,68 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import { ticketTemplateWording } from "./ticket-wording.js";
+
+/*
+  A KARBANTARTÁSI LAP NEM HIBAJEGY A LEVÉLBEN SEM (Balázs, 2026-11-18; acrobot 55810): a levélsablonok szövege MAINTENANCE-nél "karbantartási lap".
+  A sablon SZÖVEGÉN dolgozik (a tárgy, a törzs, a HTML-törzs), a behelyettesítés ELŐTT: a behelyettesített értékek (a jegy címe, a link) érintetlenek.
+  MI PIROSÍT: ha a hibajegy szó MAINTENANCE-nél a levélben marad; ha a hibajegy (REPAIR) szövege megváltozik; ha egy ragozott alak (hibajegyhez,
+  hibajegyet) rossz alakot ad; ha a nagybetűs "Hibajegy:" kisbetűs lesz; ha a szó része egy másik szónak.
+*/
+describe("a levélsablon szava a jegy fajtája szerint", () => {
+  const text = (value: string) => ticketTemplateWording(value, "MAINTENANCE");
+
+  it("a hibajegy és a ragozott alakjai karbantartási lap lesznek, a nagybetű megmarad", () => {
+    assert.equal(
+      text("A(z) {{jegyszam}} számú hibajegyhez tartozó munkalapot aláírták."),
+      "A(z) {{jegyszam}} számú karbantartási laphoz tartozó munkalapot aláírták.",
+    );
+    assert.equal(
+      text("Új hibajegyet rögzített egy ügyfél."),
+      "Új karbantartási lapot rögzített egy ügyfél.",
+    );
+    assert.equal(
+      text("Hibajegy: {{jegy_linkje}}"),
+      "Karbantartási lap: {{jegy_linkje}}",
+    );
+    assert.equal(
+      text("a hibajegyről, a hibajegyen, a hibajegynek, a hibajegyek"),
+      "a karbantartási lapról, a karbantartási lapon, a karbantartási lapnak, a karbantartási lapok",
+    );
+  });
+
+  it("a többi rag is (hibajeggyel, hibajegyre, hibajegyként, hibajegye, hibajegyét, hibajegyig, hibajegyeket)", () => {
+    assert.equal(
+      text(
+        "hibajeggyel, Hibajeggyel, hibajegyre, hibajegyként, a hibajegye, hibajegyét, hibajegyig, hibajegyeket, hibajegyekre",
+      ),
+      "karbantartási lappal, Karbantartási lappal, karbantartási lapra, karbantartási lapként, a karbantartási lapja, karbantartási lapját, karbantartási lapig, karbantartási lapokat, karbantartási lapokra",
+    );
+    // a záró idézőjelig érő útvonal sem szöveg
+    assert.equal(
+      text('<a href="https://os.example/szerviz/hibajegyek">lista</a>'),
+      '<a href="https://os.example/szerviz/hibajegyek">lista</a>',
+    );
+    // egy útvonal vagy összetett név nem szöveg: a statikus link nem íródik át
+    assert.equal(
+      text(
+        '<a href="https://os.example/szerviz/hibajegyek/1">hibajegy-link</a>',
+      ),
+      '<a href="https://os.example/szerviz/hibajegyek/1">hibajegy-link</a>',
+    );
+    // egy másik szó része, vagy ismeretlen toldalék marad
+    assert.equal(
+      text("hibajegyzék, hibajegykezelő"),
+      "hibajegyzék, hibajegykezelő",
+    );
+  });
+
+  it("a hibajegy (REPAIR) szövege és a nem hibajegy szavak változatlanok; az üres marad üres", () => {
+    const original =
+      "Új hibajegyet rögzített egy ügyfél. Hibajegy: {{jegy_linkje}}";
+    assert.equal(ticketTemplateWording(original, "REPAIR"), original);
+    assert.equal(ticketTemplateWording(original, undefined), original);
+    assert.equal(text("hibajegykezelő szerepkör"), "hibajegykezelő szerepkör");
+    assert.equal(text(""), "");
+  });
+});

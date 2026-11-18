@@ -21,10 +21,51 @@
  */
 export const SERVICE_JOB_NUMBER_PREFIX = "HJ";
 
+/**
+ * A KARBANTARTÁSI LAP SZÁMA KT-ÉÉÉÉ-NNN (Balázs, 2026-11-18, Luca-Balázs-Acrobot szál; acrobot 55777, 55781, 55787): a szerződésből keletkező
+ * karbantartás nem hibajegy, a száma sem az. KÜLÖN sorozat (évente 001-ről, ugyanaz a három jegyű alak: az előtag az egyetlen különbség), a
+ * hibajegy (REPAIR) HJ marad. A szám a LÉTREHOZÁS pillanatában kapott fajta szerint keletkezik; egy későbbi fajta-váltás nem számoz át.
+ */
+export type ServiceJobNumberKind = "REPAIR" | "MAINTENANCE";
+
+export const SERVICE_JOB_NUMBER_PREFIXES: Readonly<
+  Record<ServiceJobNumberKind, string>
+> = { REPAIR: SERVICE_JOB_NUMBER_PREFIX, MAINTENANCE: "KT" };
+
 const SEQUENCE_DIGITS = 3;
 
-export function serviceJobNumberPrefix(year: number): string {
-  return `${SERVICE_JOB_NUMBER_PREFIX}-${year}-`;
+export function serviceJobNumberPrefix(
+  year: number,
+  kind: ServiceJobNumberKind = "REPAIR",
+): string {
+  return `${SERVICE_JOB_NUMBER_PREFIXES[kind]}-${year}-`;
+}
+
+/** A sorszám a szám végén (az előtag után), vagy `null`, ha nem értelmezhető. */
+const serialOf = (number: string): number | null => {
+  const tail = number.slice(number.lastIndexOf("-") + 1);
+  const parsed = Number(tail);
+  return Number.isSafeInteger(parsed) && parsed >= 1 ? parsed : null;
+};
+
+/**
+ * A LEGNAGYOBB SZÁM, SZÁMSZERŰEN: az élő és a törölt/felszabadított számok közös maximumához (a törölt szám nem térhet vissza). Számszerű és
+ * nem betűrendi, mert a "…-1000" betűrendben a "…-999" előtt áll. A hiányzó (`null`) kimarad; mind hiányzik: `null`. Azonos előtagú számokat vár.
+ */
+export function latestServiceJobNumber(
+  ...numbers: readonly (string | null | undefined)[]
+): string | null {
+  let best: string | null = null;
+  let bestSerial = -1;
+  for (const number of numbers) {
+    if (!number) continue;
+    const serial = serialOf(number) ?? -1;
+    if (best === null || serial > bestSerial) {
+      best = number;
+      bestSerial = serial;
+    }
+  }
+  return best;
 }
 
 /**
@@ -33,16 +74,21 @@ export function serviceJobNumberPrefix(year: number): string {
  * A `null` az év első jegye. Egy nem értelmezhető sorszám (kézi beavatkozás,
  * importált sor) NEM csendben nullázza a számlálót: inkább dobunk, mert egy
  * újrakezdett sorozat két jegyet adna ugyanazzal a számmal, és azt utólag nem
- * lehet szétválasztani.
+ * lehet szétválasztani. Egy MÁSIK sorozat száma (HJ a KT-hez) sem értelmezhető: dob, nem számol át.
  */
 export function nextServiceJobNumber(input: {
   year: number;
   lastNumber: string | null;
+  kind?: ServiceJobNumberKind;
 }): string {
-  const prefix = serviceJobNumberPrefix(input.year);
+  const prefix = serviceJobNumberPrefix(input.year, input.kind ?? "REPAIR");
   if (input.lastNumber === null)
     return `${prefix}${"1".padStart(SEQUENCE_DIGITS, "0")}`;
 
+  if (!input.lastNumber.startsWith(prefix))
+    throw new Error(
+      `A legutolsó jegyszám (${input.lastNumber}) nem a ${prefix} sorozaté`,
+    );
   const tail = input.lastNumber.slice(prefix.length);
   const parsed = Number(tail);
   if (!Number.isSafeInteger(parsed) || parsed < 1) {
