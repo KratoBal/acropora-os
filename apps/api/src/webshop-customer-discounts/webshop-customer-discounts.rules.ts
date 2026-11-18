@@ -34,6 +34,33 @@ export const personalGroupMetadata = (customerId: string) => ({
   customer_id: customerId,
 });
 
+/** A customer group as the Medusa admin lists it, with its metadata and members. */
+export type MedusaCustomerGroupRow = {
+  id: string;
+  name: string;
+  metadata?: Record<string, unknown> | null;
+  customers?: { id: string }[] | null;
+};
+
+/**
+ * Egy név szerint megtalált csoport akkor hordozhatja a vevő kedvezményét, ha EZ a rendszer hozta létre ennek a vevőnek
+ * (a metaadata egyezik), és rajta kívül senki nincs benne. Egy kézzel létrehozott azonos nevű, vagy kézzel bővített csoport
+ * a kedvezményt másokra is kiterjesztené (barracuda, #2727). Ha a tagokat a webshop nem adja vissza, az sem elég.
+ */
+export function isReusablePersonalGroup(
+  group: MedusaCustomerGroupRow,
+  customerId: string,
+): boolean {
+  const expected = personalGroupMetadata(customerId);
+  return (
+    group.metadata?.acropora_personal_discount ===
+      expected.acropora_personal_discount &&
+    group.metadata?.customer_id === expected.customer_id &&
+    Array.isArray(group.customers) &&
+    group.customers.every((member) => member.id === customerId)
+  );
+}
+
 export type MedusaPersonalPromotionCreate = {
   code: string;
   type: "standard";

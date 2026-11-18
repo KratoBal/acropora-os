@@ -2,6 +2,7 @@ import { medusaAdminBaseUrlFromEnv } from "../integrations/medusa/medusa-admin.c
 import { medusaAdminRequest } from "../webshop-coupons/webshop-coupons.client.js";
 import type { MedusaPromotionRow } from "../webshop-coupons/webshop-coupons.rules.js";
 import type {
+  MedusaCustomerGroupRow,
   MedusaCustomerRow,
   MedusaPersonalPromotionCreate,
 } from "./webshop-customer-discounts.rules.js";
@@ -11,7 +12,7 @@ export interface MedusaCustomerDiscountClient {
   searchCustomers(q: string): Promise<MedusaCustomerRow[]>;
   getCustomer(id: string): Promise<MedusaCustomerRow>;
   customersByIds(ids: string[]): Promise<MedusaCustomerRow[]>;
-  findGroupByName(name: string): Promise<{ id: string } | null>;
+  findGroupByName(name: string): Promise<MedusaCustomerGroupRow | null>;
   createGroup(
     name: string,
     metadata: Record<string, string>,
@@ -87,11 +88,15 @@ export class HttpMedusaCustomerDiscountClient implements MedusaCustomerDiscountC
     );
   }
 
-  async findGroupByName(name: string): Promise<{ id: string } | null> {
-    const params = new URLSearchParams({ name, fields: "id,name", limit: "2" });
+  async findGroupByName(name: string): Promise<MedusaCustomerGroupRow | null> {
+    const params = new URLSearchParams({
+      name,
+      fields: "id,name,metadata,customers.id",
+      limit: "2",
+    });
     const groups =
       (
-        await this.request<{ customer_groups: { id: string; name: string }[] }>(
+        await this.request<{ customer_groups: MedusaCustomerGroupRow[] }>(
           `/admin/customer-groups?${params.toString()}`,
         )
       ).customer_groups ?? [];
