@@ -53,16 +53,14 @@ beforeEach(() => {
   api.list
     .mockReset()
     .mockResolvedValue({ discounts: [discount()], truncated: false });
-  api.searchCustomers
-    .mockReset()
-    .mockResolvedValue([
-      {
-        id: "cus_01JBBBBBBB99",
-        email: "bela@example.test",
-        name: "Minta Béla",
-        hasAccount: true,
-      },
-    ]);
+  api.searchCustomers.mockReset().mockResolvedValue([
+    {
+      id: "cus_01JBBBBBBB99",
+      email: "bela@example.test",
+      name: "Minta Béla",
+      hasAccount: true,
+    },
+  ]);
   api.set.mockReset();
   api.setActive.mockReset();
 });
