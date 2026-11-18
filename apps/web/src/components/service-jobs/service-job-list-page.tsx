@@ -63,17 +63,11 @@ export const MAINTENANCE_JOB_TABLE_MIN_WIDTH = 1040;
   a kezelő nem tudja, mit olvas a másik fél.
 */
 /**
- * HOVÁ VISZ A KARBANTARTÁS-LISTA SORA (Luca és Balázs, 2026-11-18; acrobot 55781): ha a lapnak PONTOSAN EGY munkalapja van, közvetlenül azt
- * nyitja (a karbantartás munkalapként jelenik meg, nincs kitérő); több (vagy nulla) munkalapnál a karbantartási lap adatlapját. A
- * karbantartási lap nem hibajegy: a sor sosem a `/szerviz/hibajegyek` alá visz.
+ * HOVÁ VISZ A KARBANTARTÁS-LISTA SORA: MINDIG A KARBANTARTÁSI LAPRA (Luca, 2026-11-18 14:43:46 UTC; acrobot 55968: „a karbantartási lapra kattintva ne a munkalapra vigyen, hanem
+ * magára a lapra”). Az 55781-es kitérő (az egyetlen munkalapos sor a munkalapot nyitotta) megszűnt. A karbantartási lap nem hibajegy: a sor sosem a `/szerviz/hibajegyek` alá visz.
  */
-export const maintenanceSheetHref = (job: {
-  id: string;
-  soleWorksheetId?: string | null;
-}): string =>
-  job.soleWorksheetId
-    ? `/szerviz/munkalapok/${job.soleWorksheetId}`
-    : `/szerviz/karbantartas/${job.id}`;
+export const maintenanceSheetHref = (job: { id: string }): string =>
+  `/szerviz/karbantartas/${job.id}`;
 
 export const MAINTENANCE_JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
   {

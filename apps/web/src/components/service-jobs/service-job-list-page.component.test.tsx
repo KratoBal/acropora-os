@@ -110,11 +110,11 @@ describe("ServiceJobListPage", () => {
   });
 
   /*
-    A KARBANTARTÁS-LISTA SORA (Luca és Balázs, 2026-11-18; acrobot 55781): pontosan EGY munkalapnál közvetlenül a munkalapot nyitja, több
-    (vagy nulla) munkalapnál a karbantartási lap adatlapját; SOSEM a hibajegyek alá. MI PIROSÍT: ha a sor a hibajegy-adatlapra visz; ha az
-    egyetlen munkalapnál nem a munkalapot nyitja; ha több munkalapnál mégis azt.
+    A KARBANTARTÁS-LISTA SORA MINDIG A KARBANTARTÁSI LAPOT NYITJA (Luca, 2026-11-18 14:43:46 UTC, acrobot 55968: „a karbantartási lapra kattintva ne a munkalapra vigyen, hanem magára
+    a lapra”; ez felváltja az 55781-es megoldást, ahol az egyetlen munkalapos sor a munkalapot nyitotta). MI PIROSÍT: ha a sor a hibajegy-adatlapra visz; ha az egyetlen
+    munkalapos sor a munkalapot nyitja a lap helyett.
   */
-  it("a sor egy munkalapnál a munkalapot, többnél a karbantartási lapot nyitja, soha nem a hibajegyet", async () => {
+  it("a sor mindig a karbantartási lapot nyitja (egy, több és nulla munkalapnál is), soha a munkalapot vagy a hibajegyet", async () => {
     const base = response().items[0]!;
     api.list.mockResolvedValue(
       response({
@@ -125,7 +125,6 @@ describe("ServiceJobListPage", () => {
             title: "Egy munkalapos karbantartás",
             kind: "MAINTENANCE",
             worksheetCount: 1,
-            soleWorksheetId: "ws-1",
           },
           {
             ...base,
@@ -133,7 +132,6 @@ describe("ServiceJobListPage", () => {
             title: "Két munkalapos karbantartás",
             kind: "MAINTENANCE",
             worksheetCount: 2,
-            soleWorksheetId: null,
           },
           {
             ...base,
@@ -149,7 +147,7 @@ describe("ServiceJobListPage", () => {
     const href = async (name: string) =>
       (await screen.findByRole("link", { name })).getAttribute("href");
     expect(await href("Egy munkalapos karbantartás")).toBe(
-      "/szerviz/munkalapok/ws-1",
+      "/szerviz/karbantartas/job-1",
     );
     expect(await href("Két munkalapos karbantartás")).toBe(
       "/szerviz/karbantartas/job-2",

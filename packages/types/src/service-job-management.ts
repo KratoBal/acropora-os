@@ -119,12 +119,6 @@ export interface ServiceJobListItem {
   assigneeNames?: string[];
   worksheetCount: number;
   /**
-   * A JEGY EGYETLEN MUNKALAPJÁNAK AZONOSÍTÓJA (Luca és Balázs, 2026-11-18; acrobot 55781): ha a jegynek PONTOSAN EGY munkalapja van,
-   * a Karbantartás lista sora közvetlenül azt nyitja, nem a jegy adatlapját. Több vagy nulla munkalapnál `null`; hiányzik, ha a
-   * válasz nem hordozza. A PARTNER VÁLASZÁBAN NINCS (`partnerServiceJobListItem` elhagyja): a partner a saját útján éri el a lapjait.
-   */
-  soleWorksheetId?: string | null;
-  /**
    * A KARBANTARTÁS ÁLLAPOTA A LISTÁN (Balázs, 2026-11-18 11:31; acrobot 55782): minden munkalap aláírva (a munkalap LEGUTOLSÓ verziója
    * aláírt) = `true`, különben `false`. Csak a MAINTENANCE sorokon van; a hibajegyén nincs (annak az állapotgép az állapota).
    */
@@ -963,7 +957,7 @@ export type ServiceJobPartnerTimelineEntry =
 export function partnerServiceJobListItem(
   item: ServiceJobListItem,
 ): ServiceJobListItem {
-  const { assignees, soleWorksheetId: _soleWorksheetId, ...partner } = item;
+  const { assignees, ...partner } = item;
   return {
     ...partner,
     assigneeNames: (assignees ?? []).map((assignee) => assignee.name),

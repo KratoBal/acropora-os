@@ -211,12 +211,12 @@ describe("a hibajegy-lista partner alakja", () => {
 });
 
 /*
-  A KARBANTARTÁS-LISTA SORA PONTOSAN EGY MUNKALAPNÁL A MUNKALAPOT NYITJA (Luca és Balázs, 2026-11-18, Luca-Balázs-Acrobot szál; acrobot
-  55781): a lista sora ehhez a jegy egyetlen munkalapjának azonosítóját kapja. MI PIROSÍT: ha a mező nem megy át a belső listába; ha több
-  vagy nulla munkalapnál nem `null`; ha a partner a munkalap azonosítóját is megkapja (a partner a saját utján éri el a lapjait).
+  A KARBANTARTÁS ÁLLAPOTA A LISTÁBAN (Balázs, 2026-11-18; acrobot 55782). A lista sora a karbantartási lapot nyitja (Luca, 14:43:46, acrobot 55968), ezért az egyetlen
+  munkalap azonosítója (`soleWorksheetId`, 55781) megszűnt: a mező és a mögötte álló lekérdezés nincs többé. MI PIROSÍT: ha a mező visszakerül a belső vagy a partner
+  válaszba; ha a karbantartás állapota nem megy át a listába.
 */
-describe("a hibajegy-lista egyetlen munkalapja", () => {
-  const sor = (id: string, soleWorksheetId: string | null, count: number) => ({
+describe("a karbantartás-lista sora", () => {
+  const sor = (id: string, count: number) => ({
     id,
     jobNumber: `HJ-2026-${id}`,
     title: "Karbantartás",
@@ -228,7 +228,6 @@ describe("a hibajegy-lista egyetlen munkalapja", () => {
     assignees: [],
     createdAt: new Date("2026-11-18T09:00:00.000Z"),
     worksheetCount: count,
-    soleWorksheetId,
     hiddenAt: null,
   });
   const counts = {
@@ -244,31 +243,29 @@ describe("a hibajegy-lista egyetlen munkalapja", () => {
   const service = () =>
     new ServiceJobsService({
       list: async () => ({
-        rows: [sor("1", "ws-1", 1), sor("2", null, 2), sor("3", null, 0)],
+        rows: [sor("1", 1), sor("2", 2), sor("3", 0)],
         truncated: false,
       }),
       countsByStatus: async () => counts,
       assignedUnitIds: async () => [],
     } as unknown as ServiceJobsRepository);
 
-  it("a belső lista hordozza az egyetlen munkalap azonosítóját, több vagy nulla munkalapnál null", async () => {
+  it("a belső lista sem hordozza az egyetlen munkalap azonosítóját", async () => {
     const response = await service().list({}, {
       id: "office-user",
       role: "ADMIN",
     } as AuthenticatedUser);
-    assert.deepEqual(
-      response.items.map((item) => item.soleWorksheetId),
-      ["ws-1", null, null],
-    );
+    for (const item of response.items)
+      assert.equal("soleWorksheetId" in item, false);
   });
 
   it("a karbantartás állapota (minden munkalap aláírva) átmegy a listába, hibajegynél hiányzik", async () => {
     const response = await new ServiceJobsService({
       list: async () => ({
         rows: [
-          { ...sor("1", "ws-1", 1), maintenanceDone: true },
-          { ...sor("2", null, 2), maintenanceDone: false },
-          { ...sor("3", null, 0), kind: "REPAIR" as const },
+          { ...sor("1", 1), maintenanceDone: true },
+          { ...sor("2", 2), maintenanceDone: false },
+          { ...sor("3", 0), kind: "REPAIR" as const },
         ],
         truncated: false,
       }),
@@ -284,7 +281,7 @@ describe("a hibajegy-lista egyetlen munkalapja", () => {
     );
   });
 
-  it("a partner válaszában a munkalap azonosítója nem szerepel", async () => {
+  it("a partner válaszában sincs munkalap-azonosító", async () => {
     const response = await service().list({}, {
       id: "partner-user",
       role: "PARTNER_SERVICE",
