@@ -47,6 +47,7 @@ import { ServiceOfflineNotice } from "@/components/service/service-offline-notic
 import { PilotDelegatedColleaguesCard } from "./pilot-delegated-colleagues-card";
 import { ServiceJobPlacementEditor } from "../service-job-placement-editor";
 import { ServiceJobFieldsEditor } from "../service-job-fields-editor";
+import { ServiceJobDelete } from "../service-job-delete";
 import { CompletionCertificatePanel } from "../completion-certificate-panel";
 import { MaintenanceInvoicePanel } from "../maintenance-invoice-panel";
 import { MaintenancePackagePanel } from "../maintenance-package-panel";
@@ -332,6 +333,9 @@ export function PilotServiceJobDetailPage({
   );
   const canHide = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_HIDE),
+  );
+  const canDelete = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.SERVICE_JOB_DELETE),
   );
   const token = session?.token ?? "";
 
@@ -1444,6 +1448,29 @@ export function PilotServiceJobDetailPage({
               serviceJobId={job.id}
               jobNumber={job.jobNumber}
             />
+          ) : null}
+          {/*
+            A VÉGLEGES TÖRLÉS (Balázs, 2026-11-18; acrobot 55766): mindkét fajtán, a Kezelés blokktól külön (az a karbantartási lapon nincs). A jog szigorúbb a
+            kezelésnél (`service.job.delete`); a gomb előnézetet kér, és megerősítés után töröl; a lista a törlés után nyílik.
+          */}
+          {canDelete ? (
+            <PilotCard>
+              <PilotCardHeader title="Törlés" />
+              <div className="space-y-3 px-5 py-4">
+                <p className="text-xs text-pilot-grey-500">
+                  {maintenance
+                    ? "A karbantartási lap a munkalapjaival együtt véglegesen törölhető, amíg nincs lezárva vagy aláírva."
+                    : "A hibajegy a munkalapjaival együtt véglegesen törölhető, amíg nincs lezárva vagy aláírva."}
+                </p>
+                <ServiceJobDelete
+                  token={token}
+                  jobId={jobId}
+                  onDeleted={() =>
+                    router.push(maintenance ? maintenanceListHref : listHref)
+                  }
+                />
+              </div>
+            </PilotCard>
           ) : null}
         </div>
       </div>

@@ -3,6 +3,8 @@ import {
   DOCUMENT_VARIANT_PARAM,
 } from "@acropora/types";
 import type {
+  ServiceJobDeletePreview,
+  ServiceJobDeleteResult,
   ServiceJobDetail,
   ServiceJobDocumentSummary,
   ServiceJobDocumentType,
@@ -459,6 +461,20 @@ export const serviceJobsApi = {
    * mozditja, a reszletlap pedig ugyis ujratoltodik utana. Egy fel-frissitett
    * reszlet-objektum visszaadasa azt igerne, hogy a tobbi mezo is friss.
    */
+  /** A TÖRLÉS ELŐNÉZETE (acrobot 55766): mit töröl a gomb, szabad-e. A törlés a szerveren újra dönt. */
+  deletePreview(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<ServiceJobDeletePreview>(
+      jobPath(id, "/delete-preview"),
+      token,
+      { signal },
+    );
+  },
+  /** A HIBAJEGY VÉGLEGES TÖRLÉSE (409 az okkal, ha nem szabad). */
+  deleteJob(token: string, id: string) {
+    return apiRequest<ServiceJobDeleteResult>(jobPath(id, ""), token, {
+      method: "DELETE",
+    });
+  },
   setHidden(token: string, id: string, hidden: boolean) {
     return apiRequest<void>(jobPath(id, "/hidden"), token, {
       method: "POST",
