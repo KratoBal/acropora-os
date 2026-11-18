@@ -1,4 +1,10 @@
 import type {
+  MedusaRedirectPlanChange,
+  MedusaRedirectPlanRow,
+  MedusaRedirectPlanView,
+} from "@acropora/types";
+
+import type {
   MedusaAdminClient,
   MedusaUrlRedirect,
 } from "./medusa-admin.client.js";
@@ -7,45 +13,15 @@ import {
   redirectRetargetedOf,
   redirectRowsOf,
   urlRedirectsHash,
-  type RedirectRetargeted,
   type RedirectSource,
 } from "./medusa-redirect-projection.js";
 
 /** Egy fajta különbségből legfeljebb ennyi példa jön a válaszban (a darabszám a TELJES). */
 export const PLAN_EXAMPLES_LIMIT = 20;
 
-export interface RedirectPlanRow {
-  source: string;
-  destination: string;
-  status: number;
-}
-
-export interface RedirectPlanChange {
-  source: string;
-  from: { destination: string; status: number };
-  to: { destination: string; status: number };
-}
-
-export interface MedusaRedirectPlanView {
-  /**
-   * `in-sync`: a bolt listája már ez, a vetítés nem küldene; `would-send`: eltérés van, az `--apply` a TELJES listát cserélné; `refused`: lánc van
-   * a listában, a vetítés NEM küld (az ok a `refusedReason`).
-   */
-  state: "in-sync" | "would-send" | "refused";
-  refusedReason: string | null;
-  localCount: number;
-  remoteCount: number;
-  localHash: string;
-  remoteHash: string;
-  /** Csak az OS-ben van (a forrás kis-nagybetű nélkül): a bolt újként kapná. */
-  added: { count: number; examples: RedirectPlanRow[] };
-  /** Ugyanaz a forrás más céllal vagy státusszal. */
-  changed: { count: number; examples: RedirectPlanChange[] };
-  /** Csak a boltban van: a teljes csere miatt EL FOG TŰNNI. */
-  removed: { count: number; examples: RedirectPlanRow[] };
-  unchanged: number;
-  retargeted: RedirectRetargeted;
-}
+export type RedirectPlanRow = MedusaRedirectPlanRow;
+export type RedirectPlanChange = MedusaRedirectPlanChange;
+export type { MedusaRedirectPlanView };
 
 const key = (row: MedusaUrlRedirect) => row.source_path.toLowerCase();
 const plain = (row: MedusaUrlRedirect): RedirectPlanRow => ({

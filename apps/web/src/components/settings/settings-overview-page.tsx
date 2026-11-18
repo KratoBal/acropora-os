@@ -314,6 +314,14 @@ export const WEBSHOP_SETTINGS_AREAS: SettingsArea[] = [
         href: "/admin/integrations/medusa/price-stops",
         permission: PERMISSIONS.INVENTORY_VIEW,
       },
+      {
+        // a vetítés terve (task t-20261118-vetites-oldal): mit változtatna a következő átirányítás-vetítés a bolt listáján; menüpont nincs, a végpont INVENTORY_VIEW-t kér
+        label: "Átirányítások vetítése",
+        description:
+          "Mit változtatna a következő vetítés a webshop átirányítás-listáján: új, módosuló és eltűnő sorok.",
+        href: "/admin/integrations/medusa/redirect-plan",
+        permission: PERMISSIONS.INVENTORY_VIEW,
+      },
     ],
   },
   {
