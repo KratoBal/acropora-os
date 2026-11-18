@@ -59,10 +59,8 @@ export function cachedMaintenanceForTab(
   if (tab === "all") return { items: rows, unknown };
   const done = tab === "done";
   return {
-    items: rows.filter(
-      (item) =>
-        item.maintenanceDone !== undefined && item.maintenanceDone === done,
-    ),
+    // `=== done` (nem `Boolean(...)`): az ismeretlen (`undefined`) sem a `true`, sem a `false` fülhöz nem egyenlő
+    items: rows.filter((item) => item.maintenanceDone === done),
     unknown,
   };
 }

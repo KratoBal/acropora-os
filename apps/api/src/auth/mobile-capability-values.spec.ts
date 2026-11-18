@@ -453,3 +453,53 @@ test("every tile the phone maps names an entry the source actually has", () => {
       kirajzolatlanok.join(", "),
   );
 });
+
+/**
+ * A SCREEN-BACKED TILE'S ENTRY MUST BE SERVED TO THE PHONE (acrobot 56224, the Karbantartás tile).
+ *
+ * A tile that opens a screen names a menu entry (`TILE_ENTRY`), and the server serves the phone only the entries with the `mobile` surface. An entry left on `["web"]` makes
+ * the tile vanish for EVERYONE, with no error anywhere: the phone looks the entry up, does not find it, and skips it, exactly like a legitimate omission. The two directions
+ * above do not see it (the entry exists, and the tile exists). Tiles with no screen (`route: null`: Beszerzés, Termékek, NAV) are never drawn, so their entries may stay web-only.
+ */
+test("every tile that opens a screen names an entry with the mobile surface", () => {
+  const modulok = readFileSync("../mobile/src/lib/home/modules.ts", "utf8");
+  const tabla = /export const HOME_MODULES[^=]*=\s*\{([\s\S]*?)\n\};/.exec(
+    modulok,
+  );
+  assert.ok(tabla, "Nem találtam a HOME_MODULES táblát.");
+  const kepernyosek = [
+    ...tabla![1]!.matchAll(/\n  (\w+): \{[\s\S]*?route: ("[^"]*"|null),/g),
+  ]
+    .filter((hit) => hit[2] !== "null")
+    .map((hit) => hit[1]!);
+  // A KERESÉS KONTROLLJA: ha a minta elromlik, ez az állítás áll meg elsőnek, és a keresést nevezi meg.
+  assert.ok(
+    kepernyosek.length >= 9,
+    `Csak ${kepernyosek.length} képernyős csempét találtam. Ez a keresés hibája.`,
+  );
+
+  const source = readFileSync(TILE_MAP, "utf8");
+  const match = /const TILE_ENTRY = \{([\s\S]*?)\} as const;/.exec(source);
+  assert.ok(match, "Nem találtam a telefon TILE_ENTRY képzését.");
+  const tetelOf = new Map(
+    [...match![1]!.matchAll(/(\w+):\s*"([^"]+)"/g)].map((hit) => [
+      hit[1]!,
+      hit[2]!,
+    ]),
+  );
+  const webOnly = kepernyosek
+    .map((kod) => ({ kod, tetel: tetelOf.get(kod) }))
+    .filter(
+      ({ tetel }) =>
+        !NAVIGATION_ENTRIES.some(
+          (entry) => entry.id === tetel && entry.surfaces.includes("mobile"),
+        ),
+    )
+    .map(({ kod, tetel }) => `${kod} -> ${tetel}`);
+  assert.deepEqual(
+    webOnly,
+    [],
+    "Ezek a csempék képernyőre vezetnek, de a menütételük nem mobil felületű, tehát a szerver nem adja ki a telefonnak, és a csempe mindenkinek eltűnik: " +
+      webOnly.join(", "),
+  );
+});
