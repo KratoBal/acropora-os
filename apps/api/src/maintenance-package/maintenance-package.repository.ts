@@ -16,7 +16,7 @@ export class MaintenancePackageRepository {
    * is. A karbantartási csomagnak nincs értelmezhető válasza egy hibajegyre.
    */
   async packageData(id: string) {
-    return this.database.serviceJob.findFirst({
+    const job = await this.database.serviceJob.findFirst({
       where: { id, kind: "MAINTENANCE" },
       select: {
         id: true,
@@ -64,18 +64,6 @@ export class MaintenancePackageRepository {
           select: {
             id: true,
             number: true,
-            // BOTH COPIES, the newest first (Luca, 2026-11-18): the SIGNED one goes into the package, the ISSUED one when there is no signed one; the service picks.
-            // The send gate still wants the signed one.
-            documents: {
-              where: { type: { in: ["SIGNED_FORM", "GENERATED_FORM"] } },
-              orderBy: { createdAt: "desc" },
-              select: {
-                type: true,
-                fileName: true,
-                contentType: true,
-                content: true,
-              },
-            },
             /*
               CSAK A VALÓDI KIÁLLÍTÁS SZÁMÍT ITT -- egy DRAFT (előnézeti)
               piszkozat NEM elégíti ki a küldés kapuját (ADR-014, 4. szelet):
@@ -91,5 +79,31 @@ export class MaintenancePackageRepository {
         },
       },
     });
+    if (!job) return null;
+    if (!job.completionCertificate)
+      return { ...job, completionCertificate: null };
+    // THE CERTIFICATE'S TWO COPIES, one query each with `take 1` semantics (Luca, 2026-11-18; barracuda, #2696 review): the SIGNED one goes into the package, the ISSUED one when there is
+    // no signed one. A single select over both types would load the BYTES of every uploaded signed copy (the upload can be repeated) into memory; the service picks signed else issued.
+    const certificateId = job.completionCertificate.id;
+    const latest = (type: "SIGNED_FORM" | "GENERATED_FORM") =>
+      this.database.completionCertificateDocument.findFirst({
+        where: { certificateId, type },
+        orderBy: { createdAt: "desc" },
+        select: {
+          type: true,
+          fileName: true,
+          contentType: true,
+          content: true,
+        },
+      });
+    const documents = (
+      await Promise.all([latest("SIGNED_FORM"), latest("GENERATED_FORM")])
+    ).filter(
+      (document): document is NonNullable<typeof document> => document !== null,
+    );
+    return {
+      ...job,
+      completionCertificate: { ...job.completionCertificate, documents },
+    };
   }
 }
