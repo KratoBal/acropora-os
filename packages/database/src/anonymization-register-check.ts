@@ -23,6 +23,8 @@ const IN_SCOPE_TYPE = /^(String|Json|Bytes|Unsupported\("[^"]*"\))$/;
 
 const KNOWN_TOP_LEVEL_BLOCKS = new Set([
   "model",
+  // a view (a9db2779): read like a model, so its text columns need a decision too; it stores no rows, the stage runner skips it
+  "view",
   "enum",
   "generator",
   "datasource",
@@ -46,6 +48,8 @@ export interface SchemaField {
 export interface SchemaModel {
   readonly name: string;
   readonly fields: readonly SchemaField[];
+  /** A `view` block: a stored query over other tables. It has no rows of its own to page or rewrite. */
+  readonly isView: boolean;
 }
 
 /** Removes a trailing `//` comment that is not inside a string literal. */
@@ -63,7 +67,8 @@ function stripLineComment(text: string): string {
 
 export function parseSchemaModels(schema: string): SchemaModel[] {
   const models: SchemaModel[] = [];
-  let current: { name: string; fields: SchemaField[] } | null = null;
+  let current: { name: string; fields: SchemaField[]; isView: boolean } | null =
+    null;
   let otherBlock = false;
   let inBlockComment = false;
 
@@ -94,7 +99,8 @@ export function parseSchemaModels(schema: string): SchemaModel[] {
           `schema.prisma:${lineNumber}: unknown block "${keyword} ${name}"; the anonymization register check only knows models, so it refuses to guess`,
         );
       }
-      if (keyword === "model") current = { name, fields: [] };
+      if (keyword === "model" || keyword === "view")
+        current = { name, fields: [], isView: keyword === "view" };
       else otherBlock = true;
       return;
     }

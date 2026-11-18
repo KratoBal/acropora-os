@@ -72,6 +72,28 @@ model Pair {
 `;
 
 describe("the schema read", () => {
+  it("skips a view: it stores no rows, and a relation field to it is not a column (a9db2779)", () => {
+    const schema = `model Sheet {
+  id     String       @id @default(cuid())
+  latest SheetLatest?
+}
+
+view SheetLatest {
+  sheetId String @unique
+  version Int
+  sheet   Sheet  @relation(fields: [sheetId], references: [id])
+}
+`;
+    assert.deepEqual(
+      adapterModels(schema).map((model) => [
+        model.name,
+        model.columns.map((column) => column.field),
+      ]),
+      [["Sheet", ["id"]]],
+    );
+    assert.deepEqual(adapterRelations(schema), []);
+  });
+
   it("keys, pages and writes every model of the REAL schema, and reads the one @map and the Unsupported column", () => {
     const models = adapterModels(REAL_SCHEMA);
     assert.ok(models.length > 250, `only ${models.length} models`);

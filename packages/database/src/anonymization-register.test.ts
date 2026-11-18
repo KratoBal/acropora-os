@@ -36,7 +36,8 @@ describe("anonymization register against prisma/schema.prisma", () => {
    * register.
    */
   it("sees every model and every in-scope field the file declares", () => {
-    const modelCount = schema.match(/^model \w+ \{/gm)?.length ?? 0;
+    // a view is read like a model (its text columns need a decision too), so it counts here (a9db2779)
+    const modelCount = schema.match(/^(?:model|view) \w+ \{/gm)?.length ?? 0;
     const fieldCount =
       schema.match(
         /^[ \t]+\w+[ \t]+(String|Json|Bytes|Unsupported\("[^"]*"\))(\[\])?\??([ \t]|$)/gm,
@@ -208,8 +209,42 @@ model Page {
 
   it("refuses a top-level block it does not know", () => {
     assert.throws(
-      () => parseSchemaModels("view CustomerView {\n  email String\n}\n"),
-      /unknown block "view CustomerView"/,
+      () => parseSchemaModels("type CustomerType {\n  email String\n}\n"),
+      /unknown block "type CustomerType"/,
+    );
+  });
+
+  /**
+   * A VIEW IS NOT WAVED THROUGH (a9db2779). It was refused as unknown until a schema needed one; now it is read like a model, so a
+   * text column it exposes (`email String`) needs a decision exactly as on a table, and a foreign key on it inherits one.
+   */
+  it("reads a view like a model: its text column needs a decision, its foreign key inherits one", () => {
+    const schema = `model Customer {
+  id    String @id @default(cuid())
+  email String
+}
+
+view CustomerView {
+  customerId String @unique
+  email      String
+  customer   Customer @relation(fields: [customerId], references: [id])
+}
+`;
+    const models = parseSchemaModels(schema);
+    assert.deepEqual(
+      models.map((model) => [model.name, model.isView]),
+      [
+        ["Customer", false],
+        ["CustomerView", true],
+      ],
+    );
+    const result = checkRegister(schema, { Customer: { email: "email" } });
+    assert.deepEqual(result.problems, [
+      "CustomerView.email (String, schema.prisma:8) has no anonymization decision",
+    ]);
+    assert.equal(
+      result.decisions.get("CustomerView.customerId")?.source.by,
+      "foreign-key",
     );
   });
 
