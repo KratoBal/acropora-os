@@ -10,6 +10,7 @@ import {
   operationsGroupId,
   perAssetFields,
   sharedFields,
+  sharedSectionTitle,
 } from "./group-form";
 import type { OperationsTemplate, OperationsTemplateField } from "./types";
 
@@ -301,6 +302,143 @@ describe("a csoport bejegyzései", () => {
     if (!missing.ok) {
       assert.equal(missing.field, "asset:a3:anomalyNote");
       assert.match(missing.message, /^Homokszűrő 3: /);
+    }
+  });
+});
+
+/*
+  EGYSÉGES RÖGZÍTÉS (kártya d2222173; Balázs, 2026-11-18 08:42 UTC: a csoportos bejegyzésnél az időpontokat egyszer kelljen beírni, minden
+  eszköz megkapja). A sablon `uniformRecording` kapcsolója. MI PIROSIT: ha bekapcsolva egy szám, igen/nem vagy szöveg mező eszközönként
+  maradna; ha a fénykép vagy a rendellenesség közössé válna (egy kép egy eszközt mutat, egy hibajegy egy eszközhöz tartozik); ha a közös
+  érték nem kerülne MINDEN bejegyzésre; ha a közös kötelező mező hibája eszköz-névvel jönne; ha kikapcsolva vagy HIÁNYZÓ mezővel (régebbi
+  szerver, régi gyorsítótár a telefonon) bármi másképp menne, mint eddig.
+*/
+const uniform = (on: boolean | undefined): OperationsTemplate => {
+  const base = template("t1", {
+    fields: [
+      field("elotte", "NUMBER", {
+        unit: "m3",
+        meterRole: "BEFORE",
+        required: true,
+      }),
+      field("utana", "NUMBER", {
+        unit: "m3",
+        meterRole: "AFTER",
+        required: true,
+      }),
+      field("visszamosas", "NUMBER", { unit: "perc", required: true }),
+      field("rendben", "BOOLEAN"),
+      field("megjegyzes", "TEXT"),
+      field("kep", "PHOTO"),
+    ],
+  });
+  return on === undefined ? base : { ...base, uniformRecording: on };
+};
+const FILE = { uri: "file:///k.jpg", name: "k.jpg", type: "image/jpeg" };
+
+describe("egységes rögzítés: a sablon kapcsolója", () => {
+  it("bekapcsolva minden szám, igen/nem és szöveg mező közös, a fénykép eszközönként marad", () => {
+    const t = uniform(true);
+    assert.deepEqual(
+      sharedFields(t).map((f) => f.key),
+      ["elotte", "utana", "visszamosas", "rendben", "megjegyzes"],
+    );
+    assert.deepEqual(
+      perAssetFields(t).map((f) => f.key),
+      ["kep"],
+    );
+    assert.equal(sharedSectionTitle(t), "Közös értékek");
+  });
+
+  it("bekapcsolva egy ismeretlen mezőtípus (újabb szerver) eszközönként marad: a közös a fehér lista, nem a fénykép kizárása", () => {
+    const t = uniform(true);
+    const unknown = {
+      ...field("datum", "TEXT"),
+      type: "DATE",
+    } as unknown as OperationsTemplateField;
+    const withUnknown = { ...t, fields: [...t.fields, unknown] };
+    assert.deepEqual(
+      perAssetFields(withUnknown).map((f) => f.key),
+      ["kep", "datum"],
+    );
+  });
+
+  it("kikapcsolva és HIÁNYZÓ mezővel ugyanúgy, mint eddig: csak a vízóra közös", () => {
+    for (const t of [uniform(false), uniform(undefined)]) {
+      assert.deepEqual(
+        sharedFields(t).map((f) => f.key),
+        ["elotte", "utana"],
+      );
+      assert.deepEqual(
+        perAssetFields(t).map((f) => f.key),
+        ["visszamosas", "rendben", "megjegyzes", "kep"],
+      );
+      assert.equal(sharedSectionTitle(t), "Közös vízóra");
+    }
+  });
+
+  it("bekapcsolva a közös érték egyszer beírva MINDEN bejegyzésre rákerül; a fénykép és a rendellenesség eszközönként", () => {
+    const form = emptyGroupForm(assets);
+    form.startedAt = STARTED;
+    form.shared = {
+      elotte: "100",
+      utana: "112,5",
+      visszamosas: "6",
+      rendben: true,
+      megjegyzes: "mindhárom egyszerre",
+    };
+    form.perAsset.a2!.photos = { kep: [FILE] };
+    form.perAsset.a3!.anomaly = true;
+    form.perAsset.a3!.anomalyNote = "kopog";
+    const built = buildGroupEntries({
+      template: uniform(true),
+      assets,
+      form,
+      now: NOW,
+    });
+    assert.equal(built.ok, true);
+    if (!built.ok) return;
+    for (const entry of built.entries) {
+      assert.equal(entry.payload.values.visszamosas, 6);
+      assert.equal(entry.payload.values.rendben, true);
+      assert.equal(entry.payload.values.megjegyzes, "mindhárom egyszerre");
+      assert.equal(entry.payload.values.elotte, 100);
+    }
+    assert.deepEqual(
+      built.entries.map((entry) => entry.photos.length),
+      [0, 1, 0],
+    );
+    assert.deepEqual(
+      built.entries.map((entry) => entry.payload.anomaly),
+      [false, false, true],
+    );
+  });
+
+  it("bekapcsolva a hiányzó közös kötelező mező hibája közös helyen jön, eszköz-név nélkül; kikapcsolva eszközönként, a névvel", () => {
+    const form = emptyGroupForm(assets);
+    form.startedAt = STARTED;
+    form.shared = { elotte: "100", utana: "112,5" };
+    const on = buildGroupEntries({
+      template: uniform(true),
+      assets,
+      form,
+      now: NOW,
+    });
+    assert.equal(on.ok, false);
+    if (!on.ok) {
+      assert.equal(on.field, "shared:visszamosas");
+      assert.doesNotMatch(on.message, /^Homokszűrő/);
+    }
+    const off = buildGroupEntries({
+      template: uniform(undefined),
+      assets,
+      form,
+      now: NOW,
+    });
+    assert.equal(off.ok, false);
+    if (!off.ok) {
+      assert.equal(off.field, "asset:a1:visszamosas");
+      assert.match(off.message, /^Homokszűrő 1: /);
     }
   });
 });

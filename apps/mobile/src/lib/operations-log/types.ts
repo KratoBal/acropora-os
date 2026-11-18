@@ -28,6 +28,11 @@ export interface OperationsTemplate {
   frequency: OperationsTaskFrequency;
   /** Az AKTÍV mezők, a megadott sorrendben. */
   fields: OperationsTemplateField[];
+  /**
+   * „Egységes rögzítés” (kártya d2222173): csoportos bejegyzésnél a szám, igen/nem és szöveg mezőket egyszer írják be, és minden eszköz
+   * megkapja. HIÁNYZÓ mező (régebbi szerver, vagy a telefon régi gyorsítótára): kikapcsolt.
+   */
+  uniformRecording?: boolean;
   /** A sablon utolsó módosítása: az offline gyorsítótár ebből látja, hogy elavult-e. */
   updatedAt: string;
 }
