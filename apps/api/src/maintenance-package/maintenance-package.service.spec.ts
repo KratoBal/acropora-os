@@ -52,6 +52,7 @@ function job(overrides: Record<string, unknown> = {}) {
       number: "ALT-2026-001",
       documents: [
         {
+          type: "SIGNED_FORM",
           fileName: "igazolas-alairt.pdf",
           contentType: "application/pdf",
           content: Buffer.from("%PDF-1.4\ncertificate"),
@@ -93,14 +94,112 @@ describe("a karbantartási lap dokumentumcsomagja", () => {
     assert.ok(csomag.bytes.includes(Buffer.from("igazolas-alairt.pdf")));
   });
 
-  it("teljesítési igazolás nélkül a LETÖLTÉS is elutasít, névvel", async () => {
-    const service = serviceWith(job({ completionCertificate: null }));
+  /*
+    LUCA DÖNTÉSE (2026-11-18 14:43 UTC; acrobot 55966): a LETÖLTÉS igazolás nélkül is megy, a csomagba az igazolás bekerül, ha van: az aláírt PDF, ennek hiányában a kiállított
+    (aláíratlan). A KIKÜLDÉS kapuja marad. MI PIROSÍT: ha az igazolás nélküli letöltés elutasít; ha a csomagba nem kerül be a kiállított igazolás aláírt hiányában; ha az aláírt mellett a
+    kiállított is bekerül (az aláírt a csomag igazolása); ha a kiküldés már nem kéri az igazolást vagy az aláírt példányát.
+  */
+  it("teljesítési igazolás nélkül a LETÖLTÉS átmegy, a csomagban nincs igazolás", async () => {
+    const csomag = await serviceWith(
+      job({ completionCertificate: null }),
+    ).assemble("job-a", "download");
+    assert.ok(csomag.bytes.includes(Buffer.from("munkalap.pdf")));
+    assert.ok(!csomag.bytes.includes(Buffer.from("teljesitesi-igazolas")));
+    assert.ok(!csomag.bytes.includes(Buffer.from("igazolas-alairt.pdf")));
+  });
+
+  it("alá nem írt (csak kiállított) igazolásnál a LETÖLTÉS a kiállított PDF-et teszi a csomagba", async () => {
+    const csomag = await serviceWith(
+      job({
+        completionCertificate: {
+          id: "cert-1",
+          number: "ALT-2026-001",
+          documents: [
+            {
+              type: "GENERATED_FORM",
+              fileName: "teljesitesi-igazolas-ALT-2026-001.pdf",
+              contentType: "application/pdf",
+              content: Buffer.from("%PDF-1.4\ngenerated-certificate"),
+            },
+          ],
+          invoices: [],
+        },
+      }),
+    ).assemble("job-a", "download");
+    assert.ok(
+      csomag.bytes.includes(
+        Buffer.from("teljesitesi-igazolas-ALT-2026-001.pdf"),
+      ),
+    );
+    assert.ok(csomag.bytes.includes(Buffer.from("generated-certificate")));
+  });
+
+  it("aláírt és kiállított igazolásnál az ALÁÍRT kerül a csomagba, a kiállított nem", async () => {
+    const csomag = await serviceWith(
+      job({
+        completionCertificate: {
+          id: "cert-1",
+          number: "ALT-2026-001",
+          documents: [
+            {
+              type: "SIGNED_FORM",
+              fileName: "igazolas-alairt.pdf",
+              contentType: "application/pdf",
+              content: Buffer.from("%PDF-1.4\nsigned-certificate"),
+            },
+            {
+              type: "GENERATED_FORM",
+              fileName: "teljesitesi-igazolas-ALT-2026-001.pdf",
+              contentType: "application/pdf",
+              content: Buffer.from("%PDF-1.4\ngenerated-certificate"),
+            },
+          ],
+          invoices: [],
+        },
+      }),
+    ).assemble("job-a", "download");
+    assert.ok(csomag.bytes.includes(Buffer.from("signed-certificate")));
+    assert.ok(!csomag.bytes.includes(Buffer.from("generated-certificate")));
+  });
+
+  it("a KIKÜLDÉS kapuja marad: igazolás nélkül és alá nem írt igazolással is elutasít, névvel", async () => {
     await assert.rejects(
-      () => service.assemble("job-a", "download"),
+      () =>
+        serviceWith(job({ completionCertificate: null })).assemble(
+          "job-a",
+          "send",
+        ),
       (hiba: unknown) => {
         assert.match(
           (hiba as { message: string }).message,
           /Nincs kiállítva teljesítési igazolás/,
+        );
+        return hiba instanceof BadRequestException;
+      },
+    );
+    await assert.rejects(
+      () =>
+        serviceWith(
+          job({
+            completionCertificate: {
+              id: "cert-1",
+              number: "ALT-2026-001",
+              documents: [
+                {
+                  type: "GENERATED_FORM",
+                  fileName: "teljesitesi-igazolas-ALT-2026-001.pdf",
+                  contentType: "application/pdf",
+                  content: Buffer.from("%PDF-1.4\ngenerated-certificate"),
+                },
+              ],
+              invoices: [],
+            },
+          }),
+        ).assemble("job-a", "send"),
+      (hiba: unknown) => {
+        assert.match(
+          (hiba as { message: string }).message,
+          /aláírt példánya hiányzik/,
         );
         return hiba instanceof BadRequestException;
       },
@@ -134,6 +233,7 @@ describe("a karbantartási lap dokumentumcsomagja", () => {
         number: "ALT-2026-001",
         documents: [
           {
+            type: "SIGNED_FORM",
             fileName: "igazolas-alairt.pdf",
             contentType: "application/pdf",
             content: Buffer.from("%PDF-1.4\ncertificate"),

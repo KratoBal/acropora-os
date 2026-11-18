@@ -110,7 +110,14 @@ export class MaintenancePackageService {
     const job = await this.repository.packageData(id);
     if (!job) throw new NotFoundException("A karbantartási lap nem található.");
 
-    const certificateDocument = job.completionCertificate?.documents[0] ?? null;
+    // the certificate's two copies, the newest first: the signed one is the package's certificate, the issued one when there is no signed one (Luca, 2026-11-18)
+    const certificateDocuments = job.completionCertificate?.documents ?? [];
+    const signedCertificate =
+      certificateDocuments.find((d) => d.type === "SIGNED_FORM") ?? null;
+    const certificateDocument =
+      signedCertificate ??
+      certificateDocuments.find((d) => d.type === "GENERATED_FORM") ??
+      null;
     const issuedInvoice = job.completionCertificate?.invoices[0] ?? null;
 
     const blockers = maintenancePackageBlockers({
@@ -125,7 +132,7 @@ export class MaintenancePackageService {
         ),
       })),
       hasCertificate: job.completionCertificate != null,
-      certificateSigned: certificateDocument != null,
+      certificateSigned: signedCertificate != null,
       /*
         CSAK A VALÓDI KIÁLLÍTÁS ELÉGÍTI KI. A kiállítás 2026-09-29 óta
         megvan, de a `MAINTENANCE_INVOICE_ISSUE_ENABLED` kapcsoló (alapból KI)
@@ -164,13 +171,16 @@ export class MaintenancePackageService {
       });
     }
 
-    entries.push({
-      name: certificateDocument?.fileName ?? "teljesitesi-igazolas.pdf",
-      bytes: this.inlineBytes(
-        certificateDocument,
-        "A teljesítési igazolás aláírt PDF-je nem érhető el.",
-      ),
-    });
+    // the download goes without a certificate (Luca): then there is no certificate entry; the send gate lets a call through to here only with one
+    if (certificateDocument) {
+      entries.push({
+        name: certificateDocument.fileName,
+        bytes: this.inlineBytes(
+          certificateDocument,
+          "A teljesítési igazolás PDF-je nem érhető el.",
+        ),
+      });
+    }
 
     /*
       A NEGYEDIK ELEM: A SZÁMLA. Ma a gyakorlatban SOHA nem fut le --

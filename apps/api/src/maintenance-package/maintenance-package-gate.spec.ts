@@ -52,19 +52,57 @@ describe("maintenancePackageBlockers", () => {
     assert.equal(maintenancePackageIsBlocked(blockers), false);
   });
 
-  it("igazolás nélkül a LETÖLTÉS is blokkolt, nem csak a kiküldés", () => {
+  /*
+    LUCA DÖNTÉSE (2026-11-18 14:43 UTC, acrobot 55966): „ha le akarom tölteni a csomagot, akkor tudjam letölteni. ne legyenek feltételek. egy feltétel maradjon, hogy a munkalap legyen lezárva.”
+    A LETÖLTÉS tehát az igazolást nem kéri (se kiállítva, se aláírva): a csomagba bekerül, ha van. A KIKÜLDÉS kapuja marad (arról nem döntött). MI PIROSÍT: ha a letöltés igazolás
+    hiányában blokkol; ha a kiküldés már nem kéri az igazolást vagy az aláírt példányát; ha a lezárt, de példány nélküli munkalap letöltésnél átmegy.
+  */
+  it("igazolás nélkül a LETÖLTÉS NEM blokkolt (Luca)", () => {
     const blockers = maintenancePackageBlockers(
       input({ hasCertificate: false, certificateSigned: false }),
     );
-    assert.equal(maintenancePackageIsBlocked(blockers), true);
-    assert.deepEqual(blockers.job, ["no-certificate"]);
+    assert.equal(maintenancePackageIsBlocked(blockers), false);
+    assert.deepEqual(blockers.job, []);
   });
 
-  it("kiállított, de alá nem írt igazolás külön okot ad, nem a hiányzóéval azonosat", () => {
+  it("kiállított, de alá nem írt igazolással a LETÖLTÉS NEM blokkolt (Luca)", () => {
     const blockers = maintenancePackageBlockers(
       input({ hasCertificate: true, certificateSigned: false }),
     );
-    assert.deepEqual(blockers.job, ["certificate-not-signed"]);
+    assert.equal(maintenancePackageIsBlocked(blockers), false);
+  });
+
+  it("a KIKÜLDÉS kapuja marad: igazolás nélkül no-certificate, alá nem írva certificate-not-signed", () => {
+    assert.deepEqual(
+      maintenancePackageBlockers(
+        input({
+          purpose: "send",
+          hasCertificate: false,
+          certificateSigned: false,
+          invoicePresent: true,
+        }),
+      ).job,
+      ["no-certificate"],
+    );
+    assert.deepEqual(
+      maintenancePackageBlockers(
+        input({
+          purpose: "send",
+          hasCertificate: true,
+          certificateSigned: false,
+          invoicePresent: true,
+        }),
+      ).job,
+      ["certificate-not-signed"],
+    );
+  });
+
+  it("a lezárt, de kiadott példány nélküli munkalap (adathiba) a letöltést is megállítja", () => {
+    const blockers = maintenancePackageBlockers(
+      input({ worksheets: [{ ...KESZ_LAP, hasIssuedSheet: false }] }),
+    );
+    assert.equal(maintenancePackageIsBlocked(blockers), true);
+    assert.equal(blockers.worksheets[0]?.reason, "no-issued-sheet");
   });
 
   it("lezáratlan munkalap blokkolja a letöltést is", () => {
