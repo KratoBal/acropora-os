@@ -16,16 +16,13 @@ import {
  *    nélkül és számla nélkül a KÜLDÉS elutasít, egyértelmű okkal. A csomag
  *    LETÖLTÉSE számla nélkül mehet (belső ellenőrzéshez), a kiküldés nem."
  *
- * === AZ ÉRTELMEZÉS, KIMONDVA (mert a mondat két feltételt egy mondatba von
- * össze `SEND`-hez, de csak az egyiket nevezi meg letöltésnél kivételként) ===
+ * === A LETÖLTÉS KAPUJA 2026-11-18 14:43 UTC ÓTA CSAK A MUNKALAPOKAT KÉRI (Luca) ===
  *
- * A mondat SZÁMLA NÉLKÜL menti fel a letöltést -- az ALÁÍRT IGAZOLÁS
- * követelményét nem nevezi meg kivételként. Ebből az következik, hogy az
- * aláírt igazolás MINDKÉT műveletnél kell (ugyanúgy, ahogy a munkalapok
- * lezárt/kiadott állapota is mindkettőnél kell -- azt a hibajegyes minta
- * sem engedi el letöltésnél), és EGYEDÜL a számla az, ami a kettőt
- * megkülönbözteti. Ha ez az értelmezés téves, egyetlen sor változik:
- * a `purpose === "send"` feltétel a `certificate` ágakra is kiterjed.
+ * Az eredeti értelmezés (az aláírt igazolás MINDKÉT műveletnél kell, csak a számla különbözteti meg a kettőt) ezzel elavult. Luca szó szerint (közös szál, msg
+ * 1572623199433269353): „ha le akarom tölteni a csomagot akkor tudjam letölteni. ne legyenek feltételek. egy feltétel maradjon, hogy a munkalap legyen lezárva.” Ezért a
+ * LETÖLTÉS (`purpose === "download"`) a teljesítési igazolást nem kéri, se kiállítva, se aláírva: a csomagba bekerül, ha van (az aláírt PDF, ennek hiányában a kiállított).
+ * A lezárt, de kiadott példány nélküli munkalap (adathiba) a letöltésnél is hiba marad. A KIKÜLDÉS (`send`) kapuja VÁLTOZATLAN: igazolás, annak aláírt példánya és számla
+ * kell hozzá (arról Luca nem döntött).
  */
 export type MaintenancePackageJobBlockReason =
   "no-certificate" | "certificate-not-signed" | "no-invoice";
@@ -60,9 +57,11 @@ export function maintenancePackageBlockers(input: {
   });
 
   const job: MaintenancePackageJobBlockReason[] = [];
-  if (!input.hasCertificate) job.push("no-certificate");
-  else if (!input.certificateSigned) job.push("certificate-not-signed");
-  if (input.purpose === "send" && !input.invoicePresent) job.push("no-invoice");
+  if (input.purpose === "send") {
+    if (!input.hasCertificate) job.push("no-certificate");
+    else if (!input.certificateSigned) job.push("certificate-not-signed");
+    if (!input.invoicePresent) job.push("no-invoice");
+  }
 
   return { worksheets, job };
 }

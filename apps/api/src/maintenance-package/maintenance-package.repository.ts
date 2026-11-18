@@ -64,11 +64,17 @@ export class MaintenancePackageRepository {
           select: {
             id: true,
             number: true,
+            // BOTH COPIES, the newest first (Luca, 2026-11-18): the SIGNED one goes into the package, the ISSUED one when there is no signed one; the service picks.
+            // The send gate still wants the signed one.
             documents: {
-              where: { type: "SIGNED_FORM" },
+              where: { type: { in: ["SIGNED_FORM", "GENERATED_FORM"] } },
               orderBy: { createdAt: "desc" },
-              take: 1,
-              select: { fileName: true, contentType: true, content: true },
+              select: {
+                type: true,
+                fileName: true,
+                contentType: true,
+                content: true,
+              },
             },
             /*
               CSAK A VALÓDI KIÁLLÍTÁS SZÁMÍT ITT -- egy DRAFT (előnézeti)
