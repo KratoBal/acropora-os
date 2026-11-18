@@ -1,4 +1,4 @@
-import { apiAuthHeaders, apiRequest } from "./client";
+import { apiAuthHeaders, apiErrorOf, apiRequest } from "./client";
 import { API_PREFIX } from "./api-prefix";
 
 const base = "/partners/maintenance-orders";
@@ -148,8 +148,8 @@ export const maintenanceOrdersApi = {
       `${API_PREFIX}${base}/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}`,
       { credentials: "same-origin", headers: apiAuthHeaders(token) },
     );
-    if (!response.ok)
-      throw new Error("A megrendelőlap dokumentuma nem tölthető le.");
+    // the server's own reason, the same error every apiRequest call gives (barracuda on #2695)
+    if (!response.ok) throw await apiErrorOf(response);
     return response.blob();
   },
 };

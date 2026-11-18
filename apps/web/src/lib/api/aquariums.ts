@@ -9,7 +9,7 @@ import type {
   MeasurementRecommendationView,
   UpdateAquariumInput,
 } from "@acropora/types";
-import { ApiError, apiAuthHeaders, apiRequest } from "./client";
+import { apiAuthHeaders, apiErrorOf, apiRequest } from "./client";
 import { API_PREFIX } from "./api-prefix";
 
 /**
@@ -250,12 +250,8 @@ export const aquariumsApi = {
       `${API_PREFIX}/aquariums/${encodeURIComponent(aquariumId)}/measurements/${encodeURIComponent(occasionId)}/pdf`,
       { headers: apiAuthHeaders(token) },
     );
-    if (!response.ok) {
-      throw new ApiError(
-        "A mérési PDF letöltése nem sikerült.",
-        response.status,
-      );
-    }
+    // the server's own reason, the same error every apiRequest call gives (barracuda on #2695)
+    if (!response.ok) throw await apiErrorOf(response);
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -275,9 +271,8 @@ export const aquariumsApi = {
       `${API_PREFIX}/aquariums/${encodeURIComponent(aquariumId)}/measurements/export.xlsx`,
       { headers: apiAuthHeaders(token) },
     );
-    if (!response.ok) {
-      throw new ApiError("Az Excel export nem sikerült.", response.status);
-    }
+    // the server's own reason, the same error every apiRequest call gives (barracuda on #2695)
+    if (!response.ok) throw await apiErrorOf(response);
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
