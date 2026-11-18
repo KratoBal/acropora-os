@@ -67,7 +67,7 @@ export const ASSET_NOTICE_SUBJECT: OfflineNoticeSubject = {
 
 /** A hibajegylista neve. */
 export const SERVICE_JOB_NOTICE_SUBJECT: OfflineNoticeSubject = {
-  listName: "a hibajegy- és karbantartási lista",
+  listName: "a hibajegylista",
 };
 
 /** Egy nap fölött a másolat kora már nem részlet, hanem figyelmeztetés. */

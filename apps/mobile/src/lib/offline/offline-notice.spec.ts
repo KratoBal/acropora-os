@@ -537,12 +537,12 @@ describe("az adatlap, ami nem tölthető be", () => {
 });
 
 /*
-  A LISTA NEVE A KARBANTARTÁSI LAPOT IS MEGNEVEZI (hibajegy-maradek lista, 4. fejezet, acrobot 56196): a lista `kind=ALL`, a "még nem volt letöltve" mondat ezt a nevet viszi. MI PIROSÍT: ha a név újra
-  csak "a hibajegylista".
+  A HIBAJEGYEK LISTÁJA CSAK HIBAJEGYET MUTAT (acrobot 56224, c pont): a karbantartási lapoknak saját listájuk van (`MAINTENANCE_LIST_COPY.noticeListName`), tehát a "még nem volt letöltve" mondat itt csak a hibajegyet nevezi meg.
+  MI PIROSÍT: ha a név a karbantartási lapot is említi (a másik lista másolatáról szólna), vagy nem a hibajegyet nevezi meg.
 */
 describe("a hibajegy-lista neve a mentett másolat mondatában", () => {
-  it("a hibajegyet és a karbantartási lapot is megnevezi", () => {
+  it("csak a hibajegyet nevezi meg", () => {
     assert.match(SERVICE_JOB_NOTICE_SUBJECT.listName, /hibajegy/);
-    assert.match(SERVICE_JOB_NOTICE_SUBJECT.listName, /karbantartási lista/);
+    assert.doesNotMatch(SERVICE_JOB_NOTICE_SUBJECT.listName, /karbantart/);
   });
 });
