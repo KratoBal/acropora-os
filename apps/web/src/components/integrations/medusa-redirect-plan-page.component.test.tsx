@@ -85,7 +85,7 @@ const plan = (
     ],
   },
   unchanged: 2296,
-  retargeted: { brand: 3, gone: 2, moved: 1 },
+  retargeted: { brand: 3, gone: 7, moved: 5 },
   ...over,
 });
 
@@ -146,12 +146,12 @@ describe("MedusaRedirectPlanPage", () => {
     );
   });
 
-  it("shows the retargeted counts (brand page, 410, moved)", async () => {
+  it("shows the retargeted counts (brand page, 410, moved), each with its own number", async () => {
     render(<MedusaRedirectPlanPage />);
     const line = await screen.findByTestId("redirect-plan-retargeted");
-    expect(line.textContent).toContain("3");
-    expect(line.textContent).toContain("2");
-    expect(line.textContent).toContain("1");
+    expect(line.textContent).toContain("3 sor a márkalapra");
+    expect(line.textContent).toContain("7 sor 410-zel");
+    expect(line.textContent).toContain("5 sor a helyettesítőre");
   });
 
   it("an in-sync list says so and shows no difference section", async () => {
