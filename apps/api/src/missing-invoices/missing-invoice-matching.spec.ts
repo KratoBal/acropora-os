@@ -2581,8 +2581,8 @@ describe("a double payment the partner paid back", () => {
   });
 
   it("one refund closes one pair, not two", () => {
-    const c = payment("dp-c", "2026-10-05", { narrative: "KB-8888/2026" });
-    const d = payment("dp-d", "2026-10-06", { narrative: "KB-8888/2026" });
+    const c = payment("dp-c", "2026-09-30", { narrative: "KB-8888/2026" });
+    const d = payment("dp-d", "2026-10-01", { narrative: "KB-8888/2026" });
     const documents = [
       doc({
         id: "dp-y1",
