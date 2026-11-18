@@ -365,6 +365,7 @@ const mainNavigationGroups: AppNavigationGroup[] = [
           "/admin/integrations/medusa/price-stops",
           "/admin/integrations/medusa/redirect-plan",
           "/beallitasok/rendeles-elavulas",
+          "/webshop/kuponok",
         ],
       },
     ],
