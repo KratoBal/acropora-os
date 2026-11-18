@@ -639,7 +639,12 @@ export function PilotServiceJobDetailPage({
     return (
       <Alert
         variant="danger"
-        title="Nincs hozzáférésed a hibajegyekhez"
+        title={
+          // the sheet is not loaded yet: the route tells which list it belongs to (a maintenance sheet is no ticket, Balázs 2026-11-18)
+          route === "karbantartas"
+            ? "Nincs hozzáférésed a karbantartási lapokhoz"
+            : "Nincs hozzáférésed a hibajegyekhez"
+        }
         description="service.view jogosultság szükséges."
       />
     );
