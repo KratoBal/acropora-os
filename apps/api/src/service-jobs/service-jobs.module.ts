@@ -5,6 +5,9 @@ import { documentStoreProvider } from "../service-assets/document-store/document
 import { ServiceJobDocumentsController } from "./service-job-documents.controller.js";
 import { ServiceJobDocumentsRepository } from "./service-job-documents.repository.js";
 import { ServiceJobDocumentsService } from "./service-job-documents.service.js";
+import { ServiceJobDeleteController } from "./service-job-delete.controller.js";
+import { ServiceJobDeleteRepository } from "./service-job-delete.repository.js";
+import { ServiceJobDeleteService } from "./service-job-delete.service.js";
 import { ServiceJobsController } from "./service-jobs.controller.js";
 import { ServiceJobsRepository } from "./service-jobs.repository.js";
 import { ServiceJobsService } from "./service-jobs.service.js";
@@ -46,6 +49,7 @@ import { ServiceJobPackageService } from "./service-job-package.service.js";
   controllers: [
     ServiceJobsController,
     ServiceJobDocumentsController,
+    ServiceJobDeleteController,
     HandoverMailController,
   ],
   providers: [
@@ -56,6 +60,8 @@ import { ServiceJobPackageService } from "./service-job-package.service.js";
     ServiceJobDocumentsService,
     ServiceJobPackageRepository,
     ServiceJobPackageService,
+    ServiceJobDeleteRepository,
+    ServiceJobDeleteService,
   ],
   exports: [ServiceJobsRepository, ServiceJobsService],
 })
