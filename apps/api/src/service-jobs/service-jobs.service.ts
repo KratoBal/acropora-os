@@ -65,6 +65,10 @@ import {
   allowedServiceJobSteps,
   isServiceJobStepAllowed,
 } from "./service-job-transitions.js";
+import {
+  maintenanceBlock,
+  type MaintenanceBlockedAction,
+} from "./maintenance-guard.js";
 import { serviceJobSource } from "./service-job-source.js";
 import { ServiceJobsRepository } from "./service-jobs.repository.js";
 
@@ -900,6 +904,26 @@ export class ServiceJobsService {
    * iras a tranzakcioban MAR megtortent. Egy hatokor-ellenorzes a valasz
    * oldalan nem hatokor-ellenorzes, hanem elfedes.
    */
+  /**
+   * A KARBANTARTÁS-ŐR A HTTP-BELÉPŐKÖN (t-20261118-karbantartas-szerver-tiltas). A vezérlő hívja a tiltott műveletek ELŐTT; a
+   * metódusok maguk NEM, mert a `MaintenanceOrdersService` belsőleg is lép (`move`, CANCELLED egy tétel nélküli karbantartási lapon),
+   * és az a rendszer saját lépése, nem kézi hibajegy-kezelés.
+   *
+   * A SORREND A METÓDUSOKÉ: előbb az írási jogkör (a partner 404-et kap, a létezést sem tudja meg), aztán a létezés (404), és csak
+   * ezután a fajta (409). Így a tiltás nem árul el többet a jegyről, mint amit a hívó a művelettől egyébként is megtudna.
+   */
+  async rejectIfMaintenance(
+    id: string,
+    action: MaintenanceBlockedAction,
+    user: AuthenticatedUser,
+  ): Promise<void> {
+    this.requireWriteScope(user);
+    const kind = await this.repository.kindOf(id);
+    if (kind === null) throw new NotFoundException("A hibajegy nem található.");
+    const reason = maintenanceBlock(kind, action);
+    if (reason) throw new ConflictException(reason);
+  }
+
   private requireWriteScope(user: AuthenticatedUser): void {
     if (!mayWriteServiceJob(partnerScopeOf(user)))
       throw new NotFoundException("A hibajegy nem található.");

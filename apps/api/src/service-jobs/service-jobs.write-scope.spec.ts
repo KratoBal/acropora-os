@@ -91,6 +91,11 @@ function serviceWith(overrides: Partial<ServiceJobsRepository> = {}) {
     detail: async () => RESZLETLAP,
     documentRemovals: async () => [],
     statusOf: async () => "NEW",
+    // a karbantartás-őr a vezérlő belépőin a jegy fajtáját olvassa (maintenance-guard.ts); alapból javítás
+    kindOf: async () => "REPAIR",
+    setHidden: async () => {
+      irasok.push("setHidden");
+    },
     jobAttachState: async () => ({ customerId: "vevo-1" }),
     worksheetAttachState: async () => ({
       serviceJobId: null,
@@ -374,5 +379,134 @@ describe("ki írhat egy hibajegyet", () => {
       mayWriteServiceJob({ kind: "supplier", supplierId: "sup-1" }),
       false,
     );
+  });
+});
+
+/*
+  A KARBANTARTÁSI JEGYEN NINCS HIBAJEGY-KEZELÉS, A SZERVER IS TARTJA (t-20261118-karbantartas-szerver-tiltas; Balázs, 2026-11-18 11:31
+  UTC: a karbantartásnak nincs hibajegy-állapotgépe, az aláírt munkalap a kész). MI PIROSIT: egy tiltott belépő karbantartáson ír
+  (a tároló megkapja); a javítási jegyen ugyanez nem ír (a kontroll); az elrejtés visszavonása vagy a rendszer belső lemondása
+  (`MaintenanceOrdersService` -> `service.move`) karbantartáson elakad; a partner-hatókör a 404 helyett 409-et kap (a tiltás többet
+  árulna el a jegyről, mint a művelet).
+*/
+describe("a karbantartási jegy tiltott belépői a szerveren", () => {
+  const KARBANTARTAS: Partial<ServiceJobsRepository> = {
+    kindOf: async () => "MAINTENANCE",
+  };
+  const controllerOf = (overrides: Partial<ServiceJobsRepository>) => {
+    const { service, irasok } = serviceWith(overrides);
+    return {
+      controller: new ServiceJobsController(service, {
+        download: async () => undefined,
+      } as never),
+      service,
+      irasok,
+    };
+  };
+  const BELEPOK: {
+    nev: string;
+    elofeltetel?: Partial<ServiceJobsRepository>;
+    hivas: (c: ServiceJobsController, u: AuthenticatedUser) => Promise<unknown>;
+  }[] = [
+    {
+      nev: "move",
+      hivas: (c, u) =>
+        c.move("job-1", { to: "TRIAGED" }, u) as Promise<unknown>,
+    },
+    {
+      nev: "attachWorksheet",
+      hivas: (c, u) =>
+        c.attachWorksheet(
+          "job-1",
+          { worksheetId: "worksheet-1" },
+          u,
+        ) as Promise<unknown>,
+    },
+    {
+      nev: "detachWorksheet",
+      elofeltetel: {
+        worksheetAttachState: async () => ({
+          serviceJobId: "job-1",
+          customerId: "vevo-1",
+        }),
+      },
+      hivas: (c, u) =>
+        c.detachWorksheet("job-1", "worksheet-1", u) as Promise<unknown>,
+    },
+    {
+      nev: "setPartner",
+      elofeltetel: { jobAttachState: async () => ({ customerId: null }) },
+      hivas: (c, u) =>
+        c.setPartner("job-1", { customerId: "vevo-2" }, u) as Promise<unknown>,
+    },
+    {
+      nev: "setHidden",
+      hivas: (c, u) =>
+        c.setHidden("job-1", { hidden: true }, u) as Promise<unknown>,
+    },
+  ];
+  const ADMIN = {
+    id: "user-1",
+    permissions: ["service.hide"],
+  } as unknown as AuthenticatedUser;
+
+  for (const b of BELEPOK) {
+    it(`${b.nev}: karbantartáson 409, és a tároló nem kap írást`, async () => {
+      const { controller, irasok } = controllerOf({
+        ...b.elofeltetel,
+        ...KARBANTARTAS,
+      });
+      await assert.rejects(
+        () => b.hivas(controller, ADMIN),
+        (hiba: { status?: number; message?: string }) =>
+          hiba.status === 409 &&
+          /Karbantartási munkán nincs/.test(hiba.message ?? ""),
+      );
+      assert.deepEqual(irasok, []);
+    });
+
+    it(`${b.nev}: javítási jegyen ír (a kontroll)`, async () => {
+      const { controller, irasok } = controllerOf({ ...b.elofeltetel });
+      await b.hivas(controller, ADMIN);
+      assert.deepEqual(irasok, [b.nev]);
+    });
+
+    it(`${b.nev}: a partner-hatókör karbantartáson is 404-et kap, nem 409-et`, async () => {
+      const { controller, irasok } = controllerOf({
+        ...b.elofeltetel,
+        ...KARBANTARTAS,
+      });
+      await assert.rejects(
+        () => b.hivas(controller, VEVO),
+        (hiba: { status?: number }) => hiba.status === 404,
+      );
+      assert.deepEqual(irasok, []);
+    });
+  }
+
+  it("az elrejtés VISSZAVONÁSA karbantartáson is megy: egy elrejtett lap ne ragadjon be", async () => {
+    const { controller, irasok } = controllerOf(KARBANTARTAS);
+    await controller.setHidden("job-1", { hidden: false }, ADMIN);
+    assert.deepEqual(irasok, ["setHidden"]);
+  });
+
+  it("a rendszer belső lemondása (service.move, a MaintenanceOrdersService útja) karbantartáson is lefut", async () => {
+    // a lemondás a jegy alatti lapok aláírását is nézi; itt nincs lap
+    const { service, irasok } = controllerOf({
+      ...KARBANTARTAS,
+      worksheetSignatureStates: async () => [],
+    });
+    await service.move("job-1", { to: "CANCELLED" }, "user-1", ADMIN);
+    assert.deepEqual(irasok, ["move"]);
+  });
+
+  it("nem létező jegyre 404, nem 409", async () => {
+    const { controller, irasok } = controllerOf({ kindOf: async () => null });
+    await assert.rejects(
+      () =>
+        controller.move("nincs", { to: "TRIAGED" }, ADMIN) as Promise<unknown>,
+      (hiba: { status?: number }) => hiba.status === 404,
+    );
+    assert.deepEqual(irasok, []);
   });
 });

@@ -425,6 +425,8 @@ export class MessagesRepository extends Repository {
         id: true,
         jobNumber: true,
         status: true,
+        // a karbantartási jegyen nincs partneres beszélgetés (service-jobs/maintenance-guard.ts)
+        kind: true,
         createdAt: true,
         assignedUserId: true,
         customer: { select: { displayName: true } },
