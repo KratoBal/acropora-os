@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { Repository, prisma } from "@acropora/database";
 import {
+  BANK_TRANSFER_POSSIBLE_DOUBLE_TEXT,
   BANK_TRANSFER_REFUSAL_TEXT,
   type AuthenticatedUser,
   type BankTransferCreditView,
@@ -28,7 +29,7 @@ import { StubSzamlazzAgentClient } from "../integrations/szamlazz/szamlazz-agent
 import {
   bankTransferListed,
   decideBankCredit,
-  decideBankTransfer,
+  decideBankTransfers,
   loadBankTransfers,
   pairBankCredit,
   type BankTransferDecision,
@@ -55,7 +56,12 @@ export function decisionView(
     : {
         markable: false,
         refusal: decision.refusal,
-        reason: BANK_TRANSFER_REFUSAL_TEXT[decision.refusal],
+        ...(decision.sharedWith?.length
+          ? {
+              reason: BANK_TRANSFER_POSSIBLE_DOUBLE_TEXT,
+              possibleDouble: true,
+            }
+          : { reason: BANK_TRANSFER_REFUSAL_TEXT[decision.refusal] }),
         detail: decision.detail,
       };
 }
@@ -113,12 +119,13 @@ export class BankTransferPairingService {
 
   /** The credits since `from`; without `all`, only those whose text names one of ours or that wrote a mark. */
   async list(from: string, all = false): Promise<BankTransferCreditView[]> {
-    const { credits, invoices } = await loadBankTransfers(from);
+    const { credits, invoices, debits } = await loadBankTransfers(from);
     const written = await this.repository.writtenFor(credits.map((c) => c.id));
+    const decisions = decideBankTransfers(credits, invoices, debits);
     return credits
-      .map((credit) => ({
+      .map((credit, index) => ({
         credit,
-        decision: decideBankTransfer(credit, invoices),
+        decision: decisions[index]!,
         written: written.get(credit.id) ?? [],
       }))
       .filter(({ decision, written: marks }) =>

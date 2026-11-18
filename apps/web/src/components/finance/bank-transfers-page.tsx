@@ -9,6 +9,7 @@ import {
 } from "@acropora/ui";
 import {
   BANK_TRANSFER_NOT_A_PAYMENT_LABEL,
+  BANK_TRANSFER_SETTLED_BADGE,
   formatMoney,
   hasPermission,
   PERMISSIONS,
@@ -44,9 +45,21 @@ function CreditState({ credit }: { credit: BankTransferCreditView }) {
   // not an invoice's payment (our own accounts, the card and SimplePay settlements, an eBIZ invoice): said, grey, nothing to decide
   const notAPayment =
     BANK_TRANSFER_NOT_A_PAYMENT_LABEL[credit.decision.refusal];
+  // done or waiting on Számlázz.hu's own work (already booked, refunded, a díjbekérő): said calmly, nothing to decide; but an
+  // "already booked" credit another credit names too, or an invoice paid on another day, may be a double payment
+  const possibleDouble =
+    credit.decision.refusal === "PAID_EARLIER" ||
+    credit.decision.possibleDouble === true;
+  const settled = possibleDouble
+    ? undefined
+    : BANK_TRANSFER_SETTLED_BADGE[credit.decision.refusal];
   return (
     <span className="flex flex-wrap items-center gap-2">
-      {notAPayment ? (
+      {possibleDouble ? (
+        <PilotBadge variant="amber">Lehet, hogy kétszer fizették</PilotBadge>
+      ) : settled ? (
+        <PilotBadge variant={settled.variant}>{settled.label}</PilotBadge>
+      ) : notAPayment ? (
         <PilotBadge variant="grey">{notAPayment}</PilotBadge>
       ) : (
         <PilotBadge variant="amber">Kézi párosítás kell</PilotBadge>
