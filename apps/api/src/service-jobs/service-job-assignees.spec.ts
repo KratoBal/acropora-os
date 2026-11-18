@@ -62,6 +62,7 @@ function setup(
     serviceJobId: string;
     subject: string;
     userIds: readonly string[];
+    kind?: string;
   }> = [];
 
   const repository = {
@@ -85,6 +86,7 @@ function setup(
       serviceJobId: string;
       subject: string;
       userIds: readonly string[];
+      kind?: string;
     }) => {
       notified.push(notice);
     },
@@ -191,6 +193,49 @@ describe("a hibajegy delegálása felvitelkor", () => {
         userIds: ["user-2", "user-3"],
       },
     ]);
+  });
+});
+
+/*
+  A KARBANTARTÁSI LAPRA DELEGÁLT KOLLÉGA ÉRTESÍTÉSE A LAP FAJTÁJÁT VISZI (hibajegy-maradek lista, F-jelű, acrobot 56144): a felvitelnél és a későbbi delegálásnál az értesítés `kind: "MAINTENANCE"`-t kap, a
+  hibajegyé nem (az eddigi alak marad). MI PIROSÍT: ha a KT-lap értesítése fajta nélkül megy; ha a hibajegyé fajtát kap.
+*/
+describe("a karbantartási lap delegáltjának értesítése viszi a lap fajtáját", () => {
+  it("felvitelkor", async () => {
+    const world = setup();
+    await world.service.create(
+      {
+        title: "Havi karbantartás",
+        kind: "MAINTENANCE",
+        assigneeIds: ["user-2"],
+      },
+      "user-1",
+    );
+    assert.deepEqual(world.notified, [
+      {
+        serviceJobId: "job-1",
+        subject: "Havi karbantartás",
+        userIds: ["user-2"],
+        kind: "MAINTENANCE",
+      },
+    ]);
+  });
+
+  it("a felvitel utáni delegáláskor", async () => {
+    const world = setup({
+      detail: async () => ({ ...detailRow(), kind: "MAINTENANCE" }),
+    });
+    await world.service.setAssignees("job-1", { userIds: ["user-2"] }, BELSOS);
+    assert.equal(world.notified[0]?.kind, "MAINTENANCE");
+  });
+
+  it("a hibajegyé nem kap fajtát", async () => {
+    const world = setup();
+    await world.service.create(
+      { title: "Nem indul", assigneeIds: ["user-2"] },
+      "user-1",
+    );
+    assert.equal("kind" in (world.notified[0] ?? {}), false);
   });
 });
 

@@ -582,6 +582,34 @@ describe("a levél szava a jegy fajtája szerint", () => {
     assert.doesNotMatch(kuldott[0]?.text ?? "", /hibajegy/i);
   });
 
+  /*
+    AZ ELŐZMÉNY-SOR IS A LAP FAJTÁJÁT MONDJA (hibajegy-maradek lista, F-jelű, acrobot 56144): a karbantartási lap munkalapjának aláírásakor a sor "...a karbantartási lap nyitójának" volt "hibajegy"
+    helyett. MI PIROSÍT: ha a KT-lap sora újra "hibajegy"; ha a hibajegyé megváltozik.
+  */
+  it("az előzmény-sor a lap fajtáját nevezi meg: karbantartási lap, hibajegy", async () => {
+    const kt = szolgaltatas({ mode: "live", context: KARBANTARTAS });
+    await kt.service.deliverWorksheetSigned({
+      serviceJobId: "job-1",
+      actorUserId: "user-2",
+    });
+    assert.match(
+      kt.naplo.at(-1)?.note ?? "",
+      /Értesítő levél kiküldve a karbantartási lap nyitójának\./,
+    );
+    const hj = szolgaltatas({
+      mode: "live",
+      context: { ...JEGY, kind: "REPAIR" },
+    });
+    await hj.service.deliverWorksheetSigned({
+      serviceJobId: "job-1",
+      actorUserId: "user-2",
+    });
+    assert.match(
+      hj.naplo.at(-1)?.note ?? "",
+      /Értesítő levél kiküldve a hibajegy nyitójának\./,
+    );
+  });
+
   it("a hibajegy (REPAIR) levelének szava nem változik", async () => {
     const { service, kuldott } = szolgaltatas({
       mode: "live",
