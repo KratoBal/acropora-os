@@ -73,6 +73,8 @@ describe("a csempék sorrendje", () => {
   it("a teljes sorrend rögzített", () => {
     assert.deepEqual(MODULE_ORDER, [
       "HJ",
+      // a Karbantartás a Hibajegyek után (acrobot 56224, 2026-11-18)
+      "KT",
       "MU",
       "AI",
       "ES",

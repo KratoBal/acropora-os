@@ -41,6 +41,11 @@ export interface ServiceJobListItem {
   /** A helyszín teljes útja, a gyökértől lefelé. `null`, ha nincs helyszín. */
   departmentPath: string[] | null;
   worksheetCount: number;
+  /**
+   * A KARBANTARTÁS ÁLLAPOTA A LISTÁN (Balázs, 2026-11-18 11:31; acrobot 55782): minden munkalap aláírva = `true`, különben `false`. Csak a MAINTENANCE sorokon van, és a mentett sorokon is hiányozhat (a részletlap
+   * nem hordozza), ezért ELHAGYHATÓ: hiány = ISMERETLEN (`cachedMaintenanceForTab`).
+   */
+  maintenanceDone?: boolean;
   createdAt: string;
   /**
    * WHO THE JOB IS ASSIGNED TO (service redesign, 2026-10-04): the server has
@@ -81,6 +86,10 @@ export interface ServiceJobListResponse {
    * reason as `truncated`: a saved or older answer may not carry it.
    */
   counts?: Record<ServiceJobStatusValue, number>;
+  /**
+   * A KARBANTARTÁS FÜLEINEK SZÁMA (`kind=MAINTENANCE` kérésnél, #2711): a még nem kész és a kész lapok. A láthatóság és a keresés beleszámít, a hatókör nem. A hibajegy-listán hiányzik, és régebbi szervernél is.
+   */
+  maintenanceCounts?: { progress: number; done: number };
 }
 
 /**
@@ -252,9 +261,10 @@ export interface ServiceJobPartnerDetail {
  * Az `Omit` ezt MONDJA KI, a csendes orokles helyett.
  */
 // `assigneeNames` is the partner LIST's field only (#1449): the detail never carries it
+// `maintenanceDone` is the LIST's field (and the partner detail's): the internal detail does not send it, so the phone derives it from the timeline (`maintenanceDoneFromDetail`)
 export interface ServiceJobDetail extends Omit<
   ServiceJobListItem,
-  "worksheetCount" | "assigneeNames"
+  "worksheetCount" | "assigneeNames" | "maintenanceDone"
 > {
   description: string | null;
   /**

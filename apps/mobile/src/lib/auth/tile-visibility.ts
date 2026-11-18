@@ -20,6 +20,11 @@ import type { AuthenticatedUser } from "./types";
  */
 export const TILE_ENTRY = {
   HJ: "service-jobs",
+  /**
+   * A `maintenance` tetel 2026-11-18-IG CSAK web feluletu volt; a telefonos Karbantartas lista (acrobot 56224) adta hozza a
+   * `mobile` feluletet a kozos forrasban -- ugyanaz a minta, mint az `AI` kodnal lent.
+   */
+  KT: "maintenance",
   ES: "service-assets",
   MU: "worksheets",
   RE: "webshop-orders",

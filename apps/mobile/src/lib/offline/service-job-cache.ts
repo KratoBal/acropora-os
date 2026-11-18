@@ -3,6 +3,8 @@ import type {
   ServiceJobListItem,
 } from "@/lib/api/service-jobs";
 
+import { maintenanceDoneFromDetail } from "@/lib/service-jobs/maintenance-state-from-detail";
+
 import { inTransaction, offlineDatabase } from "./database";
 
 /**
@@ -120,10 +122,24 @@ export async function storeServiceJobDetail(
     `SELECT payload_json FROM cached_service_jobs WHERE id = ?`,
     [detail.id],
   );
-  const korabbiSzam =
-    (korabbiSor && parse<ServiceJobListItem>(korabbiSor.payload_json))
-      ?.worksheetCount ?? 0;
-  await storeServiceJobs([{ ...detail, worksheetCount: korabbiSzam }]);
+  const korabbi = korabbiSor
+    ? parse<ServiceJobListItem>(korabbiSor.payload_json)
+    : null;
+  const korabbiSzam = korabbi?.worksheetCount ?? 0;
+  /**
+   * A KARBANTARTÁS KÉSZSÉGE UGYANÍGY: a belső részletlap nem küldi a
+   * `maintenanceDone` mezőt, tehát a `{ ...detail }` alak kitörölné a listasorról, és
+   * a Karbantartás lista offline fülei egy megnyitott lapot ismeretlen készségűnek
+   * látnának. A lap munkalapjaiból számoljuk, és ha az nem megy, a korábbi sor marad.
+   */
+  const kesz = maintenanceDoneFromDetail(detail, korabbi?.maintenanceDone);
+  await storeServiceJobs([
+    {
+      ...detail,
+      worksheetCount: korabbiSzam,
+      ...(kesz === undefined ? {} : { maintenanceDone: kesz }),
+    },
+  ]);
 }
 
 export async function rememberServiceJobDetail(

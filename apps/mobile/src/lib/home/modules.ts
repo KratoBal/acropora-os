@@ -1,5 +1,6 @@
 import type { TileCode } from "../auth/tile-visibility";
 import { SERVICE_JOB_LIST_COPY } from "../service-jobs/list-copy";
+import { MAINTENANCE_LIST_COPY } from "../service-jobs/maintenance-list-copy";
 
 /**
  * EVERY MODULE THE HOME AND THE MODULE LAUNCHER CAN SHOW, IN ONE PLACE
@@ -46,6 +47,12 @@ export const HOME_MODULES: Readonly<Record<TileCode, HomeModule>> = {
     description: SERVICE_JOB_LIST_COPY.tileDescription,
     icon: "ticket-outline",
     route: "/service-jobs",
+  },
+  KT: {
+    title: "Karbantartás",
+    description: MAINTENANCE_LIST_COPY.tileDescription,
+    icon: "construct-outline",
+    route: "/maintenance",
   },
   MU: {
     title: "Munkalapok",
@@ -118,6 +125,7 @@ export const HOME_MODULES: Readonly<Record<TileCode, HomeModule>> = {
 /** The launcher's order: every module, the service chain first. */
 export const MODULE_ORDER: readonly TileCode[] = [
   "HJ",
+  "KT",
   "MU",
   "AI",
   "ES",
