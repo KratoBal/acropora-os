@@ -12,6 +12,7 @@ import {
   describeOfflineNotice,
   describeUnloadableDetail,
   isCacheStale,
+  SERVICE_JOB_NOTICE_SUBJECT,
   STALE_AFTER_HOURS,
 } from "./offline-notice";
 
@@ -532,5 +533,16 @@ describe("az adatlap, ami nem tölthető be", () => {
       errorMessage: "A szerver jelenleg nem érhető el.",
     });
     assert.equal(uzenet.title, "Az eszköz nem tölthető be");
+  });
+});
+
+/*
+  A LISTA NEVE A KARBANTARTÁSI LAPOT IS MEGNEVEZI (hibajegy-maradek lista, 4. fejezet, acrobot 56196): a lista `kind=ALL`, a "még nem volt letöltve" mondat ezt a nevet viszi. MI PIROSÍT: ha a név újra
+  csak "a hibajegylista".
+*/
+describe("a hibajegy-lista neve a mentett másolat mondatában", () => {
+  it("a hibajegyet és a karbantartási lapot is megnevezi", () => {
+    assert.match(SERVICE_JOB_NOTICE_SUBJECT.listName, /hibajegy/);
+    assert.match(SERVICE_JOB_NOTICE_SUBJECT.listName, /karbantartási lista/);
   });
 });

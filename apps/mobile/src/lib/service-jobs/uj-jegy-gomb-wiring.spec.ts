@@ -1,3 +1,4 @@
+import { SERVICE_JOB_LIST_COPY } from "./list-copy";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -84,6 +85,11 @@ describe("új hibajegy a Hibajegyek menüből", () => {
       !forras.includes("Új jegyet a gép adatlapjáról nyithatsz"),
       "a régi, kizáró mondat még ott áll",
     );
-    assert.match(forras, /és új jegy is nyitható/);
+    // a mondat a lista szövegtáblájában áll (hibajegy-maradek lista, 4. fejezet), a képernyő onnan teszi ki
+    assert.match(
+      SERVICE_JOB_LIST_COPY.capabilities,
+      /és új hibajegy is nyitható/,
+    );
+    assert.match(forras, /SERVICE_JOB_LIST_COPY\.capabilities/);
   });
 });

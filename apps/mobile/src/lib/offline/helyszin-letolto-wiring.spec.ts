@@ -279,3 +279,16 @@ describe("a teljes méretű képek gombja", () => {
     assert.equal(forras.includes("rememberOperationsTemplates"), false);
   });
 });
+
+/*
+  A LETÖLTŐ MAGYARÁZATA A KARBANTARTÁSI LAPOT IS MEGNEVEZI (hibajegy-maradek lista, 4. fejezet, acrobot 56196): a letöltés `kind=ALL`, a lapok offline megnyithatók. MI PIROSÍT: ha a mondat újra
+  csak a hibajegyeket és a munkalapokat sorolja.
+*/
+describe("a helyszín-letöltő magyarázata", () => {
+  it("a karbantartási lapokat is megnevezi", () => {
+    assert.match(
+      olvas(KEPERNYO),
+      /a hibajegyek, a karbantartási lapok és a munkalapok így is/,
+    );
+  });
+});

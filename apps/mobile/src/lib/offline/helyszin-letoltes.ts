@@ -40,7 +40,7 @@ const RESZ_NEVE: Record<LetoltesResz, string> = {
     tereró nelkul.
   */
   fenykepek: "bélyegkép",
-  hibajegyek: "hibajegy",
+  hibajegyek: "hibajegy és karbantartási lap",
   munkalapok: "munkalap",
   /*
     AZ ESZKOZ UZEMELTETESI NAPLO SABLONJAI (task os-uzemeltetesi-naplo, S2d): a darabszam az ESZKOZOK szama, amelyeknek a sablon-listaja a

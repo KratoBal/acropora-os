@@ -54,6 +54,7 @@ import {
   ujJegyEszkozzel,
   valaszthatoEszkozok,
 } from "@/lib/service-jobs/uj-jegy-eszkoz";
+import { SERVICE_JOB_LIST_COPY } from "@/lib/service-jobs/list-copy";
 import { readCachedAssets } from "@/lib/offline/asset-cache";
 import { sessionKey } from "@/lib/session/session-memory";
 import { useSessionState } from "@/lib/session/useSessionState";
@@ -184,9 +185,7 @@ export default function ServiceJobListScreen() {
   if (status === "authenticated" && !capabilities?.serviceJobsView)
     return (
       <SafeAreaView style={styles.safeArea}>
-        <Text style={styles.empty}>
-          Nincs hozzáférésed a hibajegyekhez. Ha ez tévedés, szólj az irodának.
-        </Text>
+        <Text style={styles.empty}>{SERVICE_JOB_LIST_COPY.noAccess}</Text>
       </SafeAreaView>
     );
 
@@ -289,9 +288,7 @@ export default function ServiceJobListScreen() {
             </View>
             {scopeNeedsConnection ? (
               <Text style={styles.hint}>
-                Ehhez a szűréshez kapcsolat kell: a mentett másolat egy része
-                még nem tudja, kire van kiosztva egy jegy. A többi szűrő offline
-                is működik.
+                {SERVICE_JOB_LIST_COPY.scopeNeedsConnection}
               </Text>
             ) : null}
             {/*
@@ -379,11 +376,7 @@ export default function ServiceJobListScreen() {
               eldönteni, melyikről van szó.
             */}
             <Text style={styles.hint}>
-              Telefonon a jegy olvasható, léptethető, fényképet lehet rátenni,
-              és új jegy is nyitható: a fenti gombbal vagy a gép adatlapjáról
-              (Eszközök, majd Hibajegy nyitása). Mindkét úton a gépből
-              következik a partner és a helyszín. Partnert váltani és delegálni
-              a webes felületen lehet.
+              {SERVICE_JOB_LIST_COPY.capabilities}
             </Text>
           </View>
         }
@@ -395,8 +388,8 @@ export default function ServiceJobListScreen() {
               {scopeNeedsConnection
                 ? "Ehhez a szűréshez kapcsolat kell."
                 : online
-                  ? "Ebben a szűrésben nincs hibajegy."
-                  : "Nincs kapcsolat, és nincs mentett hibajegy ezen a készüléken."}
+                  ? SERVICE_JOB_LIST_COPY.emptyFiltered
+                  : SERVICE_JOB_LIST_COPY.emptyOffline}
             </Text>
           )
         }
