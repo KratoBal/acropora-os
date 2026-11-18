@@ -200,7 +200,7 @@ export function nonPaymentKind(
   const name = fold(credit.counterpartyName);
   if (/^acropora (ker|kft)/.test(name)) return "OWN_ACCOUNT";
   if (
-    name.includes("kelfo") ||
+    /\bkelfo\b/.test(name) ||
     fold(credit.narrative).includes("kartya elfogad")
   )
     return "CARD_SETTLEMENT";

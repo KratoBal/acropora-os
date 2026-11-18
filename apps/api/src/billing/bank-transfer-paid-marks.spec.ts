@@ -732,6 +732,9 @@ describe("credits that are not an invoice's payment get their own reason", () =>
       "Acropora Aquarium Kft.",
       "OTP Bank Nyrt.",
       "Simple Pay Kft.",
+      // the letters "kelfo" inside another word are not the OTP department (barracuda, #2685)
+      "Kelfold Kereskedelmi Kft.",
+      "Pankelfo Bt.",
       "Állatkert",
       null,
     ])
