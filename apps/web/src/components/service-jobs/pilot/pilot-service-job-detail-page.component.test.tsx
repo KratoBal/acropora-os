@@ -153,6 +153,10 @@ vi.mock("@/components/messages/context-conversation-button", () => ({
     />
   ),
 }));
+// the partner picker loads partners itself: a stub, so the partner form can be asserted (only shown on a job without a partner)
+vi.mock("../partner-picker", () => ({
+  PartnerPicker: () => <div data-testid="partner-picker-stub" />,
+}));
 vi.mock("@/lib/api/service-jobs", () => ({ serviceJobsApi: api }));
 // The list's latest query, as the navigation trail would hand it over.
 vi.mock("@/components/navigation-history", () => ({
@@ -1186,5 +1190,40 @@ describe("PilotServiceJobDetailPage -- a karbantartási adatlap nem hibajegy", (
     await waitFor(() =>
       expect(nav.replace).toHaveBeenCalledWith("/szerviz/hibajegyek/job-1"),
     );
+  });
+
+  it("jogosultság nélkül a cím az útvonal szerint szól: a karbantartási lapé nem a hibajegyeké", () => {
+    auth.session = null;
+    const first = render(
+      <PilotServiceJobDetailPage jobId="job-1" route="karbantartas" />,
+    );
+    expect(
+      screen.getByText("Nincs hozzáférésed a karbantartási lapokhoz"),
+    ).toBeInTheDocument();
+    first.unmount();
+    render(<PilotServiceJobDetailPage jobId="job-1" route="hibajegyek" />);
+    expect(
+      screen.getByText("Nincs hozzáférésed a hibajegyekhez"),
+    ).toBeInTheDocument();
+  });
+
+  it("partner nélküli karbantartási lapon nincs partner-beállítás (a Kezelés kártya nem áll ott; a szerver elutasítaná), a hibajegyen van", async () => {
+    auth.session = sessionAs("ADMIN");
+    api.detail.mockResolvedValue(
+      maintenance(["DRAFT"], { customerName: null, customerId: null }),
+    );
+    const first = render(
+      <PilotServiceJobDetailPage jobId="job-1" route="karbantartas" />,
+    );
+    await screen.findByText("Negyedéves ellenőrzés");
+    expect(screen.queryByText("Partner beállítása")).toBeNull();
+    first.unmount();
+
+    api.detail.mockResolvedValue(
+      detail({ kind: "REPAIR", customerName: null, customerId: null }),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" route="hibajegyek" />);
+    await screen.findByText("Negyedéves ellenőrzés");
+    expect(screen.getByText("Partner beállítása")).toBeInTheDocument();
   });
 });
