@@ -15,6 +15,7 @@ import {
   type MedusaPriceStopsView,
   type MedusaPriceStopView,
 } from "@acropora/types";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -126,7 +127,13 @@ const COLUMNS: PilotTableColumn<MedusaPriceStopView>[] = [
           data-stop-long
           className="font-semibold text-pilot-grey-900 max-md:w-full max-md:text-left"
         >
-          {stop.name}
+          {/* a javításhoz a termék lapjára visz (a válasz hordozza az azonosítót); a már nem létező termék sorához nincs oldal, ott nincs link */}
+          <Link
+            href={`/products/${encodeURIComponent(stop.productId)}`}
+            className="hover:underline"
+          >
+            {stop.name}
+          </Link>
         </span>
       ) : (
         <span
