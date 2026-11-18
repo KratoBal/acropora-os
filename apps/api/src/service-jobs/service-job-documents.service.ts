@@ -101,7 +101,9 @@ export class ServiceJobDocumentsService {
     );
     const found = await this.repository.visibleJobId(id, visibility);
     if (found === null)
-      throw new NotFoundException("A hibajegy nem található.");
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
     return found;
   }
 

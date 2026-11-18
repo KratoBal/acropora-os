@@ -49,7 +49,10 @@ export class ServiceJobDeleteService {
   ): Promise<ServiceJobDeletePreview> {
     this.requireInternal(user);
     const snapshot = await this.repository.snapshot(id);
-    if (!snapshot) throw new NotFoundException("A hibajegy nem található.");
+    if (!snapshot)
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
     const refusal = serviceJobDeleteRefusal(snapshot.facts);
     return {
       jobNumber: snapshot.jobNumber,
@@ -80,11 +83,14 @@ export class ServiceJobDeleteService {
       // sorosítási hiba (P2034): egy egyidejű írás (például aláírás) a törlés olvasott soraihoz ért; a törlés elmaradt, újrapróbálható
       if ((error as { code?: string } | null)?.code === "P2034")
         throw new ConflictException(
-          "A jegy közben megváltozott, ezért a törlés elmaradt. Próbáld újra.",
+          "A hibajegy vagy karbantartási lap közben megváltozott, ezért a törlés elmaradt. Próbáld újra.",
         );
       throw error;
     }
-    if (!removed) throw new NotFoundException("A hibajegy nem található.");
+    if (!removed)
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
     if (this.documentStore)
       for (const ref of removed.stored)
         await discardStoredDocument(ref, { store: this.documentStore });
@@ -93,6 +99,8 @@ export class ServiceJobDeleteService {
 
   private requireInternal(user: AuthenticatedUser): void {
     if (!mayWriteServiceJob(partnerScopeOf(user)))
-      throw new NotFoundException("A hibajegy nem található.");
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
   }
 }

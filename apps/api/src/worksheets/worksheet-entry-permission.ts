@@ -41,6 +41,8 @@ export interface WorksheetEntryEditorContext {
   worksheetCreatedById: string | null;
   /** A mogotte allo hibajegy nyitoja. `null`, ha nincs jegy vagy ismeretlen. */
   serviceJobOpenedById: string | null;
+  /** A mögötte álló jegy fajtája: a karbantartási lap nem hibajegy, a mondat a lapot nevezi meg (acrobot 56118). */
+  serviceJobKind?: "REPAIR" | "MAINTENANCE" | null;
 }
 
 export function canEditWorksheetEntry(
@@ -71,13 +73,17 @@ export function describeEntryEditRefusal(
   context: WorksheetEntryEditorContext,
 ): string | null {
   if (canEditWorksheetEntry(context)) return null;
+  const jegy =
+    context.serviceJobKind === "MAINTENANCE"
+      ? "a karbantartási lap"
+      : "a hibajegy";
   if (!context.worksheetCreatedById && !context.serviceJobOpenedById)
     return (
-      "Ezt a bejegyzést nem lehet szerkeszteni: a munkalap készítője és a hibajegy " +
+      `Ezt a bejegyzést nem lehet szerkeszteni: a munkalap készítője és ${jegy} ` +
       "létrehozója sem ismert (például azóta törölt kolléga). Ez nem hiba a programban."
     );
   return (
-    "Ezt a bejegyzést a munkalap készítője vagy a hibajegy létrehozója tudja " +
+    `Ezt a bejegyzést a munkalap készítője vagy ${jegy} létrehozója tudja ` +
     "szerkeszteni. Ha javítani kell rajta, szólj nekik."
   );
 }

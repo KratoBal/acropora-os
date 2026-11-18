@@ -138,7 +138,7 @@ function fake() {
         createdAt: new Date("2026-10-04T10:00:00Z"),
         assignedUserId: "c",
         customer: { displayName: "FANK" },
-      },
+      } as Record<string, unknown>,
     ],
     [
       "kt1",
@@ -272,6 +272,12 @@ function fake() {
     }) => void audits.push(input),
     worksheetForContext: async (id: string) => worksheets.get(id) ?? null,
     serviceJobForContext: async (id: string) => jobs.get(id) ?? null,
+    serviceJobKinds: async (ids: readonly string[]) =>
+      ids.flatMap((id) => {
+        const kind = jobs.get(id)?.kind;
+        return kind ? [{ id, kind }] : [];
+      }),
+    conversationsOf: async () => [...conversations.values()].map(row),
     unreadCounts: async () => new Map<string, number>(),
     messagesByIds: async () => [],
   };
@@ -347,6 +353,24 @@ describe("the conversation of a worksheet or a service job", () => {
     assert.equal(
       repo.messages.at(-1)!.text,
       "Teljes a beszélgetést indított ehhez a hibajegyhez: HJ-2026-007.",
+    );
+  });
+
+  /* a karbantartási lap nem hibajegy (Balázs, 2026-11-18 11:31 UTC; acrobot 56118): a kártya és a lista a fajtáját viszi, hogy a web
+     "Karbantartási laphoz kapcsolva"-t írjon és a lap saját oldalára vigyen. MI PIROSÍT: ha a kártya vagy a lista elem nem viszi a fajtát. */
+  it("from a maintenance sheet: the card and the list item carry its kind", async () => {
+    const { service } = fake();
+    const detail = await service.openContextConversation(
+      viewer("a"),
+      "SERVICE_JOB",
+      "kt1",
+    );
+    assert.equal(detail.context?.jobKind, "MAINTENANCE");
+    assert.equal(detail.contextJobKind, "MAINTENANCE");
+    const { items } = await service.list(viewer("a"));
+    assert.equal(
+      items.find((item) => item.id === detail.id)?.contextJobKind,
+      "MAINTENANCE",
     );
   });
 

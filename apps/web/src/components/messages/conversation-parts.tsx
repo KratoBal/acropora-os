@@ -139,7 +139,7 @@ export function ConversationRow({
         </span>
         {item.contextType ? (
           <span className="block truncate text-xs text-pilot-accent-warm-text">
-            {contextSubtitle(item.contextType)}
+            {contextSubtitle(item.contextType, item.contextJobKind)}
           </span>
         ) : null}
         <span className="block truncate text-xs text-pilot-grey-600">

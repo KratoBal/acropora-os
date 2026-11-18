@@ -171,6 +171,24 @@ describe("ServiceJobPlacementEditor", () => {
    * belole kijon, az utazik a keresben -- a szerver tehat soha nem szed le
    * olyat, amit a felhasznalo nem latott.
    */
+  // a karbantartási lap nem hibajegy (acrobot 56118): a leeső eszköz kérdése és mondata a lapot nevezi meg
+  it("karbantartási lapon a leeső eszköz kérdése a lapot nevezi meg", async () => {
+    render(<ServiceJobPlacementEditor {...alap()} maintenance />);
+    await screen.findByLabelText("Helyszín");
+    fireEvent.click(screen.getByText("MIND LE"));
+    fireEvent.click(screen.getByText(/Helyszín és eszközök mentése/));
+    expect(
+      await screen.findByText(
+        "Leveszed ezeket az eszközöket a karbantartási lapról?",
+      ),
+    ).toBeTruthy();
+    const kerdes = await screen.findByText(/Az új helyszínen nem áll/);
+    expect(kerdes.textContent).toContain(
+      "nem lesz rajta a karbantartási lapon",
+    );
+    expect(screen.queryByText(/hibajegyről/)).toBeNull();
+  });
+
   it("leeső eszköznél kérdez, megnevezi, és addig nem ment", async () => {
     render(<ServiceJobPlacementEditor {...alap()} />);
     await screen.findByLabelText("Helyszín");

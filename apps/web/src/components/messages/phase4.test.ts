@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canManageMembers,
   contextCardParts,
+  contextCardTitle,
   contextHref,
   contextStatusLabel,
   contextSubtitle,
@@ -45,6 +46,25 @@ describe("phase 4 helpers", () => {
       "/szerviz/munkalapok/job%201",
     );
     expect(contextHref({ ...card, restricted: true })).toBeNull();
+    // a karbantartási lap a saját oldalára visz, nem a hibajegyekhez (acrobot 56118)
+    expect(contextHref({ ...card, jobKind: "MAINTENANCE" })).toBe(
+      "/szerviz/karbantartas/job%201",
+    );
+  });
+
+  it("a maintenance sheet is named as one, with no ticket state; a ticket is unchanged", () => {
+    const sheet = { ...card, jobKind: "MAINTENANCE" as const, status: "NEW" };
+    expect(contextCardTitle("SERVICE_JOB", "MAINTENANCE")).toBe(
+      "KAPCSOLT KARBANTARTÁSI LAP",
+    );
+    expect(contextSubtitle("SERVICE_JOB", "MAINTENANCE")).toBe(
+      "Karbantartási laphoz kapcsolva",
+    );
+    expect(contextStatusLabel(sheet)).toBeNull();
+    expect(contextCardParts(sheet).join(" ")).not.toMatch(/Új/);
+    expect(contextCardTitle("SERVICE_JOB", "REPAIR")).toBe("KAPCSOLT HIBAJEGY");
+    expect(contextCardTitle("SERVICE_JOB")).toBe("KAPCSOLT HIBAJEGY");
+    expect(contextSubtitle("SERVICE_JOB", null)).toBe("Hibajegyhez kapcsolva");
   });
 
   it("status labels by kind; an unknown status is not shown raw", () => {

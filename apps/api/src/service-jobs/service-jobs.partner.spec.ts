@@ -75,7 +75,7 @@ describe("partner egy még partner nélküli hibajegyre", () => {
 
     await assert.rejects(
       () => service.setPartner("nincs-ilyen", "vevo-1", BELSOS),
-      /hibajegy nem található/,
+      /hibajegy vagy karbantartási lap nem található/,
     );
   });
 

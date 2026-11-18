@@ -85,6 +85,21 @@ describe("miért nem szerkeszthető", () => {
     );
   });
 
+  // a karbantartási lap nem hibajegy (acrobot 56118): a mondat a lap létrehozóját nevezi meg
+  it("karbantartási lap alatt a mondat a karbantartási lap létrehozóját nevezi meg", () => {
+    const message = describeEntryEditRefusal({
+      userId: "user-2",
+      worksheetCreatedById: "user-1",
+      serviceJobOpenedById: "user-3",
+      serviceJobKind: "MAINTENANCE",
+    });
+    assert.match(
+      message ?? "",
+      /munkalap készítője vagy a karbantartási lap létrehozója/,
+    );
+    assert.doesNotMatch(message ?? "", /hibajegy/);
+  });
+
   it("ha VAN kit megkérni, a mondat MEGNEVEZI őket", () => {
     const message = describeEntryEditRefusal({
       userId: "user-2",

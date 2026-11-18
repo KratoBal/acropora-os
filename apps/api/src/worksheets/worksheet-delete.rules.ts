@@ -7,8 +7,10 @@
  * kötődik hozzá (a készlet nem tűnhet el csendben, acrobot 55770).
  */
 export interface WorksheetDeleteFacts {
-  /** Hibajegy alatt áll (a `serviceJobId` nem üres). */
+  /** Hibajegy vagy karbantartási lap alatt áll (a `serviceJobId` nem üres). */
   hasServiceJob: boolean;
+  /** A jegy fajtája, ha van: a karbantartási lap nem hibajegy, és a lapról nem választható le (acrobot 56118). */
+  serviceJobKind?: "REPAIR" | "MAINTENANCE" | null;
   /** A lezárt lap teljes száma; a piszkozatnak nincs. */
   number: string | null;
   handedOver: boolean;
@@ -26,7 +28,9 @@ export function worksheetDeleteRefusal(
   facts: WorksheetDeleteFacts,
 ): string | null {
   if (facts.hasServiceJob)
-    return "Ez a munkalap hibajegyhez tartozik: előbb le kell választani a jegyről, vagy a jegyet kell törölni.";
+    return facts.serviceJobKind === "MAINTENANCE"
+      ? "Ez a munkalap karbantartási laphoz tartozik: a karbantartási lappal együtt törölhető."
+      : "Ez a munkalap hibajegyhez tartozik: előbb le kell választani a jegyről, vagy a jegyet kell törölni.";
   if (facts.signed) return "Aláírt munkalap nem törölhető.";
   if (facts.number !== null)
     return "Lezárt (számozott) munkalap nem törölhető.";

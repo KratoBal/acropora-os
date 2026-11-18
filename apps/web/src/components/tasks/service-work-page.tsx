@@ -83,7 +83,7 @@ export function ServiceWorkPage() {
     <div className="space-y-6">
       <PageHeader
         title="Feladataim"
-        description="A rád osztott hibajegyek és munkalapok, aszerint, kin múlik a következő lépés."
+        description="A rád osztott hibajegyek, karbantartási lapok és munkalapok, aszerint, kin múlik a következő lépés."
       />
 
       {error ? (
@@ -132,8 +132,8 @@ export function ServiceWorkPage() {
           title="Nincs megjeleníthető tétel"
           description={
             view === "OPEN"
-              ? "Most nincs rád osztott nyitott hibajegy vagy munkalap."
-              : "Még nincs lezárt hibajegyed vagy munkalapod."
+              ? "Most nincs rád osztott nyitott hibajegy, karbantartási lap vagy munkalap."
+              : "Még nincs lezárt hibajegyed, karbantartási lapod vagy munkalapod."
           }
         />
       ) : null}

@@ -863,7 +863,7 @@ describe("WorksheetsService.create és a felelősök", () => {
         { ...contentDto(), serviceJobId: "hianyzik" },
         BELSOS_KERO,
       ),
-      /hibajegy nem található/,
+      /hibajegy vagy karbantartási lap nem található/,
     );
     assert.equal(created, false);
   });
