@@ -63,6 +63,12 @@ export class WorksheetListQueryDto {
   /** A szerelő saját lapjai: erre a szűrőre épül a "nekem kiosztva" lista. */
   @IsString() @IsOptional() assigneeId?: string;
   /**
+   * A KAPCSOLT MUNKA FAJTÁJA (kártya 8219e7d6): `REPAIR` a hibajegyhez, `MAINTENANCE` a karbantartási laphoz kötött lapok. Hiányában minden lap (az önállók is). Lásd `worksheetJobKindWhere`.
+   */
+  @IsIn(["REPAIR", "MAINTENANCE"])
+  @IsOptional()
+  jobKind?: "REPAIR" | "MAINTENANCE";
+  /**
    * ÁLLAPOT SZERINTI SZŰRÉS, a LEGUTOLSÓ verzió állapotára.
    *
    * Sokáig szándékosan nem volt ilyen szűrő, és az indok most is érvényes: a

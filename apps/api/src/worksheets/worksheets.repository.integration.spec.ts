@@ -1280,6 +1280,76 @@ describe(
     });
 
     /**
+     * A LISTA SZURO A KAPCSOLT MUNKA FAJTAJA SZERINT (kartya 8219e7d6, acrobot 56321): a hibajegyes lista csak a hibajegyhez, a karbantartasi csak a karbantartashoz kotott
+     * lapokat hozza, az onallo lap (jegy nelkul) csak a szuretlen listaban van, es a csempe-szamlalo kovet. MI PIROSIT: ha a szuro nem hat, vagy keveri a ket fajtat, vagy az
+     * onallo lap atcsuszik egy fajtara szurt listaba, vagy a szamlalo a szuretlen halmazt szamolja.
+     */
+    it("filters the list by the kind of the linked job, and counts what it lists", async () => {
+      const mk = (kind: "REPAIR" | "MAINTENANCE", tag: string) =>
+        prisma.serviceJob.create({
+          data: {
+            jobNumber: `${TEST_JOB_PREFIX}K${tag}${suffix}`,
+            title: `Fajta ${tag}`,
+            kind,
+            customerId,
+            departmentId: bioDepartmentId,
+          },
+          select: { id: true },
+        });
+      const sheet = async (serviceJobId?: string) =>
+        repository.createDraft({
+          customerId,
+          departmentId: bioDepartmentId,
+          content: content(),
+          actorUserId,
+          ...(serviceJobId ? { serviceJobId } : {}),
+        });
+      const repairSheet = await sheet((await mk("REPAIR", "R")).id);
+      const maintenanceSheet = await sheet((await mk("MAINTENANCE", "M")).id);
+      const standaloneSheet = await sheet();
+
+      const ids = async (jobKind?: "REPAIR" | "MAINTENANCE") => {
+        const result = await repository.list(
+          { page: 1, pageSize: 100, ...(jobKind ? { jobKind } : {}) },
+          { kind: "internal" },
+          [],
+        );
+        return {
+          ids: new Set(result.items.map((row) => row.id)),
+          draftCount: result.counts.DRAFT,
+          total: result.pagination.totalItems,
+        };
+      };
+
+      const all = await ids();
+      const repair = await ids("REPAIR");
+      const maintenance = await ids("MAINTENANCE");
+
+      for (const id of [repairSheet, maintenanceSheet, standaloneSheet])
+        assert.ok(all.ids.has(id), "a szuretlen lista mindhármat hozza");
+
+      assert.ok(repair.ids.has(repairSheet));
+      assert.ok(!repair.ids.has(maintenanceSheet));
+      assert.ok(
+        !repair.ids.has(standaloneSheet),
+        "az önálló lap nem hibajegyes",
+      );
+
+      assert.ok(maintenance.ids.has(maintenanceSheet));
+      assert.ok(!maintenance.ids.has(repairSheet));
+      assert.ok(!maintenance.ids.has(standaloneSheet));
+
+      // a szamlalo a szurt halmazt szamolja, es a ket fajta egyutt nem tobb a szuretlennel
+      assert.equal(repair.total, repair.ids.size);
+      assert.equal(maintenance.total, maintenance.ids.size);
+      assert.ok(repair.total + maintenance.total <= all.total);
+      assert.ok(
+        repair.draftCount < all.draftCount,
+        "a csempe-szamlalo a szurt halmazt szamolja, nem a szuretlent",
+      );
+    });
+
+    /**
      * TESTVER-KONTROLL: JEGY NELKUL A MEZO `null` MARAD, es a lap letrejon. Ha
      * egy rontas MINDKETTOT pirosra dontene, akkor nem a jegy beirasat mernenk,
      * hanem a letrehozast magat.

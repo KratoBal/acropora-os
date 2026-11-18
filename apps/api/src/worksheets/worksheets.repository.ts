@@ -55,6 +55,7 @@ import {
   worksheetSheetDocument,
 } from "./worksheet-sheet-document.js";
 import { worksheetSheetInput } from "./worksheet-sheet-mapping.js";
+import { worksheetJobKindWhere } from "./worksheet-job-kind-filter.js";
 import {
   toWorksheetDetail,
   type WorksheetHandover,
@@ -887,6 +888,7 @@ export class WorksheetsRepository extends Repository {
     const userWhereWithoutStatus: Prisma.WorksheetWhereInput = {
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.departmentId ? { departmentId: query.departmentId } : {}),
+      ...worksheetJobKindWhere(query.jobKind),
       ...(query.assigneeId
         ? { assignees: { some: { userId: query.assigneeId } } }
         : {}),
