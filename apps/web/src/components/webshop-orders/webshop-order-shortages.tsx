@@ -66,7 +66,15 @@ const STATUS_VARIANT: Record<WebshopShortageStatus, PilotBadgeVariant> = {
 
 const ACTIVE: readonly WebshopShortageStatus[] = ["OPEN", "AGREED"];
 
-type OrderForShortages = { id: string; lines: WebshopOrderLine[] };
+type SplitOrder = { id: string; displayId: number | null };
+type OrderForShortages = {
+  id: string;
+  lines: WebshopOrderLine[];
+  /** A rendelés szétbontásából létrejött rendelések (`WebshopOrderDetail.split.into`): a lezárás ezekből ajánl. */
+  split?: { into: SplitOrder[] };
+};
+
+const OTHER_SPLIT = "__other";
 
 type DialogState =
   | { kind: "open" }
@@ -202,6 +210,14 @@ export function ShortagesCard({
         <ResolveDialog
           shortage={dialog.shortage}
           outcome={dialog.outcome}
+          candidates={(order.split?.into ?? []).filter(
+            (candidate) =>
+              !(cases ?? []).some(
+                (other) =>
+                  other.id !== dialog.shortage.id &&
+                  other.splitOrderId === candidate.id,
+              ),
+          )}
           onClose={() => setDialog(null)}
           onSubmit={async (input) => {
             await webshopOrdersApi.resolveShortage(
@@ -777,25 +793,32 @@ function AgreementDialog({
 function ResolveDialog({
   shortage,
   outcome,
+  candidates,
   onClose,
   onSubmit,
 }: {
   shortage: WebshopOrderShortageView;
   outcome: "done" | "withdrawn";
+  /** A rendelés szétbontásából létrejött, még egy másik hiányhoz sem kötött rendelések. */
+  candidates: SplitOrder[];
   onClose: () => void;
   onSubmit: (input: WebshopOrderShortageResolveInput) => Promise<void>;
 }) {
-  const [splitOrderId, setSplitOrderId] = useState("");
+  // az első szabad szétbontott rendelés előre kijelölve (a 24 karakteres azonosítót nem kell begépelni); nélküle a kézi mező marad
+  const [picked, setPicked] = useState(candidates[0]?.id ?? OTHER_SPLIT);
+  const [typedSplitOrderId, setTypedSplitOrderId] = useState("");
   const [note, setNote] = useState("");
   const done = outcome === "done";
   const needsSplit = done && shortage.choice === "SPLIT";
-  const missing = needsSplit ? !splitOrderId.trim() : !done && !note.trim();
+  const splitOrderId =
+    picked === OTHER_SPLIT ? typedSplitOrderId.trim() : picked;
+  const missing = needsSplit ? !splitOrderId : !done && !note.trim();
   const { busy, error, submit } = useSubmit(
     () =>
       onSubmit(
         done
           ? needsSplit
-            ? { outcome: "done", splitOrderId: splitOrderId.trim() }
+            ? { outcome: "done", splitOrderId }
             : { outcome: "done" }
           : { outcome: "withdrawn", note: note.trim() },
       ),
@@ -828,17 +851,39 @@ function ResolveDialog({
             A megállapodást végrehajtottuk. A lezárás után a hiány nem
             módosítható.
           </p>
-          {needsSplit ? (
+          {needsSplit && candidates.length > 0 ? (
+            <label className="block text-xs text-pilot-grey-500">
+              A szétbontásból létrejött rendelés
+              <PilotSelect
+                aria-label="A szétbontásból létrejött rendelés"
+                value={picked}
+                onChange={setPicked}
+              >
+                {candidates.map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {candidate.displayId !== null
+                      ? `#${candidate.displayId}`
+                      : candidate.id}
+                  </option>
+                ))}
+                <option value={OTHER_SPLIT}>Másik azonosító megadása</option>
+              </PilotSelect>
+            </label>
+          ) : null}
+          {needsSplit && picked === OTHER_SPLIT ? (
             <label className="block text-xs text-pilot-grey-500">
               A kapcsolt (új) rendelés azonosítója
               <PilotInput
                 aria-label="A kapcsolt (új) rendelés azonosítója"
-                value={splitOrderId}
-                onChange={setSplitOrderId}
+                value={typedSplitOrderId}
+                onChange={setTypedSplitOrderId}
                 maxLength={64}
                 className="mt-1"
               />
               <span className="mt-1 block">
+                {candidates.length === 0
+                  ? "Ezen a rendelésen még nincs szétbontásból létrejött rendelés: előbb bontsd szét (Tételek, Szétbontás), vagy add meg az azonosítót. "
+                  : ""}
                 A szétbontás után létrejött új rendelés webcímének utolsó része.
               </span>
             </label>

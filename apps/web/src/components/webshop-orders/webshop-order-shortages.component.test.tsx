@@ -140,10 +140,13 @@ const agreed = (over: Partial<WebshopOrderShortageView> = {}) =>
     ...over,
   });
 
-function renderCard(canManage = true) {
+function renderCard(
+  canManage = true,
+  into: { id: string; displayId: number | null }[] = [],
+) {
   return render(
     <ShortagesCard
-      order={order as never}
+      order={{ ...order, split: { from: null, into } } as never}
       canManage={canManage}
       onSearchVariants={searchVariants}
     />,
@@ -522,6 +525,141 @@ describe("ShortagesCard", () => {
           },
         ),
       );
+    });
+
+    describe("the linked order is offered from the order's own split (t-20261118-keszlethiany-split-javaslat)", () => {
+      /*
+      WHAT TURNS IT RED: a split-off order of this order not offered, or not preselected (the buyer's agreed split then needs a typed 24-character id again);
+      an order already used by another case offered as free again; a SPLIT that cannot be closed with a link the detail does not know (the manual
+      entry gone); the manual field shown next to a preselected choice; no word that there is no split-off order yet when there is none.
+    */
+      const into = (...ids: [string, number][]) =>
+        ids.map(([id, displayId]) => ({ id, displayId }));
+
+      it("preselects the order's split-off order, and closes with it without typing", async () => {
+        api.shortages.mockResolvedValue([agreed()]);
+        api.resolveShortage.mockResolvedValue(agreed({ status: "DONE" }));
+        renderCard(true, into(["order_2", 39]));
+        await screen.findByText("Aqualight G3-S");
+        fireEvent.click(screen.getByRole("button", { name: "Lezárás" }));
+        const dialog = await screen.findByRole("dialog", { name: "Lezárás" });
+        const pick = within(dialog).getByLabelText(
+          "A szétbontásból létrejött rendelés",
+        ) as HTMLSelectElement;
+        expect(pick.value).toBe("order_2");
+        expect(within(dialog).getByText("#39")).toBeTruthy();
+        expect(
+          within(dialog).queryByLabelText(
+            "A kapcsolt (új) rendelés azonosítója",
+          ),
+        ).toBeNull();
+        const submit = within(dialog).getByRole("button", {
+          name: "Lezárás rögzítése",
+        });
+        expect((submit as HTMLButtonElement).disabled).toBe(false);
+        fireEvent.click(submit);
+        await waitFor(() =>
+          expect(api.resolveShortage).toHaveBeenCalledWith(
+            "tok",
+            "order_1",
+            "s1",
+            {
+              outcome: "done",
+              splitOrderId: "order_2",
+            },
+          ),
+        );
+      });
+
+      it("an order already used by another case is not offered again, the next free one is preselected", async () => {
+        api.shortages.mockResolvedValue([
+          agreed(),
+          agreed({
+            id: "s9",
+            status: "DONE",
+            splitOrderId: "order_2",
+            lines: [{ ...shortage().lines[0]!, id: "l9", itemId: "i2" }],
+          }),
+        ]);
+        renderCard(true, into(["order_2", 39], ["order_3", 40]));
+        await screen.findAllByText("Aqualight G3-S");
+        fireEvent.click(
+          within(screen.getByTestId("shortage-s1")).getByRole("button", {
+            name: "Lezárás",
+          }),
+        );
+        const dialog = await screen.findByRole("dialog", { name: "Lezárás" });
+        const pick = within(dialog).getByLabelText(
+          "A szétbontásból létrejött rendelés",
+        ) as HTMLSelectElement;
+        expect(pick.value).toBe("order_3");
+        const values = Array.from(pick.options).map((o) => o.value);
+        expect(values).toContain("order_3");
+        expect(values).not.toContain("order_2");
+      });
+
+      it("keeps a manual entry for a link the order does not know, and shows the field only then", async () => {
+        api.shortages.mockResolvedValue([agreed()]);
+        api.resolveShortage.mockResolvedValue(agreed({ status: "DONE" }));
+        renderCard(true, into(["order_2", 39]));
+        await screen.findByText("Aqualight G3-S");
+        fireEvent.click(screen.getByRole("button", { name: "Lezárás" }));
+        const dialog = await screen.findByRole("dialog", { name: "Lezárás" });
+        fireEvent.change(
+          within(dialog).getByLabelText("A szétbontásból létrejött rendelés"),
+          { target: { value: "__other" } },
+        );
+        const manual = within(dialog).getByLabelText(
+          "A kapcsolt (új) rendelés azonosítója",
+        );
+        const submit = within(dialog).getByRole("button", {
+          name: "Lezárás rögzítése",
+        });
+        expect((submit as HTMLButtonElement).disabled).toBe(true);
+        fireEvent.change(manual, { target: { value: " order_77 " } });
+        fireEvent.click(submit);
+        await waitFor(() =>
+          expect(api.resolveShortage).toHaveBeenCalledWith(
+            "tok",
+            "order_1",
+            "s1",
+            {
+              outcome: "done",
+              splitOrderId: "order_77",
+            },
+          ),
+        );
+      });
+
+      it("with no split-off order the manual field stays and the dialog says there is none yet", async () => {
+        api.shortages.mockResolvedValue([agreed()]);
+        renderCard(true, []);
+        await screen.findByText("Aqualight G3-S");
+        fireEvent.click(screen.getByRole("button", { name: "Lezárás" }));
+        const dialog = await screen.findByRole("dialog", { name: "Lezárás" });
+        expect(
+          within(dialog).getByLabelText("A kapcsolt (új) rendelés azonosítója"),
+        ).toBeTruthy();
+        expect(
+          within(dialog).queryByLabelText("A szétbontásból létrejött rendelés"),
+        ).toBeNull();
+        expect(
+          within(dialog).getByText(
+            /még nincs szétbontásból létrejött rendelés/i,
+          ),
+        ).toBeTruthy();
+      });
+
+      it("another choice never shows the split-off orders", async () => {
+        api.shortages.mockResolvedValue([agreed({ choice: "REMOVE" })]);
+        renderCard(true, into(["order_2", 39]));
+        await screen.findByText("Aqualight G3-S");
+        fireEvent.click(screen.getByRole("button", { name: "Lezárás" }));
+        const dialog = await screen.findByRole("dialog", { name: "Lezárás" });
+        expect(
+          within(dialog).queryByLabelText("A szétbontásból létrejött rendelés"),
+        ).toBeNull();
+      });
     });
 
     it("another choice closes without a linked order and the field is not offered", async () => {
