@@ -6,7 +6,8 @@
 
 export type GlsCodReportStatus = "COMPLETED" | "NEEDS_REVIEW";
 export type GlsCodLineStatus = "RESOLVED" | "NEEDS_REVIEW";
-export type GlsCodResolutionSource = "INVOICE_NUMBER" | "ORDER_KEY" | "MANUAL";
+export type GlsCodResolutionSource =
+  "INVOICE_NUMBER" | "ORDER_KEY" | "WEBSHOP_PARCEL" | "MANUAL";
 
 /**
  * Miért kell kézi ellenőrzés:
@@ -15,13 +16,19 @@ export type GlsCodResolutionSource = "INVOICE_NUMBER" | "ORDER_KEY" | "MANUAL";
  *   ORDER_NOT_INVOICED    a rendelés megvan, számlája nincs
  *   PREFIX_MISSING        előtag nélküli számlaszám ("2026/00123"): javaslat van
  *   REFERENCE_UNKNOWN     a hivatkozás egyik ismert alak sem, és ügyfélhivatkozás sincs
+ *
+ * A webshop-csomagé (a csomagszámon át, a Foxpost #1996 mintájára):
+ *   WEBSHOP_ORDER_AMBIGUOUS    a csomagszámhoz több webshop-rendelés tartozik: nem választunk
+ *   WEBSHOP_INVOICE_AMBIGUOUS  a rendelésnek több élő kimenő számlája van: nem választunk
  */
 export type GlsCodLineError =
   | "INVOICE_NOT_FOUND"
   | "ORDER_NOT_FOUND"
   | "ORDER_NOT_INVOICED"
   | "PREFIX_MISSING"
-  | "REFERENCE_UNKNOWN";
+  | "REFERENCE_UNKNOWN"
+  | "WEBSHOP_ORDER_AMBIGUOUS"
+  | "WEBSHOP_INVOICE_AMBIGUOUS";
 
 export interface GlsCodReportLine {
   id: string;
