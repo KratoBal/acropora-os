@@ -231,4 +231,22 @@ describe("a munkalap dokumentum-feltoltes hatarai", () => {
       [PERMISSIONS.SERVICE_MANAGE],
     );
   });
+
+  /** A KIADOTT PDF ÚJRAGENERÁLÁSA (kártya 47e07a53): a lap kezelője, és az útvonal a `:id/sheet/regenerate`. */
+  it("a PDF újragenerálása a szerviz-kezelési jogot követeli meg, a megadott útvonalon", () => {
+    assert.deepEqual(
+      Reflect.getMetadata(
+        REQUIRED_PERMISSIONS_KEY,
+        WorksheetsController.prototype.regenerateSheet,
+      ),
+      [PERMISSIONS.SERVICE_MANAGE],
+    );
+    assert.equal(
+      Reflect.getMetadata(
+        "path",
+        WorksheetsController.prototype.regenerateSheet,
+      ),
+      ":id/sheet/regenerate",
+    );
+  });
 });

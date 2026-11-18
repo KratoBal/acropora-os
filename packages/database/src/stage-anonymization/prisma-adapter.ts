@@ -78,7 +78,10 @@ const columnOf = (field: SchemaField): string =>
 
 function modelBlocks(schema: string): Map<string, string> {
   const blocks = new Map<string, string>();
-  for (const match of schema.matchAll(/^model (\w+) \{([\s\S]*?)^\}/gm))
+  // a view too: a relation field to a view (`latestVersion WorksheetLatestVersion?`) is not a column
+  for (const match of schema.matchAll(
+    /^(?:model|view) (\w+) \{([\s\S]*?)^\}/gm,
+  ))
     blocks.set(match[1]!, match[2]!);
   return blocks;
 }
@@ -115,6 +118,8 @@ export function adapterModels(schema: string): AdapterModel[] {
   const enums = enumNames(schema);
   const models: AdapterModel[] = [];
   for (const model of parseSchemaModels(schema)) {
+    // a view stores no rows: it is rebuilt from the anonymized tables it reads (a9db2779)
+    if (model.isView) continue;
     const fields = model.fields;
     const relationFields = new Set<string>();
     for (const field of fields)
@@ -149,6 +154,7 @@ export function adapterModels(schema: string): AdapterModel[] {
 export function adapterRelations(schema: string): AdapterRelation[] {
   const relations: AdapterRelation[] = [];
   for (const model of parseSchemaModels(schema)) {
+    if (model.isView) continue;
     for (const field of model.fields) {
       const args = relationArguments(field.attributes);
       if (args === null) continue;

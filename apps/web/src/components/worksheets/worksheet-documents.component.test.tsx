@@ -1,4 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { answered } from "@/test/answered";
@@ -22,6 +28,7 @@ vi.mock("@/lib/api/worksheets", () => ({
     documents: vi.fn(),
     downloadDocument: vi.fn(),
     downloadDocumentThumbnail: vi.fn(),
+    regenerateIssuedSheet: vi.fn(),
   },
 }));
 
@@ -226,5 +233,146 @@ describe("WorksheetDocuments", () => {
     expect(
       screen.getByText(/még nincs lezárva, ezért kiadott példány sem készült/),
     ).toBeTruthy();
+  });
+});
+
+/*
+  A KIADOTT PDF ÚJRAGENERÁLÁSA GOMB (Balázs 2026-11-18 19:17 UTC, kártya 47e07a53; acrobot 56321). MI PIROSÍT: ha a gomb olyannak is megjelenik, aki nem kezelheti a lapot; ha piszkozatnál (nincs kiadott példány) látszik; ha a kattintás nem a lap azonosítójára
+  hívja a végpontot; ha a gomb a hívás közben nem tiltott (dupla kattintás); ha a siker után a lista nem töltődik újra (az archív példány a Csatolmányok között csak így jelenne meg); ha a "nem változott" és a "megtörtént" nem különböző mondat;
+  ha a szerver okát (409) nem mutatja.
+*/
+describe("a kiadott PDF újragenerálása", () => {
+  const kiadott = () => [
+    doku({
+      id: "lap-1",
+      type: "GENERATED_SHEET",
+      fileName: "munkalap-NMD-2026-028.pdf",
+      contentType: "application/pdf" as const,
+    }),
+  ];
+
+  it("a kezelőnek a kiadott lap szakaszában látszik, másnak nem", async () => {
+    api.documents.mockResolvedValue({ items: kiadott() });
+    const { unmount } = render(
+      <WorksheetDocuments worksheetId="ws-1" token="t" canView canRegenerate />,
+    );
+    await answered(api.documents);
+    // a betöltés UTÁN mérünk: a fejléc a betöltés előtt is áll, és a gomb a kiadott sor megérkezésével jelenik meg
+    await screen.findByText("munkalap-NMD-2026-028.pdf");
+    expect(
+      within(szakasz("A kiadott munkalap")).getByRole("button", {
+        name: "PDF újragenerálása",
+      }),
+    ).toBeTruthy();
+    unmount();
+
+    api.documents.mockResolvedValue({ items: kiadott() });
+    render(<WorksheetDocuments worksheetId="ws-1" token="t" canView />);
+    await screen.findByText("munkalap-NMD-2026-028.pdf");
+    expect(
+      screen.queryByRole("button", { name: "PDF újragenerálása" }),
+    ).toBeNull();
+  });
+
+  it("piszkozatnál nincs gomb: nincs kiadott példány", async () => {
+    api.documents.mockResolvedValue({ items: [doku()] });
+    render(
+      <WorksheetDocuments worksheetId="ws-1" token="t" canView canRegenerate />,
+    );
+    await answered(api.documents);
+    // a betöltés UTÁN mérünk: a piszkozat szakasza kimondja, miért üres
+    await screen.findByText(
+      /még nincs lezárva, ezért kiadott példány sem készült/,
+    );
+    expect(
+      screen.queryByRole("button", { name: "PDF újragenerálása" }),
+    ).toBeNull();
+  });
+
+  it("a kattintás a lap azonosítójára hív, utána újratölti a listát, és kimondja a változást", async () => {
+    api.documents.mockResolvedValue({ items: kiadott() });
+    api.regenerateIssuedSheet.mockResolvedValue({ changed: true });
+    render(
+      <WorksheetDocuments worksheetId="ws-1" token="t" canView canRegenerate />,
+    );
+    await answered(api.documents);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "PDF újragenerálása" }),
+    );
+
+    await waitFor(() =>
+      expect(api.regenerateIssuedSheet).toHaveBeenCalledWith("t", "ws-1"),
+    );
+    expect(
+      await screen.findByText(/újragenerálva.*korábbi példány.*Csatolmányok/i),
+    ).toBeTruthy();
+    await waitFor(() => expect(api.documents).toHaveBeenCalledTimes(2));
+  });
+
+  it("ha nem változott semmi, ezt mondja, és nem azt, hogy megtörtént", async () => {
+    api.documents.mockResolvedValue({ items: kiadott() });
+    api.regenerateIssuedSheet.mockResolvedValue({ changed: false });
+    render(
+      <WorksheetDocuments worksheetId="ws-1" token="t" canView canRegenerate />,
+    );
+    await answered(api.documents);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "PDF újragenerálása" }),
+    );
+
+    expect(await screen.findByText(/már a mostani elrendezésű/i)).toBeTruthy();
+    expect(screen.queryByText(/korábbi példány/i)).toBeNull();
+    // változatlan tárolt példánynál nincs miért újratölteni a listát
+    expect(api.documents).toHaveBeenCalledTimes(1);
+  });
+
+  it("a hívás közben a gomb tiltott, hogy a dupla kattintás ne menjen ki kétszer", async () => {
+    api.documents.mockResolvedValue({ items: kiadott() });
+    let ujraGeneralasKesz: (value: { changed: boolean }) => void = () => {};
+    api.regenerateIssuedSheet.mockReturnValue(
+      new Promise((resolve) => {
+        ujraGeneralasKesz = resolve;
+      }),
+    );
+    render(
+      <WorksheetDocuments worksheetId="ws-1" token="t" canView canRegenerate />,
+    );
+    await answered(api.documents);
+
+    const gomb = await screen.findByRole("button", {
+      name: "PDF újragenerálása",
+    });
+    fireEvent.click(gomb);
+    await waitFor(() =>
+      expect((gomb as HTMLButtonElement).disabled).toBe(true),
+    );
+    fireEvent.click(gomb);
+    expect(api.regenerateIssuedSheet).toHaveBeenCalledTimes(1);
+    ujraGeneralasKesz({ changed: true });
+    await waitFor(() =>
+      expect((gomb as HTMLButtonElement).disabled).toBe(false),
+    );
+  });
+
+  it("a szerver okát mutatja, ha az újragenerálás elutasított", async () => {
+    api.documents.mockResolvedValue({ items: kiadott() });
+    api.regenerateIssuedSheet.mockRejectedValue(
+      new Error(
+        "Az aláírt laphoz nincs végleges PDF, ezért nincs mit újragenerálni.",
+      ),
+    );
+    render(
+      <WorksheetDocuments worksheetId="ws-1" token="t" canView canRegenerate />,
+    );
+    await answered(api.documents);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "PDF újragenerálása" }),
+    );
+
+    expect(await screen.findByText(/nincs végleges PDF/)).toBeTruthy();
+    expect(api.documents).toHaveBeenCalledTimes(1);
   });
 });

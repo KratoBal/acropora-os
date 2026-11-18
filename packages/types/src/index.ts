@@ -1173,6 +1173,7 @@ export type {
   WorksheetDisplayStatus,
   WorksheetVersionSummary,
   WorksheetDocumentListResponse,
+  WorksheetSheetRegeneration,
   WorksheetDocumentSummary,
   WorksheetDocumentType,
 } from "./worksheet-management.js";

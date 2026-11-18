@@ -987,3 +987,38 @@ Számlázz.hu-ba ír (álszámlázóban semmibe), így a TESZT- sorszámú díjb
 
 **Következmény.** A díjbekérő, az előleg és a végszámla lánca ajánlatból végigmegy, és minden hibás kimenet (nulla végszámla, dupla számlázás) vagy
 elutasítás, vagy látható figyelmeztetés a vázlaton. A figyelmeztetés a vázlat oldalán áll, NEM a megjegyzés mezőben: azt a vevő számlája kinyomtatja.
+
+## ADR-019 – A lezárt munkalap kiadott PDF-jének újragenerálása: a sor marad, a tartalma cserélődik, a régi bájtok archív csatolmányba kerülnek
+
+**Dátum:** 2026-11-18 (kártya: 47e07a53; task: t-20261118-munkalap-pdf-ujra; Balázs 19:17 UTC: "legyen")
+
+**Kontextus.** A kiadott lapot a lezárás (#847), az aláírás utáni véglegeset az aláírás tárolja, egyszer. A #2688 (élesben 2026-11-18 13:41 UTC) előtt lezárt
+lapokon a régi elrendezés áll (a hosszú tárgy a számra csúszik, "Összes munkaóra: 0"), és magától soha nem frissül. A gomb ugyanabból a verzióból új bájtokat
+állít elő; csak a megjelenítés változik, a verzió tartalma és az aláírás adata nem, és a régi tárolt példánynak visszakereshetőnek kell maradnia.
+
+**Döntés.**
+
+1. A `WorksheetDocument` sor (azonosító, verzió, típus, eredeti idő) MARAD, a tartalma (`content`, `sizeBytes`, `sha256`) cserélődik. Nincs új sor és nincs
+   migráció: a `@@unique([worksheetVersionId, type])` szerkezeti ("egy verzióhoz egy hiteles lap", #847), és a lazítása minden olvasót (hibajegy-csomag,
+   karbantartási csomag, partner, mobil) új szabályra kényszerítene.
+2. A régi bájtok ARCHÍV sorba kerülnek: típus `OTHER`, `worksheetVersionId` nélkül, a régi hashsel, az eredeti idővel és olyan felirattal, amelyik kimondja,
+   mikor és ki generálta újra. A lap Csatolmányok listáján látszik, és letölthető.
+3. Verziónként EGY sort írunk át: aláírt verziónál a VÉGLEGES (`SIGNED_SHEET`) sort, egyébként a lezáráskorit. A lezáráskori sor aláírt verziónál érintetlen
+   marad: az az aláírás előtti állapotot rögzíti, és aláírtként újrarajzolva olyan állapotot mutatna, amit sosem viselt. Ha az aláírt verzió végleges sora
+   hiányzik, az nem újragenerálás, hanem pótlás (`worksheet-sheet-backfill`): kimondott 409.
+4. A készítési idő rögzített (a sor eredeti ideje, #1582 P2 minta), ezért azonos bemenetre azonos bájt jön: ha az új hash egyezik a tároltal, nem írunk
+   semmit (`changed: false`), és egy második kattintás nem szaporítja az archívumot. A cserét feltételes `updateMany` végzi a régi hashre, ugyanabban a
+   tranzakcióban, mint az archív sor: ha közben más cserélt, a tranzakció visszagörög (409).
+5. Belsős lépés (`SERVICE_MANAGE` és belső hatókör), a partner nem generálhatja újra.
+
+**Amit nem teszünk.** A régi példányt nem töröljük és nem írjuk felül nyom nélkül; a lezáráskori út bájtjai nem változnak (a `creationDate` csak az
+újragenerálásnál adott).
+
+**Mérési korlátok (a döntés idején).** Az adatbázisos viselkedést (archív sor, feltételes csere, idempotencia) az integrációs készlet méri
+(`worksheet-sheet-regeneration.integration.spec.ts`), helyben nem futott. Az éles lapokon (például NMD-2026-028) nem próbáltuk.
+
+**Következmény.** A partner portál a lap ÖSSZES csatolmányát mutatja ("Munkalap fényképei és fájljai", `GET :id/documents`), ezért az újragenerált kiadott lapot
+azonnal látja (ugyanaz a sor). Az archív példány belső előzmény: a partner NEM látja, sem a listában, sem azonosítóval letöltve (404), mert a szolgáltatás a
+partner hatókörű olvasásból kiszűri (`isSheetArchive`: `OTHER` típus és az archív felirat eleje). A partner a saját feltöltött `OTHER` fájlját továbbra is látja.
+Ismert határ: ha a kiadott sor tartalma a dokumentum-tárolóban áll (`storageKey`, `content` nélkül), az archív sor a tároló-kulcs miatt nem olvasható ki
+(a kulcs a régi azonosítót hordozza); ma a kiadott lapok a soron belül állnak.
