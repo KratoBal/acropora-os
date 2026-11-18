@@ -329,28 +329,35 @@ describe("ServiceJobListPage", () => {
     "Nyitott" fül alatt "Kész" jelvényű lap állt. MI PIROSÍT: ha a régi fülek jönnek vissza; ha a Kész fül alatt nem kész lap áll, vagy
     fordítva; ha a lista nem mindent kér (a fülek a kliensen szűrnek).
   */
-  it("a karbantartás fülei Folyamatban, Kész, Összes, és a jelvény szerint szűrnek", async () => {
+  it("a karbantartás fülei Folyamatban, Kész, Összes, és a SZERVERTŐL kérik a jelvény szerinti szűrést", async () => {
     const base = response().items[0]!;
-    api.list.mockResolvedValue(
-      response({
-        items: [
-          {
-            ...base,
-            id: "kt-kesz",
-            jobNumber: "KT-2026-005",
-            kind: "MAINTENANCE",
-            maintenanceDone: true,
-          },
-          {
-            ...base,
-            id: "kt-fut",
-            jobNumber: "KT-2026-004",
-            kind: "MAINTENANCE",
-            maintenanceDone: false,
-          },
-        ],
-      }),
-    );
+    const kesz = {
+      ...base,
+      id: "kt-kesz",
+      jobNumber: "KT-2026-005",
+      kind: "MAINTENANCE" as const,
+      maintenanceDone: true,
+    };
+    const fut = {
+      ...base,
+      id: "kt-fut",
+      jobNumber: "KT-2026-004",
+      kind: "MAINTENANCE" as const,
+      maintenanceDone: false,
+    };
+    // a szerver szűr (f4590db6): a hetedik argumentum a fül, a válasz annak megfelelő
+    api.list.mockImplementation(async (...args: unknown[]) => {
+      const state = args[6];
+      return response({
+        items:
+          state === "done"
+            ? [kesz]
+            : state === "progress"
+              ? [fut]
+              : [kesz, fut],
+        maintenanceCounts: { progress: 7, done: 12 },
+      });
+    });
     render(<ServiceJobListPage kind="MAINTENANCE" />);
 
     expect(await screen.findByText("KT-2026-004")).toBeTruthy();
@@ -360,14 +367,19 @@ describe("ServiceJobListPage", () => {
     expect(screen.queryByRole("tab", { name: "Várakozik" })).toBeNull();
     expect(screen.queryByRole("tab", { name: "Lezárt" })).toBeNull();
     expect(api.list.mock.calls.at(-1)?.[1]).toBe("all");
+    expect(api.list.mock.calls.at(-1)?.[6]).toBe("progress");
+    // a lábléc a szerver számát mondja, nem a betöltött sorokét
+    expect(await screen.findByText(/^7 találat/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("tab", { name: "Kész" }));
     expect(await screen.findByText("KT-2026-005")).toBeTruthy();
     expect(screen.queryByText("KT-2026-004")).toBeNull();
+    expect(api.list.mock.calls.at(-1)?.[6]).toBe("done");
 
     fireEvent.click(screen.getByRole("tab", { name: "Összes" }));
     expect(await screen.findByText("KT-2026-004")).toBeTruthy();
     expect(screen.getByText("KT-2026-005")).toBeTruthy();
+    expect(api.list.mock.calls.at(-1)?.[6]).toBeUndefined();
   });
 
   it("a hibajegy-lista csempéje Nyitott hibajegy marad", async () => {
