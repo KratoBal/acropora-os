@@ -988,7 +988,6 @@ Számlázz.hu-ba ír (álszámlázóban semmibe), így a TESZT- sorszámú díjb
 **Következmény.** A díjbekérő, az előleg és a végszámla lánca ajánlatból végigmegy, és minden hibás kimenet (nulla végszámla, dupla számlázás) vagy
 elutasítás, vagy látható figyelmeztetés a vázlaton. A figyelmeztetés a vázlat oldalán áll, NEM a megjegyzés mezőben: azt a vevő számlája kinyomtatja.
 
-
 ## ADR-019 – A lezárt munkalap kiadott PDF-jének újragenerálása: a sor marad, a tartalma cserélődik, a régi bájtok archív csatolmányba kerülnek
 
 **Dátum:** 2026-11-18 (kártya: 47e07a53; task: t-20261118-munkalap-pdf-ujra; Balázs 19:17 UTC: "legyen")
@@ -998,6 +997,7 @@ lapokon a régi elrendezés áll (a hosszú tárgy a számra csúszik, "Összes 
 állít elő; csak a megjelenítés változik, a verzió tartalma és az aláírás adata nem, és a régi tárolt példánynak visszakereshetőnek kell maradnia.
 
 **Döntés.**
+
 1. A `WorksheetDocument` sor (azonosító, verzió, típus, eredeti idő) MARAD, a tartalma (`content`, `sizeBytes`, `sha256`) cserélődik. Nincs új sor és nincs
    migráció: a `@@unique([worksheetVersionId, type])` szerkezeti ("egy verzióhoz egy hiteles lap", #847), és a lazítása minden olvasót (hibajegy-csomag,
    karbantartási csomag, partner, mobil) új szabályra kényszerítene.
