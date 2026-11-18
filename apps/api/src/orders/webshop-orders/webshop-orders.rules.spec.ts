@@ -5,6 +5,7 @@ import type { MedusaOrderOverviewRow } from "../../integrations/medusa/medusa-ad
 import {
   NO_FACTS,
   applyFilters,
+  shortageCountsOf,
   countersOf,
   inView,
   isStale,
@@ -655,5 +656,28 @@ describe("the active stock shortage on the list item (card ac167fc2)", () => {
       ["a"],
     );
     assert.equal(applyFilters([withShortage, without], {}).length, 2);
+  });
+});
+
+describe("the counts of the active stock shortages by order (card ac167fc2)", () => {
+  it("folds the grouped rows into open and agreed per order, merging an order's rows", () => {
+    const counts = shortageCountsOf([
+      { orderId: "a", status: "OPEN", _count: { _all: 2 } },
+      { orderId: "a", status: "AGREED", _count: { _all: 1 } },
+      { orderId: "b", status: "AGREED", _count: { _all: 3 } },
+    ]);
+    assert.deepEqual(Object.fromEntries(counts), {
+      a: { open: 2, agreed: 1 },
+      b: { open: 0, agreed: 3 },
+    });
+  });
+
+  it("only OPEN and AGREED count: a done or withdrawn row is no active shortage even if it were handed in", () => {
+    const counts = shortageCountsOf([
+      { orderId: "a", status: "DONE", _count: { _all: 4 } },
+      { orderId: "b", status: "WITHDRAWN", _count: { _all: 1 } },
+      { orderId: "c", status: "OPEN", _count: { _all: 1 } },
+    ]);
+    assert.deepEqual([...counts.keys()], ["c"]);
   });
 });

@@ -470,3 +470,25 @@ export const distinctSorted = (values: readonly (string | null)[]): string[] =>
   [...new Set(values.filter((value): value is string => !!value))].sort(
     byName.compare,
   );
+
+/**
+ * A KÉSZLETHIÁNY-REKORDOK (rendelés, állapot) CSOPORTOSÍTOTT SZÁMAIBÓL RENDELÉSENKÉNTI NYITOTT/MEGÁLLAPODOTT SZÁM (card ac167fc2). Csak az OPEN
+ * és az AGREED számít aktívnak; más állapot nem kerül a térképbe, akkor sem, ha a lekérdezés tévedésből odaadná.
+ */
+export function shortageCountsOf(
+  rows: readonly {
+    orderId: string;
+    status: string;
+    _count: { _all: number };
+  }[],
+): Map<string, { open: number; agreed: number }> {
+  const result = new Map<string, { open: number; agreed: number }>();
+  for (const row of rows) {
+    if (row.status !== "OPEN" && row.status !== "AGREED") continue;
+    const entry = result.get(row.orderId) ?? { open: 0, agreed: 0 };
+    if (row.status === "OPEN") entry.open += row._count._all;
+    else entry.agreed += row._count._all;
+    result.set(row.orderId, entry);
+  }
+  return result;
+}

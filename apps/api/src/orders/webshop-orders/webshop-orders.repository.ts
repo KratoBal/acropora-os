@@ -13,6 +13,7 @@ import {
   huBase,
 } from "../../partner-duplicates/partner-duplicate-groups.js";
 import type { OrderTaxKey } from "./webshop-order-invoice.rules.js";
+import { shortageCountsOf } from "./webshop-orders.rules.js";
 
 import {
   linkExternalInvoices,
@@ -399,14 +400,7 @@ export class WebshopOrdersRepository {
       },
       _count: { _all: true },
     });
-    const result = new Map<string, { open: number; agreed: number }>();
-    for (const row of rows) {
-      const entry = result.get(row.orderId) ?? { open: 0, agreed: 0 };
-      if (row.status === "OPEN") entry.open += row._count._all;
-      else entry.agreed += row._count._all;
-      result.set(row.orderId, entry);
-    }
-    return result;
+    return shortageCountsOf(rows);
   }
 
   /**

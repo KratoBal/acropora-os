@@ -879,6 +879,13 @@ describe("the active stock shortage on the list (card ac167fc2, third slice)", (
       );
       assert.equal(unfiltered.total, 4);
       assert.equal(unfiltered.shortageOrders, 2);
+      // another filter narrows the page, not the count (it follows the view, like the other counters)
+      const searched = await service(orders).orders.list(
+        { view: "all", q: "vevo1@" },
+        NOW,
+      );
+      assert.equal(searched.total, 1);
+      assert.equal(searched.shortageOrders, 2);
     } finally {
       reset();
     }
