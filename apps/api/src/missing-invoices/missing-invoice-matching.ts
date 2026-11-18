@@ -1603,7 +1603,7 @@ export function matchMonth(input: MatchMonthInput): Map<string, MatchOutcome> {
       });
   }
   markAwaitingCollector(outcomes, input.debits, input.asOf);
-  markDoublePaid(outcomes);
+  markDoublePaid(outcomes, input.debits, input.credits ?? [], usedCredits);
   return outcomes;
 }
 
@@ -1700,6 +1700,100 @@ const SETTLED_LIKE: ReadonlySet<ItemState> = new Set([
   "NOT_MATCHED",
 ]);
 
+/** A kettős fizetés visszautalása legfeljebb ennyi nappal a későbbi terhelés után jöhet (acrobot 55733). */
+const DOUBLE_PAYMENT_REFUND_DAYS = 90;
+
+/**
+ * A KETTŐS FIZETÉS, AMIT A PARTNER VISSZAUTALT (acrobot 55733; éles: a Sopro KB-2855/2026 két 172 006 Ft-os terhelése 09-28-án és
+ * 09-29-én, a 172 006 Ft-os, a számlaszámot megnevező visszautaló jóváírás 10-02-án, és a két tétel azóta is DOUBLE_PAID). Eddig
+ * semmi nem kötötte a jóváírást a kettős fizetéshez.
+ *
+ * Egy PÁR feloldódik, ha MIND a három független egyezés áll (mint a sztornózott vásárlás visszatérítésénél):
+ *   1. pontosan KÉT terhelés osztozik az azonosságon (három vagy több: ember nézze), azonos devizában és összegben;
+ *   2. van egy még fel nem használt jóváírás ugyanabban a devizában, PONTOSAN a terhelés összegével, ugyanattól a partnertől,
+ *      a KÉSŐBBI terhelés napján vagy után, legfeljebb 90 napon belül;
+ *   3. a jóváírás közleménye megnevezi a két terhelés valamelyik dokumentumának számát (tömörített alak, legalább 5 jel).
+ *
+ * A KÉSŐBBI terhelés NO_INVOICE_NEEDED lesz, és az indoklása KIMONDJA, hogy ez megállapodás: a két utalás megkülönböztethetetlen,
+ * a későbbit tekintjük feleslegesnek. A KORÁBBI érintetlen marad (a számlája és a párosítása). Részleges vagy más összegű
+ * visszautalás, más partner, szám nélküli közlemény, korábbi jóváírás: nem old fel, marad DOUBLE_PAID. Egy jóváírás egy párt zár.
+ */
+function resolveRefundedDoublePayments(
+  outcomes: Map<string, MatchOutcome>,
+  others: Map<string, Set<string>>,
+  debits: readonly MatchableDebit[],
+  credits: readonly MatchableCredit[],
+  usedCredits: Set<string>,
+): void {
+  if (credits.length === 0) return;
+  const byId = new Map(debits.map((d) => [d.id, d]));
+  const pairs: [MatchableDebit, MatchableDebit][] = [];
+  for (const [id, with_] of others) {
+    const other = with_.size === 1 ? [...with_][0]! : null;
+    if (!other || id >= other) continue;
+    // mutual and only two: the other names no one else
+    if (others.get(other)?.size !== 1 || !others.get(other)!.has(id)) continue;
+    const a = byId.get(id);
+    const b = byId.get(other);
+    if (!a || !b) continue;
+    pairs.push(
+      a.bookingDate < b.bookingDate ||
+        (a.bookingDate === b.bookingDate && a.id < b.id)
+        ? [a, b]
+        : [b, a],
+    );
+  }
+  // the earlier pair first, so a credit naming two pairs closes the earlier one
+  pairs.sort(
+    (x, y) =>
+      x[0].bookingDate.localeCompare(y[0].bookingDate) ||
+      x[0].id.localeCompare(y[0].id),
+  );
+  for (const [earlier, later] of pairs) {
+    if (
+      earlier.currency !== later.currency ||
+      !earlier.amount.equals(later.amount) ||
+      !later.counterpartyName
+    )
+      continue;
+    const numbers = [earlier.id, later.id]
+      .flatMap((id) => outcomes.get(id)?.documents ?? [])
+      .map((d) => invoiceNumberForm(d.number))
+      .filter((n) => n.length >= 5);
+    if (numbers.length === 0) continue;
+    const limit = addDays(later.bookingDate, DOUBLE_PAYMENT_REFUND_DAYS);
+    const refund = credits
+      .filter(
+        (c) =>
+          !usedCredits.has(c.id) &&
+          c.currency === later.currency &&
+          c.amount.equals(later.amount) &&
+          c.bookingDate >= later.bookingDate &&
+          c.bookingDate <= limit &&
+          !!c.counterpartyName &&
+          samePartner(c.counterpartyName, later.counterpartyName!, 0.6) &&
+          numbers.some((n) => invoiceNumberForm(c.narrative).includes(n)),
+      )
+      .sort(
+        (a, b) =>
+          a.bookingDate.localeCompare(b.bookingDate) ||
+          a.id.localeCompare(b.id),
+      )[0];
+    const outcome = outcomes.get(later.id);
+    if (!refund || !outcome) continue;
+    usedCredits.add(refund.id);
+    outcomes.set(later.id, {
+      ...outcome,
+      state: "NO_INVOICE_NEEDED",
+      documents: [],
+      candidates: [],
+      reason: `kettős fizetés: a második utalás (${later.bookingDate}) visszautalva, a jóváírás napja ${refund.bookingDate}; a két utalás megkülönböztethetetlen, ezért a későbbit tekintjük feleslegesnek (megállapodás szerint)`,
+    });
+    others.delete(earlier.id);
+    others.delete(later.id);
+  }
+}
+
 /**
  * KÉTSZER FIZETETT SZÁMLA (acrobot 25636, éles: a Sopro KB-2855/2026 két
  * 172 006 Ft-os terheléshez, ugyanaz a PDF kétszer feltöltve). Ha ugyanaz a
@@ -1710,7 +1804,12 @@ const SETTLED_LIKE: ReadonlySet<ItemState> = new Set([
  * acrobot 25708) EGY párosítás: a tagjai egymás miatt nem kétszer fizetettek.
  * Mérve 2026-10-01: e nélkül egy Parkl-hónap minden fizetése DOUBLE_PAID lett.
  */
-function markDoublePaid(outcomes: Map<string, MatchOutcome>): void {
+function markDoublePaid(
+  outcomes: Map<string, MatchOutcome>,
+  debits: readonly MatchableDebit[],
+  credits: readonly MatchableCredit[],
+  usedCredits: Set<string>,
+): void {
   // azonosság -> párosítás -> { a párosítás terhelései, a bennük álló dokumentumok számai }
   const pairingsOf = new Map<
     string,
@@ -1759,6 +1858,7 @@ function markDoublePaid(outcomes: Map<string, MatchOutcome>): void {
       reason: `${outcome.reason}; ugyanaz a fájl más számlaszámmal egy másik terheléshez is párosítva (${[...with_].sort().join(", ")}): nem kettős fizetés, de érdemes megnézni`,
     });
   }
+  resolveRefundedDoublePayments(outcomes, others, debits, credits, usedCredits);
   for (const [debitId, with_] of others) {
     const outcome = outcomes.get(debitId)!;
     if (!SETTLED_LIKE.has(outcome.state)) continue;
