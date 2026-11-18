@@ -20,6 +20,13 @@ import type {
  */
 export class ServiceJobDeleteRefused extends Error {}
 
+/**
+ * SOROSÍTHATÓ TRANZAKCIÓ, ÉS EZ NEM DÍSZ (barracuda, #2693 review): az alapértelmezett (READ COMMITTED) tranzakcióban a tényolvasás nem zár ki egy EGYIDEJŰ aláírást. Ha az aláírás a mi
+ * olvasásunk UTÁN, de a törlés ELŐTT commitol, a `DELETE` a sorzárra vár, majd a már ALÁÍRT verziót és az aláírást is kaszkáddal törölné. Serializable alatt az egyidejű írás a mi olvasott
+ * soraink közé sorosítási hibát (P2034) ad, a törlés elmarad, és a hívó újrapróbálhat (a szolgáltatás ezt 409-re képezi).
+ */
+export const SERIALIZABLE = { isolationLevel: "Serializable" as const };
+
 export interface ServiceJobDeleteSnapshot {
   id: string;
   jobNumber: string;
@@ -66,6 +73,8 @@ export class ServiceJobDeleteRepository {
     id: string;
     actorUserId: string;
     refusal: (facts: ServiceJobDeleteFacts) => string | null;
+    /** CSAK TESZTHEZ: a tényolvasás UTÁN, a törlés ELŐTT fut (a versenyteszt itt írja be az egyidejű aláírást). */
+    afterRead?: () => Promise<void>;
   }): Promise<{
     jobNumber: string;
     counts: ServiceJobDeleteSnapshot["counts"];
@@ -76,6 +85,7 @@ export class ServiceJobDeleteRepository {
       if (!snapshot) return null;
       const refusal = input.refusal(snapshot.facts);
       if (refusal) throw new ServiceJobDeleteRefused(refusal);
+      await input.afterRead?.();
 
       const sheets = await tx.worksheet.findMany({
         where: { serviceJobId: input.id },
@@ -159,7 +169,7 @@ export class ServiceJobDeleteRepository {
         counts: snapshot.counts,
         stored,
       };
-    });
+    }, SERIALIZABLE);
   }
 }
 

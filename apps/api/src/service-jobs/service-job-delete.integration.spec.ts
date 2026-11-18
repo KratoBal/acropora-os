@@ -185,6 +185,46 @@ describe(
       );
     });
 
+    /*
+      A VERSENYTESZT (barracuda, #2693 review): a tényolvasás UTÁN, a törlés ELŐTT egy MÁSIK kapcsolat aláírja a munkalapot. READ COMMITTED alatt a törlés sorzárra várna, majd a már aláírt verziót
+      kaszkáddal törölné (és semmi nem szólna); Serializable alatt a törlés sorosítási hibát (P2034) kap, és semmi nem törlődik. MI PIROSÍT: ha a tranzakció nem sorosítható (a jegy törlődik, az
+      aláírt verzióval együtt), vagy ha a hiba nem P2034.
+    */
+    it("a tényolvasás után egyidejűleg aláírt munkalap elbuktatja a törlést, és az aláírás megmarad", async () => {
+      const { id } = await job(`${PREFIX}045`);
+      const draft = await sheet(id);
+
+      await assert.rejects(
+        repository.remove({
+          id,
+          actorUserId: "deleter-1",
+          refusal: serviceJobDeleteRefusal,
+          afterRead: async () => {
+            await prisma.worksheetVersion.updateMany({
+              where: { worksheetId: draft.id },
+              data: { status: "SIGNED" },
+            });
+          },
+        }),
+        (error: unknown) =>
+          (error as { code?: string } | null)?.code === "P2034",
+      );
+
+      assert.equal(await prisma.serviceJob.count({ where: { id } }), 1);
+      assert.equal(
+        await prisma.worksheetVersion.count({
+          where: { worksheetId: draft.id, status: "SIGNED" },
+        }),
+        1,
+      );
+      assert.equal(
+        await prisma.serviceJobDeletion.count({
+          where: { jobNumber: `${PREFIX}045` },
+        }),
+        0,
+      );
+    });
+
     it("a lezárt (COMPLETED) jegy tiltott, a megszakított (CANCELLED) törölhető; a hiányzó jegy null", async () => {
       const closed = await job(`${PREFIX}043`, { status: "COMPLETED" });
       await assert.rejects(remove(closed.id), ServiceJobDeleteRefused);

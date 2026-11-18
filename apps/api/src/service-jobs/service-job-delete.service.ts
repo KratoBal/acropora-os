@@ -77,6 +77,11 @@ export class ServiceJobDeleteService {
     } catch (error) {
       if (error instanceof ServiceJobDeleteRefused)
         throw new ConflictException(error.message);
+      // sorosítási hiba (P2034): egy egyidejű írás (például aláírás) a törlés olvasott soraihoz ért; a törlés elmaradt, újrapróbálható
+      if ((error as { code?: string } | null)?.code === "P2034")
+        throw new ConflictException(
+          "A jegy közben megváltozott, ezért a törlés elmaradt. Próbáld újra.",
+        );
       throw error;
     }
     if (!removed) throw new NotFoundException("A hibajegy nem található.");
