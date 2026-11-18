@@ -363,11 +363,7 @@ export function ServiceJobListPage({
           tiles={tiles}
           active={tab}
           onSelect={(key) => setTab(key as ServiceJobTab)}
-          label={
-            kind === "MAINTENANCE"
-              ? "Karbantartások állapot szerint"
-              : "Hibajegyek állapot szerint"
-          }
+          label="Hibajegyek állapot szerint"
         />
       )}
       <div className={sv.panel}>
