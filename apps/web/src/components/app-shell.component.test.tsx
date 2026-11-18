@@ -194,11 +194,12 @@ describe("AppShell business navigation groups", () => {
     saját útvonalukon élnek, és ott a menüpont a jelenlegi. MI PIROSÍT: ha az
     `alsoActiveOn` elveszne, és a GLS oldalon egyik menüpont sem lenne aktív.
   */
-  it("marks Elszámolások on each of the three settlement pages", () => {
+  it("marks Elszámolások on each of the provider settlement pages", () => {
     for (const pathname of [
       "/penzugy/foxpost",
       "/penzugy/gls",
       "/penzugy/simplepay",
+      "/penzugy/stripe",
     ]) {
       navigation.pathname = pathname;
       const { unmount } = render(<AppShell>Oldaltartalom</AppShell>);
