@@ -157,7 +157,10 @@ describe(
       assert.equal(utana.id, elotte.id, "ugyanaz a sor marad");
       assert.equal(utana.createdAt.getTime(), REGI_IDO.getTime());
       assert.notEqual(utana.sha256, REGI_SHA);
-      assert.equal(utana.content?.subarray(0, 5).toString(), "%PDF-");
+      assert.equal(
+        Buffer.from(utana.content!).subarray(0, 5).toString(),
+        "%PDF-",
+      );
 
       const [archiv, ...tobb] = await archivak(worksheetId);
       assert.equal(tobb.length, 0, "egy archív példány");
