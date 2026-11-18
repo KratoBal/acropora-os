@@ -339,6 +339,30 @@ describe("the price stop labels", () => {
     expect(priceStopKindHint("valami-uj-fajta")).toBeNull();
     expect(priceStopKindHint("own-price-missing")).toBeTruthy();
   });
+  it("links the product's name to its product page, with the id encoded, and nowhere else (t-20261118-arstop-link)", async () => {
+    auth.session = session("OWNER");
+    api.get.mockResolvedValue(
+      list([
+        stop({ productId: "p 1/x", skus: ["A-1"], name: "Egy termék" }),
+        stop({ productId: "p2", skus: ["B-1"], name: null }),
+      ]),
+    );
+    const { container } = render(<MedusaPriceStopsPage />);
+    const link = await screen.findByRole("link", { name: "Egy termék" });
+    expect(link.getAttribute("href")).toBe("/products/p%201%2Fx");
+    // a product whose row is gone has no page: no link, and the sentence stays
+    expect(screen.getByText("A termék sora már nincs meg")).toBeTruthy();
+    expect(container.querySelectorAll("tbody a")).toHaveLength(1);
+  });
+
+  it("the link sits inside the long cell, so the phone card layout rule still reaches it", async () => {
+    auth.session = session("OWNER");
+    api.get.mockResolvedValue(list([stop({ name: "Linkelt termék" })]));
+    render(<MedusaPriceStopsPage />);
+    const link = await screen.findByRole("link", { name: "Linkelt termék" });
+    expect(link.closest("[data-stop-long]")).not.toBeNull();
+  });
+
   it("marks the long cells for the phone card: the problem and the name of every row, and no other cell", async () => {
     auth.session = session("OWNER");
     api.get.mockResolvedValue(
