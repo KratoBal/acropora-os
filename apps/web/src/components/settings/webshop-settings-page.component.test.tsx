@@ -86,6 +86,8 @@ describe("Webshop beállítások", () => {
       "/beallitasok/levelsablonok?csoport=webshop",
       // the coupons (card 393ae5cb): behind their own served switch, like the home page
       "/webshop/kuponok",
+      // the customer discount (card 20713f62): the same switch and right as the coupons
+      "/webshop/egyedi-kedvezmenyek",
       "/admin/kezdolap",
     ]);
     expect(links.filter((link) => !existsSync(oldalFajlja(link.href)))).toEqual(
@@ -102,6 +104,7 @@ describe("Webshop beállítások", () => {
     const without = hrefsOnScreen();
     expect(without).not.toContain("/admin/kezdolap");
     expect(without).not.toContain("/webshop/kuponok");
+    expect(without).not.toContain("/webshop/egyedi-kedvezmenyek");
     expect(without).toContain("/admin/integrations/medusa/connection");
   });
 

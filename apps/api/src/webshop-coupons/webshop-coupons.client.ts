@@ -28,29 +28,40 @@ const FIELDS =
 /** A lista felső határa: egy kézzel kezelt kuponlistánál ennyi bőven van, és ha elérjük, a válasz kimondja (`truncated`). */
 export const PROMOTION_LIST_LIMIT = 500;
 
+/**
+ * One Medusa admin request with the stored key as the Basic user name (no password, as the Medusa admin reads it). Shared
+ * by the coupon client and the customer-discount client; the body explains an error (Medusa's own message), the headers
+ * carry the key and are never logged.
+ */
+export async function medusaAdminRequest<T>(
+  config: { baseUrl: string; apiKey: string },
+  fetchImpl: typeof fetch,
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const response = await fetchImpl(`${config.baseUrl}${path}`, {
+    ...init,
+    headers: {
+      authorization: `Basic ${Buffer.from(`${config.apiKey}:`).toString("base64")}`,
+      "content-type": "application/json",
+    },
+  });
+  if (!response.ok)
+    throw new MedusaAdminHttpError(
+      response.status,
+      (await response.text()).slice(0, 500),
+    );
+  return (await response.json()) as T;
+}
+
 export class HttpMedusaPromotionClient implements MedusaPromotionClient {
   constructor(
     private readonly config: { baseUrl: string; apiKey: string },
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
-  private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await this.fetchImpl(`${this.config.baseUrl}${path}`, {
-      ...init,
-      headers: {
-        // the key is the Basic scheme's user name, no password: the Medusa admin reads it so
-        authorization: `Basic ${Buffer.from(`${this.config.apiKey}:`).toString("base64")}`,
-        "content-type": "application/json",
-      },
-    });
-    if (!response.ok) {
-      // the body explains the error (Medusa's own message); the headers carry the key and are not logged
-      throw new MedusaAdminHttpError(
-        response.status,
-        (await response.text()).slice(0, 500),
-      );
-    }
-    return (await response.json()) as T;
+  private request<T>(path: string, init?: RequestInit): Promise<T> {
+    return medusaAdminRequest<T>(this.config, this.fetchImpl, path, init);
   }
 
   async listPromotions(): Promise<MedusaPromotionRow[]> {
