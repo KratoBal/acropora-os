@@ -457,7 +457,9 @@ jobs:
   docker-build-scan:
     name: Docker build & vulnerability scan (${{ matrix.app }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 30, not 20: room for the one retry of the build below (10 + 10 minutes) and the scan. The build itself takes about 2 to 5
+    # minutes (measured on the run of 2026-11-17: the steps of the api build other than the dependency install add up to 104 s).
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -503,8 +505,34 @@ jobs:
       # production migration image (see docs/DEPLOYMENT.md, Section 5) —
       # there is no separate build step needed to validate that stage, it's
       # a prerequisite of the default target built here.
+      #
+      # A STALL IS CUT AND RETRIED ONCE (2026-11-17, acropora-os #2663: the Dockerfile's `pnpm install --frozen-lockfile` layer took
+      # 1083 s instead of about a minute, the 20 minute job limit cancelled the run, and a rerun of the same commit was green: the
+      # runner's network stalled, the code did not). The first attempt has a 10 minute limit and may fail without failing the
+      # job; the second attempt runs only when the first did not succeed, with the same limit. The layers the first one
+      # finished come from the LOCAL cache of the buildx builder container of this same job (a build cut by a timeout exports no
+      # gha cache: `cache-to` runs at the end of a build), so the second attempt restarts at the layer that stalled as long as the
+      # builder is not recreated between the two steps. A build that fails for a real reason (a broken
+      # Dockerfile) therefore runs twice and fails in the second attempt, which is where its log is read.
       - name: Build ${{ matrix.app }} image
+        id: build_first
         uses: docker/build-push-action@v6
+        timeout-minutes: 10
+        continue-on-error: true
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: false
+          load: true
+          tags: acropora-${{ matrix.app }}:ci
+          build-args: ${{ matrix.build_args }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+      - name: Build ${{ matrix.app }} image (second attempt, the first did not succeed)
+        if: steps.build_first.outcome != 'success'
+        uses: docker/build-push-action@v6
+        timeout-minutes: 10
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile

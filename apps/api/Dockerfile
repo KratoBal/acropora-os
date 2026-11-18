@@ -393,6 +393,13 @@ RUN if [ -n "$RELEASE_COMMIT_SHA" ]; then \
       (echo "RELEASE_COMMIT_SHA=\"$RELEASE_COMMIT_SHA\" is not a well-formed 40-char lowercase hex git commit SHA" >&2 && exit 1); \
     fi
 ENV RELEASE_IMAGE_COMMIT_SHA=${RELEASE_COMMIT_SHA}
+# The RUNTIME commit too, as a default (task t-20261117-ghcr-kepek). A Coolify build passes no build argument and sets RELEASE_COMMIT_SHA at run
+# time from ${SOURCE_COMMIT}; an image built elsewhere and only pulled (GHCR) has no source commit on the platform, so that variable would resolve to
+# EMPTY and `currentReleaseCommitSha()` would be null. A platform value still wins over this default, and so does an EMPTY one: on an application
+# that pulls a pre-built image the `RELEASE_COMMIT_SHA=${SOURCE_COMMIT}` variable must therefore be REMOVED (docs/GHCR-IMAGES.md). With both set
+# from the same build argument `commitSourceState` reads `match` by construction; the measure of a deploy stays: the runtime commit equals the
+# commit the image was built from.
+ENV RELEASE_COMMIT_SHA=${RELEASE_COMMIT_SHA}
 
 # The deploy output is already @acropora/api's own root (package.json,
 # dist/, node_modules/ at the top level) — no apps/api subdirectory to
