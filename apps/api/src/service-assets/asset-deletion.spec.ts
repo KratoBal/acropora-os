@@ -5,6 +5,7 @@ import { assetDeletionRefusal } from "./asset-deletion.js";
 
 const none = {
   serviceJobs: 0,
+  maintenanceSheets: 0,
   worksheetLines: 0,
   childAssets: 0,
   operationsTemplates: 0,
@@ -28,6 +29,11 @@ describe("assetDeletionRefusal", () => {
       assetDeletionRefusal({ ...none, serviceJobs: 1 }) ?? "",
       /hibajegy/,
     );
+    // a karbantartási lap NEM hibajegy (acrobot 56109): saját szó, és a hibajegy szó nem áll benne
+    const maintenance =
+      assetDeletionRefusal({ ...none, maintenanceSheets: 1 }) ?? "";
+    assert.match(maintenance, /1 karbantartási lap/);
+    assert.doesNotMatch(maintenance, /hibajegy/);
     assert.match(
       assetDeletionRefusal({ ...none, worksheetLines: 1 }) ?? "",
       /munkalapsor/,
@@ -48,11 +54,13 @@ describe("assetDeletionRefusal", () => {
     const message =
       assetDeletionRefusal({
         serviceJobs: 2,
+        maintenanceSheets: 6,
         worksheetLines: 3,
         childAssets: 4,
         operationsTemplates: 5,
       }) ?? "";
     assert.match(message, /2 hibajegy/);
+    assert.match(message, /6 karbantartási lap/);
     assert.match(message, /3 munkalapsor/);
     assert.match(message, /4 alárendelt/);
     assert.match(message, /5 üzemeltetési naplósablon/);

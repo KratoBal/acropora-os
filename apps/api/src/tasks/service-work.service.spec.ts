@@ -35,8 +35,10 @@ const jobRow = (
   status: string,
   scheduledAt: string | null = null,
   createdAt = "2026-09-01T08:00:00.000Z",
+  kind: "REPAIR" | "MAINTENANCE" = "REPAIR",
 ) => ({
   id,
+  kind,
   jobNumber: id,
   status,
   title: `Jegy ${id}`,
@@ -157,6 +159,20 @@ describe("the service view of Feladataim", () => {
     assert.equal(sheet.unitName, "PP Üzemeltetés");
     assert.equal(job.status, "IN_PROGRESS");
     assert.equal(job.title, "Jegy HJ-1");
+  });
+
+  // a rám osztott karbantartási lap is a listán áll, de a fajtáját viszi (acrobot 56109): a web ebből jelöli "Karbantartási lap"-nak
+  it("a job carries its kind, so a maintenance sheet is not shown as a ticket", async () => {
+    const { service: s } = service({
+      open: [
+        jobRow("HJ-1", "IN_PROGRESS"),
+        jobRow("KT-1", "NEW", null, "2026-09-01T08:00:00.000Z", "MAINTENANCE"),
+      ],
+    });
+    const result = await s.list(tech, "OPEN", now);
+    const all = [...result.mine, ...result.others];
+    assert.equal(all.find((i) => i.id === "HJ-1")!.jobKind, "REPAIR");
+    assert.equal(all.find((i) => i.id === "KT-1")!.jobKind, "MAINTENANCE");
   });
 
   it("the open view asks no closed jobs; the closed view shows only the closed, with the open count unchanged", async () => {

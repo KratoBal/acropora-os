@@ -1035,17 +1035,34 @@ export class ServiceAssetsRepository extends Repository {
    * osszevont logikai ertek.
    */
   async deletionBlockers(assetId: string): Promise<AssetDeletionBlockers> {
-    const [serviceJobs, worksheetLines, childAssets, operationsTemplates] =
-      await Promise.all([
-        prisma.serviceJobAsset.count({ where: { assetId } }),
-        prisma.worksheetLine.count({ where: { assetId } }),
-        prisma.asset.count({ where: { parentAssetId: assetId } }),
-        // a kivezetett sablon is akadaly (a bejegyzesek ra hivatkoznak majd, a sema `Restrict`)
-        prisma.operationsTaskTemplate.count({
-          where: { assets: { some: { assetId } } },
-        }),
-      ]);
-    return { serviceJobs, worksheetLines, childAssets, operationsTemplates };
+    const [
+      serviceJobs,
+      maintenanceSheets,
+      worksheetLines,
+      childAssets,
+      operationsTemplates,
+    ] = await Promise.all([
+      // the ticket and the maintenance sheet are counted apart: a maintenance sheet is no ticket (acrobot 56109)
+      prisma.serviceJobAsset.count({
+        where: { assetId, serviceJob: { kind: "REPAIR" } },
+      }),
+      prisma.serviceJobAsset.count({
+        where: { assetId, serviceJob: { kind: "MAINTENANCE" } },
+      }),
+      prisma.worksheetLine.count({ where: { assetId } }),
+      prisma.asset.count({ where: { parentAssetId: assetId } }),
+      // a kivezetett sablon is akadaly (a bejegyzesek ra hivatkoznak majd, a sema `Restrict`)
+      prisma.operationsTaskTemplate.count({
+        where: { assets: { some: { assetId } } },
+      }),
+    ]);
+    return {
+      serviceJobs,
+      maintenanceSheets,
+      worksheetLines,
+      childAssets,
+      operationsTemplates,
+    };
   }
 
   /**

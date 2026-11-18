@@ -191,6 +191,24 @@ describe("the service view", () => {
     );
   });
 
+  // a rám osztott karbantartási lap nem hibajegy (acrobot 56109): a jelölése és a linkje a karbantartási lapé
+  it("a maintenance sheet is marked and linked as a maintenance sheet, not a ticket", async () => {
+    api.serviceWork.mockResolvedValue({
+      ...open,
+      mine: [
+        ...open.mine,
+        item({ id: "k1", number: "KT-2026-001", jobKind: "MAINTENANCE" }),
+      ],
+    });
+    render(<MyTasksPage />);
+    const row = await screen.findByTestId("work-SERVICE_JOB-k1");
+    expect(row.getAttribute("href")).toBe("/szerviz/karbantartas/k1");
+    expect(within(row).getByText("Karbantartási lap")).toBeTruthy();
+    expect(within(row).queryByText("Hibajegy")).toBeNull();
+    const ticket = screen.getByTestId("work-SERVICE_JOB-j2");
+    expect(within(ticket).getByText("Hibajegy")).toBeTruthy();
+  });
+
   it("„Lezárt” asks for the closed view and shows only the closed list", async () => {
     render(<MyTasksPage />);
     await screen.findByTestId("group-mine");

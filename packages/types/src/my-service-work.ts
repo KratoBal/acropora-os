@@ -30,6 +30,11 @@ export const MY_SERVICE_WORK_VIEWS: readonly MyServiceWorkView[] = [
 
 export interface MyServiceWorkItem {
   kind: MyServiceWorkKind;
+  /**
+   * A JEGY FAJTÁJA (`SERVICE_JOB` tételnél): a rám osztott karbantartási lap is ide jön, de nem hibajegy (Balázs, 2026-11-18 11:31 UTC;
+   * acrobot 56109), tehát a jelölése és a linkje a fajtából jön. Hiányzó érték (régi válasz) hibajegynek számít.
+   */
+  jobKind?: "REPAIR" | "MAINTENANCE";
   id: string;
   /** HJ-2026-0141, M-2026-0871; számozatlan munkalapnál `null`. */
   number: string | null;

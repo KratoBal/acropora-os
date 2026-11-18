@@ -15,6 +15,7 @@ export const SERVICE_WORK_CLOSED_LIMIT = 100;
 
 const jobSelect = {
   id: true,
+  kind: true,
   jobNumber: true,
   status: true,
   title: true,

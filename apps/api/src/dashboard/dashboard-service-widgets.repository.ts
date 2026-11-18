@@ -16,18 +16,17 @@ import {
 import { serviceJobVisibilityWhere } from "../service-jobs/service-job-visibility.js";
 import { worksheetListWheres } from "../worksheets/worksheets.repository.js";
 import { budapestDayKey, startOfBudapestDay } from "./budapest-day.js";
+import { OPEN_TICKET_WHERE } from "./dashboard.repository.js";
 
 const SHORT_LIST = 3;
 const CALENDAR_DAYS_AHEAD = 7;
 
 /**
- * An open ticket: not finished and not hidden. The SAME rule as the ticket
- * list's `open` scope and the old dashboard card, so the numbers agree.
+ * An open ticket: a ticket (`kind: "REPAIR"`), not finished and not hidden. The SAME condition as the start page's
+ * "nyitott hibajegy" tile (`OPEN_TICKET_WHERE`), so the numbers agree: this widget ("Nyitott hibajegyek", and the
+ * "Új hibajegy" attention item counted from it) used to count maintenance sheets as tickets (acrobot 56109).
  */
-export const OPEN_TICKET: Prisma.ServiceJobWhereInput = {
-  status: { notIn: ["COMPLETED", "CANCELLED"] },
-  hiddenAt: null,
-};
+export const OPEN_TICKET: Prisma.ServiceJobWhereInput = OPEN_TICKET_WHERE;
 
 /**
  * WHO SEES EVERY OPEN WORKSHEET ON THE TILE (owner decision, 2026-10-02):

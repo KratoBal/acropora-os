@@ -32,6 +32,8 @@ export function assetDeletionRefusal(
   const reasons: string[] = [];
   if (blockers.serviceJobs > 0)
     reasons.push(`${blockers.serviceJobs} hibajegy`);
+  if (blockers.maintenanceSheets > 0)
+    reasons.push(`${blockers.maintenanceSheets} karbantartási lap`);
   if (blockers.worksheetLines > 0)
     reasons.push(`${blockers.worksheetLines} munkalapsor`);
   if (blockers.childAssets > 0)
