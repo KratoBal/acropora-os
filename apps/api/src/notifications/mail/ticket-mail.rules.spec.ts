@@ -302,6 +302,22 @@ describe("a naplo-sor nem szivarogtat cimet", () => {
     assert.match(sor, /kiküldve/);
   });
 
+  it("a sor a lap fajtája szerint szól: karbantartási lap, különben hibajegy", () => {
+    const decision = { kind: "send", to: "a@b.hu", name: "N" } as const;
+    assert.match(
+      mailAuditNote(decision, { kind: "off" }, "MAINTENANCE"),
+      /a karbantartási lap nyitójának/,
+    );
+    assert.match(
+      mailAuditNote(decision, { kind: "off" }, "REPAIR"),
+      /a hibajegy nyitójának/,
+    );
+    assert.match(
+      mailAuditNote(decision, { kind: "off" }),
+      /a hibajegy nyitójának/,
+    );
+  });
+
   it("a kihagyas sora megnevezi az OKOT", () => {
     assert.match(
       mailAuditNote(

@@ -77,6 +77,11 @@ export interface ServiceJobAssignmentNotice {
   subject: string;
   /** The colleagues now delegated to the ticket. */
   userIds: readonly string[];
+  /**
+   * A lap fajtája, CSAK karbantartási lapnál adott át (a hibajegy értesítésének alakja nem változik): a push címe ettől "Új karbantartási lap került hozzád" (hibajegy-maradek lista, acrobot 56144;
+   * Balázs 2026-11-18: a karbantartásnak semmi köze a hibajegyekhez).
+   */
+  kind?: "REPAIR" | "MAINTENANCE";
 }
 
 /**
@@ -319,9 +324,12 @@ export class NotificationsService {
   async deliverServiceJobAssignment(
     notice: ServiceJobAssignmentNotice,
   ): Promise<AssignmentSummary> {
+    const maintenance = notice.kind === "MAINTENANCE";
     return this.deliver({
       userIds: notice.userIds,
-      title: "Új hibajegy került hozzád",
+      title: maintenance
+        ? "Új karbantartási lap került hozzád"
+        : "Új hibajegy került hozzád",
       body: notice.subject,
       data: {
         targetType: "serviceJob",
@@ -333,7 +341,7 @@ export class NotificationsService {
           attempts,
         }),
       failureLine: (summary) =>
-        `Hibajegy-értesítés: ${summary.sent} kiment, ${summary.failed} nem sikerült, ${summary.retired} eszköz-token elévült (${notice.serviceJobId}).`,
+        `${maintenance ? "Karbantartási lap" : "Hibajegy"}-értesítés: ${summary.sent} kiment, ${summary.failed} nem sikerült, ${summary.retired} eszköz-token elévült (${notice.serviceJobId}).`,
     });
   }
 
