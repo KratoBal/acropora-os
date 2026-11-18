@@ -489,3 +489,100 @@ describe("the daily run's writer (barracuda, #2192 v2)", () => {
     assert.equal(source?.run, runBankTransferMarks);
   });
 });
+
+/*
+  THE OTHER SHAPES IN A DECISION (the Banki átutalások survey, 2026-11-18). WHAT TURNS THIS RED: a credit naming a díjbekérő or
+  a cancelled invoice by its full number hidden as "no reference" (it must stand as UNRESOLVED with the reason, listed); a full
+  Számlázz.hu number that is payable not paired by its exact amount; one missing from the feed not said; an eBIZ number
+  (EINV) taken for a Számlázz.hu one, or listed for a person who has nothing to write; our own year/number reference beside
+  an EINV number not winning.
+*/
+describe("our numbers in other shapes, in a decision", () => {
+  const own = (number: string, over: Partial<FeedInvoice> = {}) =>
+    invoice("x", "11287062.00", { documentNumber: number, ...over });
+  const detailOf = (decision: ReturnType<typeof decideBankTransfer>) =>
+    decision.markable ? "" : `${decision.refusal}: ${decision.detail}`;
+
+  it("a díjbekérő by its full number: unresolved, with the reason, and listed", () => {
+    const decision = decideBankTransfer(
+      credit({ narrative: "D-CRPR-7", amount: "1121819.00" }),
+      [own("D-CRPR-7", { kindCode: "D" })],
+    );
+    assert.equal(
+      detailOf(decision),
+      "UNRESOLVED: D-CRPR-7 nem fizetendő: D-CRPR-7 díjbekérő",
+    );
+    assert.equal(bankTransferListed(decision, [], false), true);
+  });
+
+  it("a cancelled invoice by its full number: unresolved, and the customer's references are not ours", () => {
+    const decision = decideBankTransfer(
+      credit({
+        narrative: "KXT/2026/003674 E-CRPR-2026-1 S/2026/0004363",
+        amount: "11287062.00",
+      }),
+      [own("E-CRPR-2026-1", { cancelled: true })],
+    );
+    assert.equal(
+      detailOf(decision),
+      "UNRESOLVED: E-CRPR-2026-1 nem fizetendő: E-CRPR-2026-1 sztornózott",
+    );
+  });
+
+  it("a full number missing from the feed is said so", () => {
+    const decision = decideBankTransfer(
+      credit({ narrative: "E-CRPR-2026-9" }),
+      [],
+    );
+    assert.equal(
+      detailOf(decision),
+      "UNRESOLVED: E-CRPR-2026-9 nincs a feedben",
+    );
+  });
+
+  it("a payable full number pairs by the exact amount, like a year/number one", () => {
+    const decision = decideBankTransfer(
+      credit({ narrative: "E-CRPR-2026-2 kifizetés", amount: "5000.00" }),
+      [own("E-CRPR-2026-2", { grossAmount: "5000.00" })],
+    );
+    assert.equal(decision.markable, true);
+    assert.deepEqual(
+      decision.markable && decision.marks.map((m) => m.invoiceNumber),
+      ["E-CRPR-2026-2"],
+    );
+    const off = decideBankTransfer(
+      credit({ narrative: "E-CRPR-2026-2", amount: "4999.99" }),
+      [own("E-CRPR-2026-2", { grossAmount: "5000.00" })],
+    );
+    assert.equal(!off.markable && off.refusal, "AMOUNT_MISMATCH");
+  });
+
+  it("an eBIZ number is OTHER_SYSTEM: said, not listed by default, not the plan's attention", () => {
+    const decision = decideBankTransfer(
+      credit({ narrative: "EINV000000819 számla kif.", amount: "256340.00" }),
+      [],
+    );
+    assert.equal(detailOf(decision), "OTHER_SYSTEM: EINV000000819");
+    assert.equal(bankTransferListed(decision, [], false), false);
+    assert.equal(bankTransferListed(decision, [], true), true);
+    const [line] = bankTransferPlanFrom([decision]).exceptions;
+    assert.equal(line?.attention, false);
+  });
+
+  it("our own year/number reference beside an eBIZ number wins; a transfer naming neither stays NO_REFERENCE", () => {
+    const both = decideBankTransfer(
+      credit({ narrative: "2026/00084 és EINV000000819", amount: "20000.00" }),
+      balazs(),
+    );
+    assert.equal(both.markable, true);
+    assert.equal(
+      decideBankTransfer(credit({ narrative: "köszönöm" }), balazs())
+        .markable === false,
+      true,
+    );
+    assert.equal(
+      detailOf(decideBankTransfer(credit({ narrative: "köszönöm" }), balazs())),
+      "NO_REFERENCE: ",
+    );
+  });
+});

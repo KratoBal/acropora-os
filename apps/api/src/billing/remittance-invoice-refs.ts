@@ -17,6 +17,11 @@ export interface RemittanceInvoiceRef {
   prefix: string | null;
   year: string;
   number: string;
+  /**
+   * Set for a number written in FULL (`E-CRPR-2026-1`, `D-CRPR-7`: our Számlázz.hu e-invoice and díjbekérő series), upper-case, no
+   * year/number split: it matches only that exact invoice number. `year` and `number` are empty then.
+   */
+  literal?: string;
 }
 
 export const RANGE_LIMIT = 20;
@@ -38,6 +43,25 @@ const REFERENCE = new RegExp(
   "giu",
 );
 const CONTINUATION = /\s*([,;+&-]|és)\s*(\d{1,6})/gu;
+
+/*
+  OUR OTHER NUMBER SHAPES (the Banki átutalások survey, 2026-11-18; acrobot 55667, memory 2652): the Számlázz.hu series E-CRPR,
+  E-CRPRW and CRPR(W) carry the year after a hyphen (`E-CRPR-2026-1`, `CRPRW-2022-5`), and the díjbekérő is `D-CRPR-7`. Live, a
+  credit naming `E-CRPR-2026-1` and one naming `D-CRPR-7` stood as "no reference", hidden. Only these known series are read:
+  an invented pattern for any `XXX-2026-1` would name numbers that are not ours. EINV numbers are eBIZ's (`remittanceEbizNumbers`).
+*/
+const LITERAL = new RegExp(
+  String.raw`(?<![A-Za-z0-9])(E-CRPRW?-(?:19|20)\d{2}-\d{1,6}|CRPRW?-(?:19|20)\d{2}-\d{1,6}|D-CRPRW?-\d{1,6})(?![A-Za-z0-9])`,
+  "giu",
+);
+const EBIZ_NUMBER = /(?<![A-Za-z0-9])(EINV\d{6,10})(?![A-Za-z0-9])/giu;
+
+/** The eBIZ invoice numbers a text names (`EINV000000819`), upper-case, in order, each once: not ours, not paid through Számlázz.hu. */
+export function remittanceEbizNumbers(text: string): string[] {
+  return [
+    ...new Set([...text.matchAll(EBIZ_NUMBER)].map((m) => m[1]!.toUpperCase())),
+  ];
+}
 
 export function remittanceInvoiceRefs(text: string): RemittanceInvoiceRef[] {
   const out: RemittanceInvoiceRef[] = [];
@@ -69,8 +93,19 @@ export function remittanceInvoiceRefs(text: string): RemittanceInvoiceRef[] {
       previous = next;
     }
   }
+  for (const match of text.matchAll(LITERAL)) {
+    const literal = match[1]!.toUpperCase();
+    const key = `lit|${literal}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ prefix: null, year: "", number: "", literal });
+  }
   return out;
 }
+
+/** The reference as a person reads it: the full number, or year/number. */
+export const refLabel = (ref: RemittanceInvoiceRef): string =>
+  ref.literal ?? `${ref.year}/${ref.number}`;
 
 /**
  * Whether an invoice number is the reference; without a prefix, any of our series fits. The number is compared as a
@@ -85,6 +120,9 @@ export function refMatchesInvoiceNumber(
   ref: RemittanceInvoiceRef,
   invoiceNumber: string,
 ): boolean {
+  // a number written in full matches only that exact number, any case
+  if (ref.literal !== undefined)
+    return invoiceNumber.replace(/\s/g, "").toUpperCase() === ref.literal;
   const match = /^(?:([A-Z]+)-)?(\d{4})\/(\d+)$/i.exec(invoiceNumber.trim());
   if (!match) return false;
   if (match[2] !== ref.year || Number(match[3]) !== Number(ref.number))

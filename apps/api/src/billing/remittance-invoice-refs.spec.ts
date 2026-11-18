@@ -6,6 +6,7 @@ import {
   matchRemittance,
   moneyCents,
   refMatchesInvoiceNumber,
+  remittanceEbizNumbers,
   remittanceInvoiceRefs,
 } from "./remittance-invoice-refs.js";
 
@@ -123,6 +124,88 @@ describe("the customer's own references are not ours", () => {
       matchRemittance("KXT/2026/001234 2026/00503", "10000", ours).kind,
       "EXACT",
     );
+  });
+});
+
+/*
+  THE OTHER SHAPES OF OUR NUMBERS (the Banki átutalások survey, 2026-11-18, acrobot 55667; memory 2652: ACRW-/2026/ = cmfx,
+  E-CRPR, E-CRPRW, CRPR = Számlázz.hu, EINV = eBIZ). Live: a 11 287 062 Ft credit naming "E-CRPR-2026-1" and a 1 121 819 Ft
+  one naming "D-CRPR-7" (a díjbekérő: kind D in `NOT_PAYABLE_KIND`) stood as "no reference", hidden; eleven credits naming an
+  EINV number the same. WHAT TURNS THIS RED: one of those numbers not read; a foreign look-alike read; a literal number
+  matched loosely (E-CRPR-2026-1 is not E-CRPR-2026-10); an eBIZ number read as a Számlázz.hu one.
+*/
+describe("our Számlázz.hu numbers written in full, and eBIZ's", () => {
+  const literals = (text: string) =>
+    remittanceInvoiceRefs(text)
+      .filter((ref) => ref.literal !== undefined)
+      .map((ref) => ref.literal);
+
+  it("E-CRPR, E-CRPRW, CRPR and the díjbekérő D-CRPR numbers are read in full, upper-cased", () => {
+    assert.deepEqual(literals("E-CRPR-2026-1 utalás vissza"), [
+      "E-CRPR-2026-1",
+    ]);
+    assert.deepEqual(literals("e-crprw-2026-12"), ["E-CRPRW-2026-12"]);
+    assert.deepEqual(literals("CRPR-2026-5, CRPRW-2022-5"), [
+      "CRPR-2026-5",
+      "CRPRW-2022-5",
+    ]);
+    assert.deepEqual(literals("D-CRPR-7"), ["D-CRPR-7"]);
+    assert.deepEqual(literals("D-CRPRW-12 és E-CRPR-2026-1"), [
+      "D-CRPRW-12",
+      "E-CRPR-2026-1",
+    ]);
+  });
+
+  it("the customer's references around it, and the year/number shapes, stay as they were", () => {
+    assert.deepEqual(literals("KXT/2026/003674 E-CRPR-2026-1 S/2026/0004363"), [
+      "E-CRPR-2026-1",
+    ]);
+    assert.deepEqual(
+      numbers("KXT/2026/003674 E-CRPR-2026-1 S/2026/0004363"),
+      [],
+    );
+    assert.deepEqual(numbers("ACRW-2026/00083"), ["ACRW-2026/00083"]);
+    assert.deepEqual(literals("ACRW-2026/00083"), []);
+  });
+
+  it("a look-alike is not a number: a letter before or after, a missing serial, another series", () => {
+    for (const text of [
+      "XD-CRPR-7",
+      "E-CRPR-2026-1X",
+      "D-CRPR",
+      "E-CRPR-2026",
+      "E-ABCD-2026-1",
+      "CRPR-20261-5",
+    ])
+      assert.deepEqual(literals(text), [], text);
+  });
+
+  it("a literal reference matches only that exact number, any case", () => {
+    const [ref] = remittanceInvoiceRefs("E-CRPR-2026-1");
+    assert.ok(ref);
+    assert.equal(refMatchesInvoiceNumber(ref, "E-CRPR-2026-1"), true);
+    assert.equal(refMatchesInvoiceNumber(ref, "e-crpr-2026-1"), true);
+    assert.equal(refMatchesInvoiceNumber(ref, "E-CRPR-2026-10"), false);
+    assert.equal(refMatchesInvoiceNumber(ref, "ACRW-2026/00001"), false);
+    // and a year/number reference never matches a literal number
+    const [plain] = remittanceInvoiceRefs("2026/00001");
+    assert.equal(refMatchesInvoiceNumber(plain!, "E-CRPR-2026-1"), false);
+  });
+
+  it("an eBIZ number (EINV + digits) is named by its text, any case, and is not ours", () => {
+    assert.deepEqual(remittanceEbizNumbers("EINV000000819 számla kif."), [
+      "EINV000000819",
+    ]);
+    assert.deepEqual(
+      remittanceEbizNumbers("Jász-Plasztik Kft: einv000000813"),
+      ["EINV000000813"],
+    );
+    assert.deepEqual(remittanceEbizNumbers("EINV0000000716, EINV000000811"), [
+      "EINV0000000716",
+      "EINV000000811",
+    ]);
+    assert.deepEqual(remittanceEbizNumbers("REINV12 vagy EINV"), []);
+    assert.deepEqual(remittanceInvoiceRefs("EINV000000819"), []);
   });
 });
 
