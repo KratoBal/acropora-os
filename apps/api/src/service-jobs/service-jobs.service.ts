@@ -1153,6 +1153,9 @@ export class ServiceJobsService {
       })),
       worksheetCount: row.worksheetCount,
       soleWorksheetId: row.soleWorksheetId ?? null,
+      ...(row.maintenanceDone === undefined
+        ? {}
+        : { maintenanceDone: row.maintenanceDone }),
       createdAt: row.createdAt.toISOString(),
       hidden: row.hiddenAt !== null,
     }));

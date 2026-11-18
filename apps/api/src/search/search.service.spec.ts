@@ -265,6 +265,7 @@ describe("SearchService", () => {
         "assets",
         "customers",
         "invoices",
+        "maintenance",
         "orders",
         "partners",
         "products",
@@ -272,14 +273,62 @@ describe("SearchService", () => {
         "worksheets",
       ],
     ],
-    ["SERVICE", ["aquariums", "assets", "partners", "tickets", "worksheets"]],
-    ["PARTNER_SERVICE", ["aquariums", "assets", "tickets", "worksheets"]],
+    [
+      "SERVICE",
+      [
+        "aquariums",
+        "assets",
+        "maintenance",
+        "partners",
+        "tickets",
+        "worksheets",
+      ],
+    ],
+    [
+      "PARTNER_SERVICE",
+      ["aquariums", "assets", "maintenance", "tickets", "worksheets"],
+    ],
   ] as const) {
     it(`${role} pontosan a látható listaoldalai keresési csoportjait kapja`, async () => {
       const result = await search().search("saját", user(role));
       assert.deepEqual(Object.keys(result).sort(), expectedGroups);
     });
   }
+
+  /*
+    A KARBANTARTÁSI LAP A KERESŐBEN SAJÁT CSOPORT, NEM HIBAJEGY (Balázs, 2026-11-18; acrobot 55785): a hibajegyek csoportja csak a hibajegyeket
+    kéri (kind nélkül, az alapértelmezés REPAIR), a karbantartások csoportja a MAINTENANCE-t, és a találat a Karbantartás alatti
+    adatlapra visz. MI PIROSÍT: ha a két csoport ugyanazt a fajtát kéri; ha a karbantartási találat a hibajegyek útvonalára visz.
+  */
+  it("a karbantartási lap a saját csoportjában, a Karbantartás alatti úttal jön, a hibajegy a magáéban", async () => {
+    const kinds: (string | undefined)[] = [];
+    const service = search({
+      list: async (query: { kind?: string }) => {
+        kinds.push(query.kind);
+        return {
+          items: [
+            {
+              id: query.kind === "MAINTENANCE" ? "sheet-1" : "ticket-1",
+              title: "Találat",
+              jobNumber: "HJ-1",
+              customerName: "Partner",
+              departmentPath: null,
+            },
+          ],
+        };
+      },
+    });
+    const result = await service.search("találat", user("OWNER"));
+    assert.deepEqual(kinds.sort(), ["MAINTENANCE", undefined]);
+    assert.deepEqual(
+      result.maintenance?.map((item) => [item.id, item.path]),
+      [["sheet-1", "/szerviz/karbantartas/sheet-1"]],
+    );
+    assert.deepEqual(
+      result.tickets?.map((item) => [item.id, item.path]),
+      [["ticket-1", "/szerviz/hibajegyek/ticket-1"]],
+    );
+  });
 
   it("két karakternél rövidebb keresés üres válasz", async () => {
     assert.deepEqual(await search().search("a", user("OWNER")), {});

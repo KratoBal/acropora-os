@@ -14,6 +14,26 @@ describe("a hibajegy belso linkje", () => {
     );
   });
 
+  /*
+    A KARBANTARTASI LAP LINKJE A KARBANTARTAS ALATT ALL (Balazs, 2026-11-18; acrobot 55785): a levelben a link nem hibajegyre mutat. MI PIROSIT:
+    ha egy MAINTENANCE jegy linkje a hibajegyek utvonalara megy; ha a hibajegy (vagy a fajta nelkuli hivas) elveszti a sajatjat.
+  */
+  it("a karbantartasi lap a karbantartas utvonalra mutat, a hibajegy es a fajta nelkuli hivas a hibajegyekre", () => {
+    const webUrl = "https://os.acropora.hu";
+    assert.equal(
+      internalTicketLink({
+        webUrl,
+        serviceJobId: "job-1",
+        kind: "MAINTENANCE",
+      }),
+      "https://os.acropora.hu/szerviz/karbantartas/job-1",
+    );
+    assert.equal(
+      internalTicketLink({ webUrl, serviceJobId: "job-1", kind: "REPAIR" }),
+      "https://os.acropora.hu/szerviz/hibajegyek/job-1",
+    );
+  });
+
   it("a zaro perjelet levagja, ne kettozodjon", () => {
     assert.equal(
       internalTicketLink({

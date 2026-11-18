@@ -161,6 +161,48 @@ describe("ServiceJobListPage", () => {
       expect(link.getAttribute("href")).not.toMatch(/hibajegyek\/job-/);
   });
 
+  /*
+    A KARBANTARTÁS-LISTA NEM MUTAT HIBAJEGY-ÁLLAPOTOT (Balázs, 2026-11-18 11:31; acrobot 55782): az állapot a munkalapok aláírásából jön
+    (minden aláírva = Kész, különben Folyamatban), nincs partner-állapot sor, és nincs hibajegy-állapot szerinti csempe vagy fül. MI PIROSÍT:
+    ha a sor a hibajegy állapotát (Alkatrészre vár) vagy a partner-állapotot mutatja; ha a Kész/Folyamatban felcserélődik; ha a hibajegy-állapot szerinti csempék a karbantartási listán megjelennek (a fülek külön, későbbi
+    kör: a szűrő a szerveren a hibajegy-állapoton áll).
+  */
+  it("az állapot a munkalapok aláírásából jön (Kész / Folyamatban), nincs hibajegy-állapot és csempe", async () => {
+    const base = response().items[0]!;
+    api.list.mockResolvedValue(
+      response({
+        items: [
+          {
+            ...base,
+            id: "job-1",
+            title: "Aláírt karbantartás",
+            kind: "MAINTENANCE",
+            maintenanceDone: true,
+          },
+          {
+            ...base,
+            id: "job-2",
+            title: "Folyamatban lévő karbantartás",
+            kind: "MAINTENANCE",
+            maintenanceDone: false,
+          },
+        ],
+      }),
+    );
+    render(<ServiceJobListPage kind="MAINTENANCE" />);
+    await screen.findAllByTestId("maintenance-job-row");
+    const rows = screen.getAllByTestId("maintenance-job-row");
+    const statusOf = (row: HTMLElement) =>
+      row.querySelector("td[data-label='Állapot']")?.textContent;
+    expect(statusOf(rows[0]!)).toBe("Kész");
+    expect(statusOf(rows[1]!)).toBe("Folyamatban");
+    expect(screen.queryByText(/A partner ezt látja/)).toBeNull();
+    expect(screen.queryByText("Alkatrészre vár")).toBeNull();
+    expect(
+      screen.queryByLabelText("Karbantartások állapot szerint"),
+    ).toBeNull();
+  });
+
   // A lista a közös tábla: telefonon minden sor kártya, a cellák a saját oszlopuk feliratát viselik.
   it("minden cella a saját oszlopa feliratát viseli, és az oszlopok belefér a minimumba", async () => {
     render(<ServiceJobListPage />);
@@ -276,7 +318,8 @@ describe("ServiceJobListPage", () => {
         "Nyitott karbantartási lap jelenleg nincs. A lezártakat a fenti füleken nézheted meg.",
       ),
     ).toBeTruthy();
-    expect(screen.getByText("Nyitott karbantartási lap")).toBeTruthy();
+    // a hibajegy-állapot szerinti csempék a karbantartási listán nem jelennek meg (nincs állapotgép; Balázs, 2026-11-18)
+    expect(screen.queryByText("Nyitott karbantartási lap")).toBeNull();
     expect(screen.queryByText("Nyitott hibajegy")).toBeNull();
   });
 

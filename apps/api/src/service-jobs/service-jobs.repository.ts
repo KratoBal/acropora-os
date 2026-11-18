@@ -82,6 +82,8 @@ export interface ServiceJobRow {
   worksheetCount: number;
   /** A jegy egyetlen munkalapjanak azonositoja, ha PONTOSAN egy van; kulonben `null`. */
   soleWorksheetId?: string | null;
+  /** MAINTENANCE sornal: minden munkalap legutolso verzioja alairt (nincs munkalap: false); hibajegynel hianyzik. */
+  maintenanceDone?: boolean;
   /** A rejtes idopontja, vagy `null`. A felulet ebbol csinal jelolot. */
   hiddenAt: Date | null;
   /**
@@ -1093,6 +1095,29 @@ export class ServiceJobsRepository {
     const soleTerkep = new Map(
       soleRows.map((sor) => [sor.serviceJobId, sor.id] as const),
     );
+    // A KARBANTARTAS ALLAPOTA: minden munkalap LEGUTOLSO verzioja alairt (a lista ebbol nem tud hibajegy-allapotot mutatni:
+    // a karbantartasnak nincs allapotgepe). Egy kotegelt lekerdezes csak a MAINTENANCE sorok munkalapjaira.
+    const maintenanceIds = lap
+      .filter((row) => row.kind === "MAINTENANCE" && row._count.worksheets > 0)
+      .map((row) => row.id);
+    const maintenanceSheets = maintenanceIds.length
+      ? await this.database.worksheet.findMany({
+          where: { serviceJobId: { in: maintenanceIds } },
+          select: {
+            serviceJobId: true,
+            versions: {
+              orderBy: { version: "desc" },
+              take: 1,
+              select: { status: true },
+            },
+          },
+        })
+      : [];
+    const notSigned = new Set(
+      maintenanceSheets
+        .filter((sheet) => sheet.versions[0]?.status !== "SIGNED")
+        .flatMap((sheet) => (sheet.serviceJobId ? [sheet.serviceJobId] : [])),
+    );
 
     const openerIds = [
       ...new Set(
@@ -1127,6 +1152,12 @@ export class ServiceJobsRepository {
         createdAt: row.createdAt,
         worksheetCount: row._count.worksheets,
         soleWorksheetId: soleTerkep.get(row.id) ?? null,
+        ...(row.kind === "MAINTENANCE"
+          ? {
+              maintenanceDone:
+                row._count.worksheets > 0 && !notSigned.has(row.id),
+            }
+          : {}),
         hiddenAt: row.hiddenAt,
       })),
       truncated: rows.length > LIST_LIMIT,

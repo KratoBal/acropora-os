@@ -262,6 +262,28 @@ describe("a hibajegy-lista egyetlen munkalapja", () => {
     );
   });
 
+  it("a karbantartás állapota (minden munkalap aláírva) átmegy a listába, hibajegynél hiányzik", async () => {
+    const response = await new ServiceJobsService({
+      list: async () => ({
+        rows: [
+          { ...sor("1", "ws-1", 1), maintenanceDone: true },
+          { ...sor("2", null, 2), maintenanceDone: false },
+          { ...sor("3", null, 0), kind: "REPAIR" as const },
+        ],
+        truncated: false,
+      }),
+      countsByStatus: async () => counts,
+      assignedUnitIds: async () => [],
+    } as unknown as ServiceJobsRepository).list({}, {
+      id: "office-user",
+      role: "ADMIN",
+    } as AuthenticatedUser);
+    assert.deepEqual(
+      response.items.map((item) => item.maintenanceDone),
+      [true, false, undefined],
+    );
+  });
+
   it("a partner válaszában a munkalap azonosítója nem szerepel", async () => {
     const response = await service().list({}, {
       id: "partner-user",

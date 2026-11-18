@@ -13,6 +13,7 @@ import { searchApi } from "@/lib/api/search";
 
 const GROUP_LABEL: Record<(typeof SEARCH_GROUPS)[number], string> = {
   tickets: "Hibajegyek",
+  maintenance: "Karbantartási lapok",
   worksheets: "Munkalapok",
   assets: "Eszközök",
   partners: "Partnerek",

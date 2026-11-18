@@ -349,6 +349,7 @@ export class TicketMailService {
     const link = internalTicketLink({
       webUrl: this.environment.WEB_URL,
       serviceJobId: input.serviceJobId,
+      kind: context.kind,
     });
     if (!link)
       this.logger.warn(
@@ -485,6 +486,7 @@ export class TicketMailService {
     const link = internalTicketLink({
       webUrl: this.environment.WEB_URL,
       serviceJobId: input.serviceJobId,
+      kind: context.kind,
     });
     if (!link)
       this.logger.warn(
