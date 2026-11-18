@@ -25,8 +25,13 @@ describe(
     const repository = new WorksheetDeleteRepository();
     let customerId = "";
     let departmentId = "";
+    // a naplósor `userId` mezője idegenkulcs a `User`-re: a törlő felhasználó valódi sor (a CI első futásán `AuditLog_userId_fkey` hibával állt meg)
+    let actorId = "";
 
     async function removeLeftovers() {
+      await prisma.user.deleteMany({
+        where: { email: "worksheet-delete-test@example.invalid" },
+      });
       const customers = await prisma.customer.findMany({
         where: { customerNumber: { startsWith: TEST_CUSTOMER } },
         select: { id: true },
@@ -49,6 +54,16 @@ describe(
     before(async () => {
       if (gate.mode === "refuse") throw new Error(gate.reason);
       await removeLeftovers();
+      actorId = (
+        await prisma.user.create({
+          data: {
+            email: "worksheet-delete-test@example.invalid",
+            displayName: "Torles teszt felhasznalo",
+            role: "OWNER",
+          },
+          select: { id: true },
+        })
+      ).id;
       const customer = await prisma.customer.create({
         data: {
           customerNumber: `${TEST_CUSTOMER}-${Date.now() % 1_000_000}`,
@@ -80,7 +95,13 @@ describe(
           departmentId,
           serviceJobId: over.serviceJobId ?? null,
           versions: {
-            create: { version: 1, subject: "munka", status: over.status },
+            create: {
+              version: 1,
+              subject: "munka",
+              status: over.status,
+              // a lezárt állapothoz lezárási időpont tartozik (WorksheetVersion_closed_state_check)
+              closedAt: over.status === "SIGNED" ? new Date() : null,
+            },
           },
         },
         select: { id: true },
@@ -88,7 +109,7 @@ describe(
     const remove = (id: string) =>
       repository.remove({
         id,
-        actorUserId: "deleter-1",
+        actorUserId: actorId,
         refusal: worksheetDeleteRefusal,
       });
 
@@ -108,7 +129,7 @@ describe(
       const audit = await prisma.auditLog.findFirst({
         where: { action: "service.worksheet_deleted", entityId: id },
       });
-      assert.equal(audit?.userId, "deleter-1");
+      assert.equal(audit?.userId, actorId);
       await prisma.auditLog.deleteMany({
         where: { action: "service.worksheet_deleted", entityId: id },
       });
@@ -123,12 +144,12 @@ describe(
       await assert.rejects(
         repository.remove({
           id,
-          actorUserId: "deleter-1",
+          actorUserId: actorId,
           refusal: worksheetDeleteRefusal,
           afterRead: async () => {
             await prisma.worksheetVersion.updateMany({
               where: { worksheetId: id },
-              data: { status: "SIGNED" },
+              data: { status: "SIGNED", closedAt: new Date() },
             });
           },
         }),
