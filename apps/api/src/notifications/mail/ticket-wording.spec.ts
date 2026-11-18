@@ -31,6 +31,32 @@ describe("a levélsablon szava a jegy fajtája szerint", () => {
     );
   });
 
+  it("a többi rag is (hibajeggyel, hibajegyre, hibajegyként, hibajegye, hibajegyét, hibajegyig, hibajegyeket)", () => {
+    assert.equal(
+      text(
+        "hibajeggyel, Hibajeggyel, hibajegyre, hibajegyként, a hibajegye, hibajegyét, hibajegyig, hibajegyeket, hibajegyekre",
+      ),
+      "karbantartási lappal, Karbantartási lappal, karbantartási lapra, karbantartási lapként, a karbantartási lapja, karbantartási lapját, karbantartási lapig, karbantartási lapokat, karbantartási lapokra",
+    );
+    // a záró idézőjelig érő útvonal sem szöveg
+    assert.equal(
+      text('<a href="https://os.example/szerviz/hibajegyek">lista</a>'),
+      '<a href="https://os.example/szerviz/hibajegyek">lista</a>',
+    );
+    // egy útvonal vagy összetett név nem szöveg: a statikus link nem íródik át
+    assert.equal(
+      text(
+        '<a href="https://os.example/szerviz/hibajegyek/1">hibajegy-link</a>',
+      ),
+      '<a href="https://os.example/szerviz/hibajegyek/1">hibajegy-link</a>',
+    );
+    // egy másik szó része, vagy ismeretlen toldalék marad
+    assert.equal(
+      text("hibajegyzék, hibajegykezelő"),
+      "hibajegyzék, hibajegykezelő",
+    );
+  });
+
   it("a hibajegy (REPAIR) szövege és a nem hibajegy szavak változatlanok; az üres marad üres", () => {
     const original =
       "Új hibajegyet rögzített egy ügyfél. Hibajegy: {{jegy_linkje}}";

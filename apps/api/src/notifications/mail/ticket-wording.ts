@@ -13,9 +13,18 @@ const FORMS: Readonly<Record<string, string>> = {
   en: "karbantartási lapon",
   ben: "karbantartási lapban",
   nek: "karbantartási lapnak",
+  re: "karbantartási lapra",
+  ig: "karbantartási lapig",
+  ként: "karbantartási lapként",
+  e: "karbantartási lapja",
+  ét: "karbantartási lapját",
   ek: "karbantartási lapok",
+  eket: "karbantartási lapokat",
+  ekre: "karbantartási lapokra",
   ekről: "karbantartási lapokról",
   ekhez: "karbantartási lapokhoz",
+  // "hibajeggyel": a -val/-vel hasonul (g + vel -> ggyel), ezért külön alak, nem rag
+  gyel: "karbantartási lappal",
 };
 
 export function ticketTemplateWording(
@@ -24,9 +33,14 @@ export function ticketTemplateWording(
 ): string {
   if (kind !== "MAINTENANCE") return text;
   return text.replace(
-    /(?<![\p{L}])([Hh])ibajegy(ekről|ekhez|hez|et|ről|en|ben|nek|ek)?(?![\p{L}])/gu,
-    (_match, first: string, suffix: string | undefined) => {
-      const form = FORMS[suffix ?? ""]!;
+    /(?<![\p{L}/._-])([Hh])ibajeg(?:y(ekről|ekhez|eket|ekre|hez|ként|et|ről|en|ben|nek|re|ig|ét|ek|e)?|(gyel))(?![\p{L}/_-])/gu,
+    (
+      _match,
+      first: string,
+      suffix: string | undefined,
+      assimilated: string | undefined,
+    ) => {
+      const form = FORMS[assimilated ?? suffix ?? ""]!;
       return first === "H" ? form[0]!.toUpperCase() + form.slice(1) : form;
     },
   );
