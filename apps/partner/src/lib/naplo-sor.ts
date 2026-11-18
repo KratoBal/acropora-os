@@ -49,7 +49,15 @@ import {
  * ezé a függvényé -- és addig sem szabad csendben összevonni, mert az időpont
  * és a név soronként más.
  */
-export function naploSor(entry: ServiceJobPartnerTimelineEntry): string {
+/**
+ * A KARBANTARTÁSI LAPON (`maintenance`) a sor a lap szavait használja, és a létrejötte állapot nélkül áll: a karbantartásnak nincs
+ * hibajegy-állapota (Balázs, 2026-11-18 11:31 UTC; acrobot 56074). Ugyanaz a szöveg, mint a belső adatlapon (`timelineLine`,
+ * pilot-service-job-detail-page.tsx). Az állapotváltás sorai karbantartásnál meg sem jelennek (`visibleTimeline`, ticket-detail.tsx).
+ */
+export function naploSor(
+  entry: ServiceJobPartnerTimelineEntry,
+  maintenance = false,
+): string {
   if (entry.kind === "status")
     /*
       KET MEZO, KET KULONBOZO KERDES (2026-09-21).
@@ -69,11 +77,13 @@ export function naploSor(entry: ServiceJobPartnerTimelineEntry): string {
       beegetett "Uj" szo ugyanott NEMAN tevedne.
     */
     return entry.event.isCreation
-      ? `A hibajegy létrejött. Állapota: ${entry.event.partnerStatusLabel}.`
+      ? maintenance
+        ? "A karbantartási lap létrejött."
+        : `A hibajegy létrejött. Állapota: ${entry.event.partnerStatusLabel}.`
       : `A hibajegy állapota: ${entry.event.partnerStatusLabel}.`;
 
   if (entry.kind === "worksheet")
-    return `Munkalap a jegy alatt: ${serviceJobWorksheetLabel(entry.worksheet)}`;
+    return `Munkalap a ${maintenance ? "karbantartási lap" : "jegy"} alatt: ${serviceJobWorksheetLabel(entry.worksheet)}`;
 
   /*
     A TÖRÖLT CSATOLMÁNY SORA MEGNEVEZI, KI VETTE LE, és mi volt az. Ez az
@@ -91,5 +101,5 @@ export function naploSor(entry: ServiceJobPartnerTimelineEntry): string {
       : `Törölt ${mi}`;
   }
 
-  return `Eszköz a jegyen: ${entry.asset.assetNumber} (${entry.asset.assetName})`;
+  return `Eszköz a ${maintenance ? "karbantartási lapon" : "jegyen"}: ${entry.asset.assetNumber} (${entry.asset.assetName})`;
 }
