@@ -133,6 +133,48 @@ describe("a nyomtatott munkalap tartalma", () => {
     assert.equal(szoveg(sheet({ entries: [] })).includes("NAPLÓ"), false);
   });
 
+  // Luca, 2026-11-18 11:27 UTC: „munkaóra nem szükséges, ha nincs bekattintva akkor nem kell megjeleníteni" -- darab- és
+  // alkalom-tételes lapon nincs „Összes munkaóra: 0" sor; munkaóra-tétel mellett viszont a nulla is kiíródik.
+  it("munkaóra-tétel nélkül NINCS összes munkaóra sor; a darab és az alkalom marad", () => {
+    const sorok = worksheetSheetLines(
+      sheet({
+        lines: [
+          {
+            position: 1,
+            description: "Gépészet",
+            detail: null,
+            assetNumber: null,
+            partnerInternalCode: null,
+            quantity: "1",
+            unit: "db",
+            kind: "OTHER",
+            workerCount: 1,
+            laborHours: "0",
+          },
+          {
+            position: 2,
+            description: "Alkalmak száma",
+            detail: null,
+            assetNumber: null,
+            partnerInternalCode: null,
+            quantity: "2",
+            unit: "alkalom",
+            kind: "OTHER",
+            workerCount: 1,
+            laborHours: "0",
+          },
+        ],
+        laborHours: "0",
+      }),
+    );
+    assert.equal(
+      sorok.some((sor) => sor.startsWith("Összes munkaóra")),
+      false,
+    );
+    assert.ok(sorok.includes("   1 db"));
+    assert.ok(sorok.includes("   2 alkalom"));
+  });
+
   it("az összes munkaóra akkor is kiíródik, ha NULLA", () => {
     /*
       Egy elrejtett nulla két állapotot mosna össze: hogy nincs munkaóra-tétel a
@@ -357,6 +399,7 @@ describe("a lap mezőhalmaza végiggondolt", () => {
       "departmentCode",
       "departmentName",
       "description",
+      "dueDate",
       "entries",
       "fulfillmentDate",
       "issueDate",
@@ -369,10 +412,10 @@ describe("a lap mezőhalmaza végiggondolt", () => {
       "subject",
     ]);
 
-    // ÉS A KIMARADÓ MEZŐK NÉV SZERINT: a fizetési határidő NEM kerül a lapra.
-    // Egy darabszám-egyezés ezt nem mondaná meg, mert egy csere is ugyanannyi
-    // mezőt ad.
-    assert.equal(mezok.includes("dueDate"), false);
+    // A HATÁRIDŐ 2026-11-18 ÓTA RÁKERÜL (Luca kérése, 11:27 UTC, acrobot 55790: „teljesítés, kiállítás dátuma, határidő a jobb
+    // oldalra"). Ez a 2026-09-17 23:08-as döntést fordítja meg, ami ár nélkül kihagyta; név szerint áll itt, mert egy darabszám-egyezés
+    // egy cserét nem venne észre.
+    assert.equal(mezok.includes("dueDate"), true);
     // ÉS A HIBAJEGY SZÁMA SEM (döntés, 2026-09-18): a lezárt laphoz utólag is
     // csatolható jegy, tehát ez lenne az egyetlen mező, ami a fagyasztás után
     // is mozdulhat. Az indok a tartalom-modul fejlécén áll.
