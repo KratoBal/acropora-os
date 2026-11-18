@@ -21,7 +21,11 @@ import type { ServiceJobsRepository } from "./service-jobs.repository.js";
 
 type Iras = Parameters<ServiceJobsRepository["updateFields"]>[0];
 
-function keszit(options?: { hasWorksheet?: boolean }) {
+function keszit(options?: {
+  hasWorksheet?: boolean;
+  kind?: "REPAIR" | "MAINTENANCE";
+  status?: string;
+}) {
   const irasok: Iras[] = [];
   const repository: Pick<
     ServiceJobsRepository,
@@ -35,7 +39,8 @@ function keszit(options?: { hasWorksheet?: boolean }) {
     detail: async () =>
       ({
         id: "job-1",
-        status: "IN_PROGRESS",
+        kind: options?.kind ?? "REPAIR",
+        status: options?.status ?? "IN_PROGRESS",
         title: "Eredeti cím",
         description: null,
         hiddenAt: null,
@@ -143,5 +148,52 @@ describe("a hibajegy mezőinek szerkesztése", () => {
     await service.updateFields("job-1", {}, BELSOS);
 
     assert.deepEqual(irasok, []);
+  });
+
+  /*
+    A KARBANTARTÁSI LAP A SAJÁT NEVÉN SZÓL (hibajegy-maradek lista, acrobot 56117; Balázs 2026-11-18): az üres cím hibája, a naplósor és a leírás-szerkesztés határának mondatai a KT-lapon
+    "karbantartási lap"-ot mondanak, a hibajegyén "hibajegy"-et. MI PIROSÍT: ha a KT-lap mondata újra "hibajegy"; ha a hibajegyé megváltozik.
+  */
+  it("T6: a karbantartási lap üres címének hibája és naplósora a karbantartási lapot nevezi meg", async () => {
+    const { service, irasok } = keszit({ kind: "MAINTENANCE" });
+
+    await assert.rejects(
+      () => service.updateFields("job-1", { title: "   " }, BELSOS),
+      /A karbantartási lap címét nem lehet üresen hagyni\./,
+    );
+    await service.updateFields(
+      "job-1",
+      { title: "Cím", description: "Leírás" },
+      BELSOS,
+    );
+    assert.equal(
+      irasok[0]?.note,
+      "A karbantartási lap címe és leírása módosult.",
+    );
+  });
+
+  it("T7: a hibajegy üres címének hibája marad hibajegy", async () => {
+    const { service } = keszit();
+    await assert.rejects(
+      () => service.updateFields("job-1", { title: "   " }, BELSOS),
+      /A hibajegy címét nem lehet üresen hagyni\./,
+    );
+  });
+
+  it("T8: lezárt karbantartási lap leírása: a határ mondata a karbantartási lapról szól", async () => {
+    const { service, irasok } = keszit({
+      kind: "MAINTENANCE",
+      status: "COMPLETED",
+    });
+    await assert.rejects(
+      () => service.updateFields("job-1", { description: "x" }, BELSOS),
+      /A karbantartási lap le van zárva, ezért a leírása már nem módosítható\./,
+    );
+    assert.deepEqual(irasok, []);
+    const repair = keszit({ status: "COMPLETED" });
+    await assert.rejects(
+      () => repair.service.updateFields("job-1", { description: "x" }, BELSOS),
+      /A hibajegy le van zárva, ezért a leírása már nem módosítható\./,
+    );
   });
 });

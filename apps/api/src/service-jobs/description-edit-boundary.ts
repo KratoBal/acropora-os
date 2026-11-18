@@ -79,3 +79,22 @@ export const DESCRIPTION_EDIT_BLOCKER_MESSAGES: Record<
     "A hibajegyhez már tartozik munkalap, ezért a leírása már nem módosítható.",
   OUT_OF_SCOPE: "A hibajegy leírását nem módosíthatod.",
 };
+
+/** A karbantartási lap határainak mondatai: a KT-lap a saját nevén szól, nem hibajegyként (Balázs, 2026-11-18). */
+const MAINTENANCE_MESSAGES: Record<DescriptionEditBlocker, string> = {
+  FINISHED:
+    "A karbantartási lap le van zárva, ezért a leírása már nem módosítható.",
+  HAS_WORKSHEET:
+    "A karbantartási laphoz már tartozik munkalap, ezért a leírása már nem módosítható.",
+  OUT_OF_SCOPE: "A karbantartási lap leírását nem módosíthatod.",
+};
+
+/** A határ mondata a lap fajtája szerint: MAINTENANCE a karbantartási lapét, minden más a hibajegyét kapja. */
+export function descriptionEditBlockerMessage(
+  blocker: DescriptionEditBlocker,
+  kind: string | null | undefined,
+): string {
+  return kind === "MAINTENANCE"
+    ? MAINTENANCE_MESSAGES[blocker]
+    : DESCRIPTION_EDIT_BLOCKER_MESSAGES[blocker];
+}

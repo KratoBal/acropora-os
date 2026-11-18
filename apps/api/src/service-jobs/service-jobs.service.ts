@@ -18,10 +18,11 @@ import { serviceJobVisibilityWhere } from "./service-job-visibility.js";
 import { ertesitendoDelegaltak } from "./ertesitendo-delegaltak.js";
 import { mayWriteServiceJob } from "./service-job-write-scope.js";
 import {
-  DESCRIPTION_EDIT_BLOCKER_MESSAGES,
+  descriptionEditBlockerMessage,
   descriptionEditBlocker,
 } from "./description-edit-boundary.js";
 import { mayAssignUnit } from "./visibility-assignment.js";
+import { serviceJobNoun } from "./service-job-noun.js";
 
 import {
   hasPermission,
@@ -154,6 +155,7 @@ export class ServiceJobsService {
     const year = now.getFullYear();
     // a szám a létrehozáskor kapott FAJTA szerint keletkezik: a karbantartási lap KT-, a hibajegy HJ-sorozatból (Balázs, 2026-11-18)
     const numberKind = input.kind ?? "REPAIR";
+    const noun = serviceJobNoun(numberKind);
     const last = await this.repository.lastNumberOfYear(
       serviceJobNumberPrefix(year, numberKind),
     );
@@ -171,11 +173,11 @@ export class ServiceJobsService {
     if (honnan && !eredet) {
       if (partnerScope.kind === "customer") {
         throw new BadRequestException(
-          "Hibajegyet csak a saját cégéhez lehet nyitni.",
+          `${noun.accusativeCapital} csak a saját cégéhez lehet nyitni.`,
         );
       }
       throw new BadRequestException(
-        "A megadott eszköz nem található, ezért nem tudom, hova tartozik a jegy.",
+        `A megadott eszköz nem található, ezért nem tudom, hova tartozik a ${noun.short}.`,
       );
     }
     /*
@@ -188,7 +190,7 @@ export class ServiceJobsService {
     if (partnerScope.kind === "customer") {
       if (customerId !== null && customerId !== partnerScope.customerId)
         throw new BadRequestException(
-          "Hibajegyet csak a saját cégéhez lehet nyitni.",
+          `${noun.accusativeCapital} csak a saját cégéhez lehet nyitni.`,
         );
       customerId = partnerScope.customerId;
     }
@@ -269,7 +271,7 @@ export class ServiceJobsService {
           eredet.customerId !== assertedCustomerId;
       if (contradiction)
         throw new BadRequestException(
-          "A megadott eszköz másik partnerhez tartozik, mint a hibajegy partnere. Vagy a partnert javítsd, vagy az eszközt.",
+          `A megadott eszköz másik partnerhez tartozik, mint a ${noun.nominative} partnere. Vagy a partnert javítsd, vagy az eszközt.`,
         );
     }
     const departmentId =
@@ -337,7 +339,7 @@ export class ServiceJobsService {
           await this.repository.assignedUnitIds(actorUserId);
         if (!sajatHelyszinek.includes(departmentId)) {
           throw new BadRequestException(
-            "Erre a helyszínre nem nyithatsz hibajegyet: nincs hozzád rendelve.",
+            `Erre a helyszínre nem nyithatsz ${noun.accusative}: nincs hozzád rendelve.`,
           );
         }
       }
@@ -740,7 +742,7 @@ export class ServiceJobsService {
       hasWorksheet: await this.repository.hasWorksheet(id),
     });
     if (akadaly !== null) {
-      const mondat = DESCRIPTION_EDIT_BLOCKER_MESSAGES[akadaly];
+      const mondat = descriptionEditBlockerMessage(akadaly, jegy.kind);
       /**
        * KET KULON HIBAKOD, MERT KET KULON DOLGOT MOND.
        *
@@ -772,7 +774,7 @@ export class ServiceJobsService {
        */
       if (cim.length === 0)
         throw new BadRequestException(
-          "A hibajegy címét nem lehet üresen hagyni.",
+          `A ${serviceJobNoun(jegy.kind).nominative} címét nem lehet üresen hagyni.`,
         );
       mezok.title = cim;
       valtozott.push("címe");
@@ -794,7 +796,7 @@ export class ServiceJobsService {
        * ugyanazt mondana egy cim-javitasra es egy leiras-uritesre -- a naplo
        * pont attol hasznalhato, hogy a kettot meg lehet kulonboztetni.
        */
-      note: `A hibajegy ${valtozott.join(" és ")} módosult.`,
+      note: `A ${serviceJobNoun(jegy.kind).nominative} ${valtozott.join(" és ")} módosult.`,
       actorUserId: user.id,
     });
     if (!ok) throw new NotFoundException("A hibajegy nem található.");

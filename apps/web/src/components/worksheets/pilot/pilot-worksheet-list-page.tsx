@@ -277,7 +277,8 @@ export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
   },
   {
     id: "serviceJob",
-    header: "Hibajegy",
+    // a sorban hibajegy (HJ-) és karbantartási lap (KT-) száma is áll: a fejléc semleges
+    header: "Jegy / lap",
     width: "120px",
     nowrap: true,
     cell: (worksheet) =>

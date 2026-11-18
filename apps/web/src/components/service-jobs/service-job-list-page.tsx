@@ -242,7 +242,9 @@ export function ServiceJobListPage({
           setError(
             cause instanceof Error
               ? cause.message
-              : "A hibajegyek nem tölthetők be.",
+              : kind === "MAINTENANCE"
+                ? "A karbantartási lapok nem tölthetők be."
+                : "A hibajegyek nem tölthetők be.",
           );
       } finally {
         if (!signal?.aborted) setLoading(false);
@@ -300,7 +302,11 @@ export function ServiceJobListPage({
     return (
       <Alert
         variant="danger"
-        title="Nincs hozzáférésed a hibajegyekhez"
+        title={
+          kind === "MAINTENANCE"
+            ? "Nincs hozzáférésed a karbantartási lapokhoz"
+            : "Nincs hozzáférésed a hibajegyekhez"
+        }
         description="service.view jogosultság szükséges."
       />
     );
@@ -403,7 +409,9 @@ export function ServiceJobListPage({
         </div>
         {loading && !data ? (
           <p className="px-5 py-8 text-xs text-muted">
-            Hibajegyek betöltése...
+            {kind === "MAINTENANCE"
+              ? "Karbantartási lapok betöltése..."
+              : "Hibajegyek betöltése..."}
           </p>
         ) : null}
         {data && items.length ? (

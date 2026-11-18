@@ -83,6 +83,8 @@ import {
   directKeyOf,
   encodeCursor,
   mayJoinInternal,
+  CONTEXT_NOUN,
+  contextNounKey,
   contextRef,
   messagePushText,
   messageSearchPattern,
@@ -1249,7 +1251,7 @@ export class MessagesService {
       user,
       systemText.started(
         personDisplayName(user),
-        type,
+        contextNounKey(type, "kind" in subject ? subject.kind : null),
         contextRef(subject.number),
       ),
     );
@@ -1283,7 +1285,7 @@ export class MessagesService {
       throw new NotFoundException("A munkalap vagy a hibajegy nem található.");
     if (!(await this.repository.setContext(conversationId, input)))
       throw new ConflictException(
-        `Ehhez a ${input.type === "WORKSHEET" ? "munkalaphoz" : "hibajegyhez"} már tartozik beszélgetés.`,
+        `Ehhez a ${CONTEXT_NOUN[contextNounKey(input.type, "kind" in subject ? subject.kind : null)].to} már tartozik beszélgetés.`,
       );
     await this.repository.audit({
       userId: user.id,
@@ -1296,7 +1298,7 @@ export class MessagesService {
       user,
       systemText.linked(
         personDisplayName(user),
-        input.type,
+        contextNounKey(input.type, "kind" in subject ? subject.kind : null),
         contextRef(subject.number),
       ),
     );
@@ -1329,7 +1331,10 @@ export class MessagesService {
       user,
       systemText.unlinked(
         personDisplayName(user),
-        type,
+        contextNounKey(
+          type,
+          subject && "kind" in subject ? subject.kind : null,
+        ),
         contextRef(subject?.number),
       ),
     );

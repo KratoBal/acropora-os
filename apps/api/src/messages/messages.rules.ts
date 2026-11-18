@@ -304,12 +304,24 @@ export function notificationUpdate(
 
 /**
  * A kapcsolt objektum neve a mondatokban (4. fázis), a ragos alakok KIÍRVA: a
- * hangrend miatt a „munkalap” „-hoz”, „-ról”, a „hibajegy” „-hez”, „-ről”.
+ * hangrend miatt a „munkalap” „-hoz”, „-ról”, a „hibajegy” „-hez”, „-ről”, a „karbantartási lap” „-hoz”, „-ról”.
+ * A karbantartási lap a saját nevén áll, nem hibajegyként (Balázs, 2026-11-18: a karbantartásnak semmi köze a hibajegyekhez).
  */
 export const CONTEXT_NOUN = {
   WORKSHEET: { to: "munkalaphoz", from: "munkalapról" },
   SERVICE_JOB: { to: "hibajegyhez", from: "hibajegyről" },
+  MAINTENANCE: { to: "karbantartási laphoz", from: "karbantartási lapról" },
 } as const;
+
+/** A mondatokban használt név kulcsa: a MAINTENANCE fajtájú lap a saját nevét kapja. */
+export function contextNounKey(
+  type: keyof typeof CONTEXT_NOUN,
+  kind: string | null | undefined,
+): keyof typeof CONTEXT_NOUN {
+  return type === "SERVICE_JOB" && kind === "MAINTENANCE"
+    ? "MAINTENANCE"
+    : type;
+}
 
 /**
  * A 4. FÁZIS RENDSZERÜZENETEI (Figma 450:710). A neveket NEM ragozzuk: a
