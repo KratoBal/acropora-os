@@ -9,6 +9,8 @@ import { MedusaCredentialProvider } from "./medusa-credential.provider.js";
 import { MedusaPriceDedupeController } from "./medusa-price-dedupe.controller.js";
 import { MedusaPriceDedupeService } from "./medusa-price-dedupe.service.js";
 import { MedusaPriceAuditController } from "./medusa-price-audit.controller.js";
+import { MedusaRedirectPlanController } from "./medusa-redirect-plan.controller.js";
+import { MedusaRedirectPlanService } from "./medusa-redirect-plan.service.js";
 import { MedusaPriceStopsController } from "./medusa-price-stops.controller.js";
 import { MedusaPriceStopsService } from "./medusa-price-stops.service.js";
 import { MedusaPriceAuditService } from "./medusa-price-audit.service.js";
@@ -39,6 +41,7 @@ import { MedusaInventoryScheduler } from "./medusa-inventory.scheduler.js";
 @Module({
   controllers: [
     MedusaConnectionController,
+    MedusaRedirectPlanController,
     MedusaProjectionStatusController,
     MedusaPickupAdoptionController,
     MedusaPriceAuditController,
@@ -57,6 +60,7 @@ import { MedusaInventoryScheduler } from "./medusa-inventory.scheduler.js";
     MedusaPriceAuditService,
     MedusaPriceStopsService,
     MedusaPriceDedupeService,
+    MedusaRedirectPlanService,
   ],
   exports: [
     MedusaConnectionService,
