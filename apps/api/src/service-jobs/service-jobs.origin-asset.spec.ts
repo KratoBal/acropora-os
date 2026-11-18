@@ -191,6 +191,44 @@ describe("a jegy az eredet-eszközből veszi az elhelyezését", () => {
    * eredetkent megadott gep "B" partneré. A regi kod CSENDBEN az "A"-t
    * valasztotta, es a "B" gepet ugyanugy felvette a jegyre.
    */
+  it("ismeretlen eredet-eszköznél a mondat a lap fajtáját követi: karbantartási lapnál 'lap', hibajegynél 'jegy'", async () => {
+    for (const [kind, vege] of [
+      ["MAINTENANCE", "hova tartozik a lap\\."],
+      ["REPAIR", "hova tartozik a jegy\\."],
+    ] as const) {
+      const { service, created } = serviceWith({ placement: null });
+      await assert.rejects(
+        () =>
+          service.create(
+            torzs({ originAssetId: "ismeretlen", kind }),
+            BELSOS.id,
+          ),
+        new RegExp(vege),
+      );
+      assert.deepEqual(created, []);
+    }
+  });
+
+  it("karbantartási lapnál az ellentmondás mondata a karbantartási lapot nevezi meg", async () => {
+    const { service, created } = serviceWith({
+      placement: { customerId: "partner-B", departmentId: null },
+    });
+
+    await assert.rejects(
+      () =>
+        service.create(
+          torzs({
+            originAssetId: "asset-5",
+            customerId: "partner-A",
+            kind: "MAINTENANCE",
+          }),
+          BELSOS.id,
+        ),
+      /másik partnerhez tartozik, mint a karbantartási lap partnere/,
+    );
+    assert.deepEqual(created, []);
+  });
+
   it("eltérő partnernél ELUTASÍTÁS, és a jegy nem jön létre", async () => {
     const { service, created } = serviceWith({
       placement: { customerId: "partner-B", departmentId: null },

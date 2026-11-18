@@ -152,6 +152,18 @@ function fake() {
         customer: { displayName: "FANK" },
       },
     ],
+    [
+      "kt1",
+      {
+        id: "kt1",
+        jobNumber: "KT-2026-004",
+        kind: "MAINTENANCE",
+        status: "IN_PROGRESS",
+        createdAt: new Date("2026-11-18T10:00:00Z"),
+        assignedUserId: "c",
+        customer: { displayName: "FANK" },
+      },
+    ],
   ]);
   const contextTaken = (type: string, id: string) =>
     [...conversations.values()].some(
@@ -480,6 +492,58 @@ describe("linking an existing group", () => {
     assert.ok(f.repo.audits.some((a) => a.action === "conversation.linked"));
   });
 
+  /*
+    A KARBANTARTÁSI LAP A SAJÁT NEVÉN SZEREPEL A RENDSZERSOROKBAN (hibajegy-maradek lista, acrobot 56117; Balázs 2026-11-18: "a karbantartásnak semmi köze a hibajegyekhez"): a KT-lapon indított,
+    hozzá kötött és róla leválasztott beszélgetés sora, és a "már tartozik beszélgetés" hiba "karbantartási lap"-ot mond, a hibajegyé marad "hibajegy". MI PIROSÍT: ha a KT-lap sora újra "hibajegyhez"
+    / "hibajegyről"; ha a hibajegy sora megváltozik; ha a kötés hibája a hibajegy szavát használja KT-lapra.
+  */
+  it("a maintenance sheet's system lines and the duplicate error say 'karbantartási lap', a ticket's stay 'hibajegy'", async () => {
+    const f = fake();
+    await f.service.openContextConversation(viewer("a"), "SERVICE_JOB", "kt1");
+    assert.equal(
+      f.repo.messages.at(-1)!.text,
+      "Teljes a beszélgetést indított ehhez a karbantartási laphoz: KT-2026-004.",
+    );
+    const id = await group(f);
+    await assert.rejects(
+      () =>
+        f.service.linkContext(viewer("a"), id, {
+          type: "SERVICE_JOB",
+          id: "kt1",
+        }),
+      /Ehhez a karbantartási laphoz már tartozik beszélgetés\./,
+    );
+    const other = fake();
+    const otherId = await group(other);
+    await other.service.linkContext(viewer("a"), otherId, {
+      type: "SERVICE_JOB",
+      id: "kt1",
+    });
+    assert.equal(
+      other.repo.messages.at(-1)!.text,
+      "Teljes a ehhez a karbantartási laphoz kapcsolta a beszélgetést: KT-2026-004.",
+    );
+    await other.service.unlinkContext(viewer("a"), otherId);
+    assert.equal(
+      other.repo.messages.at(-1)!.text,
+      "Teljes a leválasztotta a beszélgetést erről a karbantartási lapról: KT-2026-004.",
+    );
+  });
+
+  it("a ticket's duplicate-link error still says 'hibajegy'", async () => {
+    const f = fake();
+    await f.service.openContextConversation(viewer("a"), "SERVICE_JOB", "job1");
+    const id = await group(f);
+    await assert.rejects(
+      () =>
+        f.service.linkContext(viewer("a"), id, {
+          type: "SERVICE_JOB",
+          id: "job1",
+        }),
+      /Ehhez a hibajegyhez már tartozik beszélgetés\./,
+    );
+  });
+
   it("a worksheet that already has a conversation: 409", async () => {
     const f = fake();
     await f.service.openContextConversation(viewer("a"), "WORKSHEET", "ws1");
@@ -670,6 +734,10 @@ describe("the system lines", () => {
     assert.equal(
       systemText.unlinked("Kovács Anna", "SERVICE_JOB", "HJ-1"),
       "Kovács Anna leválasztotta a beszélgetést erről a hibajegyről: HJ-1.",
+    );
+    assert.equal(
+      systemText.started("Kovács Anna", "MAINTENANCE", "KT-2026-004"),
+      "Kovács Anna beszélgetést indított ehhez a karbantartási laphoz: KT-2026-004.",
     );
     assert.equal(
       systemText.added("Balázs", ["Kiss Dániel", "Nagy Péter"]),

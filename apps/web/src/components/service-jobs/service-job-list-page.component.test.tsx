@@ -421,3 +421,54 @@ describe("ServiceJobListPage -- állapot az URL-ben", () => {
     expect(new URLSearchParams(urlNavigation.search).get("tab")).toBe("closed");
   });
 });
+
+/*
+  A KARBANTARTÁSI LISTA SZAVAI (hibajegy-maradek lista, acrobot 56117; Balázs 2026-11-18): a betöltés, a hiba és a jogosultság hiánya a karbantartási lapot nevezi meg, a hibajegy-lista a hibajegyet.
+  MI PIROSÍT: ha a karbantartási listán újra "hibajegyek" áll ezekben a mondatokban; ha a hibajegy-lista mondatai megváltoznak.
+*/
+describe("ServiceJobListPage -- a lista szavai fajtánként", () => {
+  beforeEach(() => {
+    urlNavigation.reset("/szerviz/karbantartas");
+    auth.session = session;
+    api.list.mockReset();
+  });
+
+  it("betöltés közben a karbantartási lista a karbantartási lapokat nevezi meg", async () => {
+    api.list.mockReturnValue(new Promise(() => undefined));
+    render(<ServiceJobListPage kind="MAINTENANCE" />);
+    expect(
+      await screen.findByText("Karbantartási lapok betöltése..."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Hibajegyek betöltése/)).toBeNull();
+  });
+
+  it("a hibajegy-lista betöltése hibajegyet mond", async () => {
+    api.list.mockReturnValue(new Promise(() => undefined));
+    render(<ServiceJobListPage />);
+    expect(await screen.findByText("Hibajegyek betöltése...")).toBeTruthy();
+  });
+
+  it("a betöltés hibája (nem Error) a fajta szerint szól", async () => {
+    api.list.mockRejectedValue("nem megy");
+    const { unmount } = render(<ServiceJobListPage kind="MAINTENANCE" />);
+    expect(
+      await screen.findByText("A karbantartási lapok nem tölthetők be."),
+    ).toBeTruthy();
+    unmount();
+    render(<ServiceJobListPage />);
+    expect(
+      await screen.findByText("A hibajegyek nem tölthetők be."),
+    ).toBeTruthy();
+  });
+
+  it("jogosultság nélkül a cím a fajta szerint szól", async () => {
+    auth.session = null;
+    const { unmount } = render(<ServiceJobListPage kind="MAINTENANCE" />);
+    expect(
+      screen.getByText("Nincs hozzáférésed a karbantartási lapokhoz"),
+    ).toBeTruthy();
+    unmount();
+    render(<ServiceJobListPage />);
+    expect(screen.getByText("Nincs hozzáférésed a hibajegyekhez")).toBeTruthy();
+  });
+});
