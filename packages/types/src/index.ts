@@ -2340,4 +2340,6 @@ export type {
 export type {
   ServiceJobDeletePreview,
   ServiceJobDeleteResult,
+  WorksheetDeletePreview,
+  WorksheetDeleteResult,
 } from "./service-job-delete.js";

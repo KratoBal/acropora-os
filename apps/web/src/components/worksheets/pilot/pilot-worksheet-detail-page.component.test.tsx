@@ -201,6 +201,26 @@ describe("PilotWorksheetDetailPage -- redesign", () => {
     expect(screen.getAllByText("3 óra").length).toBeGreaterThan(0);
   });
 
+  it("a Törlés blokk csak a törlési joggal és csak az önálló lapon látszik", async () => {
+    for (const [role, serviceJob, shown] of [
+      ["ADMIN", null, true],
+      ["ADMIN", { id: "job-1", jobNumber: "HJ-2026-0001" }, false],
+      ["SERVICE", null, false],
+    ] as const) {
+      auth.session = sessionAs(role);
+      api.detail.mockResolvedValue(sheet({ serviceJob }));
+      const { unmount } = render(
+        <PilotWorksheetDetailPage worksheetId="ws-1" />,
+      );
+      await screen.findByText("Hiba feltárása");
+      expect(
+        screen.queryByRole("button", { name: "Törlés" }) !== null,
+        `${role} ${serviceJob === null ? "önálló" : "jegy alatti"}`,
+      ).toBe(shown);
+      unmount();
+    }
+  });
+
   it("the sheet carries the Beszélgetés button for itself", async () => {
     api.detail.mockResolvedValue(sheet());
     render(<PilotWorksheetDetailPage worksheetId="ws-1" />);

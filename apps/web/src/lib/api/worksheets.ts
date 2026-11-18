@@ -13,6 +13,8 @@ import type {
   WorksheetSelectablePartnerListResponse,
   WorksheetDepartmentListResponse,
   WorksheetDepartmentSummary,
+  WorksheetDeletePreview,
+  WorksheetDeleteResult,
   WorksheetDetail,
   WorksheetDocumentListResponse,
   WorksheetEntryListResponse,
@@ -183,6 +185,20 @@ export const worksheetsApi = {
     );
     if (!response.ok) throw new Error("A csatolmány nem tölthető le.");
     return response.blob();
+  },
+  /** A TÖRLÉS ELŐNÉZETE (a hibajegy-törlés 2. szelete): mit töröl a gomb, szabad-e. A törlés a szerveren újra dönt. */
+  deletePreview(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<WorksheetDeletePreview>(
+      worksheetPath(id, "/delete-preview"),
+      token,
+      { signal },
+    );
+  },
+  /** AZ ÖNÁLLÓ MUNKALAP VÉGLEGES TÖRLÉSE (409 az okkal, ha nem szabad). */
+  deleteWorksheet(token: string, id: string) {
+    return apiRequest<WorksheetDeleteResult>(worksheetPath(id), token, {
+      method: "DELETE",
+    });
   },
   /**
    * A LAP ELREJTESE VAGY VISSZAALLITASA -- EGY HIVAS KET IRANYRA.

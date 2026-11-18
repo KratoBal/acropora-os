@@ -2,13 +2,16 @@ import { Module } from "@nestjs/common";
 
 import { documentStoreProvider } from "../service-assets/document-store/document-store.provider.js";
 import { NotificationsModule } from "../notifications/notifications.module.js";
+import { WorksheetDeleteController } from "./worksheet-delete.controller.js";
+import { WorksheetDeleteRepository } from "./worksheet-delete.repository.js";
+import { WorksheetDeleteService } from "./worksheet-delete.service.js";
 import { WorksheetsController } from "./worksheets.controller.js";
 import { WorksheetsRepository } from "./worksheets.repository.js";
 import { WorksheetsService } from "./worksheets.service.js";
 
 @Module({
   imports: [NotificationsModule],
-  controllers: [WorksheetsController],
+  controllers: [WorksheetsController, WorksheetDeleteController],
   /**
    * A `documentStoreProvider` 2026-09-14 OTA ALL ITT, ES EZ JAVITAS.
    *
@@ -23,7 +26,13 @@ import { WorksheetsService } from "./worksheets.service.js";
    * bekotes hianyzott. Aki ezt latja, a hoszton keresi a kotetet, es nem
    * talal semmit -- mert ott minden rendben van.
    */
-  providers: [documentStoreProvider, WorksheetsRepository, WorksheetsService],
+  providers: [
+    documentStoreProvider,
+    WorksheetsRepository,
+    WorksheetsService,
+    WorksheetDeleteRepository,
+    WorksheetDeleteService,
+  ],
   exports: [WorksheetsRepository, WorksheetsService],
 })
 export class WorksheetsModule {}

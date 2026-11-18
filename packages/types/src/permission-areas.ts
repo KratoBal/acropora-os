@@ -169,7 +169,10 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
         label: "Lezárt munkalap módosítása",
       },
       { permission: P.SERVICE_ASSET_DELETE, label: "Eszköz törlése" },
-      { permission: P.SERVICE_JOB_DELETE, label: "Hibajegy törlése" },
+      {
+        permission: P.SERVICE_JOB_DELETE,
+        label: "Hibajegy és munkalap törlése",
+      },
       { permission: P.SERVICE_HIDE, label: "Sorok rejtése" },
       {
         permission: P.SERVICE_VISIBILITY_ASSIGN,
