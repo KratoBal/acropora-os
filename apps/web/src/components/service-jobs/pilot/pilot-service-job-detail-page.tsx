@@ -182,7 +182,7 @@ function timelineLine(
     return `${from} → ${to}`;
   }
   if (entry.kind === "worksheet")
-    return `Munkalap a jegy alatt: ${serviceJobWorksheetLabel(entry.worksheet)}`;
+    return `Munkalap a ${maintenance ? "karbantartási lap" : "jegy"} alatt: ${serviceJobWorksheetLabel(entry.worksheet)}`;
   if (entry.kind === "document") {
     const mi =
       entry.removal.documentType === "PHOTO"
@@ -192,7 +192,7 @@ function timelineLine(
       ? `${entry.removal.actorName} törölt egy ${mi}`
       : `Törölt ${mi}`;
   }
-  return `Eszköz a jegyen: ${entry.asset.assetNumber} (${entry.asset.assetName})`;
+  return `Eszköz a ${maintenance ? "karbantartási lapon" : "jegyen"}: ${entry.asset.assetNumber} (${entry.asset.assetName})`;
 }
 
 /** Where the maintenance job's items come from (karbantartási felmérés S7). */
@@ -839,7 +839,9 @@ export function PilotServiceJobDetailPage({
                 </p>
               ) : (
                 <p className="text-sm italic text-pilot-grey-400">
-                  A bejelentéshez nem írtak leírást.
+                  {maintenance
+                    ? "A karbantartási laphoz nem írtak leírást."
+                    : "A bejelentéshez nem írtak leírást."}
                 </p>
               )}
               {/*
@@ -848,8 +850,8 @@ export function PilotServiceJobDetailPage({
                 (decision E1): a job has no priority.
               */}
               <p className="text-xs text-pilot-grey-500">
-                Bejelentette: {reporter ?? "ismeretlen"} ·{" "}
-                {formatDateTime(job.createdAt)}
+                {maintenance ? "Létrehozta" : "Bejelentette"}:{" "}
+                {reporter ?? "ismeretlen"} · {formatDateTime(job.createdAt)}
               </p>
               {canManage && !finished ? (
                 <ServiceJobFieldsEditor
@@ -903,7 +905,11 @@ export function PilotServiceJobDetailPage({
                       }
                     : undefined
                 }
-                emptyText="Ehhez a jegyhez még nincs fénykép vagy fájl csatolva."
+                emptyText={
+                  maintenance
+                    ? "Ehhez a karbantartási laphoz még nincs fénykép vagy fájl csatolva."
+                    : "Ehhez a jegyhez még nincs fénykép vagy fájl csatolva."
+                }
               />
               {/*
                 THE "+ FOTÓ" TILE STAYS THE UPLOAD TRIGGER (Balázs, 2026-09-25:
@@ -1104,7 +1110,9 @@ export function PilotServiceJobDetailPage({
                 </div>
               ) : job.assets.length === 0 ? (
                 <p className="px-5 py-4 text-sm italic text-pilot-grey-400">
-                  Ehhez a jegyhez nincs eszköz rendelve.
+                  {maintenance
+                    ? "Ehhez a karbantartási laphoz nincs eszköz rendelve."
+                    : "Ehhez a jegyhez nincs eszköz rendelve."}
                 </p>
               ) : (
                 <div className="divide-y divide-pilot-grey-50">
@@ -1150,7 +1158,9 @@ export function PilotServiceJobDetailPage({
             <PilotCardHeader title="Ami történt" />
             <div className="px-5 py-4">
               <p className="mb-2 text-xs text-pilot-grey-500">
-                A jegy, a munkalapok és a csatolmányok közös naplója.
+                {maintenance
+                  ? "A karbantartási lap, a munkalapok és a csatolmányok közös naplója."
+                  : "A jegy, a munkalapok és a csatolmányok közös naplója."}
               </p>
               {visibleTimeline(job.timeline, maintenance).length ? (
                 <ol className="flex flex-col">
@@ -1192,7 +1202,11 @@ export function PilotServiceJobDetailPage({
               ) : (
                 <EmptyState
                   title="Nincs bejegyzés"
-                  description="Ezen a jegyen még nem történt semmi."
+                  description={
+                    maintenance
+                      ? "Ezen a karbantartási lapon még nem történt semmi."
+                      : "Ezen a jegyen még nem történt semmi."
+                  }
                 />
               )}
             </div>
@@ -1451,7 +1465,7 @@ export function PilotServiceJobDetailPage({
         title="Törlöd ezt a csatolmányt?"
         consequence={
           documentToDelete
-            ? `A(z) ${documentToDelete.fileName} végleg törlődik a hibajegyről.`
+            ? `A(z) ${documentToDelete.fileName} végleg törlődik a ${maintenance ? "karbantartási lapról" : "hibajegyről"}.`
             : ""
         }
         recovery="Nem állítható vissza: csak úgy kerül vissza, ha újra feltöltöd."
