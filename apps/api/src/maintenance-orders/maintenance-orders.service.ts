@@ -826,14 +826,11 @@ export class MaintenanceOrdersService {
         ),
     );
     if (!reserved.ok) {
-      await this.serviceJobs.move(
+      // a rendszer saját visszavonása, nem a felhasználói lezárási kapun át (kártya f1c14dcb): a lap lemondva marad, a hívó a keret 409-ét kapja
+      await this.serviceJobs.cancelFailedCreation(
         serviceJobId,
-        {
-          to: "CANCELLED",
-          note: "A szerződés alkalomkeretét a lap létrehozása közben egy párhuzamos foglalás elvitte; a lap tételek nélkül lemondva.",
-        },
+        "A szerződés alkalomkeretét a lap létrehozása közben egy párhuzamos foglalás elvitte; a lap tételek nélkül lemondva.",
         actor.id,
-        actor,
       );
       throw reservationConflict(year, reserved);
     }

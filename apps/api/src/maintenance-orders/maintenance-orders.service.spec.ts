@@ -990,10 +990,10 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
           jobInputs.push(input);
           return { id: "job-1" };
         },
-        move: async (...args: unknown[]) => {
-          calls.push("move");
+        // a rendszer saját visszavonása (kártya f1c14dcb): nem a felhasználói `move`, nincs is rajta, hogy egy régi hívás TypeError-ral jelezzen
+        cancelFailedCreation: async (...args: unknown[]) => {
+          calls.push("cancel");
           moved.push(args);
-          return { id: "job-1" };
         },
       } as never,
       {
@@ -1269,17 +1269,17 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
       ],
     });
     const result = await h.run();
-    const [jobId, move] = h.moved[0] as [string, { to: string }];
+    const [jobId, note] = h.moved[0] as [string, string];
     assert.deepEqual(
-      [String(result).slice(0, 4), h.calls, jobId, move.to, h.inserted],
+      [String(result).slice(0, 4), h.calls, jobId, h.inserted],
       [
         "409:",
-        ["lookup", "reserve", "job", "worksheet", "state", "reserve", "move"],
+        ["lookup", "reserve", "job", "worksheet", "state", "reserve", "cancel"],
         "job-1",
-        "CANCELLED",
         [],
       ],
     );
+    assert.match(note, /tételek nélkül lemondva/);
   });
 
   it("újrahívás: ha a kulcs alatti lapnak már vannak tételsorai, nem foglal újra (az előellenőrzés sem)", async () => {
