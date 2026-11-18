@@ -26,6 +26,7 @@ import {
 } from "../integrations/szamlazz/szamlazz-agent.client.js";
 import { StubSzamlazzAgentClient } from "../integrations/szamlazz/szamlazz-agent-stub.client.js";
 import {
+  bankTransferListed,
   decideBankCredit,
   decideBankTransfer,
   loadBankTransfers,
@@ -120,12 +121,8 @@ export class BankTransferPairingService {
         decision: decideBankTransfer(credit, invoices),
         written: written.get(credit.id) ?? [],
       }))
-      .filter(
-        ({ decision, written: marks }) =>
-          all ||
-          marks.length > 0 ||
-          decision.markable ||
-          decision.refusal !== "NO_REFERENCE",
+      .filter(({ decision, written: marks }) =>
+        bankTransferListed(decision, marks, all),
       )
       .reverse()
       .map(({ credit, decision, written: marks }) => ({

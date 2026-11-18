@@ -184,6 +184,12 @@ describe(
       // the call-time check and the daily run, each on its own credit and invoice
       await document("00094", 100000);
       await document("00095", 100000);
+      // our Számlázz.hu numbers written in full (the Banki átutalások survey, 2026-11-18): an e-invoice and a díjbekérő
+      await document("e7", 100000, { documentNumber: "E-CRPR-2099-7" });
+      await document("d7", 100000, {
+        documentNumber: "D-CRPR-7000",
+        kindCode: "D",
+      });
       ids.slow = await credit("slow");
       ids.auto = (
         await prisma.bankTransaction.create({
@@ -211,6 +217,27 @@ describe(
         list.some((credit) => credit.id === ids.credit);
       assert.equal(visible(await service().list("2099-04-10")), false);
       assert.equal(visible(await service().list("2099-04-10", true)), true);
+    });
+
+    it("a number written in full is looked up as it is, in any case: payable pairs by the amount, a díjbekérő is named", async () => {
+      const payable = await service().check(ids.credit!, "e-crpr-2099-7");
+      assert.equal(payable.markable, true);
+      assert.deepEqual(
+        payable.markable && payable.marks.map((m) => m.invoiceNumber),
+        ["E-CRPR-2099-7"],
+      );
+      const proforma = await service().check(ids.credit!, "D-CRPR-7000");
+      assert.equal(!proforma.markable && proforma.refusal, "UNRESOLVED");
+      assert.match(
+        !proforma.markable ? proforma.detail : "",
+        /D-CRPR-7000 nem fizetendő: D-CRPR-7000 díjbekérő/,
+      );
+      // a number that is not in the feed is said so, not read as another one
+      const missing = await service().check(ids.credit!, "E-CRPR-2099-99");
+      assert.match(
+        !missing.markable ? missing.detail : "",
+        /E-CRPR-2099-99 nincs a feedben/,
+      );
     });
 
     it("a check decides and writes nothing; a wrong amount is refused with no mark", async () => {

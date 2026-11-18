@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  bankTransferListed,
   bankTransferPlanFrom,
   decideBankTransfer,
   runBankTransferMarks,
@@ -487,5 +488,185 @@ describe("the daily run's writer (barracuda, #2192 v2)", () => {
   it("BANK_TRANSFER writes its own way: one credit at a time, under its lock", () => {
     const source = PAID_MARK_SOURCES.find((s) => s.source === "BANK_TRANSFER");
     assert.equal(source?.run, runBankTransferMarks);
+  });
+});
+
+/*
+  THE OTHER SHAPES IN A DECISION (the Banki átutalások survey, 2026-11-18). WHAT TURNS THIS RED: a credit naming a díjbekérő or
+  a cancelled invoice by its full number hidden as "no reference" (it must stand as UNRESOLVED with the reason, listed); a full
+  Számlázz.hu number that is payable not paired by its exact amount; one missing from the feed not said; an eBIZ number
+  (EINV) taken for a Számlázz.hu one, or listed for a person who has nothing to write; our own year/number reference beside
+  an EINV number not winning.
+*/
+describe("our numbers in other shapes, in a decision", () => {
+  const own = (number: string, over: Partial<FeedInvoice> = {}) =>
+    invoice("x", "11287062.00", { documentNumber: number, ...over });
+  const detailOf = (decision: ReturnType<typeof decideBankTransfer>) =>
+    decision.markable ? "" : `${decision.refusal}: ${decision.detail}`;
+
+  it("a díjbekérő by its full number: unresolved, with the reason, and listed", () => {
+    const decision = decideBankTransfer(
+      credit({ narrative: "D-CRPR-7", amount: "1121819.00" }),
+      [own("D-CRPR-7", { kindCode: "D" })],
+    );
+    assert.equal(
+      detailOf(decision),
+      "UNRESOLVED: D-CRPR-7 nem fizetendő: D-CRPR-7 díjbekérő",
+    );
+    assert.equal(bankTransferListed(decision, [], false), true);
+  });
+
+  it("a cancelled invoice by its full number: unresolved, and the customer's references are not ours", () => {
+    const decision = decideBankTransfer(
+      credit({
+        narrative: "KXT/2026/003674 E-CRPR-2026-1 S/2026/0004363",
+        amount: "11287062.00",
+      }),
+      [own("E-CRPR-2026-1", { cancelled: true })],
+    );
+    assert.equal(
+      detailOf(decision),
+      "UNRESOLVED: E-CRPR-2026-1 nem fizetendő: E-CRPR-2026-1 sztornózott",
+    );
+  });
+
+  it("a full number missing from the feed is said so", () => {
+    const decision = decideBankTransfer(
+      credit({ narrative: "E-CRPR-2026-9" }),
+      [],
+    );
+    assert.equal(
+      detailOf(decision),
+      "UNRESOLVED: E-CRPR-2026-9 nincs a feedben",
+    );
+  });
+
+  it("a payable full number pairs by the exact amount, like a year/number one", () => {
+    const decision = decideBankTransfer(
+      credit({ narrative: "E-CRPR-2026-2 kifizetés", amount: "5000.00" }),
+      [own("E-CRPR-2026-2", { grossAmount: "5000.00" })],
+    );
+    assert.equal(decision.markable, true);
+    assert.deepEqual(
+      decision.markable && decision.marks.map((m) => m.invoiceNumber),
+      ["E-CRPR-2026-2"],
+    );
+    const off = decideBankTransfer(
+      credit({ narrative: "E-CRPR-2026-2", amount: "4999.99" }),
+      [own("E-CRPR-2026-2", { grossAmount: "5000.00" })],
+    );
+    assert.equal(!off.markable && off.refusal, "AMOUNT_MISMATCH");
+  });
+
+  it("an eBIZ number is OTHER_SYSTEM: said, not listed by default, not the plan's attention", () => {
+    const decision = decideBankTransfer(
+      credit({ narrative: "EINV000000819 számla kif.", amount: "256340.00" }),
+      [],
+    );
+    assert.equal(detailOf(decision), "OTHER_SYSTEM: EINV000000819");
+    assert.equal(bankTransferListed(decision, [], false), false);
+    assert.equal(bankTransferListed(decision, [], true), true);
+    const [line] = bankTransferPlanFrom([decision]).exceptions;
+    assert.equal(line?.attention, false);
+  });
+
+  it("our own year/number reference beside an eBIZ number wins; a transfer naming neither stays NO_REFERENCE", () => {
+    const both = decideBankTransfer(
+      credit({ narrative: "2026/00084 és EINV000000819", amount: "20000.00" }),
+      balazs(),
+    );
+    assert.equal(both.markable, true);
+    assert.equal(
+      decideBankTransfer(credit({ narrative: "köszönöm" }), balazs())
+        .markable === false,
+      true,
+    );
+    assert.equal(
+      detailOf(decideBankTransfer(credit({ narrative: "köszönöm" }), balazs())),
+      "NO_REFERENCE: ",
+    );
+  });
+});
+
+/*
+  THE PAGE'S LIST (the Banki átutalások survey, 2026-11-18, live: 15 of the 20 default rows were GLS/Foxpost credits another
+  source had WRITTEN, each with the sentence meant for a case a person must solve). WHAT TURNS THIS RED: a credit another source
+  closed for sure shown by default; one that is not sure (PLANNED, UNKNOWN) hidden; the page deciding by another definition than
+  the daily plan's (`attention`); a credit with our own written mark hidden; `all` not showing everything.
+*/
+describe("the page's list shows what a person looks at, by the plan's own definition", () => {
+  const usedBy = (...states: string[]) =>
+    decideBankTransfer(
+      credit({
+        existingMarks: states.map((state, i) => ({
+          source: i === 0 ? "GLS_COD" : "FOXPOST",
+          invoiceNumber: `ACRW-2026/0054${i}`,
+          state,
+        })),
+      }),
+      balazs(),
+    );
+
+  it("a credit another source closed for sure is not listed by default, but `all` lists it", () => {
+    for (const decision of [
+      usedBy("WRITTEN"),
+      usedBy("ALREADY_PAID"),
+      usedBy("WRITTEN", "ALREADY_PAID"),
+    ]) {
+      assert.equal(bankTransferListed(decision, [], false), false);
+      assert.equal(bankTransferListed(decision, [], true), true);
+    }
+  });
+
+  it("PLANNED, UNKNOWN or a mix is listed: a person still looks", () => {
+    for (const decision of [
+      usedBy("PLANNED"),
+      usedBy("UNKNOWN"),
+      usedBy("WRITTEN", "PLANNED"),
+    ])
+      assert.equal(bankTransferListed(decision, [], false), true);
+  });
+
+  it("the same definition as the daily plan: for a used credit, listed is the plan's attention", () => {
+    for (const decision of [
+      usedBy("WRITTEN"),
+      usedBy("PLANNED"),
+      usedBy("UNKNOWN"),
+      usedBy("WRITTEN", "PLANNED"),
+      usedBy("ALREADY_PAID"),
+    ]) {
+      const [line] = bankTransferPlanFrom([decision]).exceptions;
+      assert.equal(
+        bankTransferListed(decision, [], false),
+        line?.attention,
+        decision.markable ? "" : decision.detail,
+      );
+    }
+  });
+
+  it("a credit with our own written mark stays listed, even when another source also closed it", () => {
+    assert.equal(
+      bankTransferListed(usedBy("WRITTEN"), ["ACRW-2026/00090"], false),
+      true,
+    );
+  });
+
+  it("what was listed before stays: markable, unresolved, already paid; a transfer naming none of ours does not", () => {
+    const named = decideBankTransfer(
+      credit({ narrative: "2026/00083,86,85,84", amount: "100000.50" }),
+      balazs(),
+    );
+    assert.equal(bankTransferListed(named, [], false), true);
+    const none = decideBankTransfer(
+      credit({ narrative: "köszönöm" }),
+      balazs(),
+    );
+    assert.equal(bankTransferListed(none, [], false), false);
+    assert.equal(bankTransferListed(none, [], true), true);
+    const missing = decideBankTransfer(
+      credit({ narrative: "2026/00083,87", amount: "10000" }),
+      balazs(),
+    );
+    assert.equal(bankTransferListed(missing, [], false), true);
   });
 });
