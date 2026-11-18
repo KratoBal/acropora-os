@@ -384,6 +384,32 @@ export class WebshopOrdersRepository {
   }
 
   /**
+   * AZ AKTÍV KÉSZLETHIÁNYOK a megadott rendelésekre (card ac167fc2): rendelésenként a nyitott (OPEN) és a megállapodott (AGREED) hiányok
+   * száma. EGY kötegelt olvasás az oldal összes azonosítójára; hiány nélküli rendelés nincs a térképben.
+   */
+  async activeShortages(
+    orderIds: string[],
+  ): Promise<Map<string, { open: number; agreed: number }>> {
+    if (!orderIds.length) return new Map();
+    const rows = await prisma.webshopOrderShortage.groupBy({
+      by: ["orderId", "status"],
+      where: {
+        orderId: { in: orderIds },
+        status: { in: ["OPEN", "AGREED"] },
+      },
+      _count: { _all: true },
+    });
+    const result = new Map<string, { open: number; agreed: number }>();
+    for (const row of rows) {
+      const entry = result.get(row.orderId) ?? { open: 0, agreed: 0 };
+      if (row.status === "OPEN") entry.open += row._count._all;
+      else entry.agreed += row._count._all;
+      result.set(row.orderId, entry);
+    }
+    return result;
+  }
+
+  /**
    * AZ ELŐRE UTALÁS BEÉRKEZÉSEI (bb3a6bd5), rendelésenként; kézi rögzítésnél
    * a rögzítő megjelenítendő nevével.
    */

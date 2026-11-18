@@ -49,6 +49,7 @@ export class WebshopOrderListQueryDto implements WebshopOrderListQuery {
   @IsOptional() @IsString() @MaxLength(100) paymentMethod?: string;
   @IsOptional() @IsIn(PAYMENT_STATES) paymentState?: WebshopOrderPaymentState;
   @IsOptional() @IsIn(["issued", "missing"]) invoice?: "issued" | "missing";
+  @IsOptional() @IsIn(["active"]) shortage?: "active";
   @IsOptional()
   @IsIn(["registered", "guest"])
   customerType?: "registered" | "guest";

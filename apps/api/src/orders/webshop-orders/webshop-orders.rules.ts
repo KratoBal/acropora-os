@@ -176,6 +176,8 @@ export interface WebshopOrderFacts {
   transferReceived: boolean;
   /** Előre utalásos rendelés, két napja áll, díjbekérő nincs kiállítva (P1/6). */
   proformaMissing: boolean;
+  /** Az aktív (OPEN vagy AGREED) készlethiányok darabszáma; `null`, ha nincs (card ac167fc2). */
+  stockShortage: { open: number; agreed: number } | null;
 }
 export const NO_FACTS: WebshopOrderFacts = {
   invoiceNumber: null,
@@ -185,6 +187,7 @@ export const NO_FACTS: WebshopOrderFacts = {
   proformaExpired: false,
   transferReceived: false,
   proformaMissing: false,
+  stockShortage: null,
 };
 
 /** A tények a rendelés számlájából és aktív csomagjából. */
@@ -197,6 +200,8 @@ export function factsOf(
   externalInvoiceNumber: string | null = null,
   /** Lásd `proformaMissingOf`. */
   proformaMissing = false,
+  /** Az aktív készlethiányok darabszáma a rendelésen (card ac167fc2). */
+  stockShortage: { open: number; agreed: number } | null = null,
 ): WebshopOrderFacts {
   const issuedNumber =
     invoice?.status === "ISSUED" ? (invoice.number ?? null) : null;
@@ -210,6 +215,7 @@ export function factsOf(
     transferReceived,
     // a kifizetett rendelésnek nincs mit kiállítani
     proformaMissing: proformaMissing && !transferReceived,
+    stockShortage,
   };
 }
 
@@ -317,6 +323,7 @@ export function toListItem(
     proformaExpired: facts.proformaExpired,
     proformaMissing: facts.proformaMissing,
     transferReceived: facts.transferReceived,
+    stockShortage: facts.stockShortage,
     status: {
       code,
       label: code ? WEBSHOP_ORDER_STATUS_LABELS[code] : null,
@@ -409,6 +416,7 @@ export function applyFilters(
       return false;
     if (query.invoice === "issued" && !item.invoiceNumber) return false;
     if (query.invoice === "missing" && item.invoiceNumber) return false;
+    if (query.shortage === "active" && !item.stockShortage) return false;
     if (query.customerType === "guest" && !item.customer.guest) return false;
     if (query.customerType === "registered" && item.customer.guest)
       return false;

@@ -40,6 +40,11 @@ const thresholdsNow: { list: WebshopStaleThreshold[] } = {
 const proformasNow: { map: Map<string, unknown> } = { map: new Map() };
 const receiptsNow: { map: Map<string, unknown> } = { map: new Map() };
 const externalsNow: { map: Map<string, unknown> } = { map: new Map() };
+/** Az aktív készlethiányok a hamis repositoryban (rendelésenként), és hogy melyik azonosítókra kérdezett a lista. */
+const shortagesNow: {
+  map: Map<string, { open: number; agreed: number }>;
+  asked: string[][];
+} = { map: new Map(), asked: [] };
 const NO_AUDIT = {
   recordStatusChange: async () => undefined,
   invoices: async () => new Map(),
@@ -49,6 +54,10 @@ const NO_AUDIT = {
   proformas: async () => proformasNow.map,
   transferReceipts: async () => receiptsNow.map,
   externalInvoices: async () => externalsNow.map,
+  activeShortages: async (ids: string[]) => {
+    shortagesNow.asked.push([...ids]);
+    return shortagesNow.map;
+  },
 } as unknown as WebshopOrdersRepository;
 const NO_PARCELS = {
   activeParcelsFor: async () => ({}),
@@ -809,5 +818,86 @@ describe("WebshopOrdersService.changeStatus", () => {
         return true;
       },
     );
+  });
+});
+
+describe("the active stock shortage on the list (card ac167fc2, third slice)", () => {
+  /*
+    MI PIROSÍT: ha az aktív (OPEN vagy AGREED) hiány nem jelenik meg a rendelés során, vagy a nyitott és a megállapodott darabszám
+    felcserélődik; ha a hiány nélküli rendelés is kap jelölést; ha a szűrő nem csak a hiányosakat adja; ha a számláló a szűrőtől függ
+    (a többi számlálóhoz hasonlóan a nézet szerint számol); ha a lista rendelésenként kérdez az OS-től (EGY kötegelt olvasás kell az oldal
+    azonosítóira).
+  */
+  const reset = () => {
+    shortagesNow.map = new Map();
+    shortagesNow.asked = [];
+  };
+
+  it("puts the open and agreed counts on the order's row, and null on the others", async () => {
+    shortagesNow.map = new Map([
+      ["order_1", { open: 1, agreed: 0 }],
+      ["order_3", { open: 0, agreed: 2 }],
+    ]);
+    try {
+      const result = await service([order(1), order(2), order(3)]).orders.list(
+        { view: "all" },
+        NOW,
+      );
+      assert.deepEqual(
+        result.items.map((item) => [item.id, item.stockShortage]).sort(),
+        [
+          ["order_1", { open: 1, agreed: 0 }],
+          ["order_2", null],
+          ["order_3", { open: 0, agreed: 2 }],
+        ],
+      );
+    } finally {
+      reset();
+    }
+  });
+
+  it("filters to the orders with an active shortage, and counts them by the view, not by the filter", async () => {
+    shortagesNow.map = new Map([
+      ["order_1", { open: 1, agreed: 0 }],
+      ["order_3", { open: 0, agreed: 1 }],
+    ]);
+    try {
+      const orders = [order(1), order(2), order(3), order(4)];
+      const filtered = await service(orders).orders.list(
+        { view: "all", shortage: "active" },
+        NOW,
+      );
+      assert.deepEqual(filtered.items.map((item) => item.id).sort(), [
+        "order_1",
+        "order_3",
+      ]);
+      assert.equal(filtered.total, 2);
+      assert.equal(filtered.shortageOrders, 2);
+      const unfiltered = await service(orders).orders.list(
+        { view: "all" },
+        NOW,
+      );
+      assert.equal(unfiltered.total, 4);
+      assert.equal(unfiltered.shortageOrders, 2);
+    } finally {
+      reset();
+    }
+  });
+
+  it("asks the OS ONCE for all the order ids of the list, not once per order", async () => {
+    try {
+      await service([order(1), order(2), order(3)]).orders.list(
+        { view: "all" },
+        NOW,
+      );
+      assert.equal(shortagesNow.asked.length, 1);
+      assert.deepEqual([...shortagesNow.asked[0]!].sort(), [
+        "order_1",
+        "order_2",
+        "order_3",
+      ]);
+    } finally {
+      reset();
+    }
   });
 });

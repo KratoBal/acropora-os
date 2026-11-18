@@ -309,6 +309,7 @@ describe("stage", () => {
       proformaExpired: false,
       transferReceived: false,
       proformaMissing: false,
+      stockShortage: null,
     };
     const shipped = {
       invoiceNumber: "ACR-2026-1",
@@ -318,6 +319,7 @@ describe("stage", () => {
       proformaExpired: false,
       transferReceived: false,
       proformaMissing: false,
+      stockShortage: null,
     };
     assert.deepEqual(
       [
@@ -620,5 +622,38 @@ describe("the store pickup marker follows the option id (task t-20261116-bolti-j
       if (before === undefined) delete process.env.ACROPORA_SO_PICKUP;
       else process.env.ACROPORA_SO_PICKUP = before;
     }
+  });
+});
+
+describe("the active stock shortage on the list item (card ac167fc2)", () => {
+  it("toListItem carries the facts' shortage, and no fact means null", () => {
+    assert.equal(
+      toListItem(row({ id: "x" }), NO_FACTS, NOW).stockShortage,
+      null,
+    );
+    assert.deepEqual(
+      toListItem(
+        row({ id: "x" }),
+        { ...NO_FACTS, stockShortage: { open: 1, agreed: 2 } },
+        NOW,
+      ).stockShortage,
+      { open: 1, agreed: 2 },
+    );
+  });
+
+  it("the shortage filter keeps only the items with an active shortage, and no filter keeps all", () => {
+    const withShortage = toListItem(
+      row({ id: "a" }),
+      { ...NO_FACTS, stockShortage: { open: 1, agreed: 0 } },
+      NOW,
+    );
+    const without = toListItem(row({ id: "b" }), NO_FACTS, NOW);
+    assert.deepEqual(
+      applyFilters([withShortage, without], { shortage: "active" }).map(
+        (item) => item.id,
+      ),
+      ["a"],
+    );
+    assert.equal(applyFilters([withShortage, without], {}).length, 2);
   });
 });
