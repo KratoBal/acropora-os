@@ -415,8 +415,10 @@ export function redirectAuditSuffix(redirect: MailRedirect): string {
 export function mailAuditNote(
   decision: MailDecision,
   redirect: MailRedirect,
+  /** A lap fajtája: a karbantartási lap a saját nevén szerepel a sorban (hibajegy-maradek lista, acrobot 56144). */
+  kind?: "REPAIR" | "MAINTENANCE",
 ): string {
   if (decision.kind !== "send")
     return `Értesítő levél nem ment ki (${decision.reason}).`;
-  return `Értesítő levél kiküldve a hibajegy nyitójának.${redirectAuditSuffix(redirect)}`;
+  return `Értesítő levél kiküldve a ${kind === "MAINTENANCE" ? "karbantartási lap" : "hibajegy"} nyitójának.${redirectAuditSuffix(redirect)}`;
 }

@@ -366,6 +366,29 @@ describe("a hibajegy delegálásának értesítése", () => {
     assert.equal(sent[0]?.body, "Nem indul a szivattyú");
   });
 
+  /*
+    A PUSH CÍME A LAP FAJTÁJÁT MONDJA (hibajegy-maradek lista, F-jelű, acrobot 56144): a KT-lapra delegált kolléga "Új hibajegy került hozzád"-at kapott. MI PIROSÍT: ha a karbantartási lap push-a
+    újra hibajegyet mond; ha a hibajegyé (fajta nélkül is) megváltozik.
+  */
+  it("a cím a lap fajtája szerint szól: karbantartási lap, különben hibajegy", async () => {
+    const kt = serviceFor(log());
+    await kt.service.deliverServiceJobAssignment({
+      ...jobNotice,
+      kind: "MAINTENANCE",
+    });
+    assert.equal(kt.sent[0]?.title, "Új karbantartási lap került hozzád");
+    assert.equal(kt.sent[0]?.body, "Nem indul a szivattyú");
+    const hj = serviceFor(log());
+    await hj.service.deliverServiceJobAssignment({
+      ...jobNotice,
+      kind: "REPAIR",
+    });
+    assert.equal(hj.sent[0]?.title, "Új hibajegy került hozzád");
+    const none = serviceFor(log());
+    await none.service.deliverServiceJobAssignment(jobNotice);
+    assert.equal(none.sent[0]?.title, "Új hibajegy került hozzád");
+  });
+
   it("a célpont a jegy, típussal együtt", async () => {
     const written = log();
     const { service, sent } = serviceFor(written);

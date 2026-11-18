@@ -194,6 +194,12 @@ export class ServiceJobsService {
         );
       customerId = partnerScope.customerId;
     }
+    // A karbantartási lap belső tétel (a Karbantartás menü, a szerződés, a TIG): a partner a javítási hibajegyet nyithatja. A PARTNER_SERVICE szerep a `service.manage` jogot is viseli, ezért
+    // a kérés eddig átment, és a felelősök "Új hibajegyet nyitott" push-t kaptak a karbantartási lapról (hibajegy-maradek lista, acrobot 56144).
+    if (partnerScope.kind !== "internal" && input.kind === "MAINTENANCE")
+      throw new BadRequestException(
+        "Karbantartási lapot csak a szerviz nyithat: a partner javítási hibajegyet nyithat.",
+      );
     if (partnerScope.kind === "supplier")
       throw new NotFoundException("A hibajegy nem található.");
 
@@ -447,6 +453,7 @@ export class ServiceJobsService {
         serviceJobId: created.id,
         subject: title,
         userIds: ertesitendok,
+        ...(kind === "MAINTENANCE" ? { kind } : {}),
       });
 
     /**
@@ -568,6 +575,7 @@ export class ServiceJobsService {
         serviceJobId: id,
         subject: detail.title,
         userIds: ujErtesitendok,
+        ...(detail.kind === "MAINTENANCE" ? { kind: detail.kind } : {}),
       });
 
     return detail;
