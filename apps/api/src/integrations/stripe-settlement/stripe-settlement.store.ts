@@ -61,8 +61,13 @@ export interface StripeSettlementStore {
   liveInvoicesByOrder(
     orderIds: readonly string[],
   ): Promise<Map<string, string[]>>;
-  /** Whether an outgoing invoice with this number exists (a manual approval names one). */
-  invoiceExists(invoiceNumber: string): Promise<boolean>;
+  /** Whether this number is a LIVE outgoing invoice (a manual approval names one): the same reading as `liveInvoicesByOrder`. */
+  liveInvoiceExists(invoiceNumber: string): Promise<boolean>;
+  /**
+   * When the oldest payout that can still resolve was created, so the pull's window reaches back to it. A manual payout is left
+   * out: it cannot resolve by reading again, and would hold the window open for ever.
+   */
+  oldestOpenPayoutCreatedAt(): Promise<Date | null>;
   /**
    * Stores a payout and its lines, by Stripe's ids, so a second run changes nothing but what became resolvable. A line a person
    * approved is left as approved. The payout's counts and status are worked out here, from the stored lines.
@@ -226,12 +231,35 @@ export class PrismaStripeSettlementStore implements StripeSettlementStore {
     return out;
   }
 
-  async invoiceExists(invoiceNumber: string): Promise<boolean> {
+  async liveInvoiceExists(invoiceNumber: string): Promise<boolean> {
     return (
       (await prisma.invoice.count({
-        where: { direction: "OUTBOUND", invoiceNumber },
+        where: {
+          direction: "OUTBOUND",
+          documentType: "INVOICE",
+          status: "ISSUED",
+          invoiceNumber,
+          correctionInvoices: {
+            none: {
+              documentType: "STORNO",
+              status: { in: ["ISSUED", "ISSUING"] },
+            },
+          },
+        },
       })) > 0
     );
+  }
+
+  async oldestOpenPayoutCreatedAt(): Promise<Date | null> {
+    const oldest = await prisma.stripePayout.findFirst({
+      where: {
+        status: "NEEDS_REVIEW",
+        OR: [{ errorCode: null }, { errorCode: { not: "MANUAL_PAYOUT" } }],
+      },
+      orderBy: { stripeCreatedAt: "asc" },
+      select: { stripeCreatedAt: true },
+    });
+    return oldest?.stripeCreatedAt ?? null;
   }
 
   async savePayout(payout: StripePayoutToSave): Promise<void> {

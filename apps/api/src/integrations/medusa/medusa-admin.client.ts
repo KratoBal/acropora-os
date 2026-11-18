@@ -937,6 +937,8 @@ export interface MedusaStripeTransaction {
   fee: number;
   net: number;
   source_kind: string | null;
+  /** The id of what the transaction came from (a charge, a refund, a payout...). */
+  source_id: string | null;
   payment_intent: string | null;
   charge: string | null;
   refund: string | null;

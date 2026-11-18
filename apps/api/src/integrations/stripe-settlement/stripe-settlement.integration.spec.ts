@@ -256,8 +256,8 @@ describe(
           partnerName: "Kitalalt Vevo",
         },
       });
-      assert.equal(await store.invoiceExists(invoiceNumber(1)), true);
-      assert.equal(await store.invoiceExists(invoiceNumber(9)), false);
+      assert.equal(await store.liveInvoiceExists(invoiceNumber(1)), true);
+      assert.equal(await store.liveInvoiceExists(invoiceNumber(9)), false);
 
       // a stale version is a conflict, and changes nothing
       await assert.rejects(
@@ -381,6 +381,57 @@ describe(
       ]);
       assert.deepEqual([...live.entries()], [[orderId(5), [invoiceNumber(5)]]]);
       assert.equal((await store.liveInvoicesByOrder([])).size, 0);
+      // the same reading for a manual approval: issued, an invoice, not stornoed
+      assert.equal(await store.liveInvoiceExists(invoiceNumber(5)), true);
+      assert.equal(await store.liveInvoiceExists(invoiceNumber(6)), false); // a draft
+      assert.equal(await store.liveInvoiceExists(invoiceNumber(7)), false); // stornoed
+      assert.equal(await store.liveInvoiceExists(invoiceNumber(8)), false); // a storno in flight
+      assert.equal(
+        await store.liveInvoiceExists(`${invoiceNumber(7)}S`),
+        false,
+      ); // the storno itself is no invoice
+    });
+
+    it("the oldest open payout is read for the window; a manual payout never holds it open", async () => {
+      await prisma.stripePayout.deleteMany({
+        where: { stripePayoutId: { startsWith: `po_${ID_PREFIX}` } },
+      });
+      const manualId = `po_${ID_PREFIX}${s5}m`;
+      await store.savePayout(
+        payout([], {
+          stripePayoutId: manualId,
+          automatic: false,
+          errorCode: "MANUAL_PAYOUT",
+          stripeCreatedAt: new Date("2020-01-01T00:00:00.000Z"),
+          arrivalDate: new Date("2020-01-03T00:00:00.000Z"),
+        }),
+      );
+      const open = payout(
+        [
+          line(1, {
+            status: "NEEDS_REVIEW",
+            errorCode: "ORDER_NOT_INVOICED",
+            invoiceNumbers: [],
+          }),
+        ],
+        {
+          stripeCreatedAt: new Date("2026-10-01T00:00:00.000Z"),
+        },
+      );
+      await store.savePayout(open);
+      const oldest = await store.oldestOpenPayoutCreatedAt();
+      assert.ok(oldest);
+      // the 2020 manual payout is not it; and it is not later than the open one we hold
+      assert.notEqual(
+        oldest.getTime(),
+        new Date("2020-01-01T00:00:00.000Z").getTime(),
+      );
+      assert.ok(
+        oldest.getTime() <= new Date("2026-10-01T00:00:00.000Z").getTime(),
+      );
+      await prisma.stripePayout.deleteMany({
+        where: { stripePayoutId: { startsWith: `po_${ID_PREFIX}` } },
+      });
     });
 
     it("one sync run at a time, and a finished run frees the place", async () => {

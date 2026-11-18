@@ -117,10 +117,12 @@ export class StripeSettlementService {
     const expectedUpdatedAt = new Date(input.expectedUpdatedAt);
     if (Number.isNaN(expectedUpdatedAt.getTime()))
       throw new BadRequestException("STRIPE_LINE_VERSION_INVALID");
-    // a person names the invoice, so the name is checked: an approval against a number that is no invoice would settle nothing
-    if (!(await this.store.invoiceExists(invoiceNumber)))
+    // a person names the invoice, so the name is checked, and by the same reading of "live" the pairing uses: an approval against
+    // a number that is no invoice, a draft or a stornoed one would settle nothing. It is NOT checked against the line's own
+    // orders: a person may knowingly settle a payment against another order's invoice (a mispaired order), and that is theirs
+    if (!(await this.store.liveInvoiceExists(invoiceNumber)))
       throw new BadRequestException(
-        "Ilyen számlaszámú kimenő számla nincs a rendszerben.",
+        "Ilyen számlaszámú élő (kiállított, nem sztornózott) kimenő számla nincs a rendszerben.",
       );
     await this.store.approveLine({
       payoutId,
@@ -143,9 +145,14 @@ export class StripeSettlementService {
     };
     try {
       const latest = await this.store.latestArrivalDate();
-      const sinceMs = latest
+      // an open payout older than the overlap (an order invoiced weeks later) is read again too: the window reaches back to it
+      const oldestOpen = await this.store.oldestOpenPayoutCreatedAt();
+      const overlapMs = latest
         ? latest.getTime() - RESCAN_OVERLAP_DAYS * DAY_MS
         : Date.now() - FIRST_RUN_LOOKBACK_DAYS * DAY_MS;
+      const sinceMs = oldestOpen
+        ? Math.min(overlapMs, oldestOpen.getTime() - DAY_MS)
+        : overlapMs;
       const payouts = await this.listPayouts_(
         client,
         Math.floor(sinceMs / 1000),
@@ -228,7 +235,7 @@ export class StripeSettlementService {
         lines: [],
       });
 
-    const transactions: MedusaStripeTransaction[] = [];
+    const listed: MedusaStripeTransaction[] = [];
     let ordersTruncated = false;
     let linesNotRead = false;
     let cursor: string | undefined;
@@ -241,7 +248,7 @@ export class StripeSettlementService {
         const answer = await client.stripePayoutTransactions(payout.id, {
           startingAfter: cursor,
         });
-        transactions.push(...answer.transactions);
+        listed.push(...answer.transactions);
         ordersTruncated ||= answer.orders_truncated;
         if (!answer.has_more || !answer.next_cursor) break;
         cursor = answer.next_cursor;
@@ -258,6 +265,12 @@ export class StripeSettlementService {
       throw error;
     }
 
+    // Stripe's payout-filtered list may carry the payout's OWN transaction (type payout, minus the amount paid out, source this
+    // payout): it is no line, and counting it would cancel the others out. A payout row that points at ANOTHER payout stays, and
+    // is TYPE_UNKNOWN for a person (barracuda, #2720 review).
+    const transactions = listed.filter(
+      (txn) => !(txn.type === "payout" && txn.source_id === payout.id),
+    );
     const invoices = await this.store.liveInvoicesByOrder(
       transactions.flatMap((txn) => txn.orders.map((order) => order.id)),
     );

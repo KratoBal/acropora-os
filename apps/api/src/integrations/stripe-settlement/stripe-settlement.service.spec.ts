@@ -56,6 +56,7 @@ const txn = (
   fee: 211.5,
   net: 4488.5,
   source_kind: "charge",
+  source_id: "ch_1",
   payment_intent: "pi_1",
   charge: "ch_1",
   refund: null,
@@ -87,7 +88,9 @@ class FakeStore implements StripeSettlementStore {
     );
   liveInvoicesByOrder = async (orderIds: readonly string[]) =>
     new Map([...this.invoices].filter(([id]) => orderIds.includes(id)));
-  invoiceExists = async (number: string) => this.invoiceNumbers.has(number);
+  liveInvoiceExists = async (number: string) => this.invoiceNumbers.has(number);
+  oldestOpen: Date | null = null;
+  oldestOpenPayoutCreatedAt = async () => this.oldestOpen;
   savePayout = async (p: StripePayoutToSave) => {
     this.saved.push(p);
     const open =
@@ -445,6 +448,96 @@ describe("StripeSettlementService.sync", () => {
     assert.equal(store.runs.length, 0);
   });
 
+  it("the payout's OWN transaction is no line: it would cancel the others out; another payout's row stays for a person", async () => {
+    const store = new FakeStore();
+    const own = txn("txn_own", {
+      type: "payout",
+      reporting_category: "payout",
+      source_kind: "payout",
+      source_id: "po_a",
+      payment_intent: null,
+      charge: null,
+      amount: -4488.5,
+      net: -4488.5,
+      fee: 0,
+      orders: [],
+    });
+    const other = txn("txn_other", {
+      type: "payout",
+      reporting_category: "payout",
+      source_kind: "payout",
+      source_id: "po_somewhere_else",
+      payment_intent: null,
+      charge: null,
+      amount: -100,
+      net: -100,
+      fee: 0,
+      orders: [],
+    });
+    const { svc } = service(store, {
+      payouts: [[payout("po_a", 10)]],
+      transactions: {
+        po_a: [{ transactions: [txn("txn_1"), own, other] }],
+      },
+    });
+    await svc.sync("MANUAL");
+    assert.deepEqual(
+      store.saved[0]!.lines.map((l) => [
+        l.stripeTransactionId,
+        l.status,
+        l.errorCode,
+      ]),
+      [
+        ["txn_1", "RESOLVED", null],
+        ["txn_other", "NEEDS_REVIEW", "TYPE_UNKNOWN"],
+      ],
+    );
+  });
+
+  it("with the payout's own row or without it, the stored lines are the same", async () => {
+    const own = txn("txn_own", {
+      type: "payout",
+      source_kind: "payout",
+      source_id: "po_a",
+      payment_intent: null,
+      amount: -4488.5,
+      net: -4488.5,
+      fee: 0,
+      orders: [],
+    });
+    const run = async (rows: MedusaStripeTransaction[]) => {
+      const store = new FakeStore();
+      const { svc } = service(store, {
+        payouts: [[payout("po_a", 10)]],
+        transactions: { po_a: [{ transactions: rows }] },
+      });
+      await svc.sync("MANUAL");
+      return store.saved[0]!.lines;
+    };
+    assert.deepEqual(await run([txn("txn_1"), own]), await run([txn("txn_1")]));
+  });
+
+  it("an open payout older than the overlap pulls the window back to it, a day before it was created", async () => {
+    const store = new FakeStore();
+    store.latest = new Date(40 * DAY * 1000);
+    store.oldestOpen = new Date(5 * DAY * 1000);
+    const { calls, svc } = service(store, { payouts: [[]] });
+    await svc.sync("SCHEDULED");
+    assert.equal(calls.payouts[0]!.createdGte, 5 * DAY - DAY);
+  });
+
+  it("an open payout newer than the overlap changes nothing about the window", async () => {
+    const store = new FakeStore();
+    store.latest = new Date(40 * DAY * 1000);
+    store.oldestOpen = new Date(39 * DAY * 1000);
+    const { calls, svc } = service(store, { payouts: [[]] });
+    await svc.sync("SCHEDULED");
+    assert.equal(
+      calls.payouts[0]!.createdGte,
+      40 * DAY - RESCAN_OVERLAP_DAYS * DAY,
+    );
+  });
+
   it("a run already going is a conflict, and nothing is read", async () => {
     const store = new FakeStore();
     store.startError = new ConflictException(
@@ -496,7 +589,7 @@ describe("StripeSettlementService.approveLine", () => {
         },
         "u1",
       ),
-      /nincs a rendszerben/,
+      /élő \(kiállított, nem sztornózott\) kimenő számla nincs/,
     );
     assert.equal(store.approved.length, 0);
   });
