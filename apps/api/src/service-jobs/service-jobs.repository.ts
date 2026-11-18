@@ -1214,7 +1214,14 @@ export class ServiceJobsRepository {
     );
   }
 
-  /** A feltételnek megfelelő karbantartási lapok közül a készek, határ nélkül (a lap azonosítója, nem a sora). */
+  /**
+   * A feltételnek megfelelő karbantartási lapok közül a készek, határ nélkül (a lap azonosítója, nem a sora).
+   *
+   * A HATÁR, AMIT A KÖVETKEZŐ OLVASÓ LÁSSON (barracuda, #2711): KÉT azonosító-lista nő a karbantartási lapok számával -- itt a
+   * `serviceJobId in [minden látható karbantartási lap]`, a hívóban az `id in / notIn [a készek]` --, és a lap sosem zárul, tehát
+   * gyűlik. A plafon a Postgres bind-határa (Prisma alatt kb. 32767), a `notIn` nem darabolható. 2026-11-18-án néhány tucat lap van,
+   * évente legfeljebb néhány száz: messze a határ alatt. A végleges alak egy SQL-részlekérdezés azonosító-lista nélkül (kártya a9db2779).
+   */
   private async doneMaintenanceIn(
     where: Prisma.ServiceJobWhereInput,
   ): Promise<Set<string>> {
