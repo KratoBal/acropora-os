@@ -70,6 +70,49 @@ describe("the invoice numbers a remittance names", () => {
   });
 });
 
+/*
+  THE CUSTOMER'S OWN REFERENCES IN THE SAME TEXT (the Banki átutalások survey, 2026-11-18, live: "HCUT/2026/003814 2026/00058
+  S/2026/0005034"). The shapes below are invented numbers in the live shapes. WHAT TURNS THIS RED: a reference behind a letter
+  and a slash read as ours (the customer's order number became "2026/003814"); a seven-digit serial cut to six (a half of a number
+  read as a whole one); and the consequence, a cut or foreign number that equals one of our invoices as a number
+  (`2026/000503` is 503, our ACRW-2026/00503) being offered for pairing.
+*/
+describe("the customer's own references are not ours", () => {
+  it("a number behind a letter and a slash is the customer's (HCUT/, S/), ours beside it stays", () => {
+    assert.deepEqual(numbers("KXT/2026/001234 2026/00058 S/2026/0005034"), [
+      "2026/00058",
+    ]);
+    assert.deepEqual(
+      numbers("KXT/2026/003674 E-CRPR-2026-1 S/2026/0004363"),
+      [],
+    );
+    assert.deepEqual(numbers("H/2026/001234"), []);
+  });
+
+  it("a seven-digit serial is not read as its first six digits, anywhere", () => {
+    assert.deepEqual(numbers("2026/0005034"), []);
+    assert.deepEqual(numbers("számla 2026/0000503 köszönjük"), []);
+    // six digits still are a number (the customer's extra zero), and a list is not hurt
+    assert.deepEqual(numbers("2026/000436"), ["2026/000436"]);
+    assert.deepEqual(numbers("2026/00083,86"), ["2026/00083", "2026/00086"]);
+  });
+
+  it("a foreign or cut number that equals one of ours as a number is not offered for pairing", () => {
+    const ours = [{ invoiceNumber: "ACRW-2026/00503", open: "10000" }];
+    for (const text of ["S/2026/0000503", "KXT/2026/000503", "KXT/2026/00503"])
+      assert.equal(
+        matchRemittance(text, "10000", ours).kind,
+        "NO_REFERENCE",
+        text,
+      );
+    // and the real one beside a foreign one is still offered
+    assert.equal(
+      matchRemittance("KXT/2026/001234 2026/00503", "10000", ours).kind,
+      "EXACT",
+    );
+  });
+});
+
 describe("a reference against an invoice number", () => {
   it("without a prefix any series fits; with one, only that (ARCW is ACRW)", () => {
     const [bare] = remittanceInvoiceRefs("2026/00083");

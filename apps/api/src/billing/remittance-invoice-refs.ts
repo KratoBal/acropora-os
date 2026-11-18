@@ -21,10 +21,20 @@ export interface RemittanceInvoiceRef {
 
 export const RANGE_LIMIT = 20;
 
+/*
+  THE CUSTOMER'S OWN REFERENCES ARE NOT OURS (the Banki átutalások survey, 2026-11-18). Two shapes of the same text
+  ("HCUT/2026/003814 2026/00058 S/2026/0005034") were read wrongly:
+  - a number right behind a letter or digit and a slash (`HCUT/2026/003814`, `S/2026/...`) is the customer's order or its
+    own series, like `SZ-2026/00012`: only ours, or none, is a reference to our invoices. A list written with slashes
+    (`2026/00083/2026/00084`) loses its second member by this; a missing member never pairs, a foreign one would;
+  - the serial is three to six digits and then NO digit: a seven-digit `S/2026/0005034` was cut to `2026/000503`, half a number
+    read as a whole one. Numbers are compared as numbers (000503 is 503), so a cut or foreign number could equal one of our
+    invoices (`ACRW-2026/00503`) and be offered for pairing.
+*/
 // "és" has no ASCII word boundary (`\b` is ASCII in JavaScript), so it stands as a plain separator
 const SEPARATOR = String.raw`\s*(?:[,;+&-]|és)\s*`;
 const REFERENCE = new RegExp(
-  String.raw`(?:\b(A(?:CR|RC)[A-Z])[-\s]?|(?<![A-Za-z]-?)\b)(20\d{2})\s*\/\s*(\d{3,6})((?:${SEPARATOR}\d{1,6}(?![\d/]|\s*\/))*)`,
+  String.raw`(?:\b(A(?:CR|RC)[A-Z])[-\s]?|(?<![A-Za-z]-?|[A-Za-z0-9]\/)\b)(20\d{2})\s*\/\s*(\d{3,6})(?!\d)((?:${SEPARATOR}\d{1,6}(?![\d/]|\s*\/))*)`,
   "giu",
 );
 const CONTINUATION = /\s*([,;+&-]|és)\s*(\d{1,6})/gu;
