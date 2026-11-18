@@ -8,6 +8,9 @@
  * AMI NEM TILTOTT, ÉS EZ SZÁNDÉKOS:
  *
  *   a Teljesítési igazolás     a karbantartáson MARAD (Balázs, 2026-10-15; emlék 2352)
+ *   a jegy dokumentumai        (`:id/documents`, feltöltés, felirat, törlés) nyitva: a karbantartási lapon a „Fényképek és fájlok"
+ *                              kártya megmarad (#2687 nem rejti, pilot-service-job-detail-page.tsx), oda kerülnek a helyszíni fotók
+ *                              és a csatolmányok (barracuda kérdése a #2692-n)
  *   az elrejtés visszavonása   egy már elrejtett lap ne ragadjon be (murena javaslata, 55839)
  *   a rendszer saját lépése    a `MaintenanceOrdersService` belsőleg mond le egy tétel nélküli lapot (`ServiceJobsService.move`,
  *                              CANCELLED): ezért az őr a HTTP-BELÉPŐN áll (a vezérlőben), nem a `move()` belsejében
