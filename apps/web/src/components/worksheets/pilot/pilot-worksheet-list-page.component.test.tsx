@@ -274,3 +274,75 @@ describe("PilotWorksheetListPage -- redesign", () => {
     expect(name.className).not.toContain("truncate");
   });
 });
+
+/*
+  A LISTA SZŰRŐJE A KAPCSOLT MUNKA FAJTÁJA SZERINT (kártya 8219e7d6; Balázs 2026-11-18 19:18 UTC): Mind / Hibajegyes / Karbantartási. A szűrést a SZERVER végzi (a lista lapozott): a kapcsoló a `jobKind` kérés-paramétert állítja, és az
+  oldalszámot az elsőre teszi. MI PIROSÍT: ha a három gomb valamelyike hiányzik; ha az aktuális állás nem látszik (`aria-pressed`); ha a gomb nem a `jobKind` paramétert állítja, vagy nem lapoz vissza az elsőre; ha a Mind nem törli a paramétert;
+  ha az URL-ben álló érték nem megy át a szerverhez; ha a "Szűrők törlése" a fajtát nem törli (és a partner-szűrőt sem, EGY lépésben).
+*/
+describe("PilotWorksheetListPage -- a kapcsolt munka fajtája", () => {
+  const gomb = (nev: string) => screen.getByRole("button", { name: nev });
+
+  it("három gombot ad, és az alapállás a Mind", async () => {
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    expect(gomb("Mind").getAttribute("aria-pressed")).toBe("true");
+    expect(gomb("Hibajegyes").getAttribute("aria-pressed")).toBe("false");
+    expect(gomb("Karbantartási").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("a Karbantartási a jobKind paramétert állítja, az első oldalra lapozva", async () => {
+    navigation.search = "page=3";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    fireEvent.click(gomb("Karbantartási"));
+    const url = new URL(
+      navigation.replace.mock.calls.at(-1)![0] as string,
+      "http://x",
+    );
+    expect(url.searchParams.get("jobKind")).toBe("MAINTENANCE");
+    expect(url.searchParams.get("page")).toBe("1");
+  });
+
+  it("a Mind törli a paramétert", async () => {
+    navigation.search = "jobKind=REPAIR";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    fireEvent.click(gomb("Mind"));
+    const url = new URL(
+      navigation.replace.mock.calls.at(-1)![0] as string,
+      "http://x",
+    );
+    expect(url.searchParams.has("jobKind")).toBe(false);
+  });
+
+  it("az URL-ben álló fajta átmegy a szerverhez, és a gomb jelzi", async () => {
+    navigation.search = "jobKind=REPAIR";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    const query = api.list.mock.calls.at(-1)![1] as URLSearchParams;
+    expect(query.get("jobKind")).toBe("REPAIR");
+    expect(gomb("Hibajegyes").getAttribute("aria-pressed")).toBe("true");
+    expect(gomb("Mind").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("a Szűrők törlése a fajtát és a partnert is törli, EGY lépésben", async () => {
+    navigation.search = "jobKind=MAINTENANCE&customerId=c1";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    navigation.replace.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Szűrők törlése" }));
+    expect(navigation.replace).toHaveBeenCalledTimes(1);
+    const url = new URL(
+      navigation.replace.mock.calls[0]![0] as string,
+      "http://x",
+    );
+    expect(url.searchParams.has("jobKind")).toBe(false);
+    expect(url.searchParams.has("customerId")).toBe(false);
+  });
+});

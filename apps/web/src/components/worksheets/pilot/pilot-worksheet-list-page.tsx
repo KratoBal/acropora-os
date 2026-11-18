@@ -310,6 +310,13 @@ export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
   },
 ];
 
+/** A kapcsolt munka fajtájának szűrője: a `value` a `jobKind` kérés-paraméter, az üres a Mind. */
+const JOB_KIND_FILTERS: readonly { label: string; value: string }[] = [
+  { label: "Mind", value: "" },
+  { label: "Hibajegyes", value: "REPAIR" },
+  { label: "Karbantartási", value: "MAINTENANCE" },
+];
+
 export function PilotWorksheetListPage() {
   const { session } = useAuth();
   const router = useRouter();
@@ -334,6 +341,7 @@ export function PilotWorksheetListPage() {
   const mineOnly = params.get("assigneeId") === userId && Boolean(userId);
   const activeStatus = params.get("status") ?? "";
   const includeHidden = params.get("includeHidden") === "true";
+  const activeJobKind = params.get("jobKind") ?? "";
 
   const query = useMemo(() => {
     const value = new URLSearchParams(params.toString());
@@ -428,7 +436,9 @@ export function PilotWorksheetListPage() {
     return counts[key];
   };
 
-  const hasFilters = Boolean(search || params.get("customerId"));
+  const hasFilters = Boolean(
+    search || params.get("customerId") || activeJobKind,
+  );
 
   return (
     <PilotThemeRoot
@@ -549,6 +559,26 @@ export function PilotWorksheetListPage() {
             </PilotSelect>
           </label>
         ) : null}
+        {/*
+          A KAPCSOLT MUNKA FAJTÁJA (kártya 8219e7d6): a szűrést a szerver végzi (`jobKind`), a lista lapozott. A hibajegy nélküli (önálló) lap csak a Mind alatt áll.
+        */}
+        <div
+          className="flex gap-1"
+          role="group"
+          aria-label="Kapcsolt munka fajtája"
+        >
+          {JOB_KIND_FILTERS.map((option) => (
+            <PilotButton
+              key={option.label}
+              variant={activeJobKind === option.value ? "primary" : "secondary"}
+              size="regular"
+              aria-pressed={activeJobKind === option.value}
+              onClick={() => filter("jobKind", option.value)}
+            >
+              {option.label}
+            </PilotButton>
+          ))}
+        </div>
         <PilotButton
           variant={mineOnly ? "primary" : "secondary"}
           size="regular"
@@ -571,7 +601,12 @@ export function PilotWorksheetListPage() {
             type="button"
             onClick={() => {
               setSearch("");
-              filter("customerId", "");
+              // EGY lépésben: két `filter` hívás ugyanarra a kiindulásra építene, és az utolsó felülírná az elsőt
+              const next = new URLSearchParams(params.toString());
+              next.delete("customerId");
+              next.delete("jobKind");
+              next.set("page", "1");
+              router.replace(`${pathname}?${next}`);
             }}
             className="cursor-pointer text-xs text-pilot-grey-500 transition hover:text-pilot-grey-800"
           >
