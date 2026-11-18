@@ -320,6 +320,8 @@ describe("a kiadott PDF újragenerálása", () => {
 
     expect(await screen.findByText(/már a mostani elrendezésű/i)).toBeTruthy();
     expect(screen.queryByText(/korábbi példány/i)).toBeNull();
+    // változatlan tárolt példánynál nincs miért újratölteni a listát
+    expect(api.documents).toHaveBeenCalledTimes(1);
   });
 
   it("a hívás közben a gomb tiltott, hogy a dupla kattintás ne menjen ki kétszer", async () => {
