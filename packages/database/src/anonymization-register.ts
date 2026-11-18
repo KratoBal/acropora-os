@@ -1762,6 +1762,21 @@ export const ANONYMIZATION_REGISTER: Readonly<
     status: "business",
     updatedByUserId: "identifier",
   },
+  WebshopOrderShortage: {
+    orderId: "identifier",
+    agreementNote: "freeText",
+    splitOrderId: "identifier",
+    resolutionNote: "freeText",
+    detectedByUserId: "identifier",
+    resolvedByUserId: "identifier",
+  },
+  WebshopOrderShortageLine: {
+    itemId: "identifier",
+    sku: "business",
+    title: "business",
+    replacementVariantId: "identifier",
+    replacementSku: "business",
+  },
   WebshopOrderNote: {
     orderId: "identifier",
     text: "freeText",
