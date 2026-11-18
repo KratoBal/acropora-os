@@ -1182,7 +1182,6 @@ export class ServiceJobsService {
         assignedAt: assignee.assignedAt.toISOString(),
       })),
       worksheetCount: row.worksheetCount,
-      soleWorksheetId: row.soleWorksheetId ?? null,
       ...(row.maintenanceDone === undefined
         ? {}
         : { maintenanceDone: row.maintenanceDone }),
