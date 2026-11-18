@@ -16,6 +16,11 @@ class WithNotNull {
   @IsOptionalNotNull() @IsString() text?: string;
 }
 
+/** SEMMI típus-ellenőrző: a dekorátor egyedül is zárja a null-t (barracuda, #2678). */
+class Alone {
+  @IsOptionalNotNull() anything?: string;
+}
+
 class WithPlainOptional {
   @IsOptional() @IsBoolean() flag?: boolean;
 }
@@ -37,6 +42,12 @@ describe("IsOptionalNotNull", () => {
     assert.deepEqual(await errorsOf(WithNotNull, { flag: null }), ["flag"]);
     assert.deepEqual(await errorsOf(WithNotNull, { text: null }), ["text"]);
     assert.deepEqual(await errorsOf(WithNotNull, { flag: "true" }), ["flag"]);
+  });
+
+  it("egyedül kitéve is zárja a null-t, és a hiányt, valamint minden más értéket átenged", async () => {
+    assert.deepEqual(await errorsOf(Alone, { anything: null }), ["anything"]);
+    assert.deepEqual(await errorsOf(Alone, {}), []);
+    assert.deepEqual(await errorsOf(Alone, { anything: "x" }), []);
   });
 
   it("POZITÍV KONTROLL: a sima @IsOptional() a null-t átengedi (ez a veszély, amit a dekorátor zár)", async () => {
