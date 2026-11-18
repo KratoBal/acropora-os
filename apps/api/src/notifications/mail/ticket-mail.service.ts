@@ -336,7 +336,6 @@ export class TicketMailService {
           note: mailAuditNote(
             decision,
             mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
-            context.kind,
           ),
           actorUserId: input.actorUserId,
         });
