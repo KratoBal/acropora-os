@@ -111,16 +111,23 @@ export const MAINTENANCE_JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
     id: "status",
     header: "Állapot",
     width: "220px",
-    cell: (job) => (
-      <>
-        <ServiceStatusBadge tone={serviceJobStatusTone(job.status)}>
-          {serviceJobStatusLabel[job.status]}
+    // A KARBANTARTÁS ÁLLAPOTA A MUNKALAPOK ALÁÍRÁSÁBÓL JÖN (Balázs, 2026-11-18): minden aláírva = Kész, különben Folyamatban; nincs
+    // hibajegy-állapot és partner-állapot sor (a karbantartási lap nem hibajegy). A fajta nélküli/hibajegy sor a régi módon.
+    cell: (job) =>
+      job.kind === "MAINTENANCE" ? (
+        <ServiceStatusBadge tone={job.maintenanceDone ? "green" : "blue"}>
+          {job.maintenanceDone ? "Kész" : "Folyamatban"}
         </ServiceStatusBadge>
-        <div className={`mt-1 ${sv.rowMeta}`}>
-          A partner ezt látja: {job.partnerStatusLabel}
-        </div>
-      </>
-    ),
+      ) : (
+        <>
+          <ServiceStatusBadge tone={serviceJobStatusTone(job.status)}>
+            {serviceJobStatusLabel[job.status]}
+          </ServiceStatusBadge>
+          <div className={`mt-1 ${sv.rowMeta}`}>
+            A partner ezt látja: {job.partnerStatusLabel}
+          </div>
+        </>
+      ),
   },
   {
     id: "worksheets",
@@ -350,16 +357,19 @@ export function ServiceJobListPage({
           />
         </div>
       ) : null}
-      <ServiceListStats
-        tiles={tiles}
-        active={tab}
-        onSelect={(key) => setTab(key as ServiceJobTab)}
-        label={
-          kind === "MAINTENANCE"
-            ? "Karbantartások állapot szerint"
-            : "Hibajegyek állapot szerint"
-        }
-      />
+      {/* a hibajegy-állapot szerinti csempék a karbantartási listán nem jelennek meg (nincs állapotgép) */}
+      {kind === "MAINTENANCE" ? null : (
+        <ServiceListStats
+          tiles={tiles}
+          active={tab}
+          onSelect={(key) => setTab(key as ServiceJobTab)}
+          label={
+            kind === "MAINTENANCE"
+              ? "Karbantartások állapot szerint"
+              : "Hibajegyek állapot szerint"
+          }
+        />
+      )}
       <div className={sv.panel}>
         <ServiceListTabs
           tabs={SERVICE_JOB_TABS.map((entry) => ({

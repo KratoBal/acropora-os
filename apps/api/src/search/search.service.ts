@@ -35,6 +35,8 @@ const LIMIT = 5;
  */
 export const SEARCH_GROUP_NAVIGATION: Record<SearchGroup, string> = {
   tickets: "service-jobs",
+  // a Karbantartás menüpont (`/szerviz/karbantartas`): ugyanaz a lista (`service.view`), a karbantartási lapok csoportja
+  maintenance: "maintenance",
   worksheets: "worksheets",
   assets: "service-assets",
   partners: "partners",
@@ -136,6 +138,7 @@ export class SearchService {
 
     const [
       tickets,
+      maintenance,
       worksheets,
       assets,
       partners,
@@ -148,6 +151,9 @@ export class SearchService {
     ] = await Promise.all([
       canSee(SEARCH_GROUP_NAVIGATION.tickets)
         ? this.serviceJobs.list({ search: query }, user)
+        : undefined,
+      canSee(SEARCH_GROUP_NAVIGATION.maintenance)
+        ? this.serviceJobs.list({ search: query, kind: "MAINTENANCE" }, user)
         : undefined,
       canSee(SEARCH_GROUP_NAVIGATION.worksheets)
         ? this.worksheets.list({ page: 1, pageSize: 10, search: query }, user)
@@ -214,6 +220,20 @@ export class SearchService {
                 ticket.departmentPath?.join(" / "),
               ),
               path: `/szerviz/hibajegyek/${ticket.id}`,
+            })),
+          }),
+      ...(maintenance === undefined
+        ? {}
+        : {
+            maintenance: maintenance.items.slice(0, LIMIT).map((sheet) => ({
+              id: sheet.id,
+              title: sheet.title,
+              subtitle: subtitle(
+                sheet.jobNumber,
+                sheet.customerName,
+                sheet.departmentPath?.join(" / "),
+              ),
+              path: `/szerviz/karbantartas/${sheet.id}`,
             })),
           }),
       ...(worksheets === undefined

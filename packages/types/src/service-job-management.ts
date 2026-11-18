@@ -124,6 +124,11 @@ export interface ServiceJobListItem {
    * válasz nem hordozza. A PARTNER VÁLASZÁBAN NINCS (`partnerServiceJobListItem` elhagyja): a partner a saját útján éri el a lapjait.
    */
   soleWorksheetId?: string | null;
+  /**
+   * A KARBANTARTÁS ÁLLAPOTA A LISTÁN (Balázs, 2026-11-18 11:31; acrobot 55782): minden munkalap aláírva (a munkalap LEGUTOLSÓ verziója
+   * aláírt) = `true`, különben `false`. Csak a MAINTENANCE sorokon van; a hibajegyén nincs (annak az állapotgép az állapota).
+   */
+  maintenanceDone?: boolean;
   createdAt: string;
   /**
    * EL VAN-E REJTVE. Ugyanaz a mező és ugyanaz a szabály, mint a

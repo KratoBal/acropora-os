@@ -5,6 +5,8 @@ import type { TicketOpener } from "./ticket-mail.rules.js";
 
 export interface TicketMailContext {
   readonly jobNumber: string;
+  /** a jegy fajtaja: a levélben lévő link ennek megfelelő útvonalra mutat */
+  readonly kind?: "REPAIR" | "MAINTENANCE";
   readonly title: string;
   readonly description: string | null;
   readonly reporterPersonName?: string | null;
@@ -50,6 +52,7 @@ export class TicketMailRepository {
       where: { id: serviceJobId },
       select: {
         jobNumber: true,
+        kind: true,
         title: true,
         description: true,
         openedById: true,
