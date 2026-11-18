@@ -17,10 +17,12 @@ import {
   is missing, ambiguous, or the amount is off by a fillér.
 */
 const numbers = (text: string) =>
-  remittanceInvoiceRefs(text).map(
-    (ref) =>
-      `${ref.prefix ?? ""}${ref.prefix ? "-" : ""}${ref.year}/${ref.number}`,
-  );
+  remittanceInvoiceRefs(text)
+    .filter((ref) => ref.literal === undefined)
+    .map(
+      (ref) =>
+        `${ref.prefix ?? ""}${ref.prefix ? "-" : ""}${ref.year}/${ref.number}`,
+    );
 
 describe("the invoice numbers a remittance names", () => {
   it("Balázs's transfer: one base number and three shortened ones", () => {

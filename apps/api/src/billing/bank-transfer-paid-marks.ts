@@ -333,6 +333,28 @@ const settledElsewhere = (decision: BankTransferDecision) =>
   decision.usedElsewhere!.every((mark) => SETTLED_MARK_STATES.has(mark.state));
 
 /**
+ * WHAT THE BANKI ÁTUTALÁSOK PAGE LISTS BY DEFAULT (the survey of 2026-11-18, live: 15 of the 20 rows were GLS/Foxpost credits
+ * another source had WRITTEN, each showing the sentence for a case a person must solve). The same `settledElsewhere` as the
+ * daily plan's `attention`, not a second definition: a credit another source closed for sure is out, one that is not sure
+ * (PLANNED, UNKNOWN) stays. A credit with one of OUR written marks stays whatever else closed it (it is the page's own
+ * history); a pairable one, and every other refusal (one already paid, unresolved), as before; a transfer naming none of ours
+ * only with `all`. `all` lists everything.
+ */
+export function bankTransferListed(
+  decision: BankTransferDecision,
+  written: readonly string[],
+  all: boolean,
+): boolean {
+  if (all || written.length > 0 || decision.markable) return true;
+  return (
+    decision.refusal !== "NO_REFERENCE" &&
+    // an eBIZ invoice (EINV): the reason is said under `all`, but nothing is written here
+    decision.refusal !== "OTHER_SYSTEM" &&
+    !settledElsewhere(decision)
+  );
+}
+
+/**
  * What a person must look at: every refusal but a transfer naming none of ours, one already paid, or one another
  * source's written mark closed. The key is the credit: the reference (the day) is not one transfer's.
  */
