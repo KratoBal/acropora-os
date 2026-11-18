@@ -39,6 +39,10 @@ const api = vi.hoisted(() => ({
   changeShippingMethod: vi.fn(),
   saveNotes: vi.fn(),
   split: vi.fn(),
+  shortages: vi.fn(),
+  openShortage: vi.fn(),
+  agreeShortage: vi.fn(),
+  resolveShortage: vi.fn(),
   replacementVariants: vi.fn(),
   issueInvoice: vi.fn(),
   invoiceSummary: vi.fn(),
@@ -313,6 +317,7 @@ beforeEach(() => {
   api.updateAddress.mockReset();
   api.saveInternalNote.mockReset();
   api.split.mockReset();
+  api.shortages.mockReset().mockResolvedValue([]);
   api.shippingOptions.mockReset();
   api.shippingOptionPoints.mockReset();
   api.changeShippingMethod.mockReset();
@@ -367,6 +372,27 @@ describe("WebshopOrderDetailPage", () => {
     expect(
       screen.getByRole("link", { name: "Hívás" }).getAttribute("href"),
     ).toBe("tel:+36305550137");
+  });
+
+  it("carries the stock shortage card under the lines, loaded for this order", async () => {
+    api.detail.mockResolvedValue(detail);
+    api.shortages.mockResolvedValue([]);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    await screen.findByRole("heading", { name: "#38" });
+    const card = await screen.findByRole("region", { name: "Készlethiány" });
+    expect(
+      await within(card).findByText(
+        "Nincs rögzített készlethiány ezen a rendelésen.",
+      ),
+    ).toBeTruthy();
+    expect(api.shortages).toHaveBeenCalledWith(
+      "token",
+      detail.id,
+      expect.anything(),
+    );
+    expect(
+      within(card).getByRole("button", { name: "Hiány felvétele" }),
+    ).toBeTruthy();
   });
 
   it("copies the Stripe ID, and shows no button for an action not wired yet", async () => {

@@ -97,7 +97,7 @@ function RowAction({
   );
 }
 
-function DialogShell({
+export function DialogShell({
   title,
   onClose,
   busy,
