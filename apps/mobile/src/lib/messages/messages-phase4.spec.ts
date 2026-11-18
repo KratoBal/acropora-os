@@ -9,7 +9,6 @@ import {
   contextCardTitle,
   contextDateLabel,
   contextRoute,
-  contextListSubtitle,
   contextStatusLabel,
   contextSubtitle,
   isSystemMessage,
@@ -97,7 +96,7 @@ describe("messages phase 4 on the phone", () => {
 
 /*
   A KAPCSOLT KARBANTARTÁSI LAP A SAJÁT NEVÉN SZEREPEL AZ ÜZENETEKBEN (hibajegy-maradek lista, 4. fejezet, acrobot 56196; a szerver a kártyán `jobKind`-ot küld): a kártya címe, az alcím és a kapcsolás
-  képernyőjének szövegei. A lista elemén nincs fajta, ott a felirat mindkettőt megnevezi. MI PIROSÍT: ha a karbantartási lap kártyája újra "KAPCSOLT HIBAJEGY" / "Hibajegyhez kapcsolva"; ha a
+  képernyőjének szövegei. A lista soron a szerver `contextJobKind`-ot küld (barracuda, #2712), ezért ott is pontos a felirat. MI PIROSÍT: ha a karbantartási lap kártyája újra "KAPCSOLT HIBAJEGY" / "Hibajegyhez kapcsolva"; ha a
   hibajegyé (és a fajta nélkülié) megváltozik; ha a lista alcíme a karbantartási lapot hibajegynek mondja; ha a kapcsolás szövegei újra csak a hibajegyet nevezik meg.
 */
 describe("a kapcsolt lap neve az üzenetekben a lap fajtája szerint", () => {
@@ -130,14 +129,6 @@ describe("a kapcsolt lap neve az üzenetekben a lap fajtája szerint", () => {
     );
   });
 
-  it("a lista alcíme (ott nincs fajta) mindkettőt megnevezi", () => {
-    assert.equal(contextListSubtitle("WORKSHEET"), "Munkalaphoz kapcsolva");
-    assert.equal(
-      contextListSubtitle("SERVICE_JOB"),
-      "Hibajegyhez vagy karbantartási laphoz kapcsolva",
-    );
-  });
-
   it("a kapcsolás szövegei a karbantartási lapot is megnevezik", () => {
     for (const szoveg of [
       LINK_COPY.lead,
@@ -167,7 +158,7 @@ describe("a kapcsolt lap neve az üzenetekben a lap fajtája szerint", () => {
     );
     assert.match(
       olvas("components", "messages", "MessageParts.tsx"),
-      /contextListSubtitle\(item\.contextType\)/,
+      /contextSubtitle\(item\.contextType, item\.contextJobKind\)/,
     );
     const kapcsolas = olvas("app", "uzenetek", "kapcsolas.tsx");
     for (const kulcs of ["lead", "serviceJobTab", "serviceJobPlaceholder"])

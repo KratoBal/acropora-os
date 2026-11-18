@@ -27,13 +27,6 @@ export function contextSubtitle(
     : "Hibajegyhez kapcsolva";
 }
 
-/** A beszélgetés-lista alcíme: ott a fajta nincs a soron, ezért a felirat mindkettőt megnevezi. */
-export function contextListSubtitle(type: ConversationContextType): string {
-  return type === "WORKSHEET"
-    ? "Munkalaphoz kapcsolva"
-    : "Hibajegyhez vagy karbantartási laphoz kapcsolva";
-}
-
 export function contextCardTitle(
   type: ConversationContextType,
   jobKind?: "REPAIR" | "MAINTENANCE" | null,
