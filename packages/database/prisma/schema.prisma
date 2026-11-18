@@ -4,6 +4,8 @@ generator client {
   // whatever CI runs on) working as before; the musl target is required for
   // the node:22-alpine Docker runtime, which uses musl libc instead of glibc.
   binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+  // `views`: the WorksheetLatestVersion view below (a9db2779). The view itself is created by its migration; `migrate` does not manage views.
+  previewFeatures = ["views"]
 }
 
 datasource db {
@@ -6221,6 +6223,8 @@ model Worksheet {
   /// kollega osszes rejtese visszaallna, es a probalapok ujra megjelennenek.
   hiddenBy         User?               @relation("WorksheetHiddenBy", fields: [hiddenById], references: [id], onDelete: SetNull)
   versions         WorksheetVersion[]
+  /// The latest version's state, from the WorksheetLatestVersion view (a9db2779): a filter can ask for it in SQL.
+  latestVersion    WorksheetLatestVersion?
   assignees        WorksheetAssignee[]
   /// `Restrict`: a folytatás a régi lapra hivatkozik mint előzményre, és egy
   /// lánc, aminek eltűnt az egyik vége, könyvelésnél használhatatlan.
@@ -6371,6 +6375,19 @@ model WorksheetVersion {
 
   @@unique([worksheetId, version])
   @@index([status, closedAt])
+}
+
+/// A MUNKALAP LEGUTOLSÓ VERZIÓJA, NÉZETKÉNT (a9db2779; barracuda a #2711-en). A karbantartási lap kész-szabálya ("van munkalapja, és
+/// MINDEGYIK legutolsó verziója aláírt", Balázs 2026-11-18) a "legutolsó verzió" fogalmán áll, és ezt a Prisma szűrője magától nem
+/// tudja kifejezni (két verzió sorszámát nem hasonlítja össze). A nézet egy munkalaphoz egy sort ad: a legnagyobb `version` számút.
+/// Így a lista szűrője és a számláló EXISTS / NOT EXISTS részlekérdezés lesz, a lapok számával növő azonosító-lista nélkül.
+/// A nézetet a migrációja hozza létre (`20261118200000_worksheet_latest_version_view`); a `migrate` nem kezel nézetet. Csak olvasható.
+view WorksheetLatestVersion {
+  worksheetId String                 @unique
+  version     Int
+  status      WorksheetVersionStatus
+
+  worksheet Worksheet @relation(fields: [worksheetId], references: [id])
 }
 
 /// Munkalap-tétel. A `detail` a valódi dokumentum kiegészítő sora, ami ma

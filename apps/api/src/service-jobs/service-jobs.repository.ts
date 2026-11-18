@@ -18,7 +18,8 @@ import {
 } from "./service-job-list-scope.js";
 import { ALL_SERVICE_JOB_STATUSES } from "./service-job-status.js";
 import {
-  doneMaintenanceJobIds,
+  MAINTENANCE_DONE,
+  maintenanceStateWhere,
   type MaintenanceListState,
 } from "./maintenance-done.js";
 import {
@@ -1000,14 +1001,11 @@ export class ServiceJobsRepository {
         serviceJobSearchWhere(search),
       ],
     };
+    // the tab is one more `AND` part: EXISTS / NOT EXISTS subqueries in the same query, no id list (a9db2779)
     if (maintenanceState && kind === "MAINTENANCE") {
-      const done = await this.doneMaintenanceIn(where);
-      (where.AND as Prisma.ServiceJobWhereInput[]).push({
-        id:
-          maintenanceState === "done"
-            ? { in: [...done] }
-            : { notIn: [...done] },
-      });
+      (where.AND as Prisma.ServiceJobWhereInput[]).push(
+        maintenanceStateWhere(maintenanceState),
+      );
     }
 
     /**
@@ -1107,7 +1105,19 @@ export class ServiceJobsRepository {
     const maintenanceIds = lap
       .filter((row) => row.kind === "MAINTENANCE" && row._count.worksheets > 0)
       .map((row) => row.id);
-    const doneMaintenance = await this.doneMaintenanceOf(maintenanceIds);
+    // the page's ids only (at most LIST_LIMIT), with the same rule as the tabs
+    const doneMaintenance = new Set(
+      maintenanceIds.length === 0
+        ? []
+        : (
+            await this.database.serviceJob.findMany({
+              where: {
+                AND: [{ id: { in: maintenanceIds } }, MAINTENANCE_DONE],
+              },
+              select: { id: true },
+            })
+          ).map((job) => job.id),
+    );
 
     const openerIds = [
       ...new Set(
@@ -1189,49 +1199,6 @@ export class ServiceJobsRepository {
     });
   }
 
-  /** A megadott karbantartási lapok közül a készek (`doneMaintenanceJobIds`): egy kötegelt lekérdezés a munkalapjaik legutolsó verziójára. */
-  private async doneMaintenanceOf(
-    jobIds: readonly string[],
-  ): Promise<Set<string>> {
-    if (jobIds.length === 0) return new Set();
-    const sheets = await this.database.worksheet.findMany({
-      where: { serviceJobId: { in: [...jobIds] } },
-      select: {
-        serviceJobId: true,
-        versions: {
-          orderBy: { version: "desc" },
-          take: 1,
-          select: { status: true },
-        },
-      },
-    });
-    return doneMaintenanceJobIds(
-      jobIds,
-      sheets.map((sheet) => ({
-        serviceJobId: sheet.serviceJobId,
-        latestStatus: sheet.versions[0]?.status,
-      })),
-    );
-  }
-
-  /**
-   * A feltételnek megfelelő karbantartási lapok közül a készek, határ nélkül (a lap azonosítója, nem a sora).
-   *
-   * A HATÁR, AMIT A KÖVETKEZŐ OLVASÓ LÁSSON (barracuda, #2711): KÉT azonosító-lista nő a karbantartási lapok számával -- itt a
-   * `serviceJobId in [minden látható karbantartási lap]`, a hívóban az `id in / notIn [a készek]` --, és a lap sosem zárul, tehát
-   * gyűlik. A plafon a Postgres bind-határa (Prisma alatt kb. 32767), a `notIn` nem darabolható. 2026-11-18-án néhány tucat lap van,
-   * évente legfeljebb néhány száz: messze a határ alatt. A végleges alak egy SQL-részlekérdezés azonosító-lista nélkül (kártya a9db2779).
-   */
-  private async doneMaintenanceIn(
-    where: Prisma.ServiceJobWhereInput,
-  ): Promise<Set<string>> {
-    const jobs = await this.database.serviceJob.findMany({
-      where: { AND: [where, { kind: "MAINTENANCE" }] },
-      select: { id: true },
-    });
-    return this.doneMaintenanceOf(jobs.map((job) => job.id));
-  }
-
   /**
    * A KARBANTARTÁS FÜLEINEK SZÁMA (f4590db6): a látható, a keresésnek megfelelő karbantartási lapok közül hány van folyamatban és hány
    * kész. Ugyanaz a szabály, mint a jelvényé; a scope nem számít bele, ugyanúgy, mint a `countsByStatus`-nál.
@@ -1240,15 +1207,19 @@ export class ServiceJobsRepository {
     visibility: Prisma.ServiceJobWhereInput,
     search?: string,
   ): Promise<{ progress: number; done: number }> {
-    const where: Prisma.ServiceJobWhereInput = {
-      AND: [visibility, { kind: "MAINTENANCE" }, serviceJobSearchWhere(search)],
-    };
-    const jobs = await this.database.serviceJob.findMany({
-      where,
-      select: { id: true },
-    });
-    const done = await this.doneMaintenanceOf(jobs.map((job) => job.id));
-    return { progress: jobs.length - done.size, done: done.size };
+    const where: Prisma.ServiceJobWhereInput[] = [
+      visibility,
+      { kind: "MAINTENANCE" },
+      serviceJobSearchWhere(search),
+    ];
+    // two counts, no id list (a9db2779): all the matching sheets, and those the rule calls done
+    const [all, done] = await Promise.all([
+      this.database.serviceJob.count({ where: { AND: where } }),
+      this.database.serviceJob.count({
+        where: { AND: [...where, MAINTENANCE_DONE] },
+      }),
+    ]);
+    return { progress: all - done, done };
   }
 
   async countsByStatus(
