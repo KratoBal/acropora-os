@@ -112,9 +112,16 @@ export const partnerApi = {
       body: JSON.stringify({ email, password }),
     }),
   logout: () => request<{ ok: true }>("/auth/logout", { method: "POST" }),
-  tickets: (scope: "all" | "open" | "closed") =>
+  /*
+    A FAJTA SZERINT, NEM "ALL": a Hibajegyek lista a hibajegyeket (REPAIR), a Karbantartás lista a karbantartási lapokat (MAINTENANCE) kéri (Luca, 2026-11-18 14:50 UTC; acrobot 55980).
+    Korábban "ALL" ment, és a karbantartási lapok a hibajegyek között jelentek meg.
+  */
+  tickets: (
+    scope: "all" | "open" | "closed",
+    kind: "REPAIR" | "MAINTENANCE" = "REPAIR",
+  ) =>
     request<ServiceJobListResponse>(
-      `/service/jobs?${new URLSearchParams({ scope, kind: "ALL" })}`,
+      `/service/jobs?${new URLSearchParams({ scope, kind })}`,
     ),
   ticket: (id: string) =>
     /*

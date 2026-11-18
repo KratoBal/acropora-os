@@ -13,6 +13,7 @@ import {
 
 import { partnerApi } from "@/lib/api";
 import { ticketScopeTotal } from "@/lib/ticket-scope-counts";
+import { TICKET_WORDING, ticketHref, type TicketKind } from "@/lib/ticket-kind";
 import { PANEL_CIM } from "./frame";
 
 /**
@@ -64,8 +65,20 @@ const SCOPE_TABS: { key: "open" | "closed" | "all"; label: string }[] = [
 
 const dateFormatter = new Intl.DateTimeFormat("hu-HU", { dateStyle: "medium" });
 
-export function TicketList() {
-  const [scope, setScope] = useState<"open" | "closed" | "all">("open");
+/**
+ * A `kind` A LISTA FAJTÁJA: a Hibajegyek menüpont `REPAIR`, a Karbantartás menüpont `MAINTENANCE` (Luca, 2026-11-18 14:50 UTC; acrobot 55980). A szavak, az útvonal és a lekérdezés is ebből jön
+ * (`TICKET_WORDING`); karbantartásnál nincs "Új ... nyitása" gomb (a partner csak hibajegyet nyithat), és a sor állapota a "kész" jelző, nem a partneri hibajegy-állapot.
+ */
+export function TicketList({ kind = "REPAIR" }: { kind?: TicketKind }) {
+  const words = TICKET_WORDING[kind];
+  /*
+    A KARBANTARTÁS LISTÁN NINCS ÁLLAPOTSZŰRŐ (barracuda, #2698 review): a Nyitott / Lezárt fül a jegy STATUS mezőjén szűr (COMPLETED és CANCELLED = lezárt), egy karbantartási lap státusza viszont
+    sosem COMPLETED (nincs állapotgépe, a kézi állapotváltást a szerver tiltja), tehát a "Nyitott" fülön a KÉSZ lapok is ott állnának, a "Lezárt" fül pedig mindig üres volna. A lista mindent mutat
+    (`all`), a sor a Kész / Folyamatban jelzőt viseli, a lábléc az összest számolja.
+  */
+  const [scope, setScope] = useState<"open" | "closed" | "all">(
+    kind === "MAINTENANCE" ? "all" : "open",
+  );
   const [data, setData] = useState<Awaited<
     ReturnType<typeof partnerApi.tickets>
   > | null>(null);
@@ -74,15 +87,11 @@ export function TicketList() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      setData(await partnerApi.tickets(scope));
+      setData(await partnerApi.tickets(scope, kind));
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "A hibajegyek nem tölthetők be.",
-      );
+      setError(cause instanceof Error ? cause.message : words.listLoadError);
     }
-  }, [scope]);
+  }, [scope, kind, words.listLoadError]);
 
   useEffect(() => {
     void load();
@@ -93,18 +102,18 @@ export function TicketList() {
       <div className="flex items-center justify-between border-b border-pilot-grey-100 bg-white px-8 py-5">
         <div>
           <h1 className="text-xl font-semibold text-pilot-grey-900">
-            Hibajegyek
+            {words.listTitle}
           </h1>
-          <p className="mt-0.5 text-sm text-pilot-grey-400">
-            Tekintse át a saját cége hibajegyeit és azok aktuális állapotát.
-          </p>
+          <p className="mt-0.5 text-sm text-pilot-grey-400">{words.listLead}</p>
         </div>
-        <Link href="/hibajegyek/uj">
-          <PilotButton variant="primary">
-            <Icon name="plus" size={14} />
-            Új hibajegy nyitása
-          </PilotButton>
-        </Link>
+        {kind === "REPAIR" ? (
+          <Link href="/hibajegyek/uj">
+            <PilotButton variant="primary">
+              <Icon name="plus" size={14} />
+              Új hibajegy nyitása
+            </PilotButton>
+          </Link>
+        ) : null}
       </div>
 
       {/*
@@ -122,22 +131,24 @@ export function TicketList() {
         Ellenorizve az eles CSS-en (2026-09-25 16:2x): a `@layer base`
         maga helyesen all, a hianyzo darab ez az egy sor volt.
       */}
-      <div className="flex items-center gap-1 border-b border-pilot-grey-100 bg-white px-8 py-4">
-        {SCOPE_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setScope(tab.key)}
-            className={`cursor-pointer rounded-md px-4 py-2 text-sm font-medium transition-all ${
-              scope === tab.key
-                ? "bg-pilot-aqua-50 text-pilot-aqua-700"
-                : "bg-transparent text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {kind === "REPAIR" ? (
+        <div className="flex items-center gap-1 border-b border-pilot-grey-100 bg-white px-8 py-4">
+          {SCOPE_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setScope(tab.key)}
+              className={`cursor-pointer rounded-md px-4 py-2 text-sm font-medium transition-all ${
+                scope === tab.key
+                  ? "bg-pilot-aqua-50 text-pilot-aqua-700"
+                  : "bg-transparent text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {error ? (
         <div className="px-8 py-4">
@@ -159,7 +170,7 @@ export function TicketList() {
 
       {!data && !error ? (
         <p className="px-8 py-6 text-sm text-pilot-grey-400">
-          Hibajegyek betöltése…
+          {words.listLoading}
         </p>
       ) : null}
 
@@ -169,10 +180,10 @@ export function TicketList() {
             <Icon name="service" size={24} className="text-pilot-aqua-600" />
           </div>
           <p className="text-base font-semibold text-pilot-grey-700">
-            Nincs megjeleníthető hibajegy
+            {words.emptyTitle}
           </p>
           <p className="max-w-xs text-sm text-pilot-grey-400">
-            Ebben az állapotszűrőben jelenleg nincs saját hibajegye.
+            {words.emptyText}
           </p>
         </div>
       ) : null}
@@ -182,7 +193,7 @@ export function TicketList() {
           <table className="w-full min-w-[720px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-pilot-grey-100">
-                {["Hibajegy", "Helyszín", "Állapot", "Létrehozva"].map(
+                {[words.column, "Helyszín", "Állapot", "Létrehozva"].map(
                   (col) => (
                     <th
                       key={col}
@@ -205,7 +216,7 @@ export function TicketList() {
                   <td className="px-5 py-3">
                     <Link
                       className="font-medium text-pilot-grey-900 hover:text-pilot-aqua-700"
-                      href={`/hibajegyek/${ticket.id}`}
+                      href={ticketHref(kind, ticket.id)}
                     >
                       {ticket.title}
                     </Link>
@@ -223,11 +234,22 @@ export function TicketList() {
                       "Helyszín nincs megadva"}
                   </td>
                   <td className="px-5 py-3">
-                    <PilotBadge
-                      variant={partnerStatusBadgeVariant(ticket.partnerStatus)}
-                    >
-                      {ticket.partnerStatusLabel}
-                    </PilotBadge>
+                    {kind === "MAINTENANCE" ? (
+                      /* a karbantartásnak nincs állapotgépe: a sor állapota a "kész" jelző (minden munkalap aláírva), nem a hibajegy partneri állapota */
+                      <PilotBadge
+                        variant={ticket.maintenanceDone ? "success" : "blue"}
+                      >
+                        {ticket.maintenanceDone ? "Kész" : "Folyamatban"}
+                      </PilotBadge>
+                    ) : (
+                      <PilotBadge
+                        variant={partnerStatusBadgeVariant(
+                          ticket.partnerStatus,
+                        )}
+                      >
+                        {ticket.partnerStatusLabel}
+                      </PilotBadge>
+                    )}
                   </td>
                   <td className="whitespace-nowrap px-5 py-3 text-pilot-grey-500">
                     <time dateTime={ticket.createdAt}>
@@ -239,7 +261,7 @@ export function TicketList() {
             </tbody>
           </table>
           <div className="border-t border-pilot-grey-100 bg-white px-5 py-3 text-xs text-pilot-grey-400">
-            {ticketScopeTotal(data.counts, scope)} hibajegy összesen
+            {ticketScopeTotal(data.counts, scope)} {words.totalSuffix}
             {data.truncated
               ? " (a lista a megjelenített résznél hosszabb)"
               : ""}

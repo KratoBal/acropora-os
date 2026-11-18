@@ -41,7 +41,7 @@ describe("a bejelentés javításának bekötése", () => {
   it("a szerkesztő a MUNKALAP HIÁNYÁHOZ van kötve", () => {
     assert.match(
       kod(LAP),
-      /worksheets\.length === 0 \?\s*\(?\s*<TicketFieldsEditor/,
+      /worksheets\.length === 0 && !maintenance\s*\?\s*\(?\s*<TicketFieldsEditor/,
     );
   });
 

@@ -1,0 +1,10 @@
+import { TicketDetail } from "@/components/ticket-detail";
+
+export default async function MaintenanceSheetPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  return <TicketDetail id={id} route="karbantartas" />;
+}

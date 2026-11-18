@@ -27,6 +27,7 @@ import {
 } from "@acropora/types";
 
 import { partnerApi } from "@/lib/api";
+import { ticketHref } from "@/lib/ticket-kind";
 import { DocumentPanel } from "./document-panel";
 import { Message } from "./ticket-list";
 
@@ -411,7 +412,11 @@ export function WorksheetDetail({ id }: { id: string }) {
             <PilotCardHeader title="Munkalap adatai" />
             <div className="px-5 py-2">
               <PilotDataRow
-                label="Hibajegy"
+                label={
+                  worksheet.serviceJob?.kind === "MAINTENANCE"
+                    ? "Karbantartási lap"
+                    : "Hibajegy"
+                }
                 /*
                   A HIÁNY IS ÁLLÍTÁS, ezért nem gondolatjel áll itt: a lap
                   keletkezhet hibajegy nélkül, és az nem hiányzó ADAT, hanem
@@ -423,7 +428,10 @@ export function WorksheetDetail({ id }: { id: string }) {
                   worksheet.serviceJob ? (
                     <Link
                       className="text-pilot-aqua-700 hover:underline"
-                      href={`/hibajegyek/${worksheet.serviceJob.id}`}
+                      href={ticketHref(
+                        worksheet.serviceJob.kind ?? "REPAIR",
+                        worksheet.serviceJob.id,
+                      )}
                     >
                       {worksheet.serviceJob.jobNumber}
                     </Link>

@@ -832,6 +832,14 @@ export function partnerStatusTone(
  * megy ki -- pontosan ezert letezik a ket partner-mezo.
  */
 export interface ServiceJobPartnerDetail {
+  /**
+   * A LAP FAJTÁJA (Luca, 2026-11-18; acrobot 55980): a partner portál ebből dönti el, melyik menüpont alatt (Hibajegyek vagy Karbantartás) és milyen szavakkal mutatja.
+   */
+  kind: ServiceJobKind;
+  /**
+   * KARBANTARTÁSNÁL: minden munkalap aláírva (a karbantartásnak nincs állapotgépe, a partneri állapot-felirat nem értelmezhető rá). Csak a MAINTENANCE lapon van.
+   */
+  maintenanceDone?: boolean;
   reporterPersonName?: string | null;
   /** Shared formatted label, including the partner-side person. */
   reporterName?: string | null;
@@ -967,9 +975,20 @@ export function partnerServiceJobListItem(
 export function partnerServiceJobDetail(
   detail: ServiceJobDetail,
 ): ServiceJobPartnerDetail {
+  const sheets = detail.timeline.flatMap((entry) =>
+    entry.kind === "worksheet" ? [entry.worksheet] : [],
+  );
   return {
     id: detail.id,
     jobNumber: detail.jobNumber,
+    kind: detail.kind,
+    ...(detail.kind === "MAINTENANCE"
+      ? {
+          maintenanceDone:
+            sheets.length > 0 &&
+            sheets.every((sheet) => sheet.status === "SIGNED"),
+        }
+      : {}),
     title: detail.title,
     description: detail.description,
     ...(detail.reporterPersonName
