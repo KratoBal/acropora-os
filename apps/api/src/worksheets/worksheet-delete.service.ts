@@ -70,6 +70,11 @@ export class WorksheetDeleteService {
     } catch (error) {
       if (error instanceof WorksheetDeleteRefused)
         throw new ConflictException(error.message);
+      // sorosítási hiba (P2034): egy egyidejű írás (aláírás, folytatás, beszerzés) a törlés olvasott soraihoz ért; a törlés elmaradt, újrapróbálható
+      if ((error as { code?: string } | null)?.code === "P2034")
+        throw new ConflictException(
+          "A munkalap közben megváltozott, ezért a törlés elmaradt. Próbáld újra.",
+        );
       throw error;
     }
     if (!removed) throw new NotFoundException("A munkalap nem található.");

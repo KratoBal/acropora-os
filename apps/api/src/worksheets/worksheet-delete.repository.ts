@@ -2,7 +2,10 @@ import { Injectable } from "@nestjs/common";
 
 import { prisma, type Prisma } from "@acropora/database";
 
-import type { StoredDocumentRef } from "../service-jobs/service-job-delete.repository.js";
+import {
+  SERIALIZABLE,
+  type StoredDocumentRef,
+} from "../service-jobs/service-job-delete.repository.js";
 import type { WorksheetDeleteFacts } from "./worksheet-delete.rules.js";
 
 /**
@@ -91,6 +94,8 @@ export class WorksheetDeleteRepository {
     id: string;
     actorUserId: string;
     refusal: (facts: WorksheetDeleteFacts) => string | null;
+    /** CSAK TESZTHEZ: a tényolvasás UTÁN, a törlés ELŐTT fut (a versenyteszt itt írja be az egyidejű aláírást). */
+    afterRead?: () => Promise<void>;
   }): Promise<{
     label: string;
     counts: WorksheetDeleteSnapshot["counts"];
@@ -101,6 +106,7 @@ export class WorksheetDeleteRepository {
       if (!snapshot) return null;
       const refusal = input.refusal(snapshot.facts);
       if (refusal) throw new WorksheetDeleteRefused(refusal);
+      await input.afterRead?.();
 
       const stored: StoredDocumentRef[] = (
         await tx.worksheetDocument.findMany({
@@ -133,6 +139,6 @@ export class WorksheetDeleteRepository {
         },
       });
       return { label: snapshot.label, counts: snapshot.counts, stored };
-    });
+    }, SERIALIZABLE);
   }
 }

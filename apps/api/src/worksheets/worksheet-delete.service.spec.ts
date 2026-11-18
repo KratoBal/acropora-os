@@ -105,6 +105,21 @@ describe("az önálló munkalap törlésének szolgáltatása", () => {
     );
   });
 
+  it("a sorosítási hiba (egyidejű írás) 409, nem 500", async () => {
+    await assert.rejects(
+      build({
+        remove: async () => {
+          throw Object.assign(new Error("serialization failure"), {
+            code: "P2034",
+          });
+        },
+      }).service.delete("ws-1", internal),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        /újra/.test((error as Error).message),
+    );
+  });
+
   it("a tárolóba írt csatolmány a sikeres törlés után törlődik, a bukott után nem", async () => {
     const ok = build();
     assert.deepEqual(await ok.service.delete("ws-1", internal), {

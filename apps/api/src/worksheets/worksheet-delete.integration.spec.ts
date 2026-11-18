@@ -114,6 +114,36 @@ describe(
       });
     });
 
+    /*
+      A VERSENYTESZT (barracuda, #2693/#2694 review): a tényolvasás UTÁN, a törlés ELŐTT egy MÁSIK kapcsolat aláírja a lapot. Serializable alatt a törlés sorosítási hibát (P2034) kap, és az
+      aláírás megmarad; READ COMMITTED alatt a törlés a már aláírt verziót is kaszkáddal törölné. MI PIROSÍT: ha a lap törlődik, vagy a hiba nem P2034.
+    */
+    it("a tényolvasás után egyidejűleg aláírt lap elbuktatja a törlést, és az aláírás megmarad", async () => {
+      const { id } = await sheet({});
+      await assert.rejects(
+        repository.remove({
+          id,
+          actorUserId: "deleter-1",
+          refusal: worksheetDeleteRefusal,
+          afterRead: async () => {
+            await prisma.worksheetVersion.updateMany({
+              where: { worksheetId: id },
+              data: { status: "SIGNED" },
+            });
+          },
+        }),
+        (error: unknown) =>
+          (error as { code?: string } | null)?.code === "P2034",
+      );
+      assert.equal(await prisma.worksheet.count({ where: { id } }), 1);
+      assert.equal(
+        await prisma.worksheetVersion.count({
+          where: { worksheetId: id, status: "SIGNED" },
+        }),
+        1,
+      );
+    });
+
     it("az aláírt lap és a jegy alatti lap tilt, és a tiltás visszagördül: semmi nem törlődik", async () => {
       const signed = await sheet({ status: "SIGNED" });
       await assert.rejects(remove(signed.id), WorksheetDeleteRefused);
