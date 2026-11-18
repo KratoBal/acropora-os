@@ -1190,15 +1190,20 @@ export class ServiceJobsService {
       ],
     };
     const kind = query.kind ?? "REPAIR";
-    const [{ rows, truncated }, counts] = await Promise.all([
+    const [{ rows, truncated }, counts, maintenanceCounts] = await Promise.all([
       this.repository.list(
         query.scope ?? "open",
         visibility,
         query.search,
         kind,
         user.id,
+        query.maintenanceState,
       ),
       this.repository.countsByStatus(visibility, query.search, kind),
+      // the maintenance list's tabs count by the badge's rule, not by the ticket status (f4590db6)
+      kind === "MAINTENANCE"
+        ? this.repository.maintenanceStateCounts(visibility, query.search)
+        : Promise.resolve(undefined),
     ]);
     /*
       A PARTNER SAJAT ALAKOT KAP (kartya a0660885): ugyanaz a `!== "internal"`
@@ -1234,6 +1239,7 @@ export class ServiceJobsService {
     }));
     return {
       counts,
+      ...(maintenanceCounts ? { maintenanceCounts } : {}),
       truncated,
       items: partner ? items.map(partnerServiceJobListItem) : items,
     };

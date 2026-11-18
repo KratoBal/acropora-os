@@ -116,11 +116,17 @@ export const MAINTENANCE_TABS: { id: MaintenanceTab; label: string }[] = [
   { id: "all", label: "Összes" },
 ];
 
-export function maintenanceItemsForTab(
-  items: readonly ServiceJobListItem[],
-  tab: MaintenanceTab,
-): ServiceJobListItem[] {
-  if (tab === "all") return [...items];
-  const done = tab === "done";
-  return items.filter((item) => Boolean(item.maintenanceDone) === done);
+/**
+ * A FÜL TELJES SZÁMA A SZERVER SZÁMÁBÓL (f4590db6): a szerver szűr a fülre, és megmondja, hány lap van folyamatban és hány kész. A betöltött
+ * sorok száma csak tartalék, ha a válasz (régi szerver) nem hozza.
+ */
+export function maintenanceTotal(
+  counts: { progress: number; done: number } | undefined,
+  tab: string,
+  shown: number,
+): number {
+  if (!counts) return shown;
+  if (tab === "done") return counts.done;
+  if (tab === "progress") return counts.progress;
+  return counts.progress + counts.done;
 }

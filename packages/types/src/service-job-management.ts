@@ -153,6 +153,11 @@ export interface ServiceJobListResponse {
   items: ServiceJobListItem[];
   counts: ServiceJobStatusCounts;
   /**
+   * A KARBANTARTÁS FÜLEINEK SZÁMA (`kind=MAINTENANCE` kérésnél): a még nem kész és a kész lapok, a jelvény szabálya szerint (minden
+   * munkalap legutolsó verziója aláírt = kész). A hibajegy-listán hiányzik.
+   */
+  maintenanceCounts?: { progress: number; done: number };
+  /**
    * IGAZ, HA A LISTA A HATARBA UTKOZOTT, tehat van tobb sor, ami nem fert bele.
    * A SZERVER mondja meg, nem a kliens szamolja: a hatar a lekerdezese, es egy
    * kliensoldali "pont ketszaz jott" osszehasonlitas nemán avulna el, amint a
