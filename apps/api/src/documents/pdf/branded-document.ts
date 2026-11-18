@@ -127,15 +127,49 @@ export function drawDocumentHeader(
     .text(input.eyebrow, PDF_LEFT, 64, {
       characterSpacing: 1.8,
     });
-  document.fillColor(PDF_INK).fontSize(22).text(input.title, PDF_LEFT, 86, {
-    width: 305,
-    lineGap: 2,
-  });
+  /*
+    A CÍM ÉS AZ ALCÍM A FEJLÉC VONALA FÖLÖTT MARAD (t-20261118-fejlec-hosszu-cim; Luca munkalapja, acrobot 55822). Eddig a cím 22
+    ponton, az alcím FIX helyen (136) állt: egy kétsoros cím (egy hosszú név a jelenléti íven) az alcímre csúszott, egy háromsoros
+    alcím (eszköz és ügyfél a bérleti szerződésen) a vonalon (170) át a tartalomba. Most az alcím a cím MÉRT magassága alá kerül
+    (egysoros címnél ugyanoda, 136-ra, tehát a rövid fejléc képe nem változik); ha a kettő nem fér el, a cím betűje lépésenként
+    kisebb lesz (legfeljebb 14 pontig), és ha az alcím így sem fér el, a maradék helyre vágódik, három ponttal.
+  */
+  const TITLE_TOP = 86;
+  const SUBTITLE_TOP = 136;
+  const BAND_BOTTOM = 164;
+  const titleHeight = (size: number) => {
+    document.fontSize(size);
+    return document.heightOfString(input.title, { width: 305, lineGap: 2 });
+  };
+  document.fontSize(10);
+  const subtitleWanted = Math.min(
+    document.heightOfString(input.subtitle, { width: 310 }),
+    document.currentLineHeight(true) * 2,
+  );
+  let titleSize = 22;
+  while (
+    titleSize > 14 &&
+    Math.max(SUBTITLE_TOP, TITLE_TOP + titleHeight(titleSize) + 4) +
+      subtitleWanted >
+      BAND_BOTTOM
+  )
+    titleSize -= 1;
+  const titleBottom = TITLE_TOP + titleHeight(titleSize);
+  document
+    .fillColor(PDF_INK)
+    .fontSize(titleSize)
+    .text(input.title, PDF_LEFT, TITLE_TOP, {
+      width: 305,
+      lineGap: 2,
+    });
+  const subtitleTop = Math.max(SUBTITLE_TOP, titleBottom + 4);
   document
     .fillColor(PDF_MUTED)
     .fontSize(10)
-    .text(input.subtitle, PDF_LEFT, 136, {
+    .text(input.subtitle, PDF_LEFT, subtitleTop, {
       width: 310,
+      height: Math.max(BAND_BOTTOM - subtitleTop, 12),
+      ellipsis: true,
     });
   drawAcroporaLogo(document, 440, 64, 76);
   document
