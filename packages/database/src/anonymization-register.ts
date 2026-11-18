@@ -1444,6 +1444,10 @@ export const ANONYMIZATION_REGISTER: Readonly<
     decisionNote: "freeText",
     decidedById: "identifier",
   },
+  ServiceJobDeletion: {
+    jobNumber: "identifier",
+    deletedById: "identifier",
+  },
   TicketMailDelivery: {
     serviceJobId: "identifier",
     jobNumber: "identifier",
