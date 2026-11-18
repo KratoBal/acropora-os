@@ -18,8 +18,10 @@ export const webshopCouponsApi = {
     });
   },
   setActive(token: string, id: string, active: boolean) {
+    // plain `${...}` parts only: the route check reads this path from the source (mobile-api-routes.spec)
+    const state = active ? "true" : "false";
     return apiRequest<WebshopCoupon>(
-      `/webshop-coupons/${encodeURIComponent(id)}/active/${active ? "true" : "false"}`,
+      `/webshop-coupons/${encodeURIComponent(id)}/active/${state}`,
       token,
       { method: "POST" },
     );

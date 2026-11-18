@@ -188,7 +188,7 @@ export function WebshopCouponsPage() {
           <h2 className="text-base font-semibold text-pilot-grey-900">
             Új kupon
           </h2>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="flex flex-col gap-1 text-sm text-pilot-grey-700">
               Kód
               <PilotInput
