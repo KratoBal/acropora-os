@@ -6,7 +6,9 @@ import type { ServiceJobKind, ServiceJobStatusValue } from "@acropora/types";
  *
  * Egy jegy akkor NEM törölhető, ha a törlés megsemmisítene valamit, ami már a jegyen kívül is hat: lezárt jegy, teljesítési igazolás (és az ahhoz kötött
  * számla), aláírt, lezárt (számozott) vagy az ügyfélnek átadott munkalap, karbantartási rendelés, egy MÁSIK jegy munkalapja által folytatott munkalap,
- * a beszerzésig jutott anyagigény, és minden jegyhez/munkalaphoz kötött készletmozgás (a készlet nem tűnhet el csendben, acrobot 55770). A megszakított
+ * a beszerzésig jutott anyagigény, és minden jegyhez/munkalaphoz kötött készletmozgás (a készlet nem tűnhet el csendben, acrobot 55770). A készletmozgás-feltétel ma semmit nem fog (a main-en
+ * egyetlen író sem használ `ServiceJob`, `Worksheet` vagy `MaterialRequest` hivatkozás-típust): előre-őrző. Ha a munkalap-anyagfelhasználás valaha MÁS hivatkozás-névvel könyvel készletet,
+ * ez a feltétel csendben nem fogja meg, tehát az új író bevezetésekor a hivatkozás-típusok listáját (a tárolóban) is bővíteni kell. A megszakított
  * (CANCELLED) jegy törölhető. Az aláírásra váró munkalap nem tilt, de a megerősítő ablak kimondja, mert az ügyfél aláírási hivatkozása megszűnik.
  */
 export interface ServiceJobDeleteSheetFacts {
@@ -59,7 +61,7 @@ export function serviceJobDeleteRefusal(
   if (facts.procuredMaterialRequests > 0)
     return `A munkalapjaihoz tartozó anyagigény már a beszerzésig jutott, ezért a ${thing} nem törölhető.`;
   if (facts.stockMovements > 0)
-    return `A ${thing}hez készletmozgás tartozik, ezért nem törölhető: a készlet nem tűnhet el csendben.`;
+    return `A ${to} készletmozgás tartozik, ezért nem törölhető: a készlet nem tűnhet el csendben.`;
   return null;
 }
 
