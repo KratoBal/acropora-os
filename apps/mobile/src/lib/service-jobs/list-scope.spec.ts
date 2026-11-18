@@ -194,7 +194,7 @@ describe("a hibajegy-lista szűrői a telefonon", () => {
     */
     assert.deepEqual(
       [...hivasok].sort(),
-      ['OFFLINE_COPY_SCOPE, "ALL"', 'serverScope, "ALL"'],
+      ['OFFLINE_COPY_SCOPE, "REPAIR"', 'serverScope, "REPAIR"'],
       `A képernyő ${hivasok.length} helyen hívja a listát, ezekkel: ${hivasok.join(", ")}. Két hívást várok: a kiválasztott szűrővel és a másolat teljes listájával.`,
     );
   });

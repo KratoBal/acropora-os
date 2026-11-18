@@ -50,7 +50,7 @@ export function jobWords(kind: JobWordsKind): JobWords {
 }
 
 /**
- * A FAJTA NÉLKÜLI HELYEK SZAVAI: a lista és a menü a hibajegyeket ÉS a karbantartási lapokat együtt mutatja (a telefon minden listahívása `kind=ALL`), ezért ott a mondat mindkettőt nevezi meg.
+ * A FAJTA NÉLKÜLI HELYEK SZAVAI: ahol a lap fajtája még nem ismert (az adatlap betöltése előtt vagy hibájakor), a mondat mindkettőt nevezi meg. A két lista (Hibajegyek, Karbantartás) saját szövegekkel áll, nem ezzel.
  */
 export const BOTH_NOUN = "hibajegy vagy karbantartási lap";
 export const BOTH_NOUN_PLURAL = "hibajegyek és karbantartási lapok";

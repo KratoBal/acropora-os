@@ -55,6 +55,7 @@ import {
   valaszthatoEszkozok,
 } from "@/lib/service-jobs/uj-jegy-eszkoz";
 import { SERVICE_JOB_LIST_COPY } from "@/lib/service-jobs/list-copy";
+import { repairRowsOf } from "@/lib/service-jobs/repair-rows";
 import { readCachedAssets } from "@/lib/offline/asset-cache";
 import { sessionKey } from "@/lib/session/session-memory";
 import { useSessionState } from "@/lib/session/useSessionState";
@@ -103,10 +104,10 @@ export default function ServiceJobListScreen() {
     // halmazt mutatna a masik felirat alatt, amig az uj lekerdezes befut.
     // "Várakozik" asks for the open list and narrows it, so the two share
     // one answer (`serverScopeOf`).
-    queryKey: ["service-jobs", serverScope, "ALL"],
+    queryKey: ["service-jobs", serverScope, "REPAIR"],
     // A hívás akkor is elindul, ha a készülék offline-nak mondja magát: a
     // jelzése tévedhet, és egy működő lekérdezést nem tarthat vissza.
-    queryFn: () => listServiceJobs(serverScope, "ALL"),
+    queryFn: () => listServiceJobs(serverScope, "REPAIR"),
     enabled:
       status === "authenticated" && Boolean(capabilities?.serviceJobsView),
     placeholderData: keepPreviousData,
@@ -166,8 +167,8 @@ export default function ServiceJobListScreen() {
     megnyitasa es a visszalepes sem ker ujra.
   */
   const fullList = useQuery({
-    queryKey: ["service-jobs", OFFLINE_COPY_SCOPE, "ALL"],
-    queryFn: () => listServiceJobs(OFFLINE_COPY_SCOPE, "ALL"),
+    queryKey: ["service-jobs", OFFLINE_COPY_SCOPE, "REPAIR"],
+    queryFn: () => listServiceJobs(OFFLINE_COPY_SCOPE, "REPAIR"),
     enabled:
       serverScope !== OFFLINE_COPY_SCOPE &&
       status === "authenticated" &&
@@ -196,7 +197,7 @@ export default function ServiceJobListScreen() {
    * elhasalt -- a `query.isError` ág ezért számít bele. Enélkül egy hálózati
    * hiba ÜRES listát adna, ami ugyanúgy néz ki, mint egy valóban üres nap.
    */
-  const cachedItems = cached.data?.items ?? [];
+  const cachedItems = repairRowsOf(cached.data?.items ?? []);
   /**
    * A MASOLAT A VALASZTOTT SZUROVEL, VAGY EGY KIMONDOTT NEMMEL.
    *
@@ -417,9 +418,6 @@ export default function ServiceJobListScreen() {
             {item.reporterPersonName && item.reporterName ? (
               <Text style={styles.meta}>Bejelentő: {item.reporterName}</Text>
             ) : null}
-            {item.kind === "MAINTENANCE" ? (
-              <Text style={styles.maintenance}>Karbantartás</Text>
-            ) : null}
             {item.customerName ? (
               <Text style={styles.partner}>{item.customerName}</Text>
             ) : null}
@@ -523,7 +521,6 @@ function createStyles(t: ThemeTokens) {
     number: { color: t.textSecondary, fontSize: 13 },
     status: { ...statusBadgeStyle(t), alignSelf: "flex-start" },
     title: { color: t.textPrimary, fontSize: 17, fontWeight: "700" },
-    maintenance: { ...statusBadgeStyle(t), alignSelf: "flex-start" },
     partner: { color: t.textPrimary, fontSize: 14, marginTop: 6 },
     meta: { color: t.textSecondary, fontSize: 13 },
   });
