@@ -99,7 +99,12 @@ describe("the customer's own references are not ours", () => {
 
   it("a foreign or cut number that equals one of ours as a number is not offered for pairing", () => {
     const ours = [{ invoiceNumber: "ACRW-2026/00503", open: "10000" }];
-    for (const text of ["S/2026/0000503", "KXT/2026/000503", "KXT/2026/00503"])
+    for (const text of [
+      "S/2026/0000503",
+      "2026/0000503",
+      "KXT/2026/000503",
+      "KXT/2026/00503",
+    ])
       assert.equal(
         matchRemittance(text, "10000", ours).kind,
         "NO_REFERENCE",
