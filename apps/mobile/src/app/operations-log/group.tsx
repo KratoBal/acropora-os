@@ -46,6 +46,7 @@ import {
   emptyGroupForm,
   perAssetFields,
   sharedFields,
+  sharedSectionTitle,
   type GroupAsset,
   type GroupEntryForm,
   type GroupFormField,
@@ -424,10 +425,13 @@ export default function RecordOperationsGroupScreen() {
 
               {sharedFields(template).length > 0 ? (
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Közös vízóra</Text>
+                  <Text style={styles.sectionTitle}>
+                    {sharedSectionTitle(template)}
+                  </Text>
                   <Text style={styles.hint}>
-                    A mérés az egész sorra egyszer vonatkozik: minden eszköz
-                    bejegyzésére rákerül.
+                    {template.uniformRecording === true
+                      ? "Egyszer írod be: minden eszköz bejegyzésére rákerül."
+                      : "A mérés az egész sorra egyszer vonatkozik: minden eszköz bejegyzésére rákerül."}
                   </Text>
                   <View style={styles.paramCard}>
                     {sharedFields(template).map((field, index) => (

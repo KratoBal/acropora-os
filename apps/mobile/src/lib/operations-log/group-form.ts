@@ -34,21 +34,34 @@ export interface GroupAsset {
   label: string;
 }
 
-/** A közös mezők: a vízóra (a sablon mezője, amelyiknek vízóra-szerepe van). Minden más mező eszközönként áll. */
-export function isSharedField(field: OperationsTemplateField): boolean {
-  return field.meterRole !== null;
+/**
+ * A közös mezők: a vízóra (a sablon mezője, amelyiknek vízóra-szerepe van) mindig. Ha a sablonon be van kapcsolva az „Egységes rögzítés”
+ * (kártya d2222173), akkor minden szám, igen/nem és szöveg mező is: egyszer írják be, és minden eszköz bejegyzésére rákerül. A fénykép
+ * mindig eszközönként áll (egy kép egy eszközt mutat), és a rendellenesség is (eszközönként nyílik jegy). Hiányzó kapcsoló: kikapcsolt.
+ */
+export function isSharedField(
+  field: OperationsTemplateField,
+  template: OperationsTemplate,
+): boolean {
+  if (field.meterRole !== null) return true;
+  return template.uniformRecording === true && field.type !== "PHOTO";
 }
 
 export function sharedFields(
   template: OperationsTemplate,
 ): OperationsTemplateField[] {
-  return template.fields.filter(isSharedField);
+  return template.fields.filter((field) => isSharedField(field, template));
 }
 
 export function perAssetFields(
   template: OperationsTemplate,
 ): OperationsTemplateField[] {
-  return template.fields.filter((field) => !isSharedField(field));
+  return template.fields.filter((field) => !isSharedField(field, template));
+}
+
+/** A közös rész címe az űrlapon: kikapcsolt kapcsolónál csak a vízóra áll ott, bekapcsoltnál minden közös érték. */
+export function sharedSectionTitle(template: OperationsTemplate): string {
+  return template.uniformRecording === true ? "Közös értékek" : "Közös vízóra";
 }
 
 /**
@@ -77,7 +90,7 @@ export interface GroupAssetPart {
 export interface GroupEntryForm {
   /** A „Kezdés” gomb pillanata; `null`, amíg meg nem nyomták. */
   startedAt: Date | null;
-  /** A közös (vízóra) mezők beírt értékei. */
+  /** A közös mezők (a vízóra, egységes rögzítésnél minden szám, igen/nem és szöveg mező) beírt értékei. */
   shared: Record<string, string | boolean>;
   participantIds: string[];
   internalNote: string;
