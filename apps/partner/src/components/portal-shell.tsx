@@ -46,6 +46,8 @@ const MUSZAKI_MENU: {
   entryId?: string;
 }[] = [
   { href: "/hibajegyek", label: "Hibajegyek", icon: "clipboard" },
+  // a karbantartási lap NEM hibajegy, külön menüpont (Luca, 2026-11-18 14:50 UTC; acrobot 55980)
+  { href: "/karbantartas", label: "Karbantartás", icon: "clipboard" },
   { href: "/munkalapok", label: "Munkalapok", icon: "clipboard" },
   { href: "/eszkozok", label: "Eszközök", icon: "box" },
   {

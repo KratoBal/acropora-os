@@ -5,5 +5,5 @@ export default async function TicketPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <TicketDetail id={id} />;
+  return <TicketDetail id={id} route="hibajegyek" />;
 }

@@ -45,8 +45,11 @@ export function partnerWorksheetLink(input: {
 export function partnerTicketLink(input: {
   readonly partnerUrl: string | undefined;
   readonly serviceJobId: string;
+  /** A lap fajtája: a karbantartási lap a portál KARBANTARTÁS menüpontja alatt áll (Luca, 2026-11-18); hiányában hibajegy. */
+  readonly kind?: "REPAIR" | "MAINTENANCE";
 }): string {
   const alap = input.partnerUrl?.trim();
   if (!alap) return "";
-  return `${alap.replace(/\/+$/, "")}/hibajegyek/${input.serviceJobId}`;
+  const route = input.kind === "MAINTENANCE" ? "karbantartas" : "hibajegyek";
+  return `${alap.replace(/\/+$/, "")}/${route}/${input.serviceJobId}`;
 }

@@ -75,10 +75,12 @@ const BELSO: ServiceJobDetail = {
   },
 };
 
-/** A tizenegy mezo, amit a portal MA SEM olvas (merve 2026-09-21, kontrollal). */
+/**
+ * A tizenegy mezo, amit a portal MA SEM olvas (merve 2026-09-21, kontrollal). A `kind` 2026-11-18 ota NEM tartozik ide: a portal a Karbantartas menupont miatt olvassa (Luca, acrobot 55980),
+ * lasd a fajta-tesztet lent.
+ */
 const ELVETT = [
   "hidden",
-  "kind",
   "status",
   "customerName",
   "customerId",
@@ -121,6 +123,48 @@ describe("a partner reszletlapja", () => {
     assert.equal(partner.createdAt, "2026-09-20T08:00:00.000Z");
     assert.equal(partner.assets.length, 1);
     assert.equal(partner.timeline.length, 1);
+    assert.equal(partner.kind, "REPAIR");
+  });
+
+  /*
+    A KARBANTARTÁSI LAP A PARTNER PORTÁLON KÜLÖN MENÜPONT (Luca, 2026-11-18 14:50 UTC; acrobot 55980): a partner részlete hordozza a lap FAJTÁJÁT (a portál ebből dönti el, melyik
+    útvonalon és milyen szavakkal mutatja), és karbantartásnál a "kész" jelzőt (minden munkalap aláírva: a karbantartásnak nincs állapotgépe, a partneri állapot-felirat nem értelmezhető).
+    A belső nyolc értékű állapot továbbra sem megy ki. MI PIROSÍT: ha a fajta nem megy át; ha a hibajegyen is megjelenik a kész jelző; ha a kész jelző nem az "összes munkalap aláírt";
+    ha egy munkalap nélküli karbantartás kész.
+  */
+  it("a fajta átmegy; a kész jelző csak a karbantartáson van, és az összes munkalap aláírását jelenti", () => {
+    const sheet = (id: string, status: "SIGNED" | "DRAFT") =>
+      ({
+        kind: "worksheet" as const,
+        at: "2026-09-20T09:00:00.000Z",
+        sortKey: id,
+        worksheet: {
+          id,
+          number: null,
+          createdAt: "2026-09-20T09:00:00.000Z",
+          status,
+        },
+      }) as unknown as ServiceJobDetail["timeline"][number];
+    const repair = partnerServiceJobDetail(BELSO);
+    assert.equal(repair.kind, "REPAIR");
+    assert.equal("maintenanceDone" in repair, false);
+
+    const maintenance = (...sheets: ServiceJobDetail["timeline"]) =>
+      partnerServiceJobDetail({
+        ...BELSO,
+        kind: "MAINTENANCE",
+        timeline: [...BELSO.timeline, ...sheets],
+      });
+    assert.equal(maintenance().kind, "MAINTENANCE");
+    assert.equal(
+      maintenance(sheet("w1", "SIGNED"), sheet("w2", "SIGNED")).maintenanceDone,
+      true,
+    );
+    assert.equal(
+      maintenance(sheet("w1", "SIGNED"), sheet("w2", "DRAFT")).maintenanceDone,
+      false,
+    );
+    assert.equal(maintenance().maintenanceDone, false);
   });
 
   /**

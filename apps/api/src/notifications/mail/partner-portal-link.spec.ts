@@ -65,6 +65,29 @@ describe("a hibajegy linkje a partner-portalon", () => {
       );
   });
 
+  /*
+    A KARBANTARTÁSI LAP A PARTNER PORTÁLON KÜLÖN MENÜPONT (Luca, 2026-11-18 14:50 UTC; acrobot 55980): a link a lap fajtája szerinti útvonalra mutat; fajta nélkül hibajegy (a régi hívók).
+    MI PIROSÍT: ha a karbantartás linkje a hibajegyek alá mutat; ha a fajta nélküli hívás útvonala megváltozik.
+  */
+  it("karbantartási lapnál a /karbantartas útvonalra mutat, fajta nélkül és hibajegynél a /hibajegyek-re", () => {
+    const base = {
+      partnerUrl: "https://ticket.acropora.hu",
+      serviceJobId: "job-1",
+    };
+    assert.equal(
+      partnerTicketLink({ ...base, kind: "MAINTENANCE" }),
+      "https://ticket.acropora.hu/karbantartas/job-1",
+    );
+    assert.equal(
+      partnerTicketLink({ ...base, kind: "REPAIR" }),
+      "https://ticket.acropora.hu/hibajegyek/job-1",
+    );
+    assert.equal(
+      partnerTicketLink(base),
+      "https://ticket.acropora.hu/hibajegyek/job-1",
+    );
+  });
+
   it("a hibajegy utvonala nem a munkalape", () => {
     assert.notEqual(
       partnerTicketLink({ partnerUrl: "https://t.hu", serviceJobId: "x" }),

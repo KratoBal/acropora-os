@@ -756,7 +756,12 @@ describe("a partner munkalap-adatlapja", () => {
    */
   it("a hibajegy hivatkozás a portál útvonalára megy", () => {
     const s = olvas(MUNKALAP_RESZLET);
-    assert.match(s, /href=\{`\/hibajegyek\/\$\{worksheet\.serviceJob\.id\}`\}/);
+    // a fajta szerinti útvonal (hibajegy: /hibajegyek/<id>, karbantartás: /karbantartas/<id>) a `ticketHref`-ből jön, a portál saját útvonalára (Luca, 2026-11-18 14:50 UTC)
+    assert.match(
+      s,
+      /href=\{ticketHref\(\s*worksheet\.serviceJob\.kind \?\? "REPAIR",\s*worksheet\.serviceJob\.id,?\s*\)\}/,
+    );
+    assert.doesNotMatch(s, /href=\{`\/szerviz\//);
     assert.ok(!/\/szerviz\//.test(kod(MUNKALAP_RESZLET)));
   });
 
