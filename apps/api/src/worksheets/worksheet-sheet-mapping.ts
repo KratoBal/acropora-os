@@ -71,6 +71,8 @@ export function worksheetSheetInput(
     description: version.description,
     issueDate: version.issueDate,
     fulfillmentDate: version.fulfillmentDate,
+    // Luca kérése (2026-11-18): a határidő a lap jobb oldalára kerül, a kiállítás és a teljesítés mellé
+    dueDate: version.dueDate,
     createdByName: version.createdByName,
     closedAt: version.closedAt,
     /*

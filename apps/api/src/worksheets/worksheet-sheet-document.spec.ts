@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import { readPdfTextLines } from "../documents/pdf/pdf-text-readback.js";
 
 import {
-  worksheetSheetLines,
+  worksheetSheetLayout,
   type WorksheetSheetInput,
 } from "./worksheet-sheet-content.js";
 import {
@@ -202,11 +202,26 @@ describe("a lap bemenetéből tárolható fájl lesz", () => {
     const doc = await worksheetSheetDocument(input);
 
     const vissza = await readPdfTextLines(doc.content);
-    const visszaolvasott = vissza.map((sor) => szokozNelkul(sor.text));
-    const hianyzo = worksheetSheetLines(input)
+    // 2026-11-18 (Luca, t-20261118-munkalap-pdf) óta a lap ELRENDEZETT: a mező címkéje és értéke külön sorban, a tételek táblázatban.
+    // A mérce ugyanaz: az elrendezés MINDEN darabja visszaolvasható -- a szám, minden címke és érték, a tételek, a mennyiség, a
+    // munkaóra, a napló és az aláírás.
+    const egyben = szokozNelkul(vissza.map((sor) => sor.text).join(" "));
+    const layout = worksheetSheetLayout(input);
+    const hianyzo = [
+      layout.number,
+      ...[...layout.left, ...layout.right].flatMap((f) => [
+        f.label.toUpperCase(),
+        f.value,
+      ]),
+      ...layout.items.flatMap((i) => [i.description, ...i.notes, i.amount]),
+      ...(layout.laborTotal !== null
+        ? ["Összes munkaóra", layout.laborTotal]
+        : []),
+      ...layout.entries,
+      ...layout.signature,
+    ]
       .map(szokozNelkul)
-      .filter((sor) => sor !== "")
-      .filter((sor) => !visszaolvasott.includes(sor));
+      .filter((darab) => !egyben.includes(darab));
 
     assert.deepEqual(hianyzo, [], "a visszaolvasott lapból sor hiányzik");
     // ISMERT POZITÍV KONTROLL: a nulla eltérés nem egy ÜRES visszaolvasásról

@@ -180,7 +180,8 @@ describe("a válaszból a lap bemenete", () => {
       "vatAmount",
       "grossAmount",
       "currency",
-      "dueDate",
+      // a "dueDate" 2026-11-18 óta NEM tiltott: Luca kérésére a lap jobb oldalán áll (t-20261118-munkalap-pdf); árat, áfát, bruttót
+      // továbbra sem visz a lap
     ])
       assert.equal(
         kulcsok.includes(tiltott),
@@ -188,7 +189,9 @@ describe("a válaszból a lap bemenete", () => {
         `ár-mező a lap bemenetében: ${tiltott}`,
       );
 
-    // ISMERT POZITÍV KONTROLL: a fenti hét nulla nem egy üres objektumról szól.
+    // a határidő a verzióból jön át (Luca, 2026-11-18)
+    assert.equal(input.dueDate, "2026-09-30");
+    // ISMERT POZITÍV KONTROLL: a fenti hat nulla nem egy üres objektumról szól.
     assert.ok(kulcsok.includes("laborHours"));
     assert.ok(kulcsok.includes("quantity"));
   });

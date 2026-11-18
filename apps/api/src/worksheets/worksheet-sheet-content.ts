@@ -94,6 +94,12 @@ export interface WorksheetSheetInput {
   description: string | null;
   issueDate: string | null;
   fulfillmentDate: string | null;
+  /**
+   * A HATÁRIDŐ (a verzió `dueDate`-je). 2026-09-17 óta NEM került a lapra (lásd fent); Luca kérése (2026-11-18 11:27 UTC, acrobot
+   * 55790, Balázs 11:35 UTC: „fontos hogy mielőbb elkészüljön") a jobb oldalra teszi, a kiállítás és a teljesítés mellé. Ha nincs
+   * kitöltve, nem áll ki: egy üres „Határidő" sor a vevő előtt kérdést szülne. ELHAGYHATÓ, hogy a régebbi hívók és mérések ne törjenek.
+   */
+  dueDate?: string | null;
   createdByName: string | null;
   closedAt: string | null;
   /** Akik dolgoztak rajta. Balázs 2026-09-17 22:49:52: rákerül. */
@@ -168,10 +174,6 @@ export function sheetDate(value: string | null): string | null {
   return HU_DATE.format(date).replace(/\. /g, "-").replace(/\.$/, "");
 }
 
-function label(name: string, value: string | null): string | null {
-  return value ? `${name}: ${value}` : null;
-}
-
 /**
  * EGY TÉTEL MENNYISÉG-SORA.
  *
@@ -193,6 +195,125 @@ function lineAmount(line: WorksheetSheetLine): string {
   return parts.join(" · ");
 }
 
+/** Egy címkézett mező a lap fejrészében. */
+export interface WorksheetSheetField {
+  label: string;
+  value: string;
+}
+
+/** Egy tétel a lap táblázatában. */
+export interface WorksheetSheetItem {
+  position: number;
+  description: string;
+  /** A tétel alatti apró sorok: a részlet és a két eszközkód, külön címkével. */
+  notes: string[];
+  /** A mennyiség-oszlop: darab, alkalom, óra -- a munkaóra csak munkaóra-tételen (`lineAmount`). */
+  amount: string;
+}
+
+/**
+ * A LAP SZERKEZETE, AHOGY A RAJZOLÓ ELRENDEZI (Luca, 2026-11-18 11:27 UTC: „össze vannak csúszva a sorok, nem átlátható";
+ * „a teljesítés, kiállítás dátuma, határidő a jobb oldalra húzva, balra pedig a partner, tárgy stb."). Ugyanazok a szabályok, mint a
+ * sorokéi: a sorok (`worksheetSheetLines`) ebből készülnek, tehát a kettő nem mondhat mást.
+ */
+export interface WorksheetSheetLayout {
+  /** Nincs aláírva: a lap tetején jelölni kell (`DRAFT_MARK`). */
+  draft: boolean;
+  /** A munkalapszám, vagy kimondva, hogy még nincs. */
+  number: string;
+  /** Bal oldal: kivel és mi. */
+  left: WorksheetSheetField[];
+  /** Jobb oldal: a dátumok. */
+  right: WorksheetSheetField[];
+  description: string | null;
+  items: WorksheetSheetItem[];
+  /**
+   * AZ ÖSSZES MUNKAÓRA, DE CSAK HA VAN MUNKAÓRA-TÉTEL (Luca: „munkaóra nem szükséges, ha nincs bekattintva akkor nem kell megjeleníteni").
+   * Ez felülírja a korábbi „nulla is kiíródik" szabályt: a darab- és alkalom-tételes lapon egy „Összes munkaóra: 0" sor a vevőnek nem
+   * mond semmit. Munkaóra-tételnél viszont a nulla is kiíródik, mert ott a hiánya jelent valamit.
+   */
+  laborTotal: string | null;
+  entries: string[];
+  signature: string[];
+}
+
+export function worksheetSheetLayout(
+  input: WorksheetSheetInput,
+): WorksheetSheetLayout {
+  const field = (
+    name: string,
+    value: string | null,
+  ): WorksheetSheetField | null => (value ? { label: name, value } : null);
+  const left = [
+    {
+      label: "Partner",
+      value: input.customerNumber
+        ? `${input.customerName} (${input.customerNumber})`
+        : input.customerName,
+    },
+    {
+      label: "Alegység",
+      value: `${input.departmentName} (${input.departmentCode})`,
+    },
+    field("Tárgy", input.subject),
+    field("Felvette", input.createdByName),
+    input.assigneeNames.length
+      ? { label: "Dolgozott rajta", value: input.assigneeNames.join(", ") }
+      : null,
+    field("Folytatás", input.continuesLabel ?? null),
+  ].filter((f): f is WorksheetSheetField => f !== null);
+  const right = [
+    field("Kiállítás", sheetDate(input.issueDate)),
+    field("Teljesítés", sheetDate(input.fulfillmentDate)),
+    field("Határidő", sheetDate(input.dueDate ?? null)),
+    field("Lezárva", sheetDate(input.closedAt)),
+  ].filter((f): f is WorksheetSheetField => f !== null);
+  const items = input.lines.map((line) => ({
+    position: line.position,
+    description: line.description,
+    notes: [
+      line.detail,
+      line.assetNumber ? `Eszköz: ${line.assetNumber}` : null,
+      line.partnerInternalCode
+        ? `Partner belső kódja: ${line.partnerInternalCode}`
+        : null,
+    ].filter((n): n is string => !!n),
+    amount: lineAmount(line),
+  }));
+  const signature: string[] = [];
+  if (!input.signature) signature.push("Még nincs aláírva.");
+  else {
+    const decision =
+      input.signature.decision === "ACCEPTED" ? "Elfogadva" : "Elutasítva";
+    signature.push(
+      `${decision}. ${worksheetSignerLabel(input.signature.signerSource)}: ${input.signature.signerName}, ${sheetDate(input.signature.signedAt)}`,
+    );
+    if (input.signature.signedByName)
+      signature.push(`Az aláírást rögzítette: ${input.signature.signedByName}`);
+    if (input.signature.note)
+      signature.push(`Megjegyzés: ${input.signature.note}`);
+  }
+  return {
+    draft: input.status !== "SIGNED",
+    number: input.label ?? "(még nincs száma)",
+    left,
+    right,
+    description: input.description,
+    items,
+    laborTotal: input.lines.some((line) => line.kind === "LABOR")
+      ? input.laborHours
+      : null,
+    entries: input.entries.map((entry) => {
+      const value =
+        typeof entry === "string" ? { body: entry, authorName: null } : entry;
+      return value.authorName
+        ? `${value.body} · ${value.authorName}`
+        : value.body;
+    }),
+    signature,
+  };
+}
+
 /**
  * A LAP SORAI.
  *
@@ -202,136 +323,43 @@ function lineAmount(line: WorksheetSheetLine): string {
 export function worksheetSheetLines(
   input: WorksheetSheetInput,
 ): readonly string[] {
+  const layout = worksheetSheetLayout(input);
+  const field = (name: string) => {
+    const f = [...layout.left, ...layout.right].find((x) => x.label === name);
+    return f ? `${f.label}: ${f.value}` : null;
+  };
   const out: (string | null)[] = [];
 
-  // A JELÖLÉS MINDEN NEM ALÁÍRT ÁLLAPOTRA ÁLL, NEM CSAK A `DRAFT`-RA.
-  //
-  // Balázs a „piszkozat" szót használta, de a mérce az, hogy ne lehessen
-  // összekeverni az ALÁÍRT lappal. Egy aláírásra váró lap sincs aláírva: ha
-  // csak a `DRAFT`-ot jelölnénk, épp az a lap menne jelöletlenül, amit a
-  // szerelő az ügyfél elé tesz.
-  if (input.status !== "SIGNED") out.push(DRAFT_MARK, "");
+  // A JELÖLÉS MINDEN NEM ALÁÍRT ÁLLAPOTRA ÁLL, NEM CSAK A `DRAFT`-RA: egy aláírásra váró lap sincs aláírva, és épp azt teszi a szerelő
+  // az ügyfél elé.
+  if (layout.draft) out.push(DRAFT_MARK, "");
 
-  /*
-    SZÁM NÉLKÜL IS VAN FEJLÉC, ÉS KIMONDJA, HOGY NINCS SZÁMA.
-
-    A `${null}` behelyettesítés „MUNKALAP null"-t írna a vevő lapjára. Az üresen
-    hagyás pedig azt sugallná, hogy elveszett a szám -- holott még meg sem
-    született: a munkalapszámot a lezárás foglalja le.
-  */
-  out.push(
-    input.label ? `MUNKALAP  ${input.label}` : "MUNKALAP  (még nincs száma)",
-    "",
-  );
-  /*
-    A VEVŐKÓD A NÉV MELLETT, ZÁRÓJELBEN -- ugyanaz az alak, mint az alegységnél.
-    Nem külön sor: a kód a nevet AZONOSÍTJA, nem egy második tény róla.
-  */
-  out.push(
-    input.customerNumber
-      ? `Partner: ${input.customerName} (${input.customerNumber})`
-      : `Partner: ${input.customerName}`,
-  );
-  out.push(`Alegység: ${input.departmentName} (${input.departmentCode})`);
-  out.push(label("Tárgy", input.subject));
-  out.push(label("Leírás", input.description));
-  out.push(label("Kiállítás", sheetDate(input.issueDate)));
-  out.push(label("Teljesítés", sheetDate(input.fulfillmentDate)));
-  out.push(label("Felvette", input.createdByName));
-  out.push(
-    input.assigneeNames.length
-      ? `Dolgozott rajta: ${input.assigneeNames.join(", ")}`
-      : null,
-  );
-  /*
-    A HIBAJEGY SZAMA NEM KERUL A LAPRA (acrobot dontese, 2026-09-18 10:56).
-
-    NEM UJ DONTES, hanem ket meglevobol kovetkezik, es epp ezert nem ment
-    Balazs ele:
-
-      a kod sajat mondata (`attachable-worksheets.ts`): a lezaras a
-        DOKUMENTUMROL szol, a csatolas a BESOROLASROL
-      Balazs 2. dontese: a lapon az all, ami a VEVONEK szol
-
-    ES AMI EZT ELDONTOTTE, AZ EGY MERES: egy LEZART laphoz utolag is csatolhato
-    hibajegy (a csatolo ut nem nezi a lap allapotat, es a valaszto szuroje
-    kifejezetten kimondja, hogy a lezart lap is csatolhato). A jegyszam tehat ma
-    az EGYETLEN sor volt a lapon, aminek az erteke a FAGYASZTAS UTAN is
-    valtozhat -- minden mas egy lezart verziobol jon. Egy dokumentum, aminek egy
-    sora a kiadas utan mozdul, nem pillanatkep tobbe.
-
-    AMIT EZ NEM JELENT: a jegyszam nem tunik el a rendszerbol. A lap adatlapjan
-    nalunk tovabbra is ott all -- csak a VEVONEK szant lapra nem kerul ki.
-
-    HA VALAKI VISSZATENNE: eloszor azt kell eldonteni, mi tortenjen az utolagos
-    csatolassal, mert a ket dolog egyutt nem lehet igaz.
-  */
-  out.push(label("Lezárva", sheetDate(input.closedAt)));
-  out.push(label("Folytatás", input.continuesLabel ?? null));
+  // SZÁM NÉLKÜL IS VAN FEJLÉC, ÉS KIMONDJA, HOGY NINCS SZÁMA: a `${null}` „MUNKALAP null"-t írna, az üres pedig elveszett számot sugallna.
+  out.push(`MUNKALAP  ${layout.number}`, "");
+  out.push(field("Partner"), field("Alegység"), field("Tárgy"));
+  out.push(layout.description ? `Leírás: ${layout.description}` : null);
+  out.push(field("Kiállítás"), field("Teljesítés"), field("Határidő"));
+  out.push(field("Felvette"), field("Dolgozott rajta"));
+  // A HIBAJEGY SZÁMA NEM KERÜL A LAPRA (acrobot döntése, 2026-09-18 10:56): egy lezárt laphoz utólag is csatolható jegy, a lap viszont
+  // pillanatkép. A rendszerben az adatlapon ott marad.
+  out.push(field("Lezárva"), field("Folytatás"));
 
   out.push("", "TÉTELEK");
-  if (!input.lines.length) {
-    out.push("Ezen a lapon nincs tétel.");
-  } else {
-    for (const line of input.lines) {
-      out.push(`${line.position}. ${line.description}`);
-      out.push(line.detail ? `   ${line.detail}` : null);
-      /*
-        A KÉT KÓD KÜLÖN CÍMKÉT KAP, ÉS EZ NEM BŐBESZÉDŰSÉG. A felső a MIENK (a
-        készüléken lévő matrica), az alsó az ÜGYFÉLÉ. Két csupasz kód egymás
-        alatt pont azt a keveredést hozná, ami ellen a mező külön nevet kapott.
-      */
-      out.push(line.assetNumber ? `   Eszköz: ${line.assetNumber}` : null);
-      out.push(
-        line.partnerInternalCode
-          ? `   Partner belső kódja: ${line.partnerInternalCode}`
-          : null,
-      );
-      out.push(`   ${lineAmount(line)}`);
-    }
+  if (!layout.items.length) out.push("Ezen a lapon nincs tétel.");
+  for (const item of layout.items) {
+    out.push(`${item.position}. ${item.description}`);
+    for (const note of item.notes) out.push(`   ${note}`);
+    out.push(`   ${item.amount}`);
   }
+  if (layout.laborTotal !== null)
+    out.push("", `Összes munkaóra: ${layout.laborTotal}`);
 
-  // AZ ÖSSZESÍTÉS AKKOR IS KIÍRÓDIK, HA NULLA. Egy elrejtett nulla két állapotot
-  // mosna össze: hogy nincs munkaóra-tétel a lapon, és hogy a sor elmaradt.
-  out.push("", `Összes munkaóra: ${input.laborHours}`);
-
-  // A NAPLÓ-SZAKASZ CSAK AKKOR ÁLL KI, HA VAN BEJEGYZÉS -- és ez mérésen alapul:
-  // az éles adatbázisban ma EGYETLEN bejegyzés van (acrobot mérése, 2026-09-17
-  // 23:01). A mező tehát nem egy meglévő szokás, hanem MOSTANTÓL telik meg. Egy
-  // üres „NAPLÓ" fejléc a lapok túlnyomó többségén azt állítaná, hogy hiányzik
-  // valami.
-  if (input.entries.length) {
+  // A NAPLÓ-SZAKASZ CSAK AKKOR ÁLL KI, HA VAN BEJEGYZÉS: egy üres „NAPLÓ" fejléc azt állítaná, hogy hiányzik valami.
+  if (layout.entries.length) {
     out.push("", "NAPLÓ");
-    for (const entry of input.entries) {
-      const value =
-        typeof entry === "string" ? { body: entry, authorName: null } : entry;
-      out.push(
-        value.authorName
-          ? `- ${value.body} · ${value.authorName}`
-          : `- ${value.body}`,
-      );
-    }
+    for (const entry of layout.entries) out.push(`- ${entry}`);
   }
 
-  out.push("", "ALÁÍRÁS");
-  if (!input.signature) {
-    out.push("Még nincs aláírva.");
-  } else {
-    const decision =
-      input.signature.decision === "ACCEPTED" ? "Elfogadva" : "Elutasítva";
-    /*
-      A MINOSEG A NEV ELOTT ALL, nem utana zarojelben: aki a lapot olvassa, a
-      mondat elejen dont arrol, kinek az alairasat latja.
-    */
-    out.push(
-      `${decision}. ` +
-        `${worksheetSignerLabel(input.signature.signerSource)}: ` +
-        `${input.signature.signerName}, ` +
-        `${sheetDate(input.signature.signedAt)}`,
-    );
-    out.push(label("Az aláírást rögzítette", input.signature.signedByName));
-    out.push(label("Megjegyzés", input.signature.note));
-  }
-
+  out.push("", "ALÁÍRÁS", ...layout.signature);
   return out.filter((line): line is string => line !== null);
 }
