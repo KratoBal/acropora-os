@@ -1041,6 +1041,32 @@ describe("PilotServiceJobDetailPage -- a karbantartási adatlap nem hibajegy", (
     expect(text).toMatch(/A karbantartási laphoz nem írtak leírást\./);
   });
 
+  it("a Törlés blokk csak a törlési joggal látszik, hibajegyen és karbantartási lapon is", async () => {
+    for (const [role, kind, shown] of [
+      ["ADMIN", "MAINTENANCE", true],
+      ["ADMIN", "REPAIR", true],
+      ["SERVICE", "MAINTENANCE", false],
+    ] as const) {
+      auth.session = sessionAs(role);
+      api.detail.mockResolvedValue(
+        kind === "MAINTENANCE" ? maintenance(["DRAFT"]) : detail(),
+      );
+      const { unmount } = render(
+        <PilotServiceJobDetailPage
+          jobId="job-1"
+          route={kind === "MAINTENANCE" ? "karbantartas" : "hibajegyek"}
+        />,
+      );
+      await screen.findByText("Negyedéves ellenőrzés");
+      expect(
+        screen.queryByRole("button", { name: "Törlés" }) !== null,
+        `${role} ${kind}`,
+      ).toBe(shown);
+      unmount();
+    }
+    auth.session = sessionAs("SERVICE");
+  });
+
   it("az átszámozott karbantartási lap a régi HJ-számot is mutatja, a többi csak a sajátját", async () => {
     api.detail.mockResolvedValue(
       maintenance(["SIGNED"], {

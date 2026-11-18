@@ -2336,3 +2336,8 @@ export type {
   MedusaRedirectPlanView,
   MedusaRedirectRetargeted,
 } from "./integrations/medusa-redirect-plan.js";
+
+export type {
+  ServiceJobDeletePreview,
+  ServiceJobDeleteResult,
+} from "./service-job-delete.js";
