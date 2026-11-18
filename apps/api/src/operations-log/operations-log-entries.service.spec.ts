@@ -58,6 +58,7 @@ function template(
     name: "Homokszűrő visszamosás",
     description: null,
     frequency: "WEEKLY",
+    uniformRecording: false,
     target: {
       kind: "ASSETS",
       assets: [{ assetId: "a1", assetNumber: "E-1", name: "Szűrő" }],

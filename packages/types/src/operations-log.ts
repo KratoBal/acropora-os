@@ -103,6 +103,11 @@ export interface OperationsTaskTemplateDto {
   target: OperationsTaskTarget;
   /** A kivezetett sablon nem törlődik: a kínálatból esik ki, a régi bejegyzések mellett olvasható marad. */
   isActive: boolean;
+  /**
+   * EGYSÉGES RÖGZÍTÉS (kártya d2222173): bekapcsolva a csoportos rögzítésnél a sablon szám, igen/nem és szöveg mezőit EGYSZER kell beírni, és
+   * minden eszköz bejegyzésére rákerülnek; a fénykép mezők és a rendellenesség eszközönként maradnak. A mobil űrlap olvassa.
+   */
+  uniformRecording: boolean;
   /** Az AKTÍV mezők, a megadott sorrendben. */
   fields: OperationsTaskFieldDto[];
   /**
@@ -139,6 +144,8 @@ export interface OperationsTaskTemplateInput {
   /** A cél: eszközlista (legalább egy azonosító) VAGY kategória, pontosan az egyik; egy eszköz egy elemű lista. */
   assetIds?: string[] | null;
   assetCategoryId?: string | null;
+  /** Lásd `OperationsTaskTemplateDto.uniformRecording`. Létrehozáskor a hiánya kikapcsolt; módosításkor a hiánya NEM változtat a beállításon. */
+  uniformRecording?: boolean;
   /** A mezők a megadott sorrendben állnak; a lista a TELJES mezőkészletet adja (ami nincs benne, kikerül). */
   fields: OperationsTaskFieldInput[];
 }

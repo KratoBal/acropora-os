@@ -418,3 +418,34 @@ describe("olvasás, módosítás, kivezetés", () => {
     });
   });
 });
+
+describe("az Egységes rögzítés kapcsoló (card d2222173, task t-20261118-egyseges-rogzites)", () => {
+  /*
+    A SABLON KAPCSOLÓJA: bekapcsolva a csoportos rögzítésnél a sablon értékeit EGYSZER kell beírni (a mobil űrlap olvassa). MI PIROSÍT: ha a
+    kapcsoló nem jut el a tárba létrehozáskor és módosításkor; ha létrehozáskor a hiánya nem KIKAPCSOLT (a mai viselkedés); ha egy módosítás,
+    amely nem küldi a kapcsolót (egy régi szerkesztő), csendben kikapcsolja a sablon beállítását.
+  */
+  it("a létrehozás a kapcsolót a tárba viszi, és a hiánya kikapcsolt", async () => {
+    const on = fixture();
+    await on.service.create(input({ uniformRecording: true }), "u1");
+    assert.equal(on.calls.write!.uniformRecording, true);
+    const off = fixture();
+    await off.service.create(input({ uniformRecording: false }), "u1");
+    assert.equal(off.calls.write!.uniformRecording, false);
+    const absent = fixture();
+    await absent.service.create(input(), "u1");
+    assert.equal(absent.calls.write!.uniformRecording, false);
+  });
+
+  it("a módosítás a megadott kapcsolót írja, és a nem küldött kapcsoló NEM változtatja meg a sablon beállítását", async () => {
+    const on = fixture();
+    await on.service.update("t1", input({ uniformRecording: true }), "u1");
+    assert.equal(on.calls.write!.uniformRecording, true);
+    const off = fixture();
+    await off.service.update("t1", input({ uniformRecording: false }), "u1");
+    assert.equal(off.calls.write!.uniformRecording, false);
+    const absent = fixture();
+    await absent.service.update("t1", input(), "u1");
+    assert.equal(absent.calls.write!.uniformRecording, undefined);
+  });
+});

@@ -93,6 +93,12 @@ class OperationsTaskTemplateBodyDto {
   @IsString()
   assetCategoryId?: string | null;
 
+  /** Egységes rögzítés (kártya d2222173): igaz/hamis; a hiánya létrehozáskor kikapcsolt, módosításkor nem változtat a beállításon. */
+  // a null NEM hiány: a tároló nem-null logikai oszlopot kapna (egy 500), ezért a null is 400
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsBoolean()
+  uniformRecording?: boolean;
+
   /**
    * A TELJES MEZŐKÉSZLET, a megadott sorrendben: ami nincs benne, kikerül a sablonból. A felső határ a szolgáltatás szabályával
    * egyezik; itt csak a kérés mérete védett.

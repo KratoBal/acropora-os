@@ -538,6 +538,44 @@ describe(
         );
       });
 
+      it("az egységes rögzítés kapcsolója: alapból kikapcsolt, felvételkor és módosításkor a megadott érték íródik, a nem küldött NEM változtat (card d2222173)", async () => {
+        const base = {
+          frequency: "WEEKLY" as const,
+          assetIds: [ids.asset],
+          fields: [],
+        };
+        const plain = await service.create(
+          { ...base, name: name("egyseges-alap") },
+          "system",
+        );
+        assert.equal(plain.uniformRecording, false);
+        const on = await service.create(
+          { ...base, name: name("egyseges-be"), uniformRecording: true },
+          "system",
+        );
+        assert.equal(on.uniformRecording, true);
+        // a kapcsolót nem küldő módosítás (egy régi szerkesztő) nem kapcsolja ki
+        const kept = await service.update(
+          on.id,
+          { ...base, name: name("egyseges-be") },
+          "system",
+        );
+        assert.equal(kept.uniformRecording, true);
+        assert.equal((await service.get(on.id)).uniformRecording, true);
+        const off = await service.update(
+          on.id,
+          { ...base, name: name("egyseges-be"), uniformRecording: false },
+          "system",
+        );
+        assert.equal(off.uniformRecording, false);
+        const again = await service.update(
+          plain.id,
+          { ...base, name: name("egyseges-alap"), uniformRecording: true },
+          "system",
+        );
+        assert.equal(again.uniformRecording, true);
+      });
+
       it("kategóriára szóló sablon felvehető, és a cél a kategória nevét adja", async () => {
         const created = await service.create(
           {

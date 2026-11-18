@@ -48,7 +48,11 @@ export class OperationsLogService {
     input: OperationsTaskTemplateInput,
     actorId: string,
   ): Promise<OperationsTaskTemplateDto> {
-    return this.repository.createTemplate(await this.checked(input), actorId);
+    const write = await this.checked(input);
+    return this.repository.createTemplate(
+      { ...write, uniformRecording: input.uniformRecording ?? false },
+      actorId,
+    );
   }
 
   async update(
@@ -81,6 +85,7 @@ export class OperationsLogService {
         id,
         {
           ...write,
+          uniformRecording: input.uniformRecording,
           isActive: input.isActive,
           expectedUpdatedAt: input.expectedUpdatedAt,
         },
