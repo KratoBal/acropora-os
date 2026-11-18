@@ -240,6 +240,17 @@ export function WebshopShippingSettingsPage() {
           <h2 className="text-base font-semibold text-pilot-grey-900">
             Fizetési módok szállítási módonként
           </h2>
+          {settings.unknownPayments.length ? (
+            <p
+              role="alert"
+              className="rounded-lg bg-pilot-red-50 p-3 text-sm text-pilot-red-700"
+            >
+              A webshop olyan fizetési módot is használ, amit ez a lap még nem
+              ismer ({settings.unknownPayments.join(", ")}). A lista nélküle
+              látszik, ezért a mentés áll: törölné. Előbb az OS-t kell
+              frissíteni.
+            </p>
+          ) : null}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {WEBSHOP_SHIPPING_ROLES.map((shipping) => {
               const list = matrix[shipping];
@@ -332,7 +343,10 @@ export function WebshopShippingSettingsPage() {
               );
             })}
           </div>
-          <PilotButton disabled={busy} onClick={() => void savePayments()}>
+          <PilotButton
+            disabled={busy || settings.unknownPayments.length > 0}
+            onClick={() => void savePayments()}
+          >
             Fizetési módok mentése
           </PilotButton>
         </PilotCard>

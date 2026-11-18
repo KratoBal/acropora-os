@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -20,6 +21,7 @@ import type { MedusaShippingSettingsClient } from "./webshop-shipping-settings.c
 import {
   settingAmount,
   toShippingSettings,
+  unknownPaymentRoles,
 } from "./webshop-shipping-settings.rules.js";
 
 export const SHIPPING_SETTINGS_CLIENT = Symbol("SHIPPING_SETTINGS_CLIENT");
@@ -129,7 +131,11 @@ export class WebshopShippingSettingsService {
     });
   }
 
-  /** A teljes mátrix egyszerre, sorrenddel; a webshop a saját szabályával is ellenőrzi (lehetetlen pár, üres lista). */
+  /**
+   * A teljes mátrix egyszerre, sorrenddel; a webshop a saját szabályával is ellenőrzi (lehetetlen pár, üres lista). Ha a
+   * webshop most olyan fizetési módot tárol, amit ez az OS nem ismer, a mentés áll (409): a teljes mátrix visszaírása azt
+   * minden szállítási módról csendben törölné (barracuda, #2729).
+   */
   async savePayments(raw: unknown): Promise<WebshopShippingSettings> {
     this.requireAllowed();
     const parsed = parseWebshopPaymentMatrixInput(raw);
@@ -139,6 +145,11 @@ export class WebshopShippingSettingsService {
         errors: parsed.errors,
       });
     return this.call(async (client) => {
+      const unknown = unknownPaymentRoles((await client.getRules()).matrix);
+      if (unknown.length)
+        throw new ConflictException(
+          `A webshop olyan fizetési módot is használ, amit ez a lap még nem ismer (${unknown.join(", ")}): a mentés törölné. Előbb az OS-t kell frissíteni.`,
+        );
       await client.putRules(parsed.value);
       return this.read(client);
     });
