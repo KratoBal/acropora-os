@@ -31,8 +31,11 @@ import {
 export function CompletionCertificatePanel({
   serviceJobId,
   blockedReason = null,
+  onChanged,
 }: {
   serviceJobId: string;
+  /** A kiállítás vagy az aláírt PDF feltöltése UTÁN hívódik: a testvér-panelek (a számla-kártya) ebből tudják, hogy újra kell tölteniük az igazolást. */
+  onChanged?: () => void;
   /** Ha meg van adva, a kiállítás gombja tiltott, és az ok látszik mellette (nincs forrás: a szerver úgyis 400-zal utasítaná el). */
   blockedReason?: string | null;
 }) {
@@ -73,6 +76,7 @@ export function CompletionCertificatePanel({
     try {
       await completionCertificatesApi.issue(token, serviceJobId);
       await load();
+      onChanged?.();
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -93,6 +97,7 @@ export function CompletionCertificatePanel({
         file,
       );
       await load();
+      onChanged?.();
     } catch (cause) {
       setError(
         cause instanceof Error

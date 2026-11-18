@@ -51,17 +51,36 @@ vi.mock("next/font/local", () => ({
  */
 
 vi.mock("../completion-certificate-panel", () => ({
-  CompletionCertificatePanel: ({ serviceJobId }: { serviceJobId: string }) => (
+  CompletionCertificatePanel: ({
+    serviceJobId,
+    blockedReason,
+    onChanged,
+  }: {
+    serviceJobId: string;
+    blockedReason?: string | null;
+    onChanged?: () => void;
+  }) => (
     <div data-testid="completion-certificate-panel-stub">
       teljesítési igazolás panel ({serviceJobId})
+      <span data-testid="certificate-blocked">
+        {blockedReason ?? "nincs ok"}
+      </span>
+      <button onClick={onChanged}>igazolás változott</button>
     </div>
   ),
 }));
 // the draft invoice, back on the pilot page (kanban 0baba3b9, acrobot 44712)
 vi.mock("../maintenance-invoice-panel", () => ({
-  MaintenanceInvoicePanel: ({ serviceJobId }: { serviceJobId: string }) => (
+  MaintenanceInvoicePanel: ({
+    serviceJobId,
+    refreshKey,
+  }: {
+    serviceJobId: string;
+    refreshKey?: number;
+  }) => (
     <div data-testid="maintenance-invoice-panel-stub">
       számla panel ({serviceJobId})
+      <span data-testid="invoice-refresh-key">{refreshKey}</span>
     </div>
   ),
 }));
@@ -219,6 +238,24 @@ describe("PilotServiceJobDetailPage -- MAINTENANCE panelek", () => {
     expect(
       screen.getByTestId("maintenance-invoice-panel-stub"),
     ).toHaveTextContent("job-1");
+  });
+
+  /*
+    A KÉT PANEL ÖSSZEKÖTÉSE (stage-végigjárás, 2026-11-18): az igazolás panel változása újratölti a számla-kártyát, és a forrás nélküli lap okot ad át a TIG-gombnak. MI PIROSÍT: ha az
+    "igazolás változott" jelzés nem változtatja a számla-panel `refreshKey`-ét; ha a forrás nélküli lapnál nem megy át az ok.
+  */
+  it("az igazolás panel változása a számla-panel refreshKey-ét lépteti, a forrás nélküli lap okot ad át", async () => {
+    api.detail.mockResolvedValue(detail({ kind: "MAINTENANCE", source: null }));
+
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+
+    const key = await screen.findByTestId("invoice-refresh-key");
+    expect(key).toHaveTextContent("0");
+    expect(screen.getByTestId("certificate-blocked")).toHaveTextContent(
+      /nincs megrendelőlapja/,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "igazolás változott" }));
+    expect(screen.getByTestId("invoice-refresh-key")).toHaveTextContent("1");
   });
 
   /*

@@ -46,8 +46,11 @@ import {
  */
 export function MaintenanceInvoicePanel({
   serviceJobId,
+  refreshKey = 0,
 }: {
   serviceJobId: string;
+  /** Egy másik panel (a teljesítési igazolásé) változtatott: a kulcs változására az igazolás és a számla újratöltődik. */
+  refreshKey?: number;
 }) {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -101,7 +104,7 @@ export function MaintenanceInvoicePanel({
   // `load()`-ot SOHA nem futtatná le.
   useEffect(() => {
     void load();
-  }, [serviceJobId, token]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [serviceJobId, token, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const createDraft = async () => {
     if (!certificateId) return;
