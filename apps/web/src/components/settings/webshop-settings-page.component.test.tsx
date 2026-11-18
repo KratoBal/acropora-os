@@ -81,6 +81,7 @@ describe("Webshop beállítások", () => {
       "/admin/integrations/medusa/connection",
       // the stored price stops list (task t-20261117-arstop-web): no menu entry, the endpoint asks inventory.view
       "/admin/integrations/medusa/price-stops",
+      "/admin/integrations/medusa/redirect-plan",
       "/beallitasok/rendeles-elavulas",
       "/beallitasok/levelsablonok?csoport=webshop",
       "/admin/kezdolap",

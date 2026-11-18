@@ -2326,3 +2326,10 @@ export type {
   WebshopShortageChoice,
   WebshopShortageStatus,
 } from "./webshop-order-shortages.js";
+export type {
+  MedusaRedirectPlanChange,
+  MedusaRedirectPlanRow,
+  MedusaRedirectPlanState,
+  MedusaRedirectPlanView,
+  MedusaRedirectRetargeted,
+} from "./integrations/medusa-redirect-plan.js";
