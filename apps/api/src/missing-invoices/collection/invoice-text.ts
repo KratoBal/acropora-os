@@ -239,12 +239,14 @@ const usable = (value: string | undefined): string | null => {
  * fájlnév-ág a `Invoice-20D3D94E-0001.pdf` darabjai közül az önálló szóként álló előtagot vette számnak: Balázs 2026-11-18-án két
  * OpenAI-számlát (-0001, -0002) töltött fel két tranzakcióhoz, mindkettő `20D3D94E` lett, azonos azonosság, és a rendszer duplának
  * mondta. Ugyanaz a megkötés, mint a külföldi számla olvasójának `hostedInvoiceNumber`-ében: 6-12 karakteres nagybetűs-számjegyes
- * előtag, üres/NUL/kötőjeles középső cella, 3-6 jegyű sorszám. Más alakot nem fűz össze.
+ * előtag (legalább egy betűvel), üres/NUL/kötőjeles középső cella, 3-6 jegyű sorszám. Más alakot nem fűz össze.
  */
 function hostedSplitNumber(prefix: string, after: string): string | null {
-  if (!/^[A-Z0-9]{6,12}$/.test(prefix)) return null;
+  // at least one letter: a 6-12 digit number, a cell and 3 digits would join silently (barracuda, #2681)
+  if (!/^(?=.*[A-Z])[A-Z0-9]{6,12}$/.test(prefix)) return null;
+  // the middle cell must HOLD the hyphen (a NUL, a hyphen or an en dash); an empty cell is a generic table column, not Stripe's
   const serial =
-    /^\s*\|[\s\u0000-\u001f\-\u2013]*\|\s*(\d{3,6})\s*(?:\||$)/.exec(
+    /^\s*\|(?=[^|]*[\u0000\-\u2013])[\s\u0000-\u001f\-\u2013]*\|\s*(\d{3,6})\s*(?:\||$)/.exec(
       after,
     )?.[1];
   return serial ? `${prefix}-${serial}` : null;

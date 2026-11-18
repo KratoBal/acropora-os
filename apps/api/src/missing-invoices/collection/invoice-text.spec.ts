@@ -1114,6 +1114,25 @@ describe("table cells and customer ids (FleetCor, 2026-10-04)", () => {
       }).invoiceNumber,
       null,
     );
+    // an EMPTY middle cell is a generic table layout, not the Stripe hyphen (a NUL, a hyphen or an en dash): no joined number
+    // (barracuda, #2681: "Invoice number | 2026001 | | 123" must not become 2026001-123)
+    for (const line of [
+      "Invoice number | 20D3D94E | | 0001",
+      "Invoice number | 20D3D94E |   | 0001",
+      "Invoice number | 2026001A | | 123",
+    ])
+      assert.equal(
+        readInvoiceText([line], { fileName: "Invoice.pdf" }).invoiceNumber,
+        null,
+        line,
+      );
+    // an all-digit prefix is not the Stripe prefix (a 6-12 digit number, an empty-looking cell and 3-6 digits would join silently)
+    assert.equal(
+      readInvoiceText(["Invoice number | 2026001 | \u0000 | 123"], {
+        fileName: "Invoice.pdf",
+      }).invoiceNumber,
+      null,
+    );
     // a prefix under six characters is not the customer prefix
     assert.equal(
       readInvoiceText(["Invoice number | AB12 | \u0000 | 0001"], {
