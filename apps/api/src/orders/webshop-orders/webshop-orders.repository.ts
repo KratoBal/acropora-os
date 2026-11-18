@@ -597,6 +597,7 @@ export class WebshopOrdersRepository {
     action:
       | "pickup-point-changed"
       | "notes-edited"
+      | "loyalty-adjusted"
       | "split"
       | "shipping-method-changed";
     before: unknown;

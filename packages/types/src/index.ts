@@ -2367,3 +2367,14 @@ export type {
   WebshopCustomerDiscountParse,
   WebshopCustomerHit,
 } from "./webshop-customer-discounts.js";
+export {
+  WEBSHOP_LOYALTY_POINTS_MAX,
+  WEBSHOP_LOYALTY_REASON_MAX,
+  isLoyaltyPoints,
+} from "./webshop-order-loyalty.js";
+export type {
+  WebshopLoyaltyAdjustmentInput,
+  WebshopLoyaltyAdjustmentResult,
+  WebshopLoyaltyEntry,
+  WebshopOrderLoyalty,
+} from "./webshop-order-loyalty.js";

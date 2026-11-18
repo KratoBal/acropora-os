@@ -11,6 +11,9 @@ import type {
   WebshopOrderStatus,
   WebshopOrderStatusChangeResult,
   WebshopOrderLineEdit,
+  WebshopLoyaltyAdjustmentInput,
+  WebshopLoyaltyAdjustmentResult,
+  WebshopOrderLoyalty,
   WebshopVariantOption,
   WebshopStaleThreshold,
   WebshopOrderAddressInput,
@@ -246,6 +249,25 @@ export const webshopOrdersApi = {
       `/webshop-orders/${encodeURIComponent(id)}/notes`,
       token,
       { method: "PUT", body: JSON.stringify(input) },
+    );
+  },
+  /** A rendelés vevőjének hűségpontjai (egyenleg és a legújabb sorok); vendég rendelésnél `available: false`. */
+  loyalty(token: string, id: string) {
+    return apiRequest<WebshopOrderLoyalty>(
+      `/webshop-orders/${encodeURIComponent(id)}/loyalty`,
+      token,
+    );
+  },
+  /** Kézi hűségpont-jóírás (pozitív) vagy -levonás; a `requestId` az újraküldés kulcsa. */
+  adjustLoyalty(
+    token: string,
+    id: string,
+    input: WebshopLoyaltyAdjustmentInput & { requestId: string },
+  ) {
+    return apiRequest<WebshopLoyaltyAdjustmentResult>(
+      `/webshop-orders/${encodeURIComponent(id)}/loyalty/adjustments`,
+      token,
+      { method: "POST", body: JSON.stringify(input) },
     );
   },
   /** A belső megjegyzés (üres szöveg törli). */

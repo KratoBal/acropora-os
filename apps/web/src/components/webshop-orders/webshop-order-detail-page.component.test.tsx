@@ -55,6 +55,8 @@ const api = vi.hoisted(() => ({
   parcelLabel: vi.fn(),
   releaseParcel: vi.fn(),
   parcelTracking: vi.fn(),
+  loyalty: vi.fn(),
+  adjustLoyalty: vi.fn(),
 }));
 const billing = vi.hoisted(() => ({ pdf: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
@@ -303,6 +305,9 @@ const detail: WebshopOrderDetail = {
 };
 
 beforeEach(() => {
+  // the loyalty card loads on its own; a guest-like answer keeps it out of the way of the page's own tests
+  api.loyalty.mockReset().mockResolvedValue({ available: false });
+  api.adjustLoyalty.mockReset();
   api.parcelTracking.mockReset().mockResolvedValue({
     events: [],
     checkedAt: "2026-10-06T08:00:00.000Z",
