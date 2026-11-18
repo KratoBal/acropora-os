@@ -38,6 +38,10 @@ function fakeClient(over: Partial<MedusaPromotionClient> = {}) {
       calls.push("list");
       return [promo];
     },
+    getPromotion: async () => {
+      calls.push("get");
+      return promo;
+    },
     createPromotion: async () => {
       calls.push("create");
       return promo;
@@ -148,8 +152,36 @@ describe("writing a coupon", () => {
   it("switching off sends the inactive status, and the answer says so", async () => {
     const { client, calls } = fakeClient();
     const coupon = await service(client).svc.setActive("promo_1", false);
-    assert.deepEqual(calls, ["status:inactive"]);
+    assert.deepEqual(calls, ["get", "status:inactive"]);
     assert.equal(coupon.state, "INACTIVE");
+  });
+});
+
+describe("switching only what the list calls a coupon", () => {
+  it("an automatic or a line-targeted promotion is refused before its status is touched", async () => {
+    for (const other of [
+      { ...promo, is_automatic: true },
+      {
+        ...promo,
+        application_method: {
+          type: "percentage",
+          target_type: "items",
+          value: 10,
+        },
+      },
+    ]) {
+      const { client, calls } = fakeClient({
+        getPromotion: async () => {
+          calls.push("get");
+          return other;
+        },
+      });
+      await assert.rejects(
+        service(client).svc.setActive("promo_x", false),
+        NotFoundException,
+      );
+      assert.deepEqual(calls, ["get"]);
+    }
   });
 });
 

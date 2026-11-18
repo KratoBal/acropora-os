@@ -14,6 +14,7 @@ import type {
  */
 export interface MedusaPromotionClient {
   listPromotions(): Promise<MedusaPromotionRow[]>;
+  getPromotion(id: string): Promise<MedusaPromotionRow>;
   createPromotion(body: MedusaPromotionCreate): Promise<MedusaPromotionRow>;
   setPromotionStatus(
     id: string,
@@ -62,6 +63,13 @@ export class HttpMedusaPromotionClient implements MedusaPromotionClient {
       `/admin/promotions?${params.toString()}`,
     );
     return body.promotions ?? [];
+  }
+
+  async getPromotion(id: string): Promise<MedusaPromotionRow> {
+    const body = await this.request<{ promotion: MedusaPromotionRow }>(
+      `/admin/promotions/${encodeURIComponent(id)}?fields=${encodeURIComponent(FIELDS)}`,
+    );
+    return body.promotion;
   }
 
   async createPromotion(
