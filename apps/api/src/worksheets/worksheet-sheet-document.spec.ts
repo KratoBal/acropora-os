@@ -344,3 +344,34 @@ describe("a lezáráskor keletkező lapnak számozottnak kell lennie", () => {
     );
   });
 });
+
+/*
+  A KIADOTT LAP BÁJTJAI AZONOS BEMENETRE AZONOSAK, HA A KÉSZÍTÉS IDEJE RÖGZÍTETT (újragenerálás, acrobot 56321): az újragenerálás gomb a már tárolt bájtokkal veti össze az újat, és ha egyeznek, nem ír archívumot. A lezáráskori út ezt NEM kapja meg (a
+  `creationDate` elhagyva marad, ahogy volt). MI PIROSÍT: ha a rögzített idejű két előállítás hashe eltér; ha az idő elhagyva ugyanazt a hasht adná (akkor a rögzítés nem tenne semmit, a mérés díszlet).
+*/
+describe("a lap rögzített készítési idővel", () => {
+  const at = new Date("2026-09-20T10:00:00.000Z");
+
+  it("azonos bemenetre azonos bájtokat és hasht ad", async () => {
+    const a = await worksheetSheetDocument(bemenet(), { creationDate: at });
+    const b = await worksheetSheetDocument(bemenet(), { creationDate: at });
+    assert.equal(a.sha256, b.sha256);
+    assert.deepEqual(a.content, b.content);
+  });
+
+  it("KONTROLL: másik idővel a hash más (a rögzítés valóban az időt rögzíti)", async () => {
+    const a = await worksheetSheetDocument(bemenet(), { creationDate: at });
+    const b = await worksheetSheetDocument(bemenet(), {
+      creationDate: new Date("2026-11-18T20:00:00.000Z"),
+    });
+    assert.notEqual(a.sha256, b.sha256);
+  });
+
+  it("más tartalomra a hash más (a mérés nem mindenre azonos)", async () => {
+    const a = await worksheetSheetDocument(bemenet(), { creationDate: at });
+    const b = await worksheetSheetDocument(bemenet({ subject: "Más tárgy" }), {
+      creationDate: at,
+    });
+    assert.notEqual(a.sha256, b.sha256);
+  });
+});

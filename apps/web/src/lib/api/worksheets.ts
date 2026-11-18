@@ -17,6 +17,7 @@ import type {
   WorksheetDeleteResult,
   WorksheetDetail,
   WorksheetDocumentListResponse,
+  WorksheetSheetRegeneration,
   WorksheetEntryListResponse,
   WorksheetListResponse,
   WorksheetSignerListResponse,
@@ -134,6 +135,16 @@ export const worksheetsApi = {
       worksheetPath(id, "/documents"),
       token,
       { signal },
+    );
+  },
+  /**
+   * A LEZART LAP KIADOTT PDF-JE UJRA, A MOSTANI ELRENDEZESSEL (kartya 47e07a53). A regi peldany a lap csatolmanyai kozott marad; a valasz megmondja, tortent-e valtozas.
+   */
+  regenerateIssuedSheet(token: string, id: string) {
+    return apiRequest<WorksheetSheetRegeneration>(
+      worksheetPath(id, "/sheet/regenerate"),
+      token,
+      { method: "POST" },
     );
   },
   /**

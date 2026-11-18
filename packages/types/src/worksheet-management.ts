@@ -908,6 +908,13 @@ export function preferSignedSheet<T extends { type: WorksheetDocumentType }>(
 }
 
 /**
+ * A KIADOTT PDF ÚJRAGENERÁLÁSÁNAK VÁLASZA (kártya 47e07a53; acrobot 56321): `changed: false`, ha a tárolt példány már a mostani elrendezésű (azonos bájt), és ilyenkor archív példány sem keletkezik.
+ */
+export interface WorksheetSheetRegeneration {
+  changed: boolean;
+}
+
+/**
  * EGY CSATOLMÁNY A MUNKALAPON -- a leíró adat, a bájtok nélkül.
  *
  * A `contentType` LITERÁL UNIÓ, és ez nem szűkítés: a tárolt érték a

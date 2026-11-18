@@ -430,6 +430,18 @@ export class WorksheetsController {
   }
 
   /**
+   * A LEZÁRT LAP KIADOTT PDF-JE ÚJRA, A MOSTANI ELRENDEZÉSSEL (kártya 47e07a53). A régi példány a lap csatolmányai között marad. Belsős lépés: a hatókört a szolgáltatás tartja.
+   */
+  @Post(":id/sheet/regenerate")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  regenerateSheet(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.regenerateIssuedSheet(id, user);
+  }
+
+  /**
    * FENYKEP A MUNKALAPHOZ, A HELYSZINROL.
    *
    * UGYANAZ AZ ALAK, MINT AZ ESZKOZNEL, es ez nem masolas: a feltoltes

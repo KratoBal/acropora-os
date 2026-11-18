@@ -56,6 +56,11 @@ import {
 } from "./worksheet-sheet-document.js";
 import { worksheetSheetInput } from "./worksheet-sheet-mapping.js";
 import {
+  archiveOfIssuedSheet,
+  sheetToRegenerate,
+  type RegenerateIssuedSheetResult,
+} from "./worksheet-sheet-regeneration.js";
+import {
   toWorksheetDetail,
   type WorksheetHandover,
   toWorksheetListItem,
@@ -64,6 +69,9 @@ import {
   type WorksheetDetailRow,
   type WorksheetLineWriteResult,
 } from "./worksheets.types.js";
+
+/** A feltételes csere elvesztése (közben más cserélt): a kivétel visszagörgeti az archív sort is, a hívó `CONFLICT`-ot kap. */
+class SheetReplaceLost extends Error {}
 
 /**
  * A lezárás kudarcai. A `NOT_FOUND` az egyetlen, ami NEM a feltétel-listából
@@ -1659,22 +1667,11 @@ export class WorksheetsRepository extends Repository {
     */
     requireClosedSheetLabel(detail.currentVersion.label, worksheetId);
 
-    const entries = await this.entries(worksheetId, transaction);
-    const document = await worksheetSheetDocument(
-      worksheetSheetInput(
-        detail,
-        detail.currentVersion,
-        entries?.rows.map((entry) => ({
-          body: entry.body,
-          authorName: entry.authorName,
-        })) ?? [],
-        row.assignees.map((assignee) => personLegalName(assignee.user)),
-        (row.documents ?? []).flatMap((document) =>
-          document.thumbnail
-            ? [{ thumbnail: document.thumbnail, caption: document.caption }]
-            : [],
-        ),
-      ),
+    const document = await this.buildSheetDocument(
+      transaction,
+      worksheetId,
+      row,
+      detail,
     );
 
     await transaction.worksheetDocument.create({
@@ -1693,6 +1690,138 @@ export class WorksheetsRepository extends Repository {
       },
       select: { id: true },
     });
+  }
+
+  /**
+   * A LAP BÁJTJAI A MOSTANI ELRENDEZÉSSEL: a lezáráskori út és az újragenerálás UGYANAZT a törzset használja (két helyen ugyanaz a szabály előbb-utóbb elcsúszna).
+   */
+  private async buildSheetDocument(
+    transaction: TransactionClient,
+    worksheetId: string,
+    row: WorksheetDetailRow,
+    detail: ReturnType<typeof toWorksheetDetail>,
+    options: { creationDate?: Date } = {},
+  ) {
+    const entries = await this.entries(worksheetId, transaction);
+    return worksheetSheetDocument(
+      worksheetSheetInput(
+        detail,
+        detail.currentVersion,
+        entries?.rows.map((entry) => ({
+          body: entry.body,
+          authorName: entry.authorName,
+        })) ?? [],
+        row.assignees.map((assignee) => personLegalName(assignee.user)),
+        (row.documents ?? []).flatMap((document) =>
+          document.thumbnail
+            ? [{ thumbnail: document.thumbnail, caption: document.caption }]
+            : [],
+        ),
+      ),
+      options,
+    );
+  }
+
+  /**
+   * A LEZÁRT LAP KIADOTT PDF-JE ÚJRA, A MOSTANI ELRENDEZÉSSEL (acrobot 56321; a döntés indoka: `worksheet-sheet-regeneration.ts`).
+   *
+   * EGY TRANZAKCIÓ, ÉS A SORREND SZÁMÍT: előbb az archív sor (a régi bájtok), aztán a feltételes csere (`updateMany` a régi hashre). Ha a csere nem talál sort (közben
+   * más cserélt), a kivétel visszagörgeti az archívumot is, tehát egy dupla kattintás nem hagy árva archívumot. A készítési idő rögzített (a sor eredeti ideje), így az azonos
+   * bájt azonos hash: ha az új hash egyezik a tároltal, nem írunk semmit (`changed: false`).
+   */
+  async regenerateIssuedSheet(
+    worksheetId: string,
+    input: { actorName: string; at: string },
+  ): Promise<RegenerateIssuedSheetResult> {
+    try {
+      return await this.database.$transaction(async (transaction) => {
+        const row = await this.detailRow(worksheetId, transaction);
+        if (!row) return { ok: false, reason: "NOT_FOUND" } as const;
+        const detail = toWorksheetDetail(row);
+        const versionId = detail.currentVersion.id;
+
+        const stored = await transaction.worksheetDocument.findMany({
+          where: {
+            worksheetVersionId: versionId,
+            type: { in: ["GENERATED_SHEET", "SIGNED_SHEET"] },
+          },
+          select: {
+            id: true,
+            type: true,
+            fileName: true,
+            contentType: true,
+            sizeBytes: true,
+            sha256: true,
+            content: true,
+            storageKey: true,
+            createdAt: true,
+            uploadedById: true,
+          },
+        });
+        const target = sheetToRegenerate(
+          {
+            status: detail.currentVersion.status,
+            closedAt: detail.currentVersion.closedAt,
+          },
+          stored.flatMap((sheet) =>
+            sheet.type === "GENERATED_SHEET" || sheet.type === "SIGNED_SHEET"
+              ? [{ ...sheet, type: sheet.type }]
+              : [],
+          ),
+        );
+        if (!target.ok) return target;
+        const old = target.row;
+
+        requireClosedSheetLabel(detail.currentVersion.label, worksheetId);
+        const document = await this.buildSheetDocument(
+          transaction,
+          worksheetId,
+          row,
+          detail,
+          { creationDate: old.createdAt },
+        );
+        if (document.sha256 === old.sha256)
+          return { ok: true, changed: false } as const;
+
+        const archive = archiveOfIssuedSheet(old, {
+          at: input.at,
+          byName: input.actorName,
+        });
+        await transaction.worksheetDocument.create({
+          data: {
+            worksheetId,
+            worksheetVersionId: null,
+            type: "OTHER",
+            fileName: archive.fileName,
+            contentType: old.contentType,
+            sizeBytes: old.sizeBytes,
+            sha256: old.sha256,
+            content: old.content ? Uint8Array.from(old.content) : null,
+            storageKey: old.storageKey,
+            caption: archive.caption,
+            uploadedById: old.uploadedById,
+            createdAt: archive.createdAt,
+          },
+          select: { id: true },
+        });
+        const replaced = await transaction.worksheetDocument.updateMany({
+          where: { id: old.id, sha256: old.sha256 },
+          data: {
+            content: Uint8Array.from(document.content),
+            storageKey: null,
+            thumbnail: null,
+            sizeBytes: document.sizeBytes,
+            sha256: document.sha256,
+          },
+        });
+        if (replaced.count !== 1) throw new SheetReplaceLost();
+        return { ok: true, changed: true } as const;
+      });
+    } catch (error) {
+      if (error instanceof SheetReplaceLost)
+        return { ok: false, reason: "CONFLICT" };
+      throw error;
+    }
   }
 
   /**
