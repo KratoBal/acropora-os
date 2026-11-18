@@ -1050,10 +1050,92 @@ describe("table cells and customer ids (FleetCor, 2026-10-04)", () => {
     );
   });
 
-  it("a value the reader split into cells is not a number (Stripe)", () => {
-    // the hyphen of 53AEF736-256060 comes through as a NUL character
-    assert.equal(
+  it("a value the reader split into cells is the whole number, never the prefix alone (Stripe)", () => {
+    // the hyphen of 53AEF736-256060 comes through as a NUL character; the prefix is the same on every invoice of the customer
+    assert.deepEqual(
       readInvoiceText(["Invoice number | 53AEF736 | \u0000 | 256060"], {
+        fileName: "Invoice.pdf",
+      }),
+      {
+        invoiceNumber: "53AEF736-256060",
+        numberFrom: "LABEL",
+        supplierTaxNumber: null,
+      },
+    );
+  });
+
+  // Balázs, 2026-11-18, Számlák/bank szál: két OpenAI-számla (20D3D94E-0001, -0002) két tranzakcióhoz, és a rendszer duplának mondta.
+  // A feltöltés a fájlnevet is átadja; a fájlnév-ág a „Invoice-20D3D94E-0001.pdf” darabjai közül a szövegben önálló szóként álló
+  // „20D3D94E”-t vette számnak, tehát mindkét számla ugyanazt a számot (és azonosságot) kapta.
+  it("two Stripe invoices of one customer read as two numbers, with the upload's file name too", () => {
+    const stripe = (serial: string) => [
+      "OpenAI, LLC | @openai | Bill to | Ship to",
+      `Invoice number | 20D3D94E | \u0000 | ${serial}`,
+      "Date of issue | November 17, 2026",
+    ];
+    for (const [serial, fileName] of [
+      ["0001", "Invoice-20D3D94E-0001.pdf"],
+      ["0002", "Invoice-20D3D94E-0002.pdf"],
+      ["0001", "Invoice.pdf"],
+      ["0002", undefined],
+    ] as const) {
+      const reading = readInvoiceText(
+        stripe(serial),
+        fileName ? { fileName } : {},
+      );
+      assert.equal(
+        reading.invoiceNumber,
+        `20D3D94E-${serial}`,
+        String(fileName),
+      );
+      assert.equal(reading.numberFrom, "LABEL", String(fileName));
+    }
+  });
+
+  it("the Stripe cells with a dash cell, or the number in one cell, read the same whole number", () => {
+    for (const line of [
+      "Invoice number | 20D3D94E | - | 0001",
+      "Invoice number | 20D3D94E | \u2013 | 0001",
+      "Invoice number | 20D3D94E-0001",
+    ])
+      assert.equal(
+        readInvoiceText([line], { fileName: "Invoice-20D3D94E-0001.pdf" })
+          .invoiceNumber,
+        "20D3D94E-0001",
+        line,
+      );
+  });
+
+  it("only the Stripe shape is joined: a short serial, a lowercase or short prefix, or another label stays as it was", () => {
+    // a two-digit serial is not a Stripe serial; the empty cell after the value still means a split value, so no label value
+    assert.equal(
+      readInvoiceText(["Invoice number | 20D3D94E | \u0000 | 01"], {
+        fileName: "Invoice.pdf",
+      }).invoiceNumber,
+      null,
+    );
+    // an EMPTY middle cell is a generic table layout, not the Stripe hyphen (a NUL, a hyphen or an en dash): no joined number
+    // (barracuda, #2681: "Invoice number | 2026001 | | 123" must not become 2026001-123)
+    for (const line of [
+      "Invoice number | 20D3D94E | | 0001",
+      "Invoice number | 20D3D94E |   | 0001",
+      "Invoice number | 2026001A | | 123",
+    ])
+      assert.equal(
+        readInvoiceText([line], { fileName: "Invoice.pdf" }).invoiceNumber,
+        null,
+        line,
+      );
+    // an all-digit prefix is not the Stripe prefix (a 6-12 digit number, an empty-looking cell and 3-6 digits would join silently)
+    assert.equal(
+      readInvoiceText(["Invoice number | 2026001 | \u0000 | 123"], {
+        fileName: "Invoice.pdf",
+      }).invoiceNumber,
+      null,
+    );
+    // a prefix under six characters is not the customer prefix
+    assert.equal(
+      readInvoiceText(["Invoice number | AB12 | \u0000 | 0001"], {
         fileName: "Invoice.pdf",
       }).invoiceNumber,
       null,

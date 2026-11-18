@@ -414,7 +414,9 @@ export function bankTransferPlanFrom(
       reason: decision.refusal,
       key: decision.creditId,
       attention:
-        decision.refusal !== "ALREADY_PAID" && !settledElsewhere(decision),
+        decision.refusal !== "ALREADY_PAID" &&
+        decision.refusal !== "OTHER_SYSTEM" &&
+        !settledElsewhere(decision),
       ...(decision.detail ? { detail: decision.detail } : {}),
     });
   }

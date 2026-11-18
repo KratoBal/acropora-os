@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { webshopOrdersWidget } from "./webshop-orders-widget";
@@ -19,7 +19,7 @@ const counters = {
 describe("a webshop rendelési sor kártyája", () => {
   it("a fő szám a feldolgozásra váró, alatta minden szakasz a lista nevével", () => {
     const { Body } = webshopOrdersWidget;
-    render(<Body data={{ counters, truncated: false }} />);
+    render(<Body data={{ counters, shortageOrders: 0, truncated: false }} />);
     expect(screen.getByText("rendelés feldolgozásra vár")).toBeTruthy();
     for (const [label, value] of [
       ["Feldolgozásra vár", "4"],
@@ -39,7 +39,7 @@ describe("a webshop rendelési sor kártyája", () => {
 
   it("a csonka beolvasásnál kimondja, hogy a szám alsó becslés", () => {
     const { Body } = webshopOrdersWidget;
-    render(<Body data={{ counters, truncated: true }} />);
+    render(<Body data={{ counters, shortageOrders: 0, truncated: true }} />);
     expect(screen.getByText(/alsó becslések/)).toBeTruthy();
   });
 
@@ -52,10 +52,53 @@ describe("a webshop rendelési sor kártyája", () => {
       stale: 0,
     };
     expect(
-      webshopOrdersWidget.emptyMessage({ counters: zero, truncated: false }),
+      webshopOrdersWidget.emptyMessage({
+        counters: zero,
+        shortageOrders: 0,
+        truncated: false,
+      }),
     ).toBe("Nincs nyitott webshop rendelés.");
     expect(
-      webshopOrdersWidget.emptyMessage({ counters, truncated: false }),
+      webshopOrdersWidget.emptyMessage({
+        counters,
+        shortageOrders: 0,
+        truncated: false,
+      }),
+    ).toBeNull();
+  });
+
+  // card ac167fc2: the number of orders with an active stock shortage, the list's own count
+  it("a készlethiányos rendelések számát külön sorban mutatja, amikor van", () => {
+    const { Body } = webshopOrdersWidget;
+    render(<Body data={{ counters, shortageOrders: 3, truncated: false }} />);
+    const row = screen.getByText("Készlethiányos").closest("li")!;
+    expect(row.textContent).toContain("3");
+    // an order that needs a person's decision is amber, not the red of a stale one
+    expect(within(row).getByText("3").className).toContain(
+      "text-pilot-amber-700",
+    );
+  });
+
+  it("hiány nélkül nincs készlethiányos sor, nulla sem", () => {
+    const { Body } = webshopOrdersWidget;
+    render(<Body data={{ counters, shortageOrders: 0, truncated: false }} />);
+    expect(screen.queryByText("Készlethiányos")).toBeNull();
+  });
+
+  it("csupa nulla szakasznál is kártya, ha van készlethiányos rendelés (nem üres állapot)", () => {
+    const zero = {
+      processing: 0,
+      invoice: 0,
+      dispatch: 0,
+      pickup: 0,
+      stale: 0,
+    };
+    expect(
+      webshopOrdersWidget.emptyMessage({
+        counters: zero,
+        shortageOrders: 2,
+        truncated: false,
+      }),
     ).toBeNull();
   });
 });
