@@ -19,6 +19,7 @@ describe("jobWords", () => {
       to: "karbantartási laphoz",
       under: "karbantartási lap alatt",
       onto: "karbantartási lapra",
+      from: "karbantartási lapról",
     });
   });
 

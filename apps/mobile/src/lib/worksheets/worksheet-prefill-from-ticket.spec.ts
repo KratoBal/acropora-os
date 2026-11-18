@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   JEGY_BETOLTES_HIBA,
   JEGY_NINCS_PARTNER,
+  KARBANTARTAS_NINCS_PARTNER,
   partnerLezarva,
   prefillFromTicket,
   type JegyAdat,
@@ -156,5 +157,53 @@ describe("mikor zárt a partner-választó", () => {
       partnerLezarva({ kind: "hiba", uzenet: JEGY_BETOLTES_HIBA }),
       false,
     );
+  });
+});
+
+/*
+  A KARBANTARTÁSI LAP ALÁ NYITOTT MUNKALAP ELŐTÖLTÉSE A SAJÁT NEVÉN SZÓL (hibajegy-maradek lista, 4. fejezet, acrobot 56196). MI PIROSÍT: ha a partner nélküli karbantartási lap mondata, vagy a
+  partner nevének tartaléka hibajegyet mond; ha a hibajegyé megváltozik; ha a lekérdezés hibájának mondata (a fajta még nem ismert) csak az egyik fajtát nevezi meg.
+*/
+describe("az előtöltés mondatai a lap fajtája szerint", () => {
+  const partnerNelkul = { customerId: null, customerName: null };
+
+  it("a partner nélküli karbantartási lap a karbantartási lapot nevezi meg", () => {
+    const eredmeny = hivas({
+      jegy: { ...jegy(partnerNelkul), kind: "MAINTENANCE" },
+      partnerek: [],
+    });
+    assert.deepEqual(eredmeny, {
+      kind: "nincs-partner",
+      uzenet: KARBANTARTAS_NINCS_PARTNER,
+    });
+    assert.doesNotMatch(KARBANTARTAS_NINCS_PARTNER, /hibajegy|jegy/i);
+  });
+
+  it("a partner nélküli hibajegy (és a fajta nélküli) a mai mondatot kapja", () => {
+    for (const kind of ["REPAIR", undefined]) {
+      assert.deepEqual(
+        hivas({ jegy: { ...jegy(partnerNelkul), kind }, partnerek: [] }),
+        { kind: "nincs-partner", uzenet: JEGY_NINCS_PARTNER },
+      );
+    }
+  });
+
+  it("a partner nevének tartaléka a lap fajtáját követi", () => {
+    const nevtelen = { customerName: "  ", customerId: "c-9" };
+    const kt = hivas({
+      jegy: { ...jegy(nevtelen), kind: "MAINTENANCE" },
+      partnerek: [],
+    });
+    const hj = hivas({ jegy: jegy(nevtelen), partnerek: [] });
+    assert.equal(
+      kt.kind === "kesz" && kt.partner.name,
+      "A karbantartási lap partnere",
+    );
+    assert.equal(hj.kind === "kesz" && hj.partner.name, "A hibajegy partnere");
+  });
+
+  it("a lekérdezés hibájának mondata mindkét fajtát megnevezi", () => {
+    assert.match(JEGY_BETOLTES_HIBA, /hibajegy/);
+    assert.match(JEGY_BETOLTES_HIBA, /karbantartási lap/);
   });
 });

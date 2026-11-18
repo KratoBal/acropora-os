@@ -20,6 +20,8 @@ export interface JobWords {
   under: string;
   /** "hibajegyre" / "karbantartási lapra" */
   onto: string;
+  /** "hibajegyről" / "karbantartási lapról" */
+  from: string;
 }
 
 const REPAIR: JobWords = {
@@ -29,6 +31,7 @@ const REPAIR: JobWords = {
   to: "hibajegyhez",
   under: "hibajegy alatt",
   onto: "hibajegyre",
+  from: "hibajegyről",
 };
 
 const MAINTENANCE: JobWords = {
@@ -38,6 +41,7 @@ const MAINTENANCE: JobWords = {
   to: "karbantartási laphoz",
   under: "karbantartási lap alatt",
   onto: "karbantartási lapra",
+  from: "karbantartási lapról",
 };
 
 /** A fajta szerinti szavak: a MAINTENANCE a karbantartási lapét, minden más (a hiányzó fajta is) a hibajegyét kapja. */

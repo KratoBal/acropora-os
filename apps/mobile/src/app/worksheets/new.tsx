@@ -52,6 +52,7 @@ import {
   ticketLinkFromParams,
   ticketNotice,
 } from "@/lib/worksheets/worksheet-under-ticket";
+import { jobWords } from "@/lib/service-jobs/job-words";
 import { worksheetOperationId } from "@/lib/offline/sync-queue";
 import { getServiceJob } from "@/lib/api/service-jobs";
 import {
@@ -224,6 +225,12 @@ export default function NewWorksheetScreen() {
     halt meg ugyanettol; ez CSENDBEN rontott volna.
   */
   const jegyAdatai = jegyQuery.data ? jegyOroklendo(jegyQuery.data) : null;
+  // A lap fajtája (a partner alakból hiányzik: ott hibajegy): a mondatok ehhez igazodnak (hibajegy-maradek lista, acrobot 56196)
+  const jegyKind =
+    jegyQuery.data && "kind" in jegyQuery.data
+      ? jegyQuery.data.kind
+      : undefined;
+  const jw = jobWords(jegyKind);
   const elotoltes = prefillFromTicket({
     link: jegy,
     jegy: jegyAdatai
@@ -231,6 +238,7 @@ export default function NewWorksheetScreen() {
           customerId: jegyAdatai.customerId,
           customerName: jegyAdatai.customerName,
           departmentId: jegyAdatai.departmentId,
+          kind: jegyKind,
         }
       : null,
     betoltes: jegyQuery.isPending,
@@ -297,6 +305,7 @@ export default function NewWorksheetScreen() {
     jegyEszkozok,
     oroklendoEszkozok: oroklendoEszkozIdk,
     oroklendoFelelosok: oroklendoFelelosIdk,
+    kind: jegyKind,
   });
 
   const departmentsQuery = useQuery({
@@ -618,10 +627,12 @@ export default function NewWorksheetScreen() {
             a szerelo egy kesz lapot latna elakadva a sorban, orakkal kesobb, a
             helyszintol tavol -- es a partner-valasztas addigra mar megtortent.
           */}
-          {ticketNotice(jegy) ? (
+          {ticketNotice(jegy, jegyKind) ? (
             <View style={styles.notice}>
-              <Text style={styles.noticeTitle}>Hibajegy alá kerül</Text>
-              <Text style={styles.noticeBody}>{ticketNotice(jegy)}</Text>
+              <Text style={styles.noticeTitle}>{jw.nounCap} alá kerül</Text>
+              <Text style={styles.noticeBody}>
+                {ticketNotice(jegy, jegyKind)}
+              </Text>
             </View>
           ) : null}
 
@@ -633,7 +644,7 @@ export default function NewWorksheetScreen() {
           */}
           {oroklesSzoveg ? (
             <View style={styles.notice}>
-              <Text style={styles.noticeTitle}>A hibajegyről</Text>
+              <Text style={styles.noticeTitle}>A {jw.from}</Text>
               <Text style={styles.noticeBody}>{oroklesSzoveg}</Text>
             </View>
           ) : null}
@@ -667,13 +678,13 @@ export default function NewWorksheetScreen() {
                 {partnerHatasos
                   ? partnerHatasos.name
                   : elotoltes.kind === "toltes"
-                    ? "A hibajegy partnere töltődik…"
+                    ? "A partner töltődik…"
                     : "Válassz partnert"}
               </Text>
               <Text style={styles.pickerMeta}>
                 {partnerHatasos
                   ? partnerLezarva(elotoltes)
-                    ? "A hibajegyről — nem módosítható"
+                    ? `A ${jw.from} — nem módosítható`
                     : partnerHatasos.partnerCode
                   : "Koppints a listához"}
               </Text>

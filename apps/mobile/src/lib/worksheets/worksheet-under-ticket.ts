@@ -82,8 +82,19 @@ export const JEGY_A_SORBAN =
 export const JEGY_FENT_VAN =
   "Ez a munkalap egy meglévő hibajegy alá kerül. Válaszd ugyanazt a partnert, mint a jegyen: eltérő partnernél a szerver visszautasítja.";
 
-export function ticketNotice(link: TicketLink): string | null {
+/** A karbantartási lap alá kerülő munkalap mondata (hibajegy-maradek lista, 4. fejezet, acrobot 56196): ugyanaz a partner-feltétel, a lap a saját nevén. */
+export const KARBANTARTAS_FENT_VAN =
+  "Ez a munkalap egy meglévő karbantartási lap alá kerül. Válaszd ugyanazt a partnert, mint a lapon: eltérő partnernél a szerver visszautasítja.";
+
+/**
+ * A `kind` a szerverről lekérdezett lap fajtája (a sorban álló lap mindig hibajegy: a telefon csak hibajegyet nyit). Fajta nélkül, vagy hibajegynél a mai mondat.
+ */
+export function ticketNotice(
+  link: TicketLink,
+  kind?: string | null,
+): string | null {
   if (link.kind === "queued") return JEGY_A_SORBAN;
-  if (link.kind === "server") return JEGY_FENT_VAN;
+  if (link.kind === "server")
+    return kind === "MAINTENANCE" ? KARBANTARTAS_FENT_VAN : JEGY_FENT_VAN;
   return null;
 }

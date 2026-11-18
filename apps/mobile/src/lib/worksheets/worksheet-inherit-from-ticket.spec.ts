@@ -165,3 +165,43 @@ describe("mit mond a képernyő az öröklésről", () => {
     );
   });
 });
+
+/*
+  AZ ÖRÖKLÉS MONDATA A LAP FAJTÁJÁT NEVEZI MEG (hibajegy-maradek lista, 4. fejezet, acrobot 56196). MI PIROSÍT: ha a karbantartási lap örökölt eszközeiről és felelőséről szóló mondat, vagy az
+  elmaradt öröklés oka hibajegyet mond; ha a hibajegyé (és a fajta nélküli hívásé) megváltozik.
+*/
+describe("az öröklés mondata a lap fajtája szerint", () => {
+  it("karbantartási lapnál a karbantartási lapot nevezi meg", () => {
+    assert.equal(
+      oroklesUzenete({
+        jegyEszkozok: ESZKOZOK,
+        oroklendoEszkozok: ["a-1", "a-2"],
+        oroklendoFelelosok: ["u-1"],
+        kind: "MAINTENANCE",
+      }),
+      "A lapra átkerül a karbantartási lap 2 eszköze és a karbantartási lap felelőse.",
+    );
+    const ok = oroklesUzenete({
+      jegyEszkozok: ESZKOZOK,
+      oroklendoEszkozok: [],
+      oroklendoFelelosok: [],
+      kind: "MAINTENANCE",
+    });
+    assert.match(ok ?? "", /A karbantartási lap eszközei nem kerülnek át/);
+    assert.doesNotMatch(ok ?? "", /jegy/i);
+  });
+
+  it("hibajegynél és fajta nélkül a mai mondat", () => {
+    for (const kind of ["REPAIR", undefined]) {
+      assert.equal(
+        oroklesUzenete({
+          jegyEszkozok: ESZKOZOK,
+          oroklendoEszkozok: ["a-1"],
+          oroklendoFelelosok: [],
+          kind,
+        }),
+        "A lapra átkerül a hibajegy eszköze.",
+      );
+    }
+  });
+});
