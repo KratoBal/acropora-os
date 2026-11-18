@@ -79,6 +79,39 @@ export type RedirectProjectionOutcome =
     }
   | { status: "refused"; reason: string };
 
+/** A bolt szerződésének sorai az OS aktív szabályaiból (a vetítés és a terv UGYANAZT a sort számolja). */
+export function redirectRowsOf(
+  aktiv: Awaited<ReturnType<RedirectSource["activeRedirects"]>>,
+): MedusaUrlRedirect[] {
+  return aktiv.map((r) => ({
+    source_path: r.sourcePath,
+    destination_path: r.destinationPath,
+    status: r.httpStatus,
+  }));
+}
+
+/** Az első lánc-szem: olyan sor, amelynek a célja egy másik sor forrása (a 410 nem ugrás, a célja önmaga). */
+export function redirectChainOf(
+  sorok: readonly MedusaUrlRedirect[],
+): MedusaUrlRedirect | undefined {
+  const forrasok = new Set(sorok.map(kis));
+  return sorok.find(
+    (r) =>
+      r.status !== GONE_STATUS &&
+      forrasok.has(r.destination_path.toLowerCase()),
+  );
+}
+
+export function redirectRetargetedOf(
+  aktiv: Awaited<ReturnType<RedirectSource["activeRedirects"]>>,
+): RedirectRetargeted {
+  return {
+    brand: aktiv.filter((r) => r.target === "brand").length,
+    gone: aktiv.filter((r) => r.target === "gone").length,
+    moved: aktiv.filter((r) => r.target === "moved").length,
+  };
+}
+
 /**
  * EGY VETÍTÉS. Lánc esetén NEM küld: a bolt egy ugrást követ, és a commerce
  * validátora úgyis elutasítaná; a jelentés megnevezi az első láncszemet.
@@ -89,23 +122,10 @@ export async function projectUrlRedirects(
   apply: boolean,
 ): Promise<RedirectProjectionOutcome> {
   const aktiv = await source.activeRedirects();
-  const retargeted: RedirectRetargeted = {
-    brand: aktiv.filter((r) => r.target === "brand").length,
-    gone: aktiv.filter((r) => r.target === "gone").length,
-    moved: aktiv.filter((r) => r.target === "moved").length,
-  };
-  const sorok: MedusaUrlRedirect[] = aktiv.map((r) => ({
-    source_path: r.sourcePath,
-    destination_path: r.destinationPath,
-    status: r.httpStatus,
-  }));
-  const forrasok = new Set(sorok.map(kis));
+  const retargeted = redirectRetargetedOf(aktiv);
+  const sorok = redirectRowsOf(aktiv);
   // a 410-es sor nem ugrás: a célja önmaga, és a bolt nem követi
-  const lanc = sorok.find(
-    (r) =>
-      r.status !== GONE_STATUS &&
-      forrasok.has(r.destination_path.toLowerCase()),
-  );
+  const lanc = redirectChainOf(sorok);
   if (lanc)
     return {
       status: "refused",
