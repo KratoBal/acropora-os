@@ -227,7 +227,12 @@ function StatusCell({
   now: number;
 }) {
   if (!item.status.code)
-    return <span className="text-pilot-grey-500">Nincs státusz</span>;
+    return (
+      <span className="block">
+        <span className="text-pilot-grey-500">Nincs státusz</span>
+        <ShortageFlag item={item} />
+      </span>
+    );
   const tile = STATUS_TILE[item.status.code];
   return (
     <span className="flex items-start gap-2">
@@ -247,7 +252,30 @@ function StatusCell({
           {formatStatusAge(item.status.changedAt, now)}
           {item.status.stale ? " · elavult" : ""}
         </span>
+        <ShortageFlag item={item} />
       </span>
+    </span>
+  );
+}
+
+/**
+ * AZ AKTÍV KÉSZLETHIÁNY JELZÉSE A RENDELÉS SORÁN (card ac167fc2, harmadik szelet): a rendelés oldalán rögzített hiány a listán is
+ * látsszon, különben ott elbújik. A nyitott (a vevő még nem döntött) és a megállapodott (a végrehajtás hátra van) darabszám külön áll;
+ * a nulla nem íródik ki.
+ */
+function ShortageFlag({ item }: { item: WebshopOrderListItem }) {
+  const shortage = item.stockShortage;
+  if (!shortage) return null;
+  const parts = [
+    shortage.open > 0 ? `${shortage.open} nyitott` : null,
+    shortage.agreed > 0 ? `${shortage.agreed} megállapodott` : null,
+  ].filter((part): part is string => part !== null);
+  return (
+    <span
+      data-testid="keszlethiany-jelzes"
+      className="mt-1 block text-xs font-medium text-pilot-amber-700"
+    >
+      Készlethiány: {parts.join(" · ")}
     </span>
   );
 }
@@ -272,6 +300,7 @@ const FILTER_KEYS = [
   "invoice",
   "customerType",
   "newCustomer",
+  "shortage",
 ] as const;
 const MORE_FILTER_KEYS = [
   "paymentMethod",
@@ -561,6 +590,7 @@ export function WebshopOrdersListPage() {
     );
 
   const stage = params.get("stage") ?? "";
+  const shortageFilter = params.get("shortage") === "active";
   const totalPages = data
     ? Math.max(1, Math.ceil(data.total / data.pageSize))
     : 1;
@@ -578,7 +608,7 @@ export function WebshopOrdersListPage() {
       <div
         role="group"
         aria-label="Feldolgozási számlálók"
-        className="grid grid-cols-2 gap-3 md:grid-cols-5"
+        className="grid grid-cols-2 gap-3 md:grid-cols-6"
       >
         {WEBSHOP_ORDER_STAGES.map((key) => {
           const active = stage === key;
@@ -601,6 +631,19 @@ export function WebshopOrdersListPage() {
             </button>
           );
         })}
+        <button
+          type="button"
+          aria-pressed={shortageFilter}
+          onClick={() => setParam("shortage", shortageFilter ? "" : "active")}
+          className={`rounded-xl border bg-white px-4 py-3 text-left transition-colors hover:border-pilot-accent-warm ${shortageFilter ? "border-pilot-accent-warm" : "border-pilot-grey-200"}`}
+        >
+          <span className="block text-xs font-semibold text-pilot-amber-700">
+            Készlethiány
+          </span>
+          <span className="mt-1 block text-2xl font-semibold text-pilot-grey-900">
+            {data ? data.shortageOrders : "–"}
+          </span>
+        </button>
       </div>
 
       <PilotSegmentedControl
