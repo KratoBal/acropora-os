@@ -645,11 +645,12 @@ export function bankTransferPlanFrom(
       reason: decision.refusal,
       key: decision.creditId,
       attention:
-        // already paid is settled unless another credit names the same invoice; a díjbekérő and a refunded invoice need nobody
+        // already paid is settled unless another credit names the same invoice; a refunded invoice needs nobody. A PROFORMA does:
+        // the money came, but the invoice from it is missing or still open, which is exactly when Autokassza did not do its work
+        // (barracuda, #2700); the one that ends in a paid invoice is ALREADY_PAID and asks nothing
         (decision.refusal === "ALREADY_PAID"
           ? Boolean(decision.sharedWith?.length)
           : decision.refusal !== "OTHER_SYSTEM" &&
-            decision.refusal !== "PROFORMA" &&
             decision.refusal !== "REFUNDED") && !settledElsewhere(decision),
       ...(decision.detail ? { detail: decision.detail } : {}),
     });
@@ -811,10 +812,24 @@ export async function loadFeedInvoicesFor(
             cancelled: false,
             kindCode: { in: [...PAYABLE_KINDS] },
             OR: proformas.map((proforma) => ({
-              customerName: {
-                equals: proforma.customerName,
-                mode: "insensitive" as const,
-              },
+              // the same customer as the decision reads it: the tax base first, the name when a side has none (`sameCustomer`)
+              OR: [
+                {
+                  customerName: {
+                    equals: proforma.customerName,
+                    mode: "insensitive" as const,
+                  },
+                },
+                ...(proforma.customerTaxNumber
+                  ? [
+                      {
+                        customerTaxNumber: {
+                          startsWith: proforma.customerTaxNumber.slice(0, 8),
+                        },
+                      },
+                    ]
+                  : []),
+              ],
               grossAmount: proforma.grossAmount,
               currency: proforma.currency,
               issueDate: { gte: proforma.issueDate },

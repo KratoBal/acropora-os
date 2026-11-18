@@ -192,7 +192,7 @@ describe("BankTransfersPage", () => {
       await screen.findByText("Rendben: a Számlázz.hu beírta"),
     ).toBeInTheDocument();
     expect(screen.getByText("Visszafizetve")).toBeInTheDocument();
-    expect(screen.getByText("Díjbekérő (Autokassza)")).toBeInTheDocument();
+    expect(screen.getByText("Díjbekérő: számlára vár")).toBeInTheDocument();
     // the two possible double payments are the only rows that still ask a person
     expect(screen.getAllByText("Lehet, hogy kétszer fizették")).toHaveLength(2);
     expect(screen.queryByText("Kézi párosítás kell")).not.toBeInTheDocument();

@@ -822,7 +822,7 @@ describe("Luca's three bank rows", () => {
       ...over,
     });
 
-  it("a díjbekérő paid by exactly its gross: its own state, nothing to write, no attention", () => {
+  it("a díjbekérő paid by exactly its gross: its own state, nothing to write, and a person sees it until its invoice is paid", () => {
     const decision = decideBankTransfer(dijbekero(), [proforma()]);
     assert.equal(!decision.markable && decision.refusal, "PROFORMA");
     assert.match(!decision.markable ? decision.detail : "", /D-CRPR-7/);
@@ -831,7 +831,33 @@ describe("Luca's three bank rows", () => {
     assert.deepEqual(plan.marks, []);
     assert.deepEqual(
       plan.exceptions.map((e) => [e.reason, e.attention]),
-      [["PROFORMA", false]],
+      [["PROFORMA", true]],
+    );
+  });
+
+  // barracuda, #2700: the money came, and the invoice from the díjbekérő is missing or still open: Autokassza did not do its work
+  it("the díjbekérő with no invoice from it, or one still open, asks attention; the one that ends in a paid invoice asks nothing", () => {
+    const attentionOf = (invoices: FeedInvoice[]) =>
+      bankTransferPlanFrom([decideBankTransfer(dijbekero(), invoices)])
+        .exceptions[0]!.attention;
+    assert.equal(attentionOf([proforma()]), true);
+    assert.equal(attentionOf([proforma(), fromProforma()]), true);
+    assert.equal(
+      attentionOf([
+        proforma(),
+        fromProforma({
+          paidAmount: "1121819.00",
+          payments: [
+            {
+              date: "2026-11-16",
+              amount: "1121819",
+              title: "átutalás",
+              bankTransactionId: "szhu-9",
+            },
+          ],
+        }),
+      ]),
+      false,
     );
   });
 

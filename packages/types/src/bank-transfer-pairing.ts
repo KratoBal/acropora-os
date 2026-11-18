@@ -75,7 +75,7 @@ export const BANK_TRANSFER_REFUSAL_TEXT: Readonly<
   PAID_EARLIER:
     "A számla már korábban ki lett fizetve, ez a jóváírás nem az a kifizetés: lehet, hogy kétszer fizették. Nézd meg, és ha igen, utald vissza.",
   PROFORMA:
-    "Díjbekérő kifizetése: a számlát a Számlázz.hu automatikusan állítja ki (Autokassza), ezen a lapon nincs mit beírni.",
+    "Díjbekérő kifizetése: a számlát a Számlázz.hu automatikusan állítja ki (Autokassza), ezen a lapon nincs mit beírni. Kifizetett számla még nincs hozzá: ha nem jelenik meg, nézd meg a Számlázz.hu-ban.",
   REFUNDED:
     "A számlát sztornózták, és az utalt összeget visszautalták: nincs teendő, a Számlázz.hu-ba nem írunk.",
   CREDIT_USED:
@@ -96,19 +96,19 @@ export const BANK_TRANSFER_POSSIBLE_DOUBLE_TEXT =
 
 /**
  * The credits that need nobody (the second survey, 2026-11-18, Luca's three rows): the calm badge a row carries instead of
- * "Kézi párosítás kell". Already paid and refunded are done (green), a díjbekérő waits for Számlázz.hu's own invoicing (grey).
+ * "Kézi párosítás kell". Already paid and refunded are done (green), a díjbekérő waits for Számlázz.hu's own invoicing and its paid invoice (amber: nothing to write, but a person sees it if the invoice does not come).
  */
 export const BANK_TRANSFER_SETTLED_BADGE: Readonly<
   Partial<
     Record<
       BankTransferRefusalValue,
-      { label: string; variant: "success" | "grey" }
+      { label: string; variant: "success" | "grey" | "amber" }
     >
   >
 > = {
   ALREADY_PAID: { label: "Rendben: a Számlázz.hu beírta", variant: "success" },
   REFUNDED: { label: "Visszafizetve", variant: "success" },
-  PROFORMA: { label: "Díjbekérő (Autokassza)", variant: "grey" },
+  PROFORMA: { label: "Díjbekérő: számlára vár", variant: "amber" },
 };
 
 /**
