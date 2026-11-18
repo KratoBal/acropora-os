@@ -93,6 +93,9 @@ class OperationsTaskTemplateBodyDto {
   @IsString()
   assetCategoryId?: string | null;
 
+  /** Egységes rögzítés (kártya d2222173): igaz/hamis; a hiánya létrehozáskor kikapcsolt, módosításkor nem változtat a beállításon. */
+  @IsBoolean() @IsOptional() uniformRecording?: boolean;
+
   /**
    * A TELJES MEZŐKÉSZLET, a megadott sorrendben: ami nincs benne, kikerül a sablonból. A felső határ a szolgáltatás szabályával
    * egyezik; itt csak a kérés mérete védett.

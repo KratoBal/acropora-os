@@ -68,6 +68,8 @@ interface Draft {
   /** A cél eszközlistája (azonosító és felirat), a hozzáadás sorrendjében. */
   assets: ListedAsset[];
   categoryId: string;
+  /** Egységes rögzítés (kártya d2222173): a csoportos rögzítésnél a sablon értékeit egyszer kell beírni. */
+  uniformRecording: boolean;
   fields: DraftField[];
 }
 
@@ -81,6 +83,7 @@ const EMPTY: Draft = {
   targetKind: "ASSET",
   assets: [],
   categoryId: "",
+  uniformRecording: false,
   fields: [],
 };
 
@@ -94,7 +97,7 @@ const emptyField = (): DraftField => ({
   meterRole: "",
 });
 
-function draftOf(template: OperationsTaskTemplateDto): Draft {
+export function draftOf(template: OperationsTaskTemplateDto): Draft {
   return {
     name: template.name,
     description: template.description ?? "",
@@ -109,6 +112,7 @@ function draftOf(template: OperationsTaskTemplateDto): Draft {
         : [],
     categoryId:
       template.target.kind === "CATEGORY" ? template.target.categoryId : "",
+    uniformRecording: template.uniformRecording,
     fields: template.fields.map((field) => ({
       rowKey: rowKey(),
       key: field.key,
@@ -135,7 +139,7 @@ function fieldInputs(draft: Draft): OperationsTaskTemplateInput["fields"] {
   }));
 }
 
-function inputOf(
+export function inputOf(
   draft: Draft,
   expectedUpdatedAt?: string,
 ): OperationsTaskTemplateInput {
@@ -150,8 +154,43 @@ function inputOf(
         ? draft.assets.map((asset) => asset.id)
         : null,
     assetCategoryId: draft.targetKind === "CATEGORY" ? draft.categoryId : null,
+    // mindig küldjük: egy mentés, amely nem viszi a kapcsolót, csendben nem kapcsolhatja ki
+    uniformRecording: draft.uniformRecording,
     fields: fieldInputs(draft),
   };
+}
+
+/** A kapcsoló súgója: mit változtat, és mi marad eszközönként (a mobil csoportos űrlap szabálya). */
+export const UNIFORM_RECORDING_HELP =
+  "Csoportos rögzítésnél a szám, igen/nem és szöveg mezőket egyszer kell beírni, és minden eszköz bejegyzése megkapja (például három homokszűrő azonos visszamosási ideje). A fénykép és a rendellenesség eszközönként marad.";
+
+/** Az „Egységes rögzítés” kapcsoló a sablon alapadatain (kártya d2222173, Balázs 2026-11-18). */
+export function UniformRecordingSwitch({
+  checked,
+  readOnly,
+  onChange,
+}: {
+  checked: boolean;
+  readOnly: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="min-w-72 flex-[1_1_100%]">
+      <label className="flex items-center gap-2 text-sm font-medium text-pilot-grey-900">
+        <input
+          type="checkbox"
+          aria-label="Egységes rögzítés"
+          checked={checked}
+          disabled={readOnly}
+          onChange={(event) => onChange(event.target.checked)}
+        />
+        Egységes rögzítés
+      </label>
+      <p className="mt-1 text-xs text-pilot-grey-600">
+        {UNIFORM_RECORDING_HELP}
+      </p>
+    </div>
+  );
 }
 
 /** A mentés előtti hibák: a név, a cél és a mezők szabályai (ugyanazok, mint a szerveren). */
@@ -401,6 +440,11 @@ export function OperationsTemplateEditorPage({
                   onChange={(description) => change({ description })}
                 />
               </PilotFormField>
+              <UniformRecordingSwitch
+                checked={draft.uniformRecording}
+                readOnly={readOnly}
+                onChange={(uniformRecording) => change({ uniformRecording })}
+              />
               {template ? (
                 <PilotBadge variant={template.isActive ? "success" : "grey"}>
                   {template.isActive ? "Aktív" : "Kivezetett"}

@@ -18,6 +18,7 @@ const TEMPLATE_SELECT = {
   frequency: true,
   assetCategoryId: true,
   isActive: true,
+  uniformRecording: true,
   updatedAt: true,
   assets: {
     select: { asset: { select: { id: true, assetNumber: true, name: true } } },
@@ -60,6 +61,8 @@ export interface OperationsTaskTemplateWrite {
   /** A kézzel választott eszközlista (az azonosítók egyediek); üres, ha a cél kategória. */
   assetIds: string[];
   assetCategoryId: string | null;
+  /** `undefined`: a módosítás nem változtat a beállításon (a létrehozás mindig megadja). */
+  uniformRecording?: boolean;
   fields: OperationsTaskFieldWrite[];
 }
 
@@ -68,7 +71,7 @@ export class OperationsTemplateConflictError extends Error {}
 
 const templateLog = new Logger("OperationsTemplates");
 
-function toDto(row: TemplateRow): OperationsTaskTemplateDto {
+export function toDto(row: TemplateRow): OperationsTaskTemplateDto {
   const target = targetOfRow(row);
   // egy közvetlen írás (import, kézi SQL) kategóriát ÉS eszközlistát is hagyhatott: a felület a kategóriát mutatja, a rögzítés mindkettőt engedi
   if (target.both)
@@ -96,6 +99,7 @@ function toDto(row: TemplateRow): OperationsTaskTemplateDto {
     // a szolgáltatás tartja: kategória XOR nem üres eszközlista; a lista az eszköz száma szerint rendezett
     target: target.target,
     isActive: row.isActive,
+    uniformRecording: row.uniformRecording,
     fields,
     retiredFields,
     updatedAt: row.updatedAt.toISOString(),
@@ -331,6 +335,7 @@ export class OperationsLogRepository {
         description: input.description,
         frequency: input.frequency,
         assetCategoryId: input.assetCategoryId,
+        uniformRecording: input.uniformRecording ?? false,
         createdById: actorId,
         updatedById: actorId,
         assets: {
@@ -422,6 +427,9 @@ export class OperationsLogRepository {
           frequency: input.frequency,
           assetCategoryId: input.assetCategoryId,
           ...(input.isActive === undefined ? {} : { isActive: input.isActive }),
+          ...(input.uniformRecording === undefined
+            ? {}
+            : { uniformRecording: input.uniformRecording }),
           updatedById: actorId,
         },
         select: { id: true },

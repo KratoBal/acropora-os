@@ -12984,6 +12984,11 @@ model OperationsTaskTemplate {
   /// A kivezetett sablon nem törlődik (a bejegyzések hivatkozni fognak rá): a kínálatból esik ki, a régi bejegyzések mellett
   /// olvasható marad.
   isActive        Boolean                 @default(true)
+  /// EGYSÉGES RÖGZÍTÉS (kártya d2222173, Balázs 2026-11-18): bekapcsolva a CSOPORTOS rögzítésnél (mobil) a sablon szám, igen/nem és szöveg
+  /// mezőit EGYSZER kell beírni, és minden eszköz bejegyzésére rákerülnek (három homokszűrő ugyanannyi ideig van visszamosva); a fénykép mezők és a
+  /// rendellenesség eszközönként maradnak. Kikapcsolva a mai viselkedés: a vízóra mezők közösek, minden más eszközönként áll. A szerver a
+  /// bejegyzés rögzítésekor nem olvassa: a bejegyzések önállóak és teljesek maradnak, a kapcsolót a mobil űrlap olvassa.
+  uniformRecording Boolean                @default(false)
   createdById     String?
   updatedById     String?
   createdAt       DateTime                @default(now())

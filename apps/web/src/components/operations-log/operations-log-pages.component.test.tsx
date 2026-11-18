@@ -94,6 +94,7 @@ const TEMPLATE: OperationsTaskTemplateDto = {
   name: "Homokszűrő visszamosás",
   description: "Heti rutin",
   frequency: "WEEKLY",
+  uniformRecording: false,
   target: {
     kind: "ASSETS",
     assets: [{ assetId: "a1", assetNumber: "V2196", name: "Homokszűrő" }],
