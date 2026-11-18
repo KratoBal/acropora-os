@@ -154,6 +154,50 @@ describe("BankTransfersPage", () => {
     expect(screen.getByText("Kézi párosítás kell")).toBeInTheDocument();
   });
 
+  // Luca's three rows (2026-11-18): already booked, refunded and a díjbekérő need nobody; a possible double payment does
+  it("already booked, refunded and a díjbekérő are said calmly, a possible double payment asks a person", async () => {
+    const row = (
+      id: string,
+      refusal: "ALREADY_PAID" | "REFUNDED" | "PROFORMA" | "PAID_EARLIER",
+      reason: string,
+      extra: { possibleDouble?: boolean } = {},
+    ) =>
+      credit({
+        id,
+        decision: { markable: false, refusal, reason, detail: "", ...extra },
+      });
+    api.list.mockResolvedValue([
+      row(
+        "paid",
+        "ALREADY_PAID",
+        "A Számlázz.hu ezt az utalást már a számlára könyvelte, nincs teendő.",
+      ),
+      row(
+        "back",
+        "REFUNDED",
+        "A számlát sztornózták, és az utalt összeget visszautalták.",
+      ),
+      row(
+        "pro",
+        "PROFORMA",
+        "Díjbekérő kifizetése: a számlát a Számlázz.hu állítja ki.",
+      ),
+      row("twice", "ALREADY_PAID", "Másik jóváírás is megnevezi.", {
+        possibleDouble: true,
+      }),
+      row("earlier", "PAID_EARLIER", "A számla már korábban ki lett fizetve."),
+    ]);
+    render(<BankTransfersPage />);
+    expect(
+      await screen.findByText("Rendben: a Számlázz.hu beírta"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Visszafizetve")).toBeInTheDocument();
+    expect(screen.getByText("Díjbekérő (Autokassza)")).toBeInTheDocument();
+    // the two possible double payments are the only rows that still ask a person
+    expect(screen.getAllByText("Lehet, hogy kétszer fizették")).toHaveLength(2);
+    expect(screen.queryByText("Kézi párosítás kell")).not.toBeInTheDocument();
+  });
+
   it("a credit that is not an invoice's payment says what it is, grey, not 'Kézi párosítás kell'", async () => {
     const decision = (
       refusal:

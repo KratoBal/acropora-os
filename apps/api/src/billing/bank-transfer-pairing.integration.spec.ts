@@ -227,10 +227,11 @@ describe(
         ["E-CRPR-2099-7"],
       );
       const proforma = await service().check(ids.credit!, "D-CRPR-7000");
-      assert.equal(!proforma.markable && proforma.refusal, "UNRESOLVED");
+      // paid by exactly its gross: the díjbekérő's own state (several invoices of the customer fit the gross, so none is named)
+      assert.equal(!proforma.markable && proforma.refusal, "PROFORMA");
       assert.match(
         !proforma.markable ? proforma.detail : "",
-        /D-CRPR-7000 nem fizetendő: D-CRPR-7000 díjbekérő/,
+        /D-CRPR-7000 díjbekérő/,
       );
       // a number that is not in the feed is said so, not read as another one
       const missing = await service().check(ids.credit!, "E-CRPR-2099-99");

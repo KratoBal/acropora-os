@@ -11,6 +11,9 @@ export type BankTransferRefusalValue =
   | "DIFFERENT_CUSTOMERS"
   | "AMOUNT_MISMATCH"
   | "ALREADY_PAID"
+  | "PAID_EARLIER"
+  | "PROFORMA"
+  | "REFUNDED"
   | "CREDIT_USED"
   | "OTHER_SYSTEM"
   | "OWN_ACCOUNT"
@@ -32,6 +35,8 @@ export type BankTransferDecisionView =
       /** the person-readable sentence */
       reason: string;
       detail: string;
+      /** ALREADY_PAID, but another credit names the same invoice too: one of them may be a double payment */
+      possibleDouble?: boolean;
     };
 
 export interface BankTransferCreditView {
@@ -65,7 +70,14 @@ export const BANK_TRANSFER_REFUSAL_TEXT: Readonly<
   DIFFERENT_CUSTOMERS: "A számlák nem ugyanannak a vevőnek szólnak.",
   AMOUNT_MISMATCH:
     "Az összeg nem egyezik a számlák nyitott összegével, ezért nem írom be.",
-  ALREADY_PAID: "Mindegyik számla már ki van fizetve.",
+  ALREADY_PAID:
+    "A Számlázz.hu ezt az utalást már a számlára könyvelte, nincs teendő.",
+  PAID_EARLIER:
+    "A számla már korábban ki lett fizetve, ez a jóváírás nem az a kifizetés: lehet, hogy kétszer fizették. Nézd meg, és ha igen, utald vissza.",
+  PROFORMA:
+    "Díjbekérő kifizetése: a számlát a Számlázz.hu automatikusan állítja ki (Autokassza), ezen a lapon nincs mit beírni.",
+  REFUNDED:
+    "A számlát sztornózták, és az utalt összeget visszautalták: nincs teendő, a Számlázz.hu-ba nem írunk.",
   CREDIT_USED:
     "Ezt a jóváírást már más számla kifizetéseként beírtuk; egy utalás pénze nem zárhat le két számlát.",
   OTHER_SYSTEM:
@@ -76,6 +88,27 @@ export const BANK_TRANSFER_REFUSAL_TEXT: Readonly<
     "Bankkártya-elfogadói elszámolás (OTP): összesített jóváírás, nem egy számla kifizetése, ezen a lapon nincs mit párosítani.",
   PAYMENT_PROVIDER:
     "SimplePay-elszámolás: összesített jóváírás, a SimplePay saját elszámolási útján rendeződik, ezen a lapon nincs mit párosítani.",
+};
+
+/** ALREADY_PAID with a second credit naming the same invoice: the sentence that replaces the plain one. */
+export const BANK_TRANSFER_POSSIBLE_DOUBLE_TEXT =
+  "A Számlázz.hu ezt az utalást már a számlára könyvelte, de egy másik jóváírás is ugyanezt a számlát nevezi meg: lehet, hogy kétszer fizették. Nézd meg a két jóváírást.";
+
+/**
+ * The credits that need nobody (the second survey, 2026-11-18, Luca's three rows): the calm badge a row carries instead of
+ * "Kézi párosítás kell". Already paid and refunded are done (green), a díjbekérő waits for Számlázz.hu's own invoicing (grey).
+ */
+export const BANK_TRANSFER_SETTLED_BADGE: Readonly<
+  Partial<
+    Record<
+      BankTransferRefusalValue,
+      { label: string; variant: "success" | "grey" }
+    >
+  >
+> = {
+  ALREADY_PAID: { label: "Rendben: a Számlázz.hu beírta", variant: "success" },
+  REFUNDED: { label: "Visszafizetve", variant: "success" },
+  PROFORMA: { label: "Díjbekérő (Autokassza)", variant: "grey" },
 };
 
 /**

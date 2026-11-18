@@ -2133,7 +2133,9 @@ export type {
 } from "./partner-merge.js";
 export {
   BANK_TRANSFER_NOT_A_PAYMENT_LABEL,
+  BANK_TRANSFER_POSSIBLE_DOUBLE_TEXT,
   BANK_TRANSFER_REFUSAL_TEXT,
+  BANK_TRANSFER_SETTLED_BADGE,
 } from "./bank-transfer-pairing.js";
 export type {
   BankTransferCreditView,

@@ -71,6 +71,8 @@ export interface FeedInvoice {
   customerTaxNumber: string | null;
   grossAmount: string;
   paidAmount: string;
+  /** ÉÉÉÉ-HH-NN; only the proforma route reads it (an invoice issued BEFORE the díjbekérő is not its invoice) */
+  issueDate?: string;
   /**
    * null: the feed row was not projected with its payments, so nothing is provably open. false: Számlázz.hu sent no
    * `kifizetesek` element, whose meaning is the payment method's (`missingPayments`).
@@ -118,6 +120,18 @@ export type BankTransferRefusal =
   | "DIFFERENT_CUSTOMERS"
   | "AMOUNT_MISMATCH"
   | "ALREADY_PAID"
+  /**
+   * every invoice the text names was fully paid before, on ANOTHER day than this credit's: this credit is not their payment, so
+   * it may be a second payment of the same invoice (Luca's "already paid" row, 2026-11-18; a person looks)
+   */
+  | "PAID_EARLIER"
+  /**
+   * the text names a díjbekérő paid by exactly its gross: the invoice comes from Számlázz.hu's own Autokassza (Balázs
+   * 2026-10-06, memory 2141), and nothing is written here, so there is no pairing to do
+   */
+  | "PROFORMA"
+  /** the text names an invoice that was paid and cancelled, and a debit of the same amount sent the money back */
+  | "REFUNDED"
   | "CREDIT_USED"
   /** the text names an eBIZ invoice (EINV): not paid through Számlázz.hu, nothing to write on this page */
   | "OTHER_SYSTEM"
@@ -143,6 +157,10 @@ export type BankTransferDecision =
       day: string;
       refusal: BankTransferRefusal;
       detail: string;
+      /** ALREADY_PAID: the invoices Számlázz.hu booked this credit on (the double-payment pass compares them) */
+      invoices?: readonly string[];
+      /** ALREADY_PAID: the OTHER credits that name the same invoice, set by `decideBankTransfers`: one may be a double payment */
+      sharedWith?: readonly string[];
       /** CREDIT_USED by another source: that source's marks on this credit, with their state (6fd8c574) */
       usedElsewhere?: readonly { source: string; state: string }[];
     };
@@ -220,9 +238,70 @@ const NOTHING_TO_PAIR: ReadonlySet<BankTransferRefusal> = new Set([
   "PAYMENT_PROVIDER",
 ]);
 
+/**
+ * A DEBIT THAT MAY BE A REFUND OF A CREDIT (Luca, 2026-11-18, 11 287 062 Ft): the day (value date, else booking date), the
+ * amount without sign, the payee and the text. Read only; only the credit's own refund search uses it.
+ */
+export interface BankRefundDebit {
+  /** ÉÉÉÉ-HH-NN */
+  day: string;
+  amount: string;
+  currency: string;
+  narrative: string;
+  counterpartyName: string | null;
+}
+
+/** One customer for the proforma route: the same Hungarian tax base when both have one, else the same folded name. */
+const sameCustomer = (a: FeedInvoice, b: FeedInvoice): boolean => {
+  const base = (invoice: FeedInvoice) => {
+    const digits = invoice.customerTaxNumber?.replace(/\D/g, "").slice(0, 8);
+    return digits && digits.length === 8 ? digits : null;
+  };
+  const [first, second] = [base(a), base(b)];
+  if (first && second) return first === second;
+  return fold(a.customerName) === fold(b.customerName);
+};
+
+/** Whether the debit's payee is the credit's payer: one folded name holds the other (the bank spells them alike or nearly). */
+const samePayer = (
+  left: string | null | undefined,
+  right: string | null | undefined,
+): boolean => {
+  const [a, b] = [fold(left), fold(right)];
+  if (a.length < 6 || b.length < 6) return false;
+  return a === b || a.includes(b) || b.includes(a);
+};
+
+/**
+ * THE DEBIT THAT SENT A CANCELLED INVOICE'S MONEY BACK (Luca 2026-11-18): the credit paid the invoice in full, the invoice was
+ * cancelled, and a debit of exactly the credit's amount, on or after the credit's day, named the invoice or went to the same
+ * payer. A part refund, an earlier debit, another amount or a stranger's is not it: a person looks.
+ */
+const refundOf = (
+  credit: BankCredit,
+  day: string,
+  invoice: FeedInvoice,
+  debits: readonly BankRefundDebit[],
+): BankRefundDebit | undefined => {
+  const amount = moneyCents(credit.amount);
+  if (amount === null || moneyCents(invoice.grossAmount) !== amount)
+    return undefined;
+  return debits.find(
+    (debit) =>
+      debit.currency === credit.currency &&
+      moneyCents(debit.amount) === amount &&
+      debit.day >= day &&
+      (remittanceInvoiceRefs(debit.narrative).some((ref) =>
+        refMatchesInvoiceNumber(ref, invoice.documentNumber),
+      ) ||
+        samePayer(debit.counterpartyName, credit.counterpartyName)),
+  );
+};
+
 export function decideBankTransfer(
   credit: BankCredit,
   invoices: readonly FeedInvoice[],
+  debits: readonly BankRefundDebit[] = [],
 ): BankTransferDecision {
   const day = credit.valueDate ?? credit.bookingDate;
   const refuse = (
@@ -257,10 +336,77 @@ export function decideBankTransfer(
     return kind ? refuse(kind, "") : refuse("NO_REFERENCE", "");
   }
 
+  // a text naming ONE díjbekérő and nothing else: that proforma's payment (its invoice is Számlázz.hu's own, Autokassza)
+  const proformaRef = refs.length === 1 ? refs[0]! : null;
+  if (proformaRef) {
+    const matching = invoices.filter((invoice) =>
+      refMatchesInvoiceNumber(proformaRef, invoice.documentNumber),
+    );
+    const proformas = matching.filter(
+      (invoice) => invoice.kindCode === "D" && !invoice.cancelled,
+    );
+    const live = matching.some(
+      (invoice) => PAYABLE_KINDS.has(invoice.kindCode) && !invoice.cancelled,
+    );
+    if (!live && proformas.length === 1) {
+      const proforma = proformas[0]!;
+      const label = `${proforma.documentNumber} díjbekérő`;
+      if (proforma.currency !== credit.currency)
+        return refuse("OTHER_CURRENCY", label);
+      const amount = moneyCents(credit.amount);
+      const gross = moneyCents(proforma.grossAmount);
+      if (amount === null || gross === null || amount !== gross)
+        return refuse(
+          "AMOUNT_MISMATCH",
+          amount === null || gross === null
+            ? `${label}: nem olvasható összeg`
+            : `${label}: utalt ${fillerText(amount)}, várt ${fillerText(gross)}`,
+        );
+      // the invoice Számlázz.hu issued from it: the same customer, the same gross, dated on or after the díjbekérő; exactly one
+      const issued = invoices.filter(
+        (invoice) =>
+          PAYABLE_KINDS.has(invoice.kindCode) &&
+          !invoice.cancelled &&
+          invoice.currency === proforma.currency &&
+          moneyCents(invoice.grossAmount) === gross &&
+          sameCustomer(invoice, proforma) &&
+          (!invoice.issueDate ||
+            !proforma.issueDate ||
+            invoice.issueDate >= proforma.issueDate),
+      );
+      const from = issued.length === 1 ? issued[0]! : null;
+      if (!from) return refuse("PROFORMA", label);
+      const rest =
+        moneyCents(from.grossAmount)! - (moneyCents(from.paidAmount) ?? 0n);
+      const thatDay = from.payments
+        .filter(
+          (payment) =>
+            payment.date === day &&
+            (Boolean(payment.bankTransactionId) ||
+              /átutal/i.test(payment.title ?? "")),
+        )
+        .reduce((sum, payment) => sum + (moneyCents(payment.amount) ?? 0n), 0n);
+      if (rest <= 0n && thatDay === amount)
+        return {
+          ...refuse(
+            "ALREADY_PAID",
+            `${from.documentNumber} (a ${proforma.documentNumber} díjbekérőből)`,
+          ),
+          invoices: [from.documentNumber],
+        } as BankTransferDecision;
+      return refuse(
+        "PROFORMA",
+        `${label}; a Számlázz.hu számlája: ${from.documentNumber}, ${rest > 0n ? "még nyitott" : "már kifizetve"}`,
+      );
+    }
+  }
+
   const named: FeedInvoice[] = [];
   /** invoices a bare number named only after the narrowing chose among series: the mark says so (barracuda, #2216 b) */
   const narrowed = new Set<string>();
   const unresolved: string[] = [];
+  /** the refs that name a cancelled invoice whose money went back out: said, not unresolved */
+  const refunded: { number: string; day: string }[] = [];
   for (const ref of refs) {
     const hits = invoices.filter(
       (invoice) =>
@@ -281,6 +427,20 @@ export function decideBankTransfer(
       const notPayable = invoices.filter((invoice) =>
         refMatchesInvoiceNumber(ref, invoice.documentNumber),
       );
+      const cancelledOnes = notPayable.filter(
+        (invoice) => PAYABLE_KINDS.has(invoice.kindCode) && invoice.cancelled,
+      );
+      const refund =
+        cancelledOnes.length === 1 && notPayable.length === 1
+          ? refundOf(credit, day, cancelledOnes[0]!, debits)
+          : undefined;
+      if (refund) {
+        refunded.push({
+          number: cancelledOnes[0]!.documentNumber,
+          day: refund.day,
+        });
+        continue;
+      }
       unresolved.push(
         notPayable.length === 0
           ? `${refLabel(ref)} nincs a feedben`
@@ -298,6 +458,15 @@ export function decideBankTransfer(
     }
   }
   if (unresolved.length > 0) return refuse("UNRESOLVED", unresolved.join(", "));
+  if (refunded.length > 0) {
+    const said = refunded
+      .map((r) => `${r.number} sztornózva, visszafizetve ${r.day}`)
+      .join(", ");
+    // one transfer for the refunded invoice AND others is not decided here: a person splits it
+    return refunded.length === refs.length
+      ? refuse("REFUNDED", said)
+      : refuse("UNRESOLVED", `${said}; egy utalás több számlára`);
+  }
   const numbers = named.map((invoice) => invoice.documentNumber).join(", ");
   if (named.some((invoice) => invoice.currency !== credit.currency))
     return refuse("OTHER_CURRENCY", numbers);
@@ -333,6 +502,25 @@ export function decideBankTransfer(
     if (rest > 0n) open.push({ invoice, cents: rest });
     else if (thatDay > 0n) paidBefore.push(invoice.documentNumber);
   }
+  if (
+    open.length === 0 &&
+    paidBefore.length === 0 &&
+    expected === 0n &&
+    amount !== null &&
+    amount > 0n
+  ) {
+    // every named invoice was paid on another day: this credit is not their payment, and may be a second one
+    const said = named
+      .map((invoice) => {
+        const days = invoice.payments.map((payment) => payment.date).sort();
+        const last = days[days.length - 1];
+        return last
+          ? `${invoice.documentNumber}: kifizetve ${last}`
+          : `${invoice.documentNumber}: már kifizetve`;
+      })
+      .join(", ");
+    return refuse("PAID_EARLIER", said);
+  }
   if (amount !== expected)
     return refuse(
       "AMOUNT_MISMATCH",
@@ -346,7 +534,11 @@ export function decideBankTransfer(
       "CREDIT_USED",
       `${elsewhere.source}: ${elsewhere.invoiceNumber}`,
     );
-  if (open.length === 0) return refuse("ALREADY_PAID", numbers);
+  if (open.length === 0)
+    return {
+      ...refuse("ALREADY_PAID", numbers),
+      invoices: named.map((invoice) => invoice.documentNumber),
+    } as BankTransferDecision;
   return {
     markable: true,
     creditId: credit.id,
@@ -364,6 +556,51 @@ export function decideBankTransfer(
       sourceRef: credit.id,
     })),
   };
+}
+
+/**
+ * THE DECISIONS OF A LIST OF CREDITS, with the one thing a single decision cannot see: two credits that both name the same
+ * invoice, each already booked on it (Luca 2026-11-18, acrobot 56014: "if another credit also pairs to the same invoice, flag a
+ * possible double payment"). One invoice paid once and two credits for it the same day cannot both be its payment. The OTHER
+ * credit's ids go on each decision (`sharedWith`), and the page and the plan say so.
+ */
+export function decideBankTransfers(
+  credits: readonly BankCredit[],
+  invoices: readonly FeedInvoice[],
+  debits: readonly BankRefundDebit[] = [],
+): BankTransferDecision[] {
+  const decisions = credits.map((credit) =>
+    decideBankTransfer(credit, invoices, debits),
+  );
+  const namedBy = (index: number): string[] => {
+    const decision = decisions[index]!;
+    const marked = (credits[index]!.existingMarks ?? [])
+      .filter((mark) => mark.state !== "FAILED")
+      .map((mark) => mark.invoiceNumber);
+    return [
+      ...(decision.markable
+        ? decision.marks.map((mark) => mark.invoiceNumber)
+        : decision.refusal === "ALREADY_PAID"
+          ? (decision.invoices ?? [])
+          : []),
+      ...marked,
+    ];
+  };
+  return decisions.map((decision, index) => {
+    if (
+      decision.markable ||
+      decision.refusal !== "ALREADY_PAID" ||
+      !decision.invoices?.length
+    )
+      return decision;
+    const mine = new Set(decision.invoices);
+    const sharedWith = credits.flatMap((other, otherIndex) =>
+      otherIndex !== index && namedBy(otherIndex).some((n) => mine.has(n))
+        ? [other.id]
+        : [],
+    );
+    return sharedWith.length > 0 ? { ...decision, sharedWith } : decision;
+  });
 }
 
 /**
@@ -414,9 +651,12 @@ export function bankTransferPlanFrom(
       reason: decision.refusal,
       key: decision.creditId,
       attention:
-        decision.refusal !== "ALREADY_PAID" &&
-        decision.refusal !== "OTHER_SYSTEM" &&
-        !settledElsewhere(decision),
+        // already paid is settled unless another credit names the same invoice; a díjbekérő and a refunded invoice need nobody
+        (decision.refusal === "ALREADY_PAID"
+          ? Boolean(decision.sharedWith?.length)
+          : decision.refusal !== "OTHER_SYSTEM" &&
+            decision.refusal !== "PROFORMA" &&
+            decision.refusal !== "REFUNDED") && !settledElsewhere(decision),
       ...(decision.detail ? { detail: decision.detail } : {}),
     });
   }
@@ -507,6 +747,22 @@ export async function loadBankCredit(
   };
 }
 
+const FEED_SELECT = {
+  documentNumber: true,
+  kindCode: true,
+  cancelled: true,
+  currency: true,
+  customerName: true,
+  customerTaxNumber: true,
+  issueDate: true,
+  grossAmount: true,
+  paidAmount: true,
+  paymentsKnown: true,
+  payments: true,
+  paymentMethod: true,
+  paymentMethodUnified: true,
+} as const;
+
 /** Every Számlázz.hu invoice the texts could name: the latest feed version of each number. Read only. */
 export async function loadFeedInvoicesFor(
   texts: readonly string[],
@@ -545,24 +801,37 @@ export async function loadFeedInvoicesFor(
       ],
     },
     orderBy: [{ feedReceivedAt: "desc" }, { id: "asc" }],
-    select: {
-      documentNumber: true,
-      kindCode: true,
-      cancelled: true,
-      currency: true,
-      customerName: true,
-      customerTaxNumber: true,
-      grossAmount: true,
-      paidAmount: true,
-      paymentsKnown: true,
-      payments: true,
-      paymentMethod: true,
-      paymentMethodUnified: true,
-    },
+    select: FEED_SELECT,
   });
+  // the invoice Számlázz.hu's Autokassza issued from a named díjbekérő is not named in the text: look for it by the same customer,
+  // the same gross, on or after the díjbekérő's day (the decision takes it only when exactly one fits)
+  const proformas = documents.filter(
+    (row) => row.kindCode === "D" && !row.cancelled,
+  );
+  const issued =
+    proformas.length === 0
+      ? []
+      : await prisma.externalBillingDocument.findMany({
+          where: {
+            source: "SZAMLAZZ",
+            cancelled: false,
+            kindCode: { in: [...PAYABLE_KINDS] },
+            OR: proformas.map((proforma) => ({
+              customerName: {
+                equals: proforma.customerName,
+                mode: "insensitive" as const,
+              },
+              grossAmount: proforma.grossAmount,
+              currency: proforma.currency,
+              issueDate: { gte: proforma.issueDate },
+            })),
+          },
+          orderBy: [{ feedReceivedAt: "desc" }, { id: "asc" }],
+          select: FEED_SELECT,
+        });
   // the latest feed version of each number
   const latest = new Map<string, (typeof documents)[number]>();
-  for (const row of documents)
+  for (const row of [...documents, ...issued])
     if (!latest.has(row.documentNumber)) latest.set(row.documentNumber, row);
   return [...latest.values()].map((row) => ({
     documentNumber: row.documentNumber,
@@ -571,6 +840,7 @@ export async function loadFeedInvoicesFor(
     currency: row.currency,
     customerName: row.customerName,
     customerTaxNumber: row.customerTaxNumber,
+    issueDate: isoDay(row.issueDate),
     grossAmount: row.grossAmount.toFixed(2),
     paidAmount: row.paidAmount.toFixed(2),
     paymentsKnown: row.paymentsKnown,
@@ -610,6 +880,7 @@ export async function loadFeedInvoicesFor(
 export async function loadBankTransfers(from: string): Promise<{
   credits: (BankCredit & { counterpartyName: string | null })[];
   invoices: FeedInvoice[];
+  debits: BankRefundDebit[];
 }> {
   const rows = await prisma.bankTransaction.findMany({
     where: {
@@ -627,16 +898,56 @@ export async function loadBankTransfers(from: string): Promise<{
   return {
     credits,
     invoices: await loadFeedInvoicesFor(credits.map((c) => c.narrative)),
+    debits: await loadRefundCandidates(rows),
   };
+}
+
+/**
+ * The debits that could be a credit's refund: the same amount, booked on or after the credit's day. Only the amounts of the
+ * credits are asked (a few hundred numbers), never the whole debit side. Read only.
+ */
+export async function loadRefundCandidates(
+  credits: readonly { amount: Prisma.Decimal | string; bookingDate: Date }[],
+): Promise<BankRefundDebit[]> {
+  if (credits.length === 0) return [];
+  const earliest = credits.reduce(
+    (min, credit) => (credit.bookingDate < min ? credit.bookingDate : min),
+    credits[0]!.bookingDate,
+  );
+  const rows = await prisma.bankTransaction.findMany({
+    where: {
+      direction: "DEBIT",
+      duplicateOfId: null,
+      duplicateMarkedAt: null,
+      bookingDate: { gte: earliest },
+      amount: {
+        in: [...new Set(credits.map((credit) => String(credit.amount)))],
+      },
+    },
+    orderBy: [{ bookingDate: "asc" }, { id: "asc" }],
+    select: {
+      amount: true,
+      currency: true,
+      bookingDate: true,
+      valueDate: true,
+      narrative: true,
+      counterpartyName: true,
+    },
+  });
+  return rows.map((row) => ({
+    day: isoDay(row.valueDate ?? row.bookingDate),
+    amount: row.amount.abs().toFixed(2),
+    currency: row.currency,
+    narrative: row.narrative,
+    counterpartyName: row.counterpartyName,
+  }));
 }
 
 export async function bankTransferPaidMarkPlan(
   from: string,
 ): Promise<PaidMarkPlan> {
-  const { credits, invoices } = await loadBankTransfers(from);
-  return bankTransferPlanFrom(
-    credits.map((credit) => decideBankTransfer(credit, invoices)),
-  );
+  const { credits, invoices, debits } = await loadBankTransfers(from);
+  return bankTransferPlanFrom(decideBankTransfers(credits, invoices, debits));
 }
 
 /** The decision for one pairable credit and the typed (or its own) text; null when there is no such credit. */
@@ -649,6 +960,14 @@ export async function decideBankCredit(
   return decideBankTransfer(
     { ...credit, narrative: text },
     await loadFeedInvoicesFor([text]),
+    await loadRefundCandidates([
+      {
+        amount: credit.amount,
+        bookingDate: new Date(
+          `${credit.valueDate ?? credit.bookingDate}T00:00:00Z`,
+        ),
+      },
+    ]),
   );
 }
 
@@ -747,10 +1066,8 @@ export async function runBankTransferMarks(
     store: PaymentMarkStore;
   },
 ): Promise<PaidMarksRunResult> {
-  const { credits, invoices } = await loadBankTransfers(from);
-  const decisions = credits.map((credit) =>
-    decideBankTransfer(credit, invoices),
-  );
+  const { credits, invoices, debits } = await loadBankTransfers(from);
+  const decisions = decideBankTransfers(credits, invoices, debits);
   const plan = bankTransferPlanFrom(decisions);
   const exceptions = [...plan.exceptions];
   const lines: PaymentMarkLine[] = [];

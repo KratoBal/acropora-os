@@ -5,8 +5,10 @@ import {
   bankTransferListed,
   bankTransferPlanFrom,
   decideBankTransfer,
+  decideBankTransfers,
   runBankTransferMarks,
   type BankCredit,
+  type BankRefundDebit,
   type FeedInvoice,
 } from "./bank-transfer-paid-marks.js";
 import { PAID_MARK_SOURCES } from "./paid-marks/paid-marks-auto.scheduler.js";
@@ -504,19 +506,19 @@ describe("our numbers in other shapes, in a decision", () => {
   const detailOf = (decision: ReturnType<typeof decideBankTransfer>) =>
     decision.markable ? "" : `${decision.refusal}: ${decision.detail}`;
 
-  it("a díjbekérő by its full number: unresolved, with the reason, and listed", () => {
+  it("a díjbekérő by its full number, paid by another amount: said with both amounts, and listed", () => {
     const decision = decideBankTransfer(
       credit({ narrative: "D-CRPR-7", amount: "1121819.00" }),
       [own("D-CRPR-7", { kindCode: "D" })],
     );
     assert.equal(
       detailOf(decision),
-      "UNRESOLVED: D-CRPR-7 nem fizetendő: D-CRPR-7 díjbekérő",
+      "AMOUNT_MISMATCH: D-CRPR-7 díjbekérő: utalt 1121819.00, várt 11287062.00",
     );
     assert.equal(bankTransferListed(decision, [], false), true);
   });
 
-  it("a cancelled invoice by its full number: unresolved, and the customer's references are not ours", () => {
+  it("a cancelled invoice by its full number, with no refund found: unresolved, and the customer's references are not ours", () => {
     const decision = decideBankTransfer(
       credit({
         narrative: "KXT/2026/003674 E-CRPR-2026-1 S/2026/0004363",
@@ -777,5 +779,296 @@ describe("credits that are not an invoice's payment get their own reason", () =>
         narrative,
       );
     }
+  });
+});
+
+/*
+  LUCA'S THREE BANK ROWS (2026-11-18, acrobot 55993, 56006, 56014). WHAT TURNS THIS RED:
+  - a credit naming a díjbekérő by its number stays "nem fizetendő" / manual pairing (it is the proforma's payment, the invoice
+    comes from Számlázz.hu's Autokassza); one with a different amount is not said so; an invoice found from the proforma not
+    named, or one that is still open written as paid (nothing is written for a proforma);
+  - a credit whose invoice was cancelled and whose money went back out stays "nem fizetendő: sztornózott" (a refund of the same
+    amount, on or after the credit's day, naming the invoice or going to the same payer); a refund of another amount, an earlier
+    one or one to somebody else taken for it;
+  - a credit Számlázz.hu already booked on its invoice stands as something to decide, or a second credit naming the same invoice
+    is not flagged as a possible double payment.
+*/
+describe("Luca's three bank rows", () => {
+  const PAYER = "BODNÁR FERENC ÁDÁM";
+  const proforma = (over: Partial<FeedInvoice> = {}): FeedInvoice => ({
+    ...invoice("x", "1121819.00", {
+      documentNumber: "D-CRPR-7",
+      kindCode: "D",
+      customerName: "Bodnár Ferenc Ádám",
+      customerTaxNumber: null,
+      issueDate: "2026-11-10",
+    }),
+    ...over,
+  });
+  const dijbekero = (over: Partial<BankCredit> = {}) =>
+    credit({
+      narrative: "D-CRPR-7",
+      amount: "1121819.00",
+      bookingDate: "2026-11-16",
+      counterpartyName: PAYER,
+      ...over,
+    });
+  const fromProforma = (over: Partial<FeedInvoice> = {}): FeedInvoice =>
+    invoice("x", "1121819.00", {
+      documentNumber: "ACRW-2026/00120",
+      customerName: "Bodnár Ferenc Ádám",
+      customerTaxNumber: null,
+      issueDate: "2026-11-16",
+      ...over,
+    });
+
+  it("a díjbekérő paid by exactly its gross: its own state, nothing to write, no attention", () => {
+    const decision = decideBankTransfer(dijbekero(), [proforma()]);
+    assert.equal(!decision.markable && decision.refusal, "PROFORMA");
+    assert.match(!decision.markable ? decision.detail : "", /D-CRPR-7/);
+    assert.equal(bankTransferListed(decision, [], false), true);
+    const plan = bankTransferPlanFrom([decision]);
+    assert.deepEqual(plan.marks, []);
+    assert.deepEqual(
+      plan.exceptions.map((e) => [e.reason, e.attention]),
+      [["PROFORMA", false]],
+    );
+  });
+
+  it("a díjbekérő paid by another amount: the amounts are said, and a person looks", () => {
+    const decision = decideBankTransfer(dijbekero({ amount: "1000000.00" }), [
+      proforma(),
+    ]);
+    assert.equal(!decision.markable && decision.refusal, "AMOUNT_MISMATCH");
+    assert.match(
+      !decision.markable ? decision.detail : "",
+      /D-CRPR-7 díjbekérő: utalt 1000000\.00, várt 1121819\.00/,
+    );
+  });
+
+  it("the invoice Számlázz.hu issued from it, already paid by this transfer: already paid, the invoice named", () => {
+    const issued = fromProforma({
+      paidAmount: "1121819.00",
+      payments: [
+        {
+          date: "2026-11-16",
+          amount: "1121819",
+          title: "átutalás",
+          bankTransactionId: "szhu-9",
+        },
+      ],
+    });
+    const decision = decideBankTransfer(dijbekero(), [proforma(), issued]);
+    assert.equal(!decision.markable && decision.refusal, "ALREADY_PAID");
+    assert.match(
+      !decision.markable ? decision.detail : "",
+      /ACRW-2026\/00120.*D-CRPR-7/,
+    );
+  });
+
+  it("the invoice from it still open: the proforma state, the invoice named, nothing written", () => {
+    const decision = decideBankTransfer(dijbekero(), [
+      proforma(),
+      fromProforma(),
+    ]);
+    assert.equal(!decision.markable && decision.refusal, "PROFORMA");
+    assert.match(!decision.markable ? decision.detail : "", /ACRW-2026\/00120/);
+    assert.deepEqual(bankTransferPlanFrom([decision]).marks, []);
+  });
+
+  it("an invoice from before the díjbekérő, a cancelled one, another buyer's or two candidates are not 'the one issued from it'", () => {
+    const named = (candidates: FeedInvoice[]) => {
+      const decision = decideBankTransfer(dijbekero(), [
+        proforma(),
+        ...candidates,
+      ]);
+      return !decision.markable ? decision.detail : "";
+    };
+    assert.doesNotMatch(
+      named([fromProforma({ issueDate: "2026-11-01" })]),
+      /ACRW-2026/,
+    );
+    assert.doesNotMatch(
+      named([fromProforma({ cancelled: true })]),
+      /ACRW-2026/,
+    );
+    assert.doesNotMatch(
+      named([fromProforma({ customerName: "Más Vevő Kft." })]),
+      /ACRW-2026/,
+    );
+    assert.doesNotMatch(
+      named([
+        fromProforma(),
+        fromProforma({ documentNumber: "ACRW-2026/00121" }),
+      ]),
+      /ACRW-2026/,
+    );
+  });
+
+  // the cancelled invoice paid, then the money sent back (Luca: 11 287 062 Ft, E-CRPR-2026-1)
+  const cancelled = () =>
+    invoice("x", "11287062.00", {
+      documentNumber: "E-CRPR-2026-1",
+      cancelled: true,
+      customerName: "Fővárosi Állat- és Növénykert",
+    });
+  const returned = (over: Partial<BankCredit> = {}) =>
+    credit({
+      narrative: "HCUT/2026/003674 E-CRPR-2026-1 S/2026/0004363",
+      amount: "11287062.00",
+      bookingDate: "2026-11-03",
+      counterpartyName: "FŐVÁROSI ÁLLAT- ÉS NÖVÉNYKERT",
+      ...over,
+    });
+  const refund = (over: Partial<BankRefundDebit> = {}): BankRefundDebit => ({
+    day: "2026-11-05",
+    amount: "11287062.00",
+    currency: "HUF",
+    narrative: "E-CRPR-2026-1 utalás vissza",
+    counterpartyName: "Fővárosi Állat- és Növénykert",
+    ...over,
+  });
+
+  it("a cancelled invoice whose money went back out: visszafizetve, with the day, nothing written", () => {
+    const decision = decideBankTransfer(returned(), [cancelled()], [refund()]);
+    assert.equal(!decision.markable && decision.refusal, "REFUNDED");
+    assert.match(
+      !decision.markable ? decision.detail : "",
+      /E-CRPR-2026-1.*2026-11-05/,
+    );
+    const plan = bankTransferPlanFrom([decision]);
+    assert.deepEqual(plan.marks, []);
+    assert.deepEqual(
+      plan.exceptions.map((e) => [e.reason, e.attention]),
+      [["REFUNDED", false]],
+    );
+  });
+
+  it("the refund naming the invoice or going to the same payer both count; a stranger's, an earlier or another amount do not", () => {
+    const refusalFor = (debits: BankRefundDebit[]) => {
+      const decision = decideBankTransfer(returned(), [cancelled()], debits);
+      return !decision.markable && decision.refusal;
+    };
+    assert.equal(
+      refusalFor([refund({ counterpartyName: "Valaki Más Kft." })]),
+      "REFUNDED",
+    ); // the narrative names the invoice
+    assert.equal(
+      refusalFor([refund({ narrative: "visszautalás" })]),
+      "REFUNDED",
+    ); // the same payer
+    assert.equal(
+      refusalFor([
+        refund({ narrative: "visszautalás", counterpartyName: "Valaki Más" }),
+      ]),
+      "UNRESOLVED",
+    );
+    assert.equal(refusalFor([refund({ day: "2026-11-02" })]), "UNRESOLVED");
+    assert.equal(refusalFor([refund({ amount: "11287061.99" })]), "UNRESOLVED");
+    assert.equal(refusalFor([refund({ currency: "EUR" })]), "UNRESOLVED");
+    assert.equal(refusalFor([]), "UNRESOLVED");
+  });
+
+  it("a cancelled invoice and a live one in one text are not 'refunded' as a whole", () => {
+    const decision = decideBankTransfer(
+      returned({ narrative: "E-CRPR-2026-1 2026/00083" }),
+      [cancelled(), ...balazs()],
+      [refund()],
+    );
+    assert.equal(!decision.markable && decision.refusal, "UNRESOLVED");
+  });
+
+  // the credit Számlázz.hu already booked (Luca: 190 488 Ft, 2026/00076): it is that invoice's payment
+  const booked = () =>
+    invoice("00076", "190488.00", {
+      paidAmount: "190488.00",
+      payments: [
+        {
+          date: "2026-10-12",
+          amount: "190488",
+          title: "átutalás",
+          bankTransactionId: "szhu-7",
+        },
+      ],
+    });
+  const bookedCredit = (id: string, over: Partial<BankCredit> = {}) =>
+    credit({
+      id,
+      narrative: "HCUT/2026/003398 2026/00076 S/2026/0004190",
+      amount: "190488.00",
+      bookingDate: "2026-10-12",
+      ...over,
+    });
+
+  it("a credit Számlázz.hu booked, with no other credit naming the invoice: already paid, no attention", () => {
+    const [decision] = decideBankTransfers([bookedCredit("a")], [booked()]);
+    assert.equal(!decision!.markable && decision!.refusal, "ALREADY_PAID");
+    assert.equal(!decision!.markable && decision!.sharedWith, undefined);
+    assert.equal(
+      bankTransferPlanFrom([decision!]).exceptions[0]!.attention,
+      false,
+    );
+  });
+
+  it("a second credit naming the same invoice the same day: both flagged as a possible double payment, and the plan asks a person", () => {
+    const decisions = decideBankTransfers(
+      [bookedCredit("a"), bookedCredit("b")],
+      [booked()],
+    );
+    for (const [index, other] of [
+      [0, "b"],
+      [1, "a"],
+    ] as const) {
+      const decision = decisions[index]!;
+      assert.equal(!decision.markable && decision.refusal, "ALREADY_PAID");
+      assert.deepEqual(!decision.markable && decision.sharedWith, [other]);
+    }
+    assert.deepEqual(
+      bankTransferPlanFrom(decisions).exceptions.map((e) => e.attention),
+      [true, true],
+    );
+  });
+
+  it("a credit of another day for an invoice paid long before: paid earlier, a person looks (it may be a double payment)", () => {
+    const decision = decideBankTransfer(
+      bookedCredit("b", { bookingDate: "2026-10-14" }),
+      [booked()],
+    );
+    assert.equal(!decision.markable && decision.refusal, "PAID_EARLIER");
+    assert.match(
+      !decision.markable ? decision.detail : "",
+      /ACRW-2026\/00076.*2026-10-12/,
+    );
+    assert.equal(
+      bankTransferPlanFrom([decision]).exceptions[0]!.attention,
+      true,
+    );
+    assert.equal(bankTransferListed(decision, [], false), true);
+  });
+
+  it("a part-paid invoice with another day's payment is still an amount question, not 'paid earlier'", () => {
+    const part = invoice("00076", "200000.00", {
+      paidAmount: "10000.00",
+      payments: [{ date: "2026-10-01", amount: "10000", title: "átutalás" }],
+    });
+    const decision = decideBankTransfer(
+      bookedCredit("b", { amount: "5000.00" }),
+      [part],
+    );
+    assert.equal(!decision.markable && decision.refusal, "AMOUNT_MISMATCH");
+  });
+
+  it("a credit that is paired on another invoice is not a second credit for this one", () => {
+    const decisions = decideBankTransfers(
+      [
+        bookedCredit("a"),
+        credit({ id: "c", narrative: "2026/00084", amount: "20000.00" }),
+      ],
+      [booked(), invoice("00084", "20000.00")],
+    );
+    assert.equal(
+      !decisions[0]!.markable && decisions[0]!.sharedWith,
+      undefined,
+    );
   });
 });
