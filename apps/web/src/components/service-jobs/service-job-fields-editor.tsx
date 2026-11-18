@@ -47,6 +47,7 @@ export function ServiceJobFieldsEditor({
   onSaved,
   open,
   onOpenChange,
+  maintenance = false,
 }: {
   jobId: string;
   token: string;
@@ -55,6 +56,8 @@ export function ServiceJobFieldsEditor({
   onSaved: () => void | Promise<void>;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Karbantartási lapon a feliratok a lap szavát mondják: nem hibajegy, és nincs bejelentése (Balázs, 2026-11-18 11:31 UTC; acrobot 56118). */
+  maintenance?: boolean;
 }) {
   const iranyitott = open !== undefined && onOpenChange !== undefined;
   const [nyitvaBelso, setNyitvaBelso] = useState(false);
@@ -103,7 +106,11 @@ export function ServiceJobFieldsEditor({
         tunetetne el, amiert azok a mondatok leteznek.
       */
       setHiba(
-        cause instanceof Error ? cause.message : "A hibajegy nem módosítható.",
+        cause instanceof Error
+          ? cause.message
+          : maintenance
+            ? "A karbantartási lap nem módosítható."
+            : "A hibajegy nem módosítható.",
       );
     } finally {
       setMent(false);
@@ -119,7 +126,9 @@ export function ServiceJobFieldsEditor({
 
   return (
     <ServicePanel className="space-y-3">
-      <ServicePanelHeading title="A bejelentés szerkesztése" />
+      <ServicePanelHeading
+        title={maintenance ? "A lap szerkesztése" : "A bejelentés szerkesztése"}
+      />
       {hiba ? (
         <p role="alert" className="text-sm text-rose-700">
           {hiba}
@@ -128,7 +137,9 @@ export function ServiceJobFieldsEditor({
       <label className="block space-y-1">
         <span className="text-sm font-medium text-dusk-700">Cím</span>
         <PilotInput
-          aria-label="A hibajegy címe"
+          aria-label={
+            maintenance ? "A karbantartási lap címe" : "A hibajegy címe"
+          }
           value={cim}
           maxLength={300}
           onChange={setCim}
@@ -137,7 +148,9 @@ export function ServiceJobFieldsEditor({
       <label className="block space-y-1">
         <span className="text-sm font-medium text-dusk-700">Leírás</span>
         <Textarea
-          aria-label="A hibajegy leírása"
+          aria-label={
+            maintenance ? "A karbantartási lap leírása" : "A hibajegy leírása"
+          }
           value={leiras}
           rows={6}
           maxLength={4000}

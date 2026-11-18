@@ -158,7 +158,7 @@ export function MembershipSection({
         {context ? (
           <div data-testid="drawer-context" className="mt-1 space-y-1">
             <p className="text-pilot-grey-700">
-              {contextCardTitle(context.type)} ·{" "}
+              {contextCardTitle(context.type, context.jobKind)} ·{" "}
               {contextCardParts(context).join(" · ")}
             </p>
             <button

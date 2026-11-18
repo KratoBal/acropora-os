@@ -864,6 +864,7 @@ export function PilotServiceJobDetailPage({
                 <ServiceJobFieldsEditor
                   jobId={jobId}
                   token={token}
+                  maintenance={maintenance}
                   title={job.title}
                   description={job.description}
                   onSaved={() => load()}
@@ -1103,6 +1104,7 @@ export function PilotServiceJobDetailPage({
                   <ServiceJobPlacementEditor
                     jobId={jobId}
                     token={token}
+                    maintenance={maintenance}
                     customerId={job.customerId}
                     departmentId={job.departmentId}
                     departmentPath={job.departmentPath}

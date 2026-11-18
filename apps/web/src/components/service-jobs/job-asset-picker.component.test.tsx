@@ -146,6 +146,22 @@ describe("JobAssetPicker", () => {
     ).toBeTruthy();
   });
 
+  // a karbantartási lap nem hibajegy (acrobot 56118)
+  it("karbantartási lapon az üres helyszín mondata a lapot nevezi meg", async () => {
+    render(
+      <JobAssetPicker
+        departmentId="unit-9"
+        selected={[]}
+        onChange={() => {}}
+        maintenance
+      />,
+    );
+    expect(
+      await screen.findByText(/A karbantartási lap enélkül is menthető/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/A jegy enélkül/)).toBeNull();
+  });
+
   /**
    * TOBB ESZKOZ VALASZTHATO, es a valasztas FELFELE megy. A komponens nem
    * tarolja a halmazt: igy az urlap egyetlen helyen tudja, mit kuld el.

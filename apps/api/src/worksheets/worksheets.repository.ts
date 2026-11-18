@@ -1107,7 +1107,7 @@ export class WorksheetsRepository extends Repository {
   async ticketPartner(serviceJobId: string) {
     const row = await this.database.serviceJob.findUnique({
       where: { id: serviceJobId },
-      select: { customerId: true },
+      select: { customerId: true, kind: true },
     });
     return row ?? undefined;
   }
@@ -2180,6 +2180,7 @@ export class WorksheetsRepository extends Repository {
   ): Promise<{
     worksheetCreatedById: string | null;
     serviceJobOpenedById: string | null;
+    serviceJobKind: "REPAIR" | "MAINTENANCE" | null;
     rows: {
       id: string;
       body: string;
@@ -2192,7 +2193,7 @@ export class WorksheetsRepository extends Repository {
       where: { id: worksheetId },
       select: {
         createdById: true,
-        serviceJob: { select: { openedById: true } },
+        serviceJob: { select: { openedById: true, kind: true } },
         entries: {
           orderBy: { createdAt: "asc" },
           select: {
@@ -2209,6 +2210,7 @@ export class WorksheetsRepository extends Repository {
     return {
       worksheetCreatedById: worksheet.createdById,
       serviceJobOpenedById: worksheet.serviceJob?.openedById ?? null,
+      serviceJobKind: worksheet.serviceJob?.kind ?? null,
       rows: worksheet.entries.map((row) => ({
         id: row.id,
         body: row.body,

@@ -133,6 +133,11 @@ export interface ConversationContextCard {
   status: string | null;
   createdAt: string | null;
   restricted: boolean;
+  /**
+   * A KAPCSOLT JEGY FAJTÁJA (`SERVICE_JOB` kártyánál): a karbantartási lap nem hibajegy (Balázs, 2026-11-18 11:31 UTC; acrobot 56118), tehát
+   * a felirat és a link ebből jön. Munkalapnál és régi válasznál hiányzik: hibajegynek számít.
+   */
+  jobKind?: "REPAIR" | "MAINTENANCE" | null;
 }
 
 export interface ConversationListItem {
@@ -148,6 +153,8 @@ export interface ConversationListItem {
   unreadCount: number;
   /** 4. fázis: a kötés típusa a listán („Munkalaphoz kapcsolva”); nincs kötés: null. */
   contextType?: ConversationContextType | null;
+  /** `SERVICE_JOB` kötésnél a jegy fajtája (a lista alcíme: hibajegy vagy karbantartási lap); különben hiányzik vagy null. */
+  contextJobKind?: "REPAIR" | "MAINTENANCE" | null;
 }
 
 /**

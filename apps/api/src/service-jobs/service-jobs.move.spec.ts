@@ -24,6 +24,8 @@ const ATADVA = new Date("2026-09-20T12:00:00Z");
 
 function serviceWith(behaviour: {
   status: ServiceJobStatus | null;
+  /** A jegy fajtája; alapból hibajegy (REPAIR). */
+  kind?: "REPAIR" | "MAINTENANCE";
   moved?: boolean;
   /** A LEPES UTANI allapot, ahogy a tarolo mar latja. */
   utana?: ServiceJobStatus;
@@ -52,8 +54,10 @@ function serviceWith(behaviour: {
     | "detail"
     | "documentRemovals"
     | "worksheetSignatureStates"
+    | "kindOf"
   > = {
     statusOf: async () => behaviour.status,
+    kindOf: async () => behaviour.kind ?? "REPAIR",
     /*
       A LEZARASI KAPU EZT OLVASSA. Alapbol URES: a jegyek tobbsegehez nincs lap,
       es Balazs 3. szabalya szerint az ilyen jegy lezarhato. Amelyik allitas a
@@ -266,6 +270,37 @@ describe("egy lépés a hibajegyen", () => {
       },
     );
     assert.equal(calls.length, 0);
+  });
+
+  /* a karbantartási lap nem hibajegy (Balázs, 2026-11-18 11:31 UTC; acrobot 56118): a belső elállás (maintenance-orders, foglalási verseny)
+     ugyanebbe a kapuba fut, és a mondat a lapot nevezi meg. MI PIROSÍT: ha karbantartási lapon "hibajegy" szó áll a mondatban. */
+  it("karbantartási lapon a mondat a lapot nevezi meg, nem a hibajegyet", async () => {
+    const { service } = serviceWith({
+      status: "NEW",
+      kind: "MAINTENANCE",
+      lapok: [
+        {
+          id: "ws-6",
+          number: "BIO-2026-009",
+          hiddenAt: null,
+          handedOverAt: null,
+          versions: [{ status: "SIGNED" }],
+        },
+      ],
+    });
+    await assert.rejects(
+      () => service.move("kt-1", { to: "CANCELLED" }, "user-1", BELSOS),
+      (hiba: unknown) => {
+        const uzenet = (hiba as { message: string }).message;
+        assert.match(
+          uzenet,
+          /^Ez a karbantartási lap nem állítható elállt állapotba\./,
+        );
+        assert.match(uzenet, /vedd le a karbantartási lapról/);
+        assert.doesNotMatch(uzenet, /hibajegy/);
+        return true;
+      },
+    );
   });
 
   it("a jeloletlen lap a lezarast is visszatartja, alairva is", async () => {

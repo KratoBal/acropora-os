@@ -418,6 +418,15 @@ export class MessagesRepository extends Repository {
   }
 
   /** A hibajegy a kártyához és az automatikus tagsághoz (4. fázis). */
+  /** A kapcsolt jegyek fajtája egy lekérdezésben, a beszélgetéslista alcíméhez (acrobot 56118). */
+  serviceJobKinds(ids: readonly string[]) {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.database.serviceJob.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, kind: true },
+    });
+  }
+
   serviceJobForContext(id: string) {
     return this.database.serviceJob.findUnique({
       where: { id },

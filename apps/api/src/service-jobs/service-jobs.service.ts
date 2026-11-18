@@ -193,7 +193,9 @@ export class ServiceJobsService {
       customerId = partnerScope.customerId;
     }
     if (partnerScope.kind === "supplier")
-      throw new NotFoundException("A hibajegy nem található.");
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
 
     /**
      * AZ EREDET-ESZKOZ ES A JEGY PARTNERE NEM MONDHAT ELLENT EGYMASNAK.
@@ -548,7 +550,10 @@ export class ServiceJobsService {
       userIds,
       actorUserId: user.id,
     });
-    if (!updated.ok) throw new NotFoundException("A hibajegy nem található.");
+    if (!updated.ok)
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
 
     const detail = await this.internalDetail(id, user);
 
@@ -797,7 +802,10 @@ export class ServiceJobsService {
       note: `A hibajegy ${valtozott.join(" és ")} módosult.`,
       actorUserId: user.id,
     });
-    if (!ok) throw new NotFoundException("A hibajegy nem található.");
+    if (!ok)
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
 
     return this.detail(id, user);
   }
@@ -809,7 +817,10 @@ export class ServiceJobsService {
   ): Promise<ServiceJobDetail> {
     this.requireWriteScope(user);
     const job = await this.repository.jobAttachState(id);
-    if (!job) throw new NotFoundException("A hibajegy nem található.");
+    if (!job)
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
     if (!job.customerId)
       throw new BadRequestException(
         "Helyszínt csak partnerrel együtt lehet megadni.",
@@ -872,7 +883,10 @@ export class ServiceJobsService {
       worksheetIds: movable.map((sheet) => sheet.id),
       actorUserId: user.id,
     });
-    if (!ok) throw new NotFoundException("A hibajegy nem található.");
+    if (!ok)
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
 
     return this.internalDetail(id, user);
   }
@@ -925,14 +939,19 @@ export class ServiceJobsService {
   ): Promise<void> {
     this.requireWriteScope(user);
     const kind = await this.repository.kindOf(id);
-    if (kind === null) throw new NotFoundException("A hibajegy nem található.");
+    if (kind === null)
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
     const reason = maintenanceBlock(kind, action);
     if (reason) throw new ConflictException(reason);
   }
 
   private requireWriteScope(user: AuthenticatedUser): void {
     if (!mayWriteServiceJob(partnerScopeOf(user)))
-      throw new NotFoundException("A hibajegy nem található.");
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
   }
 
   /**
@@ -966,6 +985,8 @@ export class ServiceJobsService {
       to,
     });
     if (blocking.length === 0) return;
+    // a maintenance sheet is no ticket (acrobot 56118): the sentences name the job by its kind; asked only when the step is refused
+    const lap = await this.jobWords(serviceJobId);
 
     const nev = (sheet: { number: string | null; hidden: boolean }): string => {
       const alap = sheet.number ?? "szám nélküli munkalap";
@@ -990,23 +1011,42 @@ export class ServiceJobsService {
     const alairatlan = nevekAhol("unsigned");
     if (alairatlan)
       reszek.push(
-        `Nincs aláírva: ${alairatlan}. Írasd alá a lapot, vagy ha nem ide tartozik, vedd le a hibajegyről.`,
+        `Nincs aláírva: ${alairatlan}. Írasd alá a lapot, vagy ha nem ide tartozik, vedd le ${lap.rol}.`,
       );
     const jeloletlen = nevekAhol("not-handed-over");
     if (jeloletlen)
       reszek.push(
-        `Az átadás nincs rögzítve: ${jeloletlen}. Jelöld meg a lapon, hogy az átadás megtörtént, vagy vedd le a hibajegyről.`,
+        `Az átadás nincs rögzítve: ${jeloletlen}. Jelöld meg a lapon, hogy az átadás megtörtént, vagy vedd le ${lap.rol}.`,
       );
     if (blocking.some((tetel) => tetel.sheet.hidden))
       reszek.push(
-        "A rejtett lap a hibajegy alatt nem látszik: a munkalap-listán, a „Rejtettek is” jelölővel találod meg.",
+        `A rejtett lap ${lap.alatt} nem látszik: a munkalap-listán, a „Rejtettek is” jelölővel találod meg.`,
       );
 
     const nyito =
       to === "COMPLETED"
-        ? "Ez a hibajegy nem zárható le."
-        : "Ez a hibajegy nem állítható elállt állapotba.";
+        ? `${lap.ez} nem zárható le.`
+        : `${lap.ez} nem állítható elállt állapotba.`;
     throw new BadRequestException([nyito, ...reszek].join(" "));
+  }
+
+  /** A jegy szavai a fajtája szerint: a karbantartási lap nem hibajegy (Balázs, 2026-11-18 11:31 UTC; acrobot 56118). */
+  private async jobWords(
+    id: string,
+  ): Promise<{ a: string; ez: string; rol: string; alatt: string }> {
+    return (await this.repository.kindOf(id)) === "MAINTENANCE"
+      ? {
+          a: "A karbantartási lap",
+          ez: "Ez a karbantartási lap",
+          rol: "a karbantartási lapról",
+          alatt: "a karbantartási lap alatt",
+        }
+      : {
+          a: "A hibajegy",
+          ez: "Ez a hibajegy",
+          rol: "a hibajegyről",
+          alatt: "a hibajegy alatt",
+        };
   }
 
   private async visibilityFor(
@@ -1234,7 +1274,10 @@ export class ServiceJobsService {
       id,
       await this.visibilityFor(user),
     );
-    if (row === null) throw new NotFoundException("A hibajegy nem található.");
+    if (row === null)
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
 
     /**
      * A TOROLT CSATOLMANYOK NYOMA -- A LATHATOSAG UTAN, NEM ELOTTE.
@@ -1490,7 +1533,10 @@ export class ServiceJobsService {
   ) {
     this.requireWriteScope(user);
     const job = await this.repository.jobAttachState(jobId);
-    if (job === null) throw new NotFoundException("A hibajegy nem található.");
+    if (job === null)
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
 
     const sheet = await this.repository.worksheetAttachState(worksheetId);
     if (sheet === null)
@@ -1583,7 +1629,10 @@ export class ServiceJobsService {
   async setPartner(jobId: string, customerId: string, user: AuthenticatedUser) {
     this.requireWriteScope(user);
     const job = await this.repository.jobAttachState(jobId);
-    if (job === null) throw new NotFoundException("A hibajegy nem található.");
+    if (job === null)
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
     if (job.customerId !== null)
       throw new ConflictException(
         "Ennek a hibajegynek már van partnere. A partner megváltoztatása átsorolás, arra ma nincs út.",
@@ -1629,7 +1678,10 @@ export class ServiceJobsService {
     // szabad kell hogy legyen, ha a partner idokozben elmozdult -- kulonben
     // epp a hibas allapotot zarnank be.
     const job = await this.repository.jobAttachState(jobId);
-    if (job === null) throw new NotFoundException("A hibajegy nem található.");
+    if (job === null)
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
 
     const sheet = await this.repository.worksheetAttachState(worksheetId);
     if (sheet === null)
@@ -1705,7 +1757,9 @@ export class ServiceJobsService {
      */
     const status = await this.repository.statusOf(id);
     if (status === null)
-      throw new NotFoundException("A hibajegy nem található.");
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
     await this.repository.setHidden(id, hidden ? new Date() : null, user.id);
   }
 
@@ -1717,13 +1771,16 @@ export class ServiceJobsService {
   ) {
     this.requireWriteScope(user);
     const from = await this.repository.statusOf(id);
-    if (from === null) throw new NotFoundException("A hibajegy nem található.");
+    if (from === null)
+      throw new NotFoundException(
+        "A hibajegy vagy karbantartási lap nem található.",
+      );
 
     if (!isServiceJobStepAllowed(from, input.to)) {
       const lehet = allowedServiceJobSteps(from);
       throw new BadRequestException(
         lehet.length === 0
-          ? "Ez a hibajegy lezárult, nincs több lépése."
+          ? `${(await this.jobWords(id)).ez} lezárult, nincs több lépése.`
           : `Ebből az állapotból ezek a lépések mehetnek: ${lehet.join(", ")}.`,
       );
     }
@@ -1772,7 +1829,7 @@ export class ServiceJobsService {
     // csendben, hanem megmondjuk, hogy elmozdult alattunk.
     if (!moved.ok)
       throw new ConflictException(
-        "A hibajegy időközben másik állapotba került. Töltsd újra, és nézd meg, mi történt.",
+        `${(await this.jobWords(id)).a} időközben másik állapotba került. Töltsd újra, és nézd meg, mi történt.`,
       );
 
     /**

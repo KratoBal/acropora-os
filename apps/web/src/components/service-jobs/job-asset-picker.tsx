@@ -53,12 +53,15 @@ export function JobAssetPicker({
   departmentId,
   selected,
   onChange,
+  maintenance = false,
 }: {
   /** A kivalasztott helyszin. Ures szoveg: meg nincs. */
   departmentId: string;
   /** A mar kivalasztott eszkozok azonositoi. */
   selected: readonly string[];
   onChange: (assetIds: string[]) => void;
+  /** Karbantartási lapon a mondatok a lap szavát mondják, nem a jegyét (Balázs, 2026-11-18 11:31 UTC; acrobot 56118). */
+  maintenance?: boolean;
 }) {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -240,7 +243,10 @@ export function JobAssetPicker({
               kind: "gond",
               text: `${stored}: ez a matrica még szabad, nincs eszközhöz rendelve. Előbb vidd fel az eszközt ezzel a kóddal.`,
             }
-          : { kind: "gond", text: miertNem(stored, eredmeny.asset) },
+          : {
+              kind: "gond",
+              text: miertNem(stored, eredmeny.asset, maintenance),
+            },
       );
     } catch (cause) {
       setCodeState({ kind: "gond", text: kodHiba(stored, cause) });
@@ -312,8 +318,9 @@ export function JobAssetPicker({
         <p className="text-sm text-dusk-500">Eszközök betöltése...</p>
       ) : lathato.length === 0 ? (
         <p className="text-sm text-dusk-500">
-          Ezen a helyszínen nincs nyilvántartott eszköz. A jegy enélkül is
-          megnyitható.
+          {maintenance
+            ? "Ezen a helyszínen nincs nyilvántartott eszköz. A karbantartási lap enélkül is menthető."
+            : "Ezen a helyszínen nincs nyilvántartott eszköz. A jegy enélkül is megnyitható."}
         </p>
       ) : (
         <ul className="max-h-56 space-y-1 overflow-y-auto rounded border p-2">
@@ -364,10 +371,14 @@ export function JobAssetPicker({
  * KET OK VAN, es kulon mondatot kapnak, mert MAS a teendo: a kivezetett eszkoz
  * mar sehol nem all, a masik helyszinen allora pedig ott kell jegyet nyitni.
  */
-function miertNem(code: string, asset: AssetDetail): string {
+function miertNem(
+  code: string,
+  asset: AssetDetail,
+  maintenance: boolean,
+): string {
   if (asset.status === "RETIRED")
     return `${code}: ${asset.name} ki van vezetve, ezért nem választható.`;
-  return `${code}: ${asset.name} MÁS helyszínen áll (${holAll(asset)}), ezért ehhez a jegyhez nem adható hozzá.`;
+  return `${code}: ${asset.name} MÁS helyszínen áll (${holAll(asset)}), ezért ${maintenance ? "ehhez a karbantartási laphoz" : "ehhez a jegyhez"} nem adható hozzá.`;
 }
 
 /**

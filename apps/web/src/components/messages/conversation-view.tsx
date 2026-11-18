@@ -556,7 +556,9 @@ export function ConversationView({
             {conversation.type === "GROUP" ? (
               <p className="text-xs text-pilot-grey-500">
                 {conversation.members.length + 1} tag
-                {context ? ` · ${contextSubtitle(context.type)}` : null}
+                {context
+                  ? ` · ${contextSubtitle(context.type, context.jobKind)}`
+                  : null}
               </p>
             ) : null}
           </div>
@@ -1154,7 +1156,7 @@ function ContextCard({ card }: { card: ConversationContextCard }) {
       className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-pilot-grey-200 bg-pilot-grey-50 px-5 py-3 text-xs"
     >
       <span className="font-semibold tracking-wide text-pilot-accent-warm-text">
-        {contextCardTitle(card.type)}
+        {contextCardTitle(card.type, card.jobKind)}
       </span>
       {contextCardParts(card).map((part) => (
         <span key={part} className="text-pilot-grey-700">

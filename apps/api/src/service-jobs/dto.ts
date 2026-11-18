@@ -245,21 +245,22 @@ export class SetServiceJobAssigneesDto {
  * A HATAROK UGYANAZOK, mint a leirasnal: ugyanaz a `descriptionEditBlocker`,
  * ugyanaz a naplosor. Nem uj ut, egy mezovel tobb.
  */
+// semleges szavak: a hibajegy és a karbantartási lap ugyanezen a végponton szerkeszthető, a validátor a fajtát nem látja (acrobot 56118)
 export class UpdateServiceJobFieldsDto {
   /** A felvitel szabalyaval egyezoen (`CreateServiceJobDto`): 1..300. */
   @IsOptional()
-  @IsString({ message: "A hibajegy címe szöveg legyen." })
-  @MinLength(1, { message: "A hibajegy címét nem lehet üresen hagyni." })
+  @IsString({ message: "A cím szöveg legyen." })
+  @MinLength(1, { message: "A címet nem lehet üresen hagyni." })
   @MaxLength(300, {
-    message: "A hibajegy címe legfeljebb 300 karakter lehet.",
+    message: "A cím legfeljebb 300 karakter lehet.",
   })
   title?: string;
 
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
-  @IsString({ message: "A hibajegy leírása szöveg legyen." })
+  @IsString({ message: "A leírás szöveg legyen." })
   @MaxLength(4000, {
-    message: "A hibajegy leírása legfeljebb 4000 karakter lehet.",
+    message: "A leírás legfeljebb 4000 karakter lehet.",
   })
   description?: string | null;
 }

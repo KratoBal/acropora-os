@@ -73,6 +73,8 @@ export interface ServiceJobPlacementEditorProps {
   worksheets: ServiceJobWorksheetLink[];
   canManage: boolean;
   onSaved: (detail: ServiceJobDetail) => void;
+  /** Karbantartási lapon a mondatok a lap szavát mondják, nem a jegyét (Balázs, 2026-11-18 11:31 UTC; acrobot 56118). */
+  maintenance?: boolean;
 }
 
 export function ServiceJobPlacementEditor({
@@ -85,7 +87,16 @@ export function ServiceJobPlacementEditor({
   worksheets,
   canManage,
   onSaved,
+  maintenance = false,
 }: ServiceJobPlacementEditorProps) {
+  // the job's noun in the sentences below: a maintenance sheet is no ticket (acrobot 56118)
+  const lap = maintenance
+    ? {
+        rol: "a karbantartási lapról",
+        on: "a karbantartási lapon",
+        t: "a karbantartási lapot",
+      }
+    : { rol: "a hibajegyről", on: "a jegyen", t: "a jegyet" };
   const [departments, setDepartments] = useState<WorksheetDepartmentSummary[]>(
     [],
   );
@@ -261,7 +272,7 @@ export function ServiceJobPlacementEditor({
           /* A HIANY IS ALLITAS: egy ures doboz betoltesi hibanak latszik, es a
              kezelo megvarja. Ez a mondat kimondja, hogy nincs mire varni. */
           <p className="mt-1 text-dusk-500">
-            Ehhez a jegyhez nincs eszköz rendelve.
+            {`${maintenance ? "Ehhez a karbantartási laphoz" : "Ehhez a jegyhez"} nincs eszköz rendelve.`}
           </p>
         )}
       </div>
@@ -273,8 +284,7 @@ export function ServiceJobPlacementEditor({
                ertelmetlen keres -- helyszine csak partnernek van. A szerver
                ugyanezt utasitja el, csak egy korrel kesobb. */
             <p className="text-sm text-dusk-500">
-              Ehhez a hibajegyhez még nincs partner, ezért helyszínt sem lehet
-              megadni.
+              {`${maintenance ? "Ehhez a karbantartási laphoz" : "Ehhez a hibajegyhez"} még nincs partner, ezért helyszínt sem lehet megadni.`}
             </p>
           ) : !departmentsLoaded ? (
             <p className="text-sm text-dusk-500">Helyszínek betöltése...</p>
@@ -326,6 +336,7 @@ export function ServiceJobPlacementEditor({
                   departmentId={unit}
                   selected={assetIds}
                   onChange={setAssetIds}
+                  maintenance={maintenance}
                 />
               </div>
               {/*
@@ -345,7 +356,7 @@ export function ServiceJobPlacementEditor({
                 <p className="text-xs text-dusk-500">
                   {worksheets.filter((lap) => lap.number !== null).length}{" "}
                   lezárt munkalap a saját helyszínén marad: a számuk tartalmazza
-                  a helyszín kódját. A még le nem zárt lapok követik a jegyet.
+                  a helyszín kódját. A még le nem zárt lapok követik {lap.t}.
                 </p>
               ) : null}
               {error ? (
@@ -382,10 +393,10 @@ export function ServiceJobPlacementEditor({
       */}
       <ConfirmDialog
         open={confirming}
-        title="Leveszed ezeket az eszközöket a hibajegyről?"
+        title={`Leveszed ezeket az eszközöket ${lap.rol}?`}
         consequence={`Az új helyszínen nem áll: ${dropping
           .map((asset) => `${asset.assetName} (${asset.assetNumber})`)
-          .join(", ")}. A mentés után nem lesz rajta a jegyen.`}
+          .join(", ")}. A mentés után nem lesz rajta ${lap.on}.`}
         recovery="Visszatehető: az eszköz megmarad a nyilvántartásban, és a régi helyszínt visszaválasztva ugyanitt újra felvehető."
         confirmLabel="Mentés"
         busy={saving}
