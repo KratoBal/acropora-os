@@ -220,6 +220,7 @@ describe("a sablon szerkesztője", () => {
       frequency: "WEEKLY",
       assetIds: ["a1"],
       assetCategoryId: null,
+      uniformRecording: false,
       fields: [
         {
           key: "vizora_elotte",
