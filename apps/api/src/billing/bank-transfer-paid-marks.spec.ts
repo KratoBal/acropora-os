@@ -566,8 +566,8 @@ describe("our numbers in other shapes, in a decision", () => {
     assert.equal(detailOf(decision), "OTHER_SYSTEM: EINV000000819");
     assert.equal(bankTransferListed(decision, [], false), false);
     assert.equal(bankTransferListed(decision, [], true), true);
-    const [line] = bankTransferPlanFrom([decision]).exceptions;
-    assert.equal(line?.attention, false);
+    // nothing to pair here: not an exception line at all (a transfer naming none of ours is left out of the plan the same way)
+    assert.deepEqual(bankTransferPlanFrom([decision]).exceptions, []);
   });
 
   it("our own year/number reference beside an eBIZ number wins; a transfer naming neither stays NO_REFERENCE", () => {
@@ -668,5 +668,111 @@ describe("the page's list shows what a person looks at, by the plan's own defini
       balazs(),
     );
     assert.equal(bankTransferListed(missing, [], false), true);
+  });
+});
+
+/*
+  CREDITS THAT ARE NOT AN INVOICE'S PAYMENT (the Banki átutalások survey, 2026-11-18, acrobot 55708): of 127 live credits, 14 came
+  in our own company's name (transfers, EUR->HUF exchange; 16 036 940 Ft), 57 were OTP card-acquiring settlements and 11 SimplePay
+  settlements. All stood as "no reference". WHAT TURNS THIS RED: one of them without its own reason; one listed by default or
+  the plan's attention; a CUSTOMER named alike (not our company, not those providers) swallowed; one that names our invoice
+  read as a non-payment; the reason said only when the text has no reference.
+*/
+describe("credits that are not an invoice's payment get their own reason", () => {
+  const kindOf = (over: Partial<BankCredit>) => {
+    const decision = decideBankTransfer(credit(over), balazs());
+    return decision.markable ? "MARKABLE" : decision.refusal;
+  };
+
+  it("our own company's name: OWN_ACCOUNT, whatever the text (empty, an exchange)", () => {
+    for (const narrative of ["", "362,36 1.000,00 EUR"])
+      assert.equal(
+        kindOf({ narrative, counterpartyName: "ACROPORA KER.ÉS SZOLG.KFT" }),
+        "OWN_ACCOUNT",
+        narrative,
+      );
+    assert.equal(
+      kindOf({ narrative: "", counterpartyName: "Acropora Kft." }),
+      "OWN_ACCOUNT",
+    );
+  });
+
+  it("the OTP card-acquiring settlement, in both spellings the bank wrote: CARD_SETTLEMENT", () => {
+    for (const counterpartyName of [
+      "OTP Bank Nyrt. KELFO Kártyaelfog",
+      "OTP Bank Nyrt. KELFO Kártyaelfogadói Főosztály",
+    ])
+      assert.equal(
+        kindOf({
+          narrative:
+            "Elszamolas a kartya elfogadoval                       61425/2026.11.18",
+          counterpartyName,
+        }),
+        "CARD_SETTLEMENT",
+      );
+    // the text alone says it too, with no partner name
+    assert.equal(
+      kindOf({ narrative: "Elszamolas a kartya elfogadoval 61425/2026.11.14" }),
+      "CARD_SETTLEMENT",
+    );
+  });
+
+  it("the SimplePay settlement: PAYMENT_PROVIDER", () => {
+    assert.equal(
+      kindOf({
+        narrative: "T714027699 report_20261111",
+        counterpartyName: "SIMPLEPAY ZRT.",
+      }),
+      "PAYMENT_PROVIDER",
+    );
+  });
+
+  it("a customer named alike, and an ordinary credit, stay NO_REFERENCE", () => {
+    for (const counterpartyName of [
+      "Acropora Aquarium Kft.",
+      "OTP Bank Nyrt.",
+      "Simple Pay Kft.",
+      "Állatkert",
+      null,
+    ])
+      assert.equal(
+        kindOf({ narrative: "köszönöm", counterpartyName }),
+        "NO_REFERENCE",
+        String(counterpartyName),
+      );
+  });
+
+  it("a credit that names our invoice is that invoice's, whoever sends it", () => {
+    assert.equal(
+      kindOf({
+        narrative: "2026/00084",
+        amount: "20000.00",
+        counterpartyName: "ACROPORA KER.ÉS SZOLG.KFT",
+      }),
+      "MARKABLE",
+    );
+  });
+
+  it("not listed by default, listed with `all`, and not a line of the plan", () => {
+    for (const [narrative, counterpartyName] of [
+      ["", "ACROPORA KER.ÉS SZOLG.KFT"],
+      [
+        "Elszamolas a kartya elfogadoval 61425/2026.11.18",
+        "OTP Bank Nyrt. KELFO",
+      ],
+      ["T714027699 report_20261111", "SIMPLEPAY ZRT."],
+    ] as const) {
+      const decision = decideBankTransfer(
+        credit({ narrative, counterpartyName }),
+        balazs(),
+      );
+      assert.equal(bankTransferListed(decision, [], false), false, narrative);
+      assert.equal(bankTransferListed(decision, [], true), true, narrative);
+      assert.deepEqual(
+        bankTransferPlanFrom([decision]).exceptions,
+        [],
+        narrative,
+      );
+    }
   });
 });

@@ -48,6 +48,8 @@ export interface BankCredit {
   bookingDate: string;
   valueDate: string | null;
   narrative: string;
+  /** who the bank names as the sender; absent when not read (a typed text decides without it) */
+  counterpartyName?: string | null;
   /**
    * The marks already standing on this credit, from ANY source (`sourceRef` = the credit), FAILED left out (barracuda,
    * #2192: one credit's money must not close two sets of invoices). A GLS or Foxpost transfer's credit carries its
@@ -118,7 +120,13 @@ export type BankTransferRefusal =
   | "ALREADY_PAID"
   | "CREDIT_USED"
   /** the text names an eBIZ invoice (EINV): not paid through Számlázz.hu, nothing to write on this page */
-  | "OTHER_SYSTEM";
+  | "OTHER_SYSTEM"
+  /** the credit is in our own company's name: a transfer between our accounts, an exchange */
+  | "OWN_ACCOUNT"
+  /** an OTP card-acquiring settlement: a lump sum of card payments, not one invoice's */
+  | "CARD_SETTLEMENT"
+  /** a SimplePay settlement: the provider's own way of settling */
+  | "PAYMENT_PROVIDER";
 
 export type BankTransferDecision =
   | {
@@ -171,6 +179,47 @@ const couldBeThisTransfers = (day: string) => (invoice: FeedInvoice) => {
   );
 };
 
+/**
+ * THE CREDITS THAT ARE NOT AN INVOICE'S PAYMENT, by the sender and the text (the survey of 2026-11-18, acrobot 55708): our own
+ * company's name (transfers between our accounts, EUR->HUF exchange), the OTP card-acquiring settlement (KELFO) and the SimplePay
+ * settlement. Only a credit whose text names none of our invoices is asked: a reference always wins. The match is accent- and
+ * case-insensitive and anchored (a customer "Acropora Aquarium Kft." or "Simple Pay Kft." is not these): the bank's own spellings
+ * are "ACROPORA KER.ÉS SZOLG.KFT", "OTP Bank Nyrt. KELFO Kártyaelfog(adói Főosztály)" and "SIMPLEPAY ZRT.".
+ */
+const fold = (value: string | null | undefined): string =>
+  (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+export function nonPaymentKind(
+  credit: Pick<BankCredit, "narrative" | "counterpartyName">,
+): "OWN_ACCOUNT" | "CARD_SETTLEMENT" | "PAYMENT_PROVIDER" | null {
+  const name = fold(credit.counterpartyName);
+  if (/^acropora (ker|kft)/.test(name)) return "OWN_ACCOUNT";
+  if (
+    name.includes("kelfo") ||
+    fold(credit.narrative).includes("kartya elfogad")
+  )
+    return "CARD_SETTLEMENT";
+  if (/^simplepay\b/.test(name)) return "PAYMENT_PROVIDER";
+  return null;
+}
+
+/**
+ * The refusals that say "nothing to pair on this page": shown with `all` and said, never listed by default and never the plan's
+ * attention (a transfer naming none of ours, an eBIZ invoice, our own accounts, the card and SimplePay settlements).
+ */
+const NOTHING_TO_PAIR: ReadonlySet<BankTransferRefusal> = new Set([
+  "NO_REFERENCE",
+  "OTHER_SYSTEM",
+  "OWN_ACCOUNT",
+  "CARD_SETTLEMENT",
+  "PAYMENT_PROVIDER",
+]);
+
 export function decideBankTransfer(
   credit: BankCredit,
   invoices: readonly FeedInvoice[],
@@ -203,9 +252,9 @@ export function decideBankTransfer(
   const refs = remittanceInvoiceRefs(credit.narrative);
   if (refs.length === 0) {
     const ebiz = remittanceEbizNumbers(credit.narrative);
-    return ebiz.length > 0
-      ? refuse("OTHER_SYSTEM", ebiz.join(", "))
-      : refuse("NO_REFERENCE", "");
+    if (ebiz.length > 0) return refuse("OTHER_SYSTEM", ebiz.join(", "));
+    const kind = nonPaymentKind(credit);
+    return kind ? refuse(kind, "") : refuse("NO_REFERENCE", "");
   }
 
   const named: FeedInvoice[] = [];
@@ -346,12 +395,7 @@ export function bankTransferListed(
   all: boolean,
 ): boolean {
   if (all || written.length > 0 || decision.markable) return true;
-  return (
-    decision.refusal !== "NO_REFERENCE" &&
-    // an eBIZ invoice (EINV): the reason is said under `all`, but nothing is written here
-    decision.refusal !== "OTHER_SYSTEM" &&
-    !settledElsewhere(decision)
-  );
+  return !NOTHING_TO_PAIR.has(decision.refusal) && !settledElsewhere(decision);
 }
 
 /**
@@ -363,15 +407,14 @@ export function bankTransferPlanFrom(
 ): PaidMarkPlan {
   const exceptions: PaidMarkException[] = [];
   for (const decision of decisions) {
-    if (decision.markable || decision.refusal === "NO_REFERENCE") continue;
+    // nothing to pair here (none of ours named, an eBIZ invoice, our own accounts, the card and SimplePay settlements): not an exception
+    if (decision.markable || NOTHING_TO_PAIR.has(decision.refusal)) continue;
     exceptions.push({
       reference: `jóváírás ${decision.day}`,
       reason: decision.refusal,
       key: decision.creditId,
       attention:
-        decision.refusal !== "ALREADY_PAID" &&
-        decision.refusal !== "OTHER_SYSTEM" &&
-        !settledElsewhere(decision),
+        decision.refusal !== "ALREADY_PAID" && !settledElsewhere(decision),
       ...(decision.detail ? { detail: decision.detail } : {}),
     });
   }

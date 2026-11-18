@@ -8,6 +8,7 @@ import {
   Skeleton,
 } from "@acropora/ui";
 import {
+  BANK_TRANSFER_NOT_A_PAYMENT_LABEL,
   formatMoney,
   hasPermission,
   PERMISSIONS,
@@ -40,9 +41,16 @@ function CreditState({ credit }: { credit: BankTransferCreditView }) {
     );
   if (credit.decision.markable)
     return <PilotBadge variant="teal">Egyezik: a napi futás beírja</PilotBadge>;
+  // not an invoice's payment (our own accounts, the card and SimplePay settlements, an eBIZ invoice): said, grey, nothing to decide
+  const notAPayment =
+    BANK_TRANSFER_NOT_A_PAYMENT_LABEL[credit.decision.refusal];
   return (
     <span className="flex flex-wrap items-center gap-2">
-      <PilotBadge variant="amber">Kézi párosítás kell</PilotBadge>
+      {notAPayment ? (
+        <PilotBadge variant="grey">{notAPayment}</PilotBadge>
+      ) : (
+        <PilotBadge variant="amber">Kézi párosítás kell</PilotBadge>
+      )}
       <span className="text-xs text-pilot-grey-600">
         {credit.decision.reason}
         {credit.decision.detail ? ` (${credit.decision.detail})` : ""}

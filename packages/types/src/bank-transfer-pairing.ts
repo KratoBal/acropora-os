@@ -12,7 +12,10 @@ export type BankTransferRefusalValue =
   | "AMOUNT_MISMATCH"
   | "ALREADY_PAID"
   | "CREDIT_USED"
-  | "OTHER_SYSTEM";
+  | "OTHER_SYSTEM"
+  | "OWN_ACCOUNT"
+  | "CARD_SETTLEMENT"
+  | "PAYMENT_PROVIDER";
 
 /** What the invoice numbers decide against the credit. */
 export type BankTransferDecisionView =
@@ -67,4 +70,23 @@ export const BANK_TRANSFER_REFUSAL_TEXT: Readonly<
     "Ezt a jóváírást már más számla kifizetéseként beírtuk; egy utalás pénze nem zárhat le két számlát.",
   OTHER_SYSTEM:
     "Ez eBIZ-számla (EINV): a kifizetése nem a Számlázz.hu-ba íródik, ezen a lapon nincs mit beírni.",
+  OWN_ACCOUNT:
+    "A saját cég nevén érkezett jóváírás (átvezetés, devizaváltás): nem ügyfélfizetés, nincs mit párosítani.",
+  CARD_SETTLEMENT:
+    "Bankkártya-elfogadói elszámolás (OTP): összesített jóváírás, nem egy számla kifizetése, ezen a lapon nincs mit párosítani.",
+  PAYMENT_PROVIDER:
+    "SimplePay-elszámolás: összesített jóváírás, a SimplePay saját elszámolási útján rendeződik, ezen a lapon nincs mit párosítani.",
+};
+
+/**
+ * The credits that are not an invoice's payment (the survey of 2026-11-18): the badge a row carries instead of "Kézi párosítás
+ * kell". A refusal without an entry here (no reference, unresolved, already paid, used) is a case a person may still decide.
+ */
+export const BANK_TRANSFER_NOT_A_PAYMENT_LABEL: Readonly<
+  Partial<Record<BankTransferRefusalValue, string>>
+> = {
+  OTHER_SYSTEM: "Más rendszer (eBIZ)",
+  OWN_ACCOUNT: "Saját számla",
+  CARD_SETTLEMENT: "Kártya-elszámolás",
+  PAYMENT_PROVIDER: "SimplePay-elszámolás",
 };
