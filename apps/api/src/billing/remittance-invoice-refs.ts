@@ -54,10 +54,10 @@ const CONTINUATION = /\s*([,;+&-]|és)\s*(\d{1,6})/gu;
   SHORTENED NUMBERS AFTER A FULL ONE (Luca, 2026-11-18 14:57 UTC; acrobot 55990): the credit "HC0000007106 E-CRPRW-2026-6,5" names two invoices, the 6 and the 5, and only the first was read. The same
   shapes as the year/number reference (a comma, ; + & or "és" list, a "-" range), but these serials are NOT zero-padded, so a further number is its OWN full serial (`,5` is the 5), it does not replace
   the last digits of the first. What cannot be read without a guess is not read: a number SHORTER than the first (`12,3` is the 3 or the 13) ends the list, like a backward or too long range. A
-  following number is not a member when another digit, a "/" or a "-digit" follows it (a date `2026-11-18`, a `2026/00083` reference).
+  following number is not a member when another digit, a "/" or a "-digit" follows it (a date `2026-11-18`, a `2026/00083` reference), or when it is an AMOUNT: a thousands group (a space and three digits, `3 001 010`) or Ft / HUF / forint after it (barracuda, #2699).
 */
 const LITERAL = new RegExp(
-  String.raw`(?<![A-Za-z0-9])((?:E-CRPRW?|CRPRW?)-(?:19|20)\d{2}-|D-CRPRW?-)(\d{1,6})(?![A-Za-z0-9])((?:${SEPARATOR}\d{1,6}(?![\d/]|-\d|\s*\/))*)`,
+  String.raw`(?<![A-Za-z0-9])((?:E-CRPRW?|CRPRW?)-(?:19|20)\d{2}-|D-CRPRW?-)(\d{1,6})(?![A-Za-z0-9])((?:${SEPARATOR}\d{1,6}(?![\d/]|-\d|\s*\/|\s\d{3}(?!\d)|\s*(?:ft|huf|forint)))*)`,
   "giu",
 );
 const EBIZ_NUMBER = /(?<![A-Za-z0-9])(EINV\d{6,10})(?![A-Za-z0-9])/giu;

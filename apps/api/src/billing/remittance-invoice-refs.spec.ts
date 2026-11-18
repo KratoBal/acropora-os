@@ -298,6 +298,35 @@ describe("shortened numbers after a full E-CRPR / CRPR / D-CRPR number", () => {
     ]);
   });
 
+  /*
+    EGY ÖSSZEG NEM LISTATAG (barracuda, #2699): "E-CRPRW-2026-6, 5000 Ft" az 5000-es számlát, "E-CRPRW-2026-6, 3 001 010 Ft" a 3-ast nevezné (az első ezres csoport). A pontos összeg-kapu a
+    téves párosítást megfogná, de a kézi párosításnál egy idegen számla jelenhetne meg javaslatként. MI PIROSÍT: ha szóköz + számjegy vagy Ft / HUF / forint előtt álló szám taggá lesz.
+  */
+  it("an amount after the number is not a list member (a space and a digit, or Ft / HUF / forint after it)", () => {
+    for (const text of [
+      "E-CRPRW-2026-6, 5000 Ft",
+      "E-CRPRW-2026-6, 3 001 010 Ft",
+      "E-CRPRW-2026-6 + 5000 HUF",
+      "E-CRPRW-2026-6; 12000forint",
+      "E-CRPRW-2026-6,5000Ft",
+    ])
+      assert.deepEqual(literals(text), ["E-CRPRW-2026-6"], text);
+    // and a real list next to words stays a list
+    assert.deepEqual(literals("utalás E-CRPRW-2026-6,5 köszönöm"), [
+      "E-CRPRW-2026-6",
+      "E-CRPRW-2026-5",
+    ]);
+    // a date after the member is not an amount (4 digits, not a thousands group)
+    assert.deepEqual(literals("E-CRPRW-2026-6,5 2026.11.18"), [
+      "E-CRPRW-2026-6",
+      "E-CRPRW-2026-5",
+    ]);
+    assert.deepEqual(literals("E-CRPRW-2026-6, 5"), [
+      "E-CRPRW-2026-6",
+      "E-CRPRW-2026-5",
+    ]);
+  });
+
   it("Luca's credit: 3 001 010 is exactly E-CRPRW-2026-6 (1 165 860) plus E-CRPRW-2026-5 (1 835 150)", () => {
     const result = matchRemittance("HC0000007106 E-CRPRW-2026-6,5", "3001010", [
       { invoiceNumber: "E-CRPRW-2026-6", open: "1165860" },
