@@ -310,7 +310,8 @@ export function HelyszinLetolto() {
       <Text style={styles.title}>Helyszín letöltése a készülékre</Text>
       <Text style={styles.hint}>
         Válaszd ki, hova mész, és töltsd le előre. Térerő nélkül az eszközök
-        adatlapjai, a hibajegyek és a munkalapok így is megnyithatók.
+        adatlapjai, a hibajegyek, a karbantartási lapok és a munkalapok így is
+        megnyithatók.
       </Text>
 
       <Pressable

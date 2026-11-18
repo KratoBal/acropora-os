@@ -20,6 +20,7 @@ import {
   canManageMembers,
   contextCardParts,
   contextCardTitle,
+  LINK_COPY,
 } from "@/lib/messages/phase4";
 import { ROLE_LABELS } from "@/lib/messages/role-labels";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
@@ -177,8 +178,11 @@ export default function ConversationDetailsScreen() {
                 {conversation.context ? (
                   <>
                     <Text style={styles.cardMeta}>
-                      {contextCardTitle(conversation.context.type)} ·{" "}
-                      {contextCardParts(conversation.context).join(" · ")}
+                      {contextCardTitle(
+                        conversation.context.type,
+                        conversation.context.jobKind,
+                      )}{" "}
+                      · {contextCardParts(conversation.context).join(" · ")}
                     </Text>
                     <Pressable
                       accessibilityRole="button"
@@ -203,9 +207,7 @@ export default function ConversationDetailsScreen() {
                       })
                     }
                   >
-                    <Text style={styles.link}>
-                      Kapcsolás munkalaphoz vagy hibajegyhez
-                    </Text>
+                    <Text style={styles.link}>{LINK_COPY.dataScreenLink}</Text>
                   </Pressable>
                 )}
               </View>

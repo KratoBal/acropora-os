@@ -9,6 +9,7 @@ import { LockedScreen } from "@/components/LockedScreen";
 import { RestoringScreen } from "@/components/RestoringScreen";
 import { environment } from "@/config/env";
 import { AuthProvider, useAuth } from "@/lib/auth/AuthProvider";
+import { SERVICE_JOB_LIST_COPY } from "@/lib/service-jobs/list-copy";
 import { MessageStreamProvider } from "@/components/messages/MessageStream";
 import { foregroundNotificationFor } from "@/lib/notifications/push-foreground";
 import { MessagesBadgeSync } from "@/components/messages/MessagesBadge";
@@ -195,7 +196,7 @@ function RootNavigator() {
       */}
       <Stack.Screen
         name="service-jobs/index"
-        options={{ title: "Hibajegyek" }}
+        options={{ title: SERVICE_JOB_LIST_COPY.screenTitle }}
       />
       <Stack.Screen name="service-jobs/[id]" options={{ title: "Hibajegy" }} />
       <Stack.Screen

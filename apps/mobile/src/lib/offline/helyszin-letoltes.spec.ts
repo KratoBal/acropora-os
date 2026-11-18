@@ -189,3 +189,20 @@ describe("a letöltés után újraolvasandó másolatok", () => {
     assert.ok(kulcsok.includes("offline-service-job"));
   });
 });
+
+/*
+  A LETÖLTÉS A HIBAJEGYEKET ÉS A KARBANTARTÁSI LAPOKAT EGYÜTT HOZZA (`kind=ALL`), A SOR IS (hibajegy-maradek lista, 4. fejezet, acrobot 56196). MI PIROSÍT: ha a rész neve újra csak "hibajegy",
+  és a szám a karbantartási lapokat is hibajegynek mondja.
+*/
+describe("a hibajegy-rész neve a letöltés soraiban", () => {
+  it("a hibajegyek és a karbantartási lapok együtt vannak megnevezve", () => {
+    const eredmeny = osszegezHelyszinLetoltes({
+      helyszin: "Biodóm",
+      reszek: MIND_KESZ,
+    });
+    assert.equal(
+      eredmeny.sorok[1],
+      "3 hibajegy és karbantartási lap letöltve.",
+    );
+  });
+});

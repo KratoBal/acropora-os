@@ -118,25 +118,31 @@ export function oroklesUzenete(bemenet: {
   jegyEszkozok: readonly JegyEszkoz[];
   oroklendoEszkozok: readonly string[];
   oroklendoFelelosok: readonly string[];
+  /** A lap fajtája, ha ismert: a karbantartási lap a saját nevén szerepel (hibajegy-maradek lista, acrobot 56196). */
+  kind?: string | null;
 }): string | null {
+  const maintenance = bemenet.kind === "MAINTENANCE";
+  const noun = maintenance ? "karbantartási lap" : "hibajegy";
   const reszek: string[] = [];
   if (bemenet.oroklendoEszkozok.length > 0)
     reszek.push(
       bemenet.oroklendoEszkozok.length === 1
-        ? "a hibajegy eszköze"
-        : `a hibajegy ${bemenet.oroklendoEszkozok.length} eszköze`,
+        ? `a ${noun} eszköze`
+        : `a ${noun} ${bemenet.oroklendoEszkozok.length} eszköze`,
     );
   if (bemenet.oroklendoFelelosok.length > 0)
     reszek.push(
       bemenet.oroklendoFelelosok.length === 1
-        ? "a hibajegy felelőse"
-        : `a hibajegy ${bemenet.oroklendoFelelosok.length} felelőse`,
+        ? `a ${noun} felelőse`
+        : `a ${noun} ${bemenet.oroklendoFelelosok.length} felelőse`,
     );
 
   if (reszek.length > 0) return `A lapra átkerül ${reszek.join(" és ")}.`;
 
   /* AZ ELMARADT ORKLES OKA -- csak akkor, ha VOLT mit orokolni. */
   if (bemenet.jegyEszkozok.length > 0)
-    return "A hibajegy eszközei nem kerülnek át: azok a jegy helyszínéhez tartoznak, és ez a lap másik helyszínre készül.";
+    return maintenance
+      ? "A karbantartási lap eszközei nem kerülnek át: azok a lap helyszínéhez tartoznak, és ez a munkalap másik helyszínre készül."
+      : "A hibajegy eszközei nem kerülnek át: azok a jegy helyszínéhez tartoznak, és ez a lap másik helyszínre készül.";
   return null;
 }

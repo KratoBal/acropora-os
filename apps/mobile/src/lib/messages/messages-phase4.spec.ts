@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import {
@@ -10,6 +12,7 @@ import {
   contextStatusLabel,
   contextSubtitle,
   isSystemMessage,
+  LINK_COPY,
 } from "./phase4";
 import type { ConversationContextCard } from "./types";
 
@@ -88,5 +91,81 @@ describe("messages phase 4 on the phone", () => {
     assert.equal(isSystemMessage({ type: "TEXT" }), false);
     assert.equal(canManageMembers("GROUP"), true);
     assert.equal(canManageMembers("DIRECT"), false);
+  });
+});
+
+/*
+  A KAPCSOLT KARBANTARTÁSI LAP A SAJÁT NEVÉN SZEREPEL AZ ÜZENETEKBEN (hibajegy-maradek lista, 4. fejezet, acrobot 56196; a szerver a kártyán `jobKind`-ot küld): a kártya címe, az alcím és a kapcsolás
+  képernyőjének szövegei. A lista soron a szerver `contextJobKind`-ot küld (barracuda, #2712), ezért ott is pontos a felirat. MI PIROSÍT: ha a karbantartási lap kártyája újra "KAPCSOLT HIBAJEGY" / "Hibajegyhez kapcsolva"; ha a
+  hibajegyé (és a fajta nélkülié) megváltozik; ha a lista alcíme a karbantartási lapot hibajegynek mondja; ha a kapcsolás szövegei újra csak a hibajegyet nevezik meg.
+*/
+describe("a kapcsolt lap neve az üzenetekben a lap fajtája szerint", () => {
+  it("a karbantartási lap kártyája és alcíme a karbantartási lapot nevezi meg", () => {
+    assert.equal(
+      contextCardTitle("SERVICE_JOB", "MAINTENANCE"),
+      "KAPCSOLT KARBANTARTÁSI LAP",
+    );
+    assert.equal(
+      contextSubtitle("SERVICE_JOB", "MAINTENANCE"),
+      "Karbantartási laphoz kapcsolva",
+    );
+  });
+
+  it("a hibajegy, a fajta nélküli és a munkalap szövege nem változik", () => {
+    for (const kind of ["REPAIR", null, undefined] as const) {
+      assert.equal(contextCardTitle("SERVICE_JOB", kind), "KAPCSOLT HIBAJEGY");
+      assert.equal(
+        contextSubtitle("SERVICE_JOB", kind),
+        "Hibajegyhez kapcsolva",
+      );
+    }
+    assert.equal(
+      contextCardTitle("WORKSHEET", "MAINTENANCE"),
+      "KAPCSOLT MUNKALAP",
+    );
+    assert.equal(
+      contextSubtitle("WORKSHEET", "MAINTENANCE"),
+      "Munkalaphoz kapcsolva",
+    );
+  });
+
+  it("a kapcsolás szövegei a karbantartási lapot is megnevezik", () => {
+    for (const szoveg of [
+      LINK_COPY.lead,
+      LINK_COPY.serviceJobTab,
+      LINK_COPY.serviceJobPlaceholder,
+      LINK_COPY.dataScreenLink,
+    ]) {
+      assert.match(szoveg, /hibajegy/i);
+      assert.match(szoveg, /karbantart/i);
+    }
+  });
+
+  it("a képernyők a fajtával és a szövegtáblával hívják", () => {
+    const olvas = (...ut: string[]) =>
+      readFileSync(join(__dirname, "..", "..", "..", "src", ...ut), "utf8");
+    assert.match(
+      olvas("components", "messages", "Phase4Parts.tsx"),
+      /contextCardTitle\(card\.type, card\.jobKind\)/,
+    );
+    assert.match(
+      olvas("app", "uzenetek", "[id].tsx"),
+      /contextSubtitle\(\s*conversation\.context\.type,\s*conversation\.context\.jobKind/,
+    );
+    assert.match(
+      olvas("app", "uzenetek", "adatok.tsx"),
+      /contextCardTitle\(\s*conversation\.context\.type,\s*conversation\.context\.jobKind/,
+    );
+    assert.match(
+      olvas("components", "messages", "MessageParts.tsx"),
+      /contextSubtitle\(item\.contextType, item\.contextJobKind\)/,
+    );
+    const kapcsolas = olvas("app", "uzenetek", "kapcsolas.tsx");
+    for (const kulcs of ["lead", "serviceJobTab", "serviceJobPlaceholder"])
+      assert.match(kapcsolas, new RegExp(`LINK_COPY\\.${kulcs}`));
+    assert.match(
+      olvas("app", "uzenetek", "adatok.tsx"),
+      /LINK_COPY\.dataScreenLink/,
+    );
   });
 });

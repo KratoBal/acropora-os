@@ -165,3 +165,27 @@ describe("a két képernyő átadja a jegyet", () => {
     );
   });
 });
+
+/*
+  A MUNKALAP-ŰRLAP A LAP FAJTÁJÁT VISZI A MONDATOKBA (hibajegy-maradek lista, 4. fejezet, acrobot 56196): a karbantartási lap alá nyitott munkalapnál a figyelmeztetés, az örökölt mezők mondata és a
+  partner-mező felirata a karbantartási lapot nevezi meg. MI PIROSÍT: ha az űrlap a fajtát nem adja át a mondat-függvényeknek (ticketNotice, az előtöltés, az öröklés); ha a címek újra beégetett
+  "Hibajegy alá kerül" / "A hibajegyről" szövegek.
+*/
+describe("a munkalap-űrlap a lap fajtájából dönt", () => {
+  const urlap = forras("app", "worksheets", "new.tsx");
+
+  it("a fajtát átadja a mondat-függvényeknek", () => {
+    // a feltétel és a kirajzolt szöveg is a fajtával hívja (két hívás)
+    assert.equal(urlap.match(/ticketNotice\(jegy, jegyKind\)/g)?.length, 2);
+    assert.match(urlap, /kind: jegyKind/);
+    assert.match(urlap, /jobWords\(jegyKind\)/);
+  });
+
+  it("a címek a lap fajtáját követik, nem beégetett hibajegy-szövegek", () => {
+    assert.match(urlap, /\{jw\.nounCap\} alá kerül/);
+    assert.match(urlap, /A \{jw\.from\}/);
+    assert.match(urlap, /`A \$\{jw\.from\} — nem módosítható`/);
+    assert.doesNotMatch(urlap, />Hibajegy alá kerül</);
+    assert.doesNotMatch(urlap, />A hibajegyről</);
+  });
+});

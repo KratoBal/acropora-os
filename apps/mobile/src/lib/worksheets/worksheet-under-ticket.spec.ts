@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   JEGY_A_SORBAN,
   JEGY_FENT_VAN,
+  KARBANTARTAS_FENT_VAN,
   mustQueue,
   ticketLinkFromParams,
   ticketNotice,
@@ -110,5 +111,33 @@ describe("mit mond a képernyő a jegyről", () => {
   it("a sorban álló jegy mondata KIMONDJA, hogy a lap is vár", () => {
     assert.notEqual(JEGY_A_SORBAN, JEGY_FENT_VAN);
     assert.match(JEGY_A_SORBAN, /a lap is a sorba megy/);
+  });
+});
+
+/*
+  A KARBANTARTÁSI LAP ALÁ KERÜLŐ MUNKALAP MONDATA A SAJÁT NEVÉN SZÓL (hibajegy-maradek lista, 4. fejezet, acrobot 56196). MI PIROSÍT: ha a szerverről lekérdezett karbantartási lap alá kerülő munkalap
+  mondata hibajegyet mond; ha a hibajegyé vagy a fajta nélküli hívásé megváltozik; ha a sorban álló (mindig hibajegy) mondatot a fajta átírja.
+*/
+describe("a munkalap mondata a lap fajtája szerint", () => {
+  const server = { kind: "server", serviceJobId: "sj-1" } as const;
+
+  it("karbantartási lapnál a karbantartási lapról szól, hibajegy-szó nélkül", () => {
+    const mondat = ticketNotice(server, "MAINTENANCE") ?? "";
+    assert.equal(mondat, KARBANTARTAS_FENT_VAN);
+    assert.match(mondat, /karbantartási lap alá kerül/);
+    assert.doesNotMatch(mondat, /hibajegy|jegy/i);
+  });
+
+  it("hibajegynél és fajta nélkül a mai mondat", () => {
+    assert.equal(ticketNotice(server, "REPAIR"), JEGY_FENT_VAN);
+    assert.equal(ticketNotice(server), JEGY_FENT_VAN);
+    assert.equal(ticketNotice(server, null), JEGY_FENT_VAN);
+  });
+
+  it("a sorban álló lap mondata nem függ a fajtától", () => {
+    assert.equal(
+      ticketNotice({ kind: "queued", operationId: "op" }, "MAINTENANCE"),
+      JEGY_A_SORBAN,
+    );
   });
 });

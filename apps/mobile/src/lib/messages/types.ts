@@ -92,6 +92,8 @@ export interface ConversationContextCard {
   status: string | null;
   createdAt: string | null;
   restricted: boolean;
+  /** A kapcsolt lap fajtája (`SERVICE_JOB` kártyánál): a karbantartási lap nem hibajegy. Munkalapnál és régi válasznál hiányzik. */
+  jobKind?: "REPAIR" | "MAINTENANCE" | null;
 }
 
 export interface ConversationListItem {
@@ -105,6 +107,8 @@ export interface ConversationListItem {
   unreadCount: number;
   /** 4. fázis: a kötés típusa a listán; nincs kötés: null. */
   contextType?: ConversationContextType | null;
+  /** `SERVICE_JOB` kötésnél a kapcsolt lap fajtája (a lista alcíme: hibajegy vagy karbantartási lap); különben hiányzik vagy null. */
+  contextJobKind?: "REPAIR" | "MAINTENANCE" | null;
 }
 
 export interface ConversationListResponse {

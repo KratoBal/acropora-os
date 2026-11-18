@@ -58,6 +58,8 @@ export interface JegyAdat {
   customerId: string | null;
   customerName: string | null;
   departmentId: string | null;
+  /** A lap fajtája, ha ismert: a karbantartási lap a saját nevén szerepel a mondatokban (hibajegy-maradek lista, acrobot 56196). */
+  kind?: string | null;
 }
 
 export type JegyElotoltes =
@@ -78,11 +80,15 @@ export type JegyElotoltes =
       departmentId: string | null;
     };
 
+/** A lekérdezés hibájánál a lap fajtája még nem ismert: a mondat mindkettőt megnevezi. */
 export const JEGY_BETOLTES_HIBA =
-  "A hibajegy adatait nem sikerült lekérdezni, ezért a partnert nem tudom kitölteni. Próbáld újra, vagy nyisd meg a lapot a jegy nélkül.";
+  "A hibajegy vagy karbantartási lap adatait nem sikerült lekérdezni, ezért a partnert nem tudom kitölteni. Próbáld újra, vagy nyisd meg a munkalapot nélküle.";
 
 export const JEGY_NINCS_PARTNER =
   "Ennek a hibajegynek nincs partnere, ezért nem lehet alá munkalapot nyitni: a szerver a lapot visszautasítaná. Előbb a jegyre kell partner.";
+
+export const KARBANTARTAS_NINCS_PARTNER =
+  "Ennek a karbantartási lapnak nincs partnere, ezért nem lehet alá munkalapot nyitni: a szerver a lapot visszautasítaná. Előbb a lapra kell partner.";
 
 /**
  * A JEGY PARTNERE A VALASZTHATO LISTABOL, HA OTT VAN.
@@ -101,7 +107,11 @@ function partnerAJegybol(
   if (listabol) return listabol;
   return {
     customerId: jegy.customerId,
-    name: jegy.customerName?.trim() || "A hibajegy partnere",
+    name:
+      jegy.customerName?.trim() ||
+      (jegy.kind === "MAINTENANCE"
+        ? "A karbantartási lap partnere"
+        : "A hibajegy partnere"),
     partnerCode: "",
   };
 }
@@ -119,7 +129,14 @@ export function prefillFromTicket(bemenet: {
   if (bemenet.betoltes || !bemenet.jegy) return { kind: "toltes" };
 
   const partner = partnerAJegybol(bemenet.jegy, bemenet.partnerek);
-  if (!partner) return { kind: "nincs-partner", uzenet: JEGY_NINCS_PARTNER };
+  if (!partner)
+    return {
+      kind: "nincs-partner",
+      uzenet:
+        bemenet.jegy.kind === "MAINTENANCE"
+          ? KARBANTARTAS_NINCS_PARTNER
+          : JEGY_NINCS_PARTNER,
+    };
   return {
     kind: "kesz",
     partner,

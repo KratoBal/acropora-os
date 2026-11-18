@@ -1,4 +1,5 @@
 import type { TileCode } from "../auth/tile-visibility";
+import { SERVICE_JOB_LIST_COPY } from "../service-jobs/list-copy";
 
 /**
  * EVERY MODULE THE HOME AND THE MODULE LAUNCHER CAN SHOW, IN ONE PLACE
@@ -42,7 +43,7 @@ export const OPERATIONS_LOG_HOME_TILE: HomeModule = {
 export const HOME_MODULES: Readonly<Record<TileCode, HomeModule>> = {
   HJ: {
     title: "Hibajegyek",
-    description: "Nyitott jegyek, léptetés és fénykép a helyszínen",
+    description: SERVICE_JOB_LIST_COPY.tileDescription,
     icon: "ticket-outline",
     route: "/service-jobs",
   },

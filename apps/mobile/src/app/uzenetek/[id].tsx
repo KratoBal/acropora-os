@@ -658,7 +658,10 @@ export default function ConversationScreen() {
           </Text>
           {conversation?.context ? (
             <Text style={styles.subtitle} numberOfLines={1}>
-              {contextSubtitle(conversation.context.type)}
+              {contextSubtitle(
+                conversation.context.type,
+                conversation.context.jobKind,
+              )}
             </Text>
           ) : null}
         </View>

@@ -20,6 +20,7 @@ import {
   type WorksheetVersionStatus,
 } from "@/lib/api/worksheets";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { jobWords } from "@/lib/service-jobs/job-words";
 import { BottomNav } from "@/components/home/BottomNav";
 import {
   worksheetCardMeta,
@@ -526,7 +527,7 @@ export default function WorksheetsScreen() {
               {item.serviceJob ? (
                 <Pressable
                   accessibilityRole="link"
-                  accessibilityLabel={`Hibajegy: ${item.serviceJob.jobNumber}`}
+                  accessibilityLabel={`${jobWords(item.serviceJob.kind).nounCap}: ${item.serviceJob.jobNumber}`}
                   hitSlop={8}
                   onPress={() =>
                     router.push({

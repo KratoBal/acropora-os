@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
-import { OFFLINE_COPY_NOTICE } from "./offline-copy-notice";
+import {
+  OFFLINE_COPY_NOTICE,
+  offlineCopyNoticeFor,
+} from "./offline-copy-notice";
 
 /**
  * A MENTETT MÁSOLAT SOHA NEM NÉMA -- ÉS EZ AZ ÁLLÍTÁS AZÉRT VAN, MERT EGYSZER
@@ -80,7 +83,7 @@ describe("a mentett másolat kimondja, mi nem megy", () => {
     for (const kulcs of kulcsok)
       assert.match(
         forras,
-        new RegExp(`OFFLINE_COPY_NOTICE\\.${kulcs}`),
+        new RegExp(`copyNotice\\.${kulcs}`),
         `a képernyő nem használja a(z) "${kulcs}" mondatot: egy kieső művelet némán tűnik el`,
       );
   });
@@ -122,5 +125,43 @@ describe("a mentett másolat kimondja, mi nem megy", () => {
     // szó, amiből a szerelő tudja, mit kezdjen magával.
     for (const szoveg of Object.values(OFFLINE_COPY_NOTICE))
       assert.match(szoveg, /érerőnél/);
+  });
+
+  /*
+    A MENTETT MÁSOLAT MONDATAI A LAP FAJTÁJA SZERINT (hibajegy-maradek lista, acrobot 56196): a karbantartási lapon karbantartási lap, a hibajegyén (és fajta nélkül) a tábla mai szövege; a
+    kulcsok és a szerkezet ugyanaz, hogy a képernyő minden mondatot kitegyen. MI PIROSÍT: ha a karbantartási lap mondata hibajegyet mond; ha a hibajegyé megváltozik; ha egy kulcs kiesik.
+  */
+  it("a karbantartási lap mondatai a karbantartási lapról szólnak, ugyanazokkal a kulcsokkal", () => {
+    const maintenance = offlineCopyNoticeFor("MAINTENANCE");
+    assert.deepEqual(
+      Object.keys(maintenance),
+      Object.keys(OFFLINE_COPY_NOTICE),
+    );
+    for (const szoveg of Object.values(maintenance)) {
+      assert.match(szoveg, /Mentett másolatot nézel/);
+      assert.match(szoveg, /most nem/);
+      assert.doesNotMatch(szoveg, /jegy/i);
+    }
+    assert.match(maintenance.photo, /a karbantartási lapra\./);
+    assert.match(maintenance.step, /A karbantartási lap állapotát/);
+  });
+
+  it("a hibajegy és a fajta nélküli hívás a tábla mai szövegét kapja", () => {
+    assert.equal(offlineCopyNoticeFor("REPAIR"), OFFLINE_COPY_NOTICE);
+    assert.equal(offlineCopyNoticeFor(undefined), OFFLINE_COPY_NOTICE);
+  });
+
+  it("a képernyő a fajtából dönt: a szavak, a mentett másolat mondatai, a napló és a fejléc címe", () => {
+    const forras = kepernyo();
+    assert.match(forras, /offlineCopyNoticeFor\(kind\)/);
+    assert.match(forras, /jobWords\(kind\)/);
+    assert.match(
+      forras,
+      /timelineRows\(detail\.timeline, new Date\(\), kind\)/,
+    );
+    assert.match(
+      forras,
+      /<Stack\.Screen options=\{\{ title: words\.nounCap \}\} \/>/,
+    );
   });
 });

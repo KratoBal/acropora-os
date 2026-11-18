@@ -681,3 +681,34 @@ describe("a munkalap-lista alapszűrése", () => {
     assert.equal(fül?.label, "Új és folyamatban");
   });
 });
+
+/*
+  A MUNKALAP LAPJÁN A KARBANTARTÁSI LAP A SAJÁT NEVÉN SZEREPEL (hibajegy-maradek lista, 4. fejezet, acrobot 56196): a szerver a `serviceJob.kind`-ot küldi, a sor felirata ebből jön.
+  MI PIROSÍT: ha a karbantartási lap alatti munkalap sora újra "Hibajegy"; ha a hibajegyé, a fajta nélkülié vagy a jegy nélkülié megváltozik.
+*/
+describe("a munkalap lapjának hibajegy-sora a lap fajtája szerint", () => {
+  const sor = (serviceJob: unknown) =>
+    worksheetDetailRows({ ...worksheet, serviceJob } as never).find((row) =>
+      /^(Hibajegy|Karbantartási lap)$/.test(row.label),
+    );
+
+  it("a karbantartási lap a saját nevét viseli, az átkattintás megmarad", () => {
+    assert.deepEqual(
+      sor({ id: "job-9", jobNumber: "KT-2026-004", kind: "MAINTENANCE" }),
+      {
+        label: "Karbantartási lap",
+        value: "KT-2026-004",
+        serviceJobId: "job-9",
+      },
+    );
+  });
+
+  it("a hibajegy és a fajta nélküli válasz felirata nem változik", () => {
+    for (const kind of ["REPAIR", undefined]) {
+      assert.equal(
+        sor({ id: "job-7", jobNumber: "HJ-2026-007", kind })?.label,
+        "Hibajegy",
+      );
+    }
+  });
+});

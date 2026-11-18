@@ -27,7 +27,9 @@ export function ContextCard({
   return (
     <View style={styles.card} accessibilityLabel="Kapcsolt objektum">
       <View style={styles.body}>
-        <Text style={styles.title}>{contextCardTitle(card.type)}</Text>
+        <Text style={styles.title}>
+          {contextCardTitle(card.type, card.jobKind)}
+        </Text>
         <Text style={styles.parts}>{contextCardParts(card).join(" · ")}</Text>
       </View>
       {route ? (

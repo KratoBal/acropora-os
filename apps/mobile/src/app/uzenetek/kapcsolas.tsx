@@ -10,6 +10,7 @@ import { listServiceJobs } from "@/lib/api/service-jobs";
 import { listWorksheets } from "@/lib/api/worksheets";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import type { ConversationContextType } from "@/lib/messages/types";
+import { LINK_COPY } from "@/lib/messages/phase4";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 
 type Candidate = { id: string; number: string; partner: string | null };
@@ -82,14 +83,12 @@ export default function LinkContextScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.lead}>
-          Keresd meg a munkalapot vagy a hibajegyet a száma szerint.
-        </Text>
+        <Text style={styles.lead}>{LINK_COPY.lead}</Text>
         <View style={styles.tabs} accessibilityRole="radiogroup">
           {(
             [
               ["WORKSHEET", "Munkalap"],
-              ["SERVICE_JOB", "Hibajegy"],
+              ["SERVICE_JOB", LINK_COPY.serviceJobTab],
             ] as const
           ).map(([value, label]) => (
             <Pressable
@@ -113,7 +112,9 @@ export default function LinkContextScreen() {
           onChangeText={setQuery}
           accessibilityLabel="Szám keresése"
           placeholder={
-            type === "WORKSHEET" ? "pl. BIO-2026-001" : "a hibajegy száma"
+            type === "WORKSHEET"
+              ? "pl. BIO-2026-001"
+              : LINK_COPY.serviceJobPlaceholder
           }
           placeholderTextColor={tokens.textMuted}
           style={styles.input}

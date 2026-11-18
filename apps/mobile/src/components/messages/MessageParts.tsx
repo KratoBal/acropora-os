@@ -113,7 +113,7 @@ export function ConversationRow({
         </Text>
         {item.contextType ? (
           <Text style={styles.context} numberOfLines={1}>
-            {contextSubtitle(item.contextType)}
+            {contextSubtitle(item.contextType, item.contextJobKind)}
           </Text>
         ) : null}
         <Text style={styles.preview} numberOfLines={1}>
