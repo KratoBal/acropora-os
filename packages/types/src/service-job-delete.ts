@@ -27,3 +27,20 @@ export interface ServiceJobDeleteResult {
   deleted: true;
   jobNumber: string;
 }
+
+/**
+ * AZ ÖNÁLLÓ, NEM LEZÁRT MUNKALAP TÖRLÉSÉNEK ELŐNÉZETE (a hibajegy-törlés 2. szelete; acrobot 55770). Ugyanaz a szerepe, mint a jegyénél: az ablak ebből mondja ki, mit töröl a gomb;
+ * a szerver a törléskor újra dönt.
+ */
+export interface WorksheetDeletePreview {
+  /** A lap embernek szóló neve: a tárgya, ha van, különben az azonosítója rövidítve. */
+  label: string;
+  deletable: boolean;
+  refusal: string | null;
+  counts: { documents: number; materialRequests: number };
+  warnings: string[];
+}
+
+export interface WorksheetDeleteResult {
+  deleted: true;
+}

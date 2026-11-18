@@ -32,6 +32,7 @@ import { WorksheetAssetEditor } from "../worksheet-asset-editor";
 import { WorksheetAssigneeEditor } from "../worksheet-assignee-editor";
 import { WorksheetDocuments } from "../worksheet-documents";
 import { serviceJobRef } from "../service-job-ref";
+import { WorksheetDelete } from "../worksheet-delete";
 import {
   formatDate,
   formatDateTime,
@@ -284,6 +285,9 @@ export function PilotWorksheetDetailPage({
   );
   const canHide = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_HIDE),
+  );
+  const canDelete = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.SERVICE_JOB_DELETE),
   );
 
   const [worksheet, setWorksheet] = useState<WorksheetDetail | null>(null);
@@ -715,6 +719,27 @@ export function PilotWorksheetDetailPage({
             canManage={canManage}
             onSaved={setWorksheet}
           />
+
+          {/*
+            A VÉGLEGES TÖRLÉS (a hibajegy-törlés 2. szelete; acrobot 55770): csak az ÖNÁLLÓ lapon (a jegy alatti lapot a jegy törlése viszi, vagy előbb le kell választani), a
+            törlési joggal (`service.job.delete`). A gomb előnézetet kér, megerősítés után töröl; a lista a törlés után nyílik.
+          */}
+          {canDelete && !worksheet.serviceJob ? (
+            <PilotCard>
+              <PilotCardHeader title="Törlés" />
+              <div className="space-y-3 px-5 py-4">
+                <p className="text-xs text-pilot-grey-500">
+                  Az önálló munkalap véglegesen törölhető, amíg nincs aláírva,
+                  lezárva vagy átadva.
+                </p>
+                <WorksheetDelete
+                  token={token}
+                  worksheetId={worksheet.id}
+                  onDeleted={() => router.push("/szerviz/munkalapok")}
+                />
+              </div>
+            </PilotCard>
+          ) : null}
 
           {/*
             HELYSZÍNI LEZÁRÁS (Figma 423:662): handing over and closing, kept
