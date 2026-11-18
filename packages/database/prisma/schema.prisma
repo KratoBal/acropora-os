@@ -161,6 +161,33 @@ enum SimplePaySyncRunStatus {
   FAILED
 }
 
+/// Stripe elszámolás (A9): egy kifizetés (payout) akkor NEEDS_REVIEW, ha van
+/// feloldatlan sora.
+enum StripePayoutStatus {
+  COMPLETED
+  NEEDS_REVIEW
+}
+
+/// RESOLVED: a sor egy rendelés fizetése (vagy visszatérítése), a rendelés és a
+/// számla megvan; NEEDS_REVIEW: nem sikerült párosítani; NOT_APPLICABLE: nem
+/// rendelés fizetése (Stripe-díj, korrekció), csak az összegekben számít.
+enum StripeLineStatus {
+  RESOLVED
+  NEEDS_REVIEW
+  NOT_APPLICABLE
+}
+
+enum StripeResolutionSource {
+  PAYMENT_INTENT
+  MANUAL
+}
+
+enum StripeSyncRunStatus {
+  RUNNING
+  APPLIED
+  FAILED
+}
+
 /// GLS elszámolás: egy utánvét-jelentés akkor NEEDS_REVIEW, ha van
 /// feloldatlan sora.
 enum GlsCodReportStatus {
@@ -1111,6 +1138,7 @@ model User {
   invoicesIssued                      Invoice[]                           @relation("InvoiceIssuedBy")
   billingMailDeliveries               BillingDocumentMailDelivery[]       @relation("BillingMailInitiatedBy")
   simplePayLinesApproved              SimplePayTransactionLine[]          @relation("SimplePayLineManualApprovedBy")
+  stripeLinesApproved                 StripeTransactionLine[]             @relation("StripeLineManualApprovedBy")
   mortalityRecordsRecorded            MortalityRecord[]                   @relation("MortalityRecordRecordedBy")
   operationsLogEntriesRecorded        OperationsLogEntry[]                @relation("OperationsLogEntryRecordedBy")
   operationsLogEntryParticipations    OperationsLogEntryParticipant[]
@@ -7564,6 +7592,103 @@ model SimplePaySyncRun {
   failedCount    Int                    @default(0)
   errorCode      String?
   updatedAt      DateTime               @updatedAt
+
+  @@index([startedAt])
+}
+
+/// Egy Stripe-kifizetés (payout) a webshop háttérből (A9, kártya 6339b04c): az
+/// OS-nek nincs saját Stripe-kulcsa, a háttér csak olvasó végpontja adja
+/// (commerce #803). A kifizetés megváltoztathatatlan, a sorai nem: a
+/// feloldatlan sorokat a következő körben újra párosítjuk.
+model StripePayout {
+  id                  String             @id @default(cuid())
+  stripePayoutId      String             @unique
+  status              StripePayoutStatus
+  currency            String             @db.VarChar(3)
+  /// A bankba utalt összeg (főegységben, forint).
+  amount              Decimal            @db.Decimal(19, 4)
+  arrivalDate         DateTime           @db.Date
+  stripeCreatedAt     DateTime
+  automatic           Boolean
+  lineCount           Int
+  unresolvedLineCount Int
+  /// A sorok összegei: bruttó fizetések, visszatérítések, díjak, nettó.
+  grossTotal          Decimal            @db.Decimal(19, 4)
+  refundTotal         Decimal            @db.Decimal(19, 4)
+  feeTotal            Decimal            @db.Decimal(19, 4)
+  netTotal            Decimal            @db.Decimal(19, 4)
+  /// A webshop-oldali rendeléskeresés ennyi rendelésnél megállt (a válasz jelzése).
+  ordersTruncated     Boolean            @default(false)
+  /// A kifizetés szintű ok, ha nem a sorokon múlik: TOTAL_MISMATCH (a sorok
+  /// nettója nem a kifizetett összeg), MANUAL_PAYOUT (a Stripe kézi
+  /// kifizetésnél nem listáz tételeket), LINES_NOT_READ (a lapozás határán megállt).
+  errorCode           String?
+  processedAt         DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  lines StripeTransactionLine[]
+
+  @@index([arrivalDate])
+  @@index([status])
+}
+
+/// Egy Stripe-egyenlegtétel (balance transaction) egy kifizetésben. Nevet,
+/// címet, e-mailt NEM tárol: a háttér sem adja (azonosítók és összegek).
+model StripeTransactionLine {
+  id                     String                  @id @default(cuid())
+  payoutId               String
+  stripeTransactionId    String                  @unique
+  /// charge, payment, refund, payment_refund, stripe_fee, adjustment...
+  type                   String
+  reportingCategory      String?
+  stripeCreatedAt        DateTime
+  currency               String                  @db.VarChar(3)
+  /// Főegységben (forint): a Stripe legkisebb egységéből átváltva.
+  amount                 Decimal                 @db.Decimal(19, 4)
+  fee                    Decimal                 @db.Decimal(19, 4)
+  net                    Decimal                 @db.Decimal(19, 4)
+  paymentIntentId        String?
+  chargeId               String?
+  refundId               String?
+  /// A háttér által megnevezett rendelések (azonosító, rendelésszám); vegyes
+  /// kosárnál kettő.
+  webshopOrderIds        String[]
+  orderNumbers           String[]
+  orderTotal             Decimal?                @db.Decimal(19, 4)
+  invoiceNumbers         String[]
+  status                 StripeLineStatus
+  resolutionSource       StripeResolutionSource?
+  errorCode              String?
+  manualApprovedByUserId String?
+  manualApprovedAt       DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  payout           StripePayout @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  manualApprovedBy User?        @relation("StripeLineManualApprovedBy", fields: [manualApprovedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([payoutId])
+  @@index([paymentIntentId])
+  @@index([status])
+  @@index([stripeCreatedAt])
+}
+
+/// A Stripe-behúzás egy futása. Az `activeKey` egyedi, így egyszerre egy fut;
+/// egy elakadt futás 30 perc után feloldódik (a SimplePay mintája).
+model StripeSyncRun {
+  id                String              @id @default(cuid())
+  activeKey         String?             @unique
+  status            StripeSyncRunStatus @default(RUNNING)
+  trigger           SyncRunTrigger
+  startedAt         DateTime            @default(now())
+  completedAt       DateTime?
+  payoutsSeen       Int                 @default(0)
+  payoutsNew        Int                 @default(0)
+  payoutsReresolved Int                 @default(0)
+  failedCount       Int                 @default(0)
+  errorCode         String?
+  updatedAt         DateTime            @updatedAt
 
   @@index([startedAt])
 }

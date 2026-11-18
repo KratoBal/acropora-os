@@ -140,6 +140,9 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "RUN_DB_INTEGRATION",
   // the global search's time limit for an external group, in milliseconds: a number, not a secret
   "SEARCH_EXTERNAL_GROUP_TIMEOUT_MS",
+  // the Stripe settlement pull (A9): a switch and a minute count, not secrets (the OS holds no Stripe key)
+  "STRIPE_SETTLEMENT_SYNC_ENABLED",
+  "STRIPE_SETTLEMENT_SYNC_INTERVAL_MINUTES",
   "VIES_API_URL",
   // the webshop problem report pull (V1.2): a switch, two minute counts and a user id: not secrets
   "WEBSHOP_COMPLAINT_ASSIGNEE_ID",

@@ -900,6 +900,61 @@ export interface MedusaOrderPayment {
   due?: { amount: number; reason: "released" | "difference" } | null;
 }
 
+/**
+ * STRIPE'S PAYOUTS AND THEIR BALANCE TRANSACTIONS, as the backend's read-only feed gives them (A9, commerce #803, #804): the OS has
+ * no Stripe key of its own. Amounts come in Stripe's smallest unit (`*_minor`) and in the major unit (forint). A transaction names
+ * the shop orders its PaymentIntent paid (`orders`), none when no order carries it.
+ */
+export interface MedusaStripePayout {
+  id: string;
+  status: string;
+  currency: string;
+  amount_minor: number;
+  amount: number;
+  /** Unix seconds. */
+  arrival_date: number;
+  created: number;
+  automatic: boolean;
+}
+
+export interface MedusaStripePayoutPage {
+  payouts: MedusaStripePayout[];
+  has_more: boolean;
+  next_cursor: string | null;
+}
+
+export interface MedusaStripeTransaction {
+  id: string;
+  type: string;
+  reporting_category: string | null;
+  /** Unix seconds. */
+  created: number;
+  currency: string;
+  amount_minor: number;
+  fee_minor: number;
+  net_minor: number;
+  amount: number;
+  fee: number;
+  net: number;
+  source_kind: string | null;
+  payment_intent: string | null;
+  charge: string | null;
+  refund: string | null;
+  orders: {
+    id: string;
+    display_id: number | null;
+    total: number;
+    currency_code: string;
+  }[];
+}
+
+export interface MedusaStripeTransactionPage {
+  transactions: MedusaStripeTransaction[];
+  has_more: boolean;
+  next_cursor: string | null;
+  orders_truncated: boolean;
+}
+
 /** Egy változat a cseréhez (`GET /admin/product-variants`). */
 export interface MedusaVariantSearchRow {
   id: string;
@@ -1089,6 +1144,20 @@ export interface MedusaAdminClient {
    * szállítás”) és a fizetési link küldése.
    */
   orderPayment(orderId: string): Promise<MedusaOrderPayment | null>;
+  /**
+   * Stripe's payouts from `createdGte` (unix seconds) on, one page, paid ones only (the backend's read-only feed). `startingAfter`
+   * is the previous page's `next_cursor`.
+   */
+  stripePayouts(input: {
+    createdGte?: number;
+    startingAfter?: string;
+    limit?: number;
+  }): Promise<MedusaStripePayoutPage>;
+  /** The balance transactions one payout paid out, with the orders each intent paid; one page. */
+  stripePayoutTransactions(
+    payoutId: string,
+    input?: { startingAfter?: string },
+  ): Promise<MedusaStripeTransactionPage>;
   /** Megjött az előre utalás: a webshop levont fizetéssé teszi (commerce #509). */
   recordTransferReceipt(
     orderId: string,
@@ -2195,6 +2264,32 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
         return null;
       throw error;
     }
+  }
+
+  async stripePayouts(input: {
+    createdGte?: number;
+    startingAfter?: string;
+    limit?: number;
+  }): Promise<MedusaStripePayoutPage> {
+    const params = new URLSearchParams({ status: "paid" });
+    if (input.createdGte !== undefined)
+      params.set("created_gte", String(input.createdGte));
+    if (input.startingAfter) params.set("starting_after", input.startingAfter);
+    params.set("limit", String(input.limit ?? 50));
+    return this.request<MedusaStripePayoutPage>(
+      `/admin/stripe-settlement/payouts?${params.toString()}`,
+    );
+  }
+
+  async stripePayoutTransactions(
+    payoutId: string,
+    input: { startingAfter?: string } = {},
+  ): Promise<MedusaStripeTransactionPage> {
+    const params = new URLSearchParams({ limit: "100" });
+    if (input.startingAfter) params.set("starting_after", input.startingAfter);
+    return this.request<MedusaStripeTransactionPage>(
+      `/admin/stripe-settlement/payouts/${encodeURIComponent(payoutId)}/transactions?${params.toString()}`,
+    );
   }
 
   async releaseHold(

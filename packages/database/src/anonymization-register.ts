@@ -1155,6 +1155,28 @@ export const ANONYMIZATION_REGISTER: Readonly<
     activeKey: "business",
     errorCode: "business",
   },
+  StripePayout: {
+    stripePayoutId: "identifier",
+    currency: "business",
+    errorCode: "business",
+  },
+  StripeTransactionLine: {
+    stripeTransactionId: "identifier",
+    type: "business",
+    reportingCategory: "business",
+    currency: "business",
+    paymentIntentId: "identifier",
+    chargeId: "identifier",
+    refundId: "identifier",
+    webshopOrderIds: "identifier",
+    orderNumbers: "identifier",
+    invoiceNumbers: "identifier",
+    errorCode: "business",
+  },
+  StripeSyncRun: {
+    activeKey: "business",
+    errorCode: "business",
+  },
   GlsCodReport: {
     fileName: "freeText",
     sha256: "identifier",
