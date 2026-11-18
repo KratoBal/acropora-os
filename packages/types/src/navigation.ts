@@ -69,6 +69,9 @@ export type NavigationVisibility =
  * issuing a ReefClub code (and e-mailing it to a customer) exists only where the ReefClub runs, so
  * no customer gets a letter about a service that is not there, or a localhost link.
  *
+ * `webshop-coupons` is `MEDUSA_WEBSHOP_COUPONS=true`: the coupon list and entry write the TEST shop's promotions
+ * (card 393ae5cb), so they exist only where the OS may write it.
+ *
  * `jev-product-enrichment` is `JEV_PRODUCT_ENRICHMENT` not being `off`
  * (docs/jev-product-intelligence/v1-discovery.md, answer 6). Only the server
  * reads the variable; it passes the switches that are on to
@@ -80,6 +83,7 @@ export const NAVIGATION_FEATURES = [
   "quotes",
   "homepage-content",
   "reefclub-linking",
+  "webshop-coupons",
 ] as const;
 export type NavigationFeature = (typeof NAVIGATION_FEATURES)[number];
 
@@ -600,6 +604,16 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.AQUARIUMS_MANAGE),
     feature: "reefclub-linking",
+  },
+  {
+    /**
+     * A WEBSHOP KUPONJAI (/webshop/kuponok; kártya 393ae5cb). Nem menüpont: a Webshop beállítások lap kártyája. Ugyanaz a
+     * jog, mint a végpontoké (`settings.manage`), és csak ahol az OS a teszt-webshopba írhat (`webshop-coupons`).
+     */
+    id: "webshop-coupons",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+    feature: "webshop-coupons",
   },
   {
     id: "settings-general",
