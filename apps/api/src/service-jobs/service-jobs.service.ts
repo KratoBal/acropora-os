@@ -194,14 +194,14 @@ export class ServiceJobsService {
         );
       customerId = partnerScope.customerId;
     }
+    if (partnerScope.kind === "supplier")
+      throw new NotFoundException("A hibajegy nem található.");
     // A karbantartási lap belső tétel (a Karbantartás menü, a szerződés, a TIG): a partner a javítási hibajegyet nyithatja. A PARTNER_SERVICE szerep a `service.manage` jogot is viseli, ezért
     // a kérés eddig átment, és a felelősök "Új hibajegyet nyitott" push-t kaptak a karbantartási lapról (hibajegy-maradek lista, acrobot 56144).
-    if (partnerScope.kind !== "internal" && input.kind === "MAINTENANCE")
+    if (partnerScope.kind === "customer" && input.kind === "MAINTENANCE")
       throw new BadRequestException(
         "Karbantartási lapot csak a szerviz nyithat: a partner javítási hibajegyet nyithat.",
       );
-    if (partnerScope.kind === "supplier")
-      throw new NotFoundException("A hibajegy nem található.");
 
     /**
      * AZ EREDET-ESZKOZ ES A JEGY PARTNERE NEM MONDHAT ELLENT EGYMASNAK.

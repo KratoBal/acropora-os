@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import type { AuthenticatedUser } from "@acropora/types";
 
 import type { ServiceJobsRepository } from "./service-jobs.repository.js";
@@ -34,6 +34,11 @@ const PARTNER = {
   customerId: "customer-1",
   supplierId: null,
 } as AuthenticatedUser;
+const SZALLITO = {
+  id: "supplier-user",
+  customerId: null,
+  supplierId: "supplier-1",
+} as AuthenticatedUser;
 const BELSOS = { id: "user-1" } as AuthenticatedUser;
 const torzs = (over: Record<string, unknown> = {}) =>
   ({ title: "Szivattyú zúg", ...over }) as never;
@@ -62,5 +67,15 @@ describe("a partner nem nyithat karbantartási lapot", () => {
     const { service, created } = serviceWith();
     await service.create(torzs({ kind: "MAINTENANCE" }), BELSOS);
     assert.equal(created.length, 1);
+  });
+
+  // barracuda, #2708: a szállítónak a létrehozás maga nem létezik (404, mint eddig), és a 400-as mondat ("a partner javítási hibajegyet nyithat") rá nem volna igaz
+  it("a szállító MAINTENANCE kérése 404 marad, nem 400", async () => {
+    const { service, created } = serviceWith();
+    await assert.rejects(
+      () => service.create(torzs({ kind: "MAINTENANCE" }), SZALLITO),
+      NotFoundException,
+    );
+    assert.deepEqual(created, []);
   });
 });
