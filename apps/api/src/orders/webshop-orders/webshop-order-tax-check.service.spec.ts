@@ -82,6 +82,15 @@ describe("WebshopOrderTaxCheckService", () => {
     });
   });
 
+  it("an answer that does not say valid or not (a missing taxpayerValidity) is UNAVAILABLE: it must not stop an invoice", async () => {
+    const { service } = setup(async () => ({
+      valid: false,
+      validityUnknown: true,
+      data: null,
+    }));
+    assert.equal((await service.check(order(TAX))).state, "UNAVAILABLE");
+  });
+
   it("a NAV that does not answer is UNAVAILABLE, not INVALID: it must not stop an invoice", async () => {
     for (const failure of [
       new ServiceUnavailableException("NAV_UNREACHABLE"),

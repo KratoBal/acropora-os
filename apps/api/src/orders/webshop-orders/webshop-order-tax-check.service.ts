@@ -53,6 +53,14 @@ export class WebshopOrderTaxCheckService {
     const taxNumber = shape.taxNumber;
     try {
       const answer = await this.nav.lookup(taxNumber);
+      // a nem egyértelmű NAV-válasz (hiányzó taxpayerValidity) nem "nincs ilyen": nem tudjuk, és nem állítunk meg vele
+      if (answer.validityUnknown)
+        return {
+          state: "UNAVAILABLE",
+          taxNumber,
+          navName: null,
+          nameMatches: null,
+        };
       if (!answer.valid)
         return {
           state: "INVALID",

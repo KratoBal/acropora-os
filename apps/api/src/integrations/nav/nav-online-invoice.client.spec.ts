@@ -5,6 +5,7 @@ import {
   NavOnlineInvoiceClient,
   parseQueryInvoiceDataResponse,
   parseQueryInvoiceDigestResponse,
+  parseQueryTaxpayerResponse,
   type NavSoftwareData,
   type NavTechnicalUser,
 } from "./nav-online-invoice.client.js";
@@ -188,5 +189,59 @@ describe("NavOnlineInvoiceClient.queryInvoiceData", () => {
       /<supplierTaxNumber>32435119<\/supplierTaxNumber>/,
     );
     assert.doesNotMatch(client.requestBody, /32435119-2-43/);
+  });
+});
+
+/**
+ * A NAV ADÓALANY-LEKÉRDEZÉS VÁLASZA (acropora-os #2726, barracuda). MI PIROSÍT: ha a hiányzó vagy ismeretlen `taxpayerValidity`
+ * "nincs ilyen adószám"-nak látszik (egy válaszalak-változás csendben minden céges számlát megállítana); ha a kifejezett "false"
+ * nem hamis; ha az érvényes adóalany adatai (név, adószám, székhely) elvesznek.
+ */
+describe("parseQueryTaxpayerResponse", () => {
+  const response = (inner: string, funcCode = "OK") =>
+    `${HEADER}<QueryTaxpayerResponse><result><funcCode>${funcCode}</funcCode></result>${inner}</QueryTaxpayerResponse>`;
+
+  it("a valid taxpayer: its name, tax number and headquarters address", () => {
+    const result = parseQueryTaxpayerResponse(
+      response(
+        `<taxpayerValidity>true</taxpayerValidity><taxpayerData>` +
+          `<taxpayerName>MINTA KFT</taxpayerName>` +
+          `<taxNumberDetail><taxpayerId>12345678</taxpayerId><vatCode>2</vatCode><countyCode>41</countyCode></taxNumberDetail>` +
+          `</taxpayerData>`,
+      ),
+    );
+    assert.equal(result.valid, true);
+    assert.equal(result.validityUnknown, undefined);
+    assert.equal(result.data?.name, "MINTA KFT");
+    assert.equal(result.data?.taxNumber, "12345678-2-41");
+  });
+
+  it("an explicit false is 'no such taxpayer' and says nothing is unknown", () => {
+    assert.deepEqual(
+      parseQueryTaxpayerResponse(
+        response(`<taxpayerValidity>false</taxpayerValidity>`),
+      ),
+      { valid: false, data: null },
+    );
+  });
+
+  it("a missing or odd taxpayerValidity is NOT 'no such taxpayer': validityUnknown", () => {
+    for (const inner of [
+      "",
+      `<taxpayerValidity></taxpayerValidity>`,
+      `<taxpayerValidity>maybe</taxpayerValidity>`,
+    ])
+      assert.deepEqual(parseQueryTaxpayerResponse(response(inner)), {
+        valid: false,
+        data: null,
+        validityUnknown: true,
+      });
+  });
+
+  it("a refused request is an error, not an answer", () => {
+    assert.throws(
+      () => parseQueryTaxpayerResponse(response("", "ERROR")),
+      NavApiError,
+    );
   });
 });

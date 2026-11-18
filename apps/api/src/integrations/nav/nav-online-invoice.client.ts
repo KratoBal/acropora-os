@@ -61,7 +61,9 @@ function buildQueryTaxpayerXml(
   return buildEnvelopeXml("QueryTaxpayerRequest", body, user, software, now);
 }
 
-function parseQueryTaxpayerResponse(xml: string): NavTaxpayerLookupResult {
+export function parseQueryTaxpayerResponse(
+  xml: string,
+): NavTaxpayerLookupResult {
   const root = parseXml(xml);
   if (
     root.name === "GeneralExceptionResponse" ||
@@ -79,7 +81,14 @@ function parseQueryTaxpayerResponse(xml: string): NavTaxpayerLookupResult {
   }
 
   const validity = value(root, "taxpayerValidity");
-  if (validity !== "true") return { valid: false, data: null };
+  if (validity === "false") return { valid: false, data: null };
+  /*
+    A HIÁNYZÓ VAGY ISMERETLEN `taxpayerValidity` NEM "NINCS ILYEN ADÓSZÁM" (barracuda, acropora-os #2726): csak a kifejezett "false"
+    az. Egy válaszalak-változás nem állíthat meg csendben minden céges számlát, ezért a nem egyértelmű válasz `validityUnknown`,
+    és a számla-kapu (`WebshopOrderTaxCheckService`) ezt UNAVAILABLE-nek veszi. A `valid` marad false (a régi hívók így látták).
+  */
+  if (validity !== "true")
+    return { valid: false, data: null, validityUnknown: true };
 
   const taxpayerData = child(root, "taxpayerData");
   if (!taxpayerData) return { valid: true, data: null };
