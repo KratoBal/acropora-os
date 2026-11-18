@@ -2447,3 +2447,177 @@ describe("a card payment waits for its monthly summary invoice until the deadlin
     assert.equal(out.get(transfer.id)?.state, "NOT_MATCHED");
   });
 });
+
+/*
+  A KETTŐS FIZETÉS, AMIT A PARTNER VISSZAUTALT (the Banki átutalások survey, 2026-11-18, acrobot 55733; live: the Sopro KB-2855/2026
+  paid twice, 172 006 Ft each, 09-28 and 09-29, and the refund of 172 006 Ft on 10-02 naming the number; both debits were still
+  DOUBLE_PAID). The numbers here are invented, the shape is the live one: one unread upload and one read invoice sharing a file
+  print. WHAT TURNS THIS RED: the refund not resolving the pair; the EARLIER debit changed (its invoice and pairing stay); the
+  resolution not saying it is a convention (the two payments cannot be told apart); a refund of another amount, before the
+  second payment, after 90 days, from another partner, not naming the number, or one credit closing two pairs, or three debits on
+  one invoice, resolving anything.
+*/
+describe("a double payment the partner paid back", () => {
+  const partner = "Minta Szállító Kft.";
+  const payment = (
+    id: string,
+    day: string,
+    over: Partial<MatchableDebit> = {},
+  ) =>
+    debit({
+      id,
+      bookingDate: day,
+      amount: D(50000),
+      counterpartyName: partner,
+      narrative: "KB-7777/2026",
+      ...over,
+    });
+  const refund = (over: Partial<MatchableCredit> = {}): MatchableCredit => ({
+    id: "cr-1",
+    bookingDate: "2026-10-02",
+    amount: D(50000),
+    currency: "HUF",
+    counterpartyName: "MINTA SZALLITO KFT",
+    narrative: "kb-7777/2026 szla visszautalasa (dupla utalas)",
+    ...over,
+  });
+  // an unread upload (no number) and the read invoice, one file print
+  const unread = (id: string) =>
+    doc({
+      id,
+      source: "UPLOAD",
+      gross: null,
+      number: "",
+      identities: ["sha:dp-1"],
+    });
+  const read = (id: string, number = "KB-7777/2026") =>
+    doc({ id, number, identities: ["sha:dp-1"] });
+  const settle = (
+    credits: MatchableCredit[],
+    extra: { debits?: MatchableDebit[]; documents?: CandidateDocument[] } = {},
+  ) => {
+    const a = payment("dp-a", "2026-09-28");
+    const b = payment("dp-b", "2026-09-29");
+    const manual = new Map<string, string[]>([
+      [a.id, ["dp-d1"]],
+      [b.id, ["dp-d2"]],
+    ]);
+    for (const [index, d] of (extra.debits ?? []).entries())
+      manual.set(d.id, [`dp-x${index}`]);
+    const out = matchMonth({
+      debits: [a, b, ...(extra.debits ?? [])],
+      documents: [unread("dp-d1"), read("dp-d2"), ...(extra.documents ?? [])],
+      manual,
+      credits,
+    });
+    return {
+      a: out.get("dp-a"),
+      b: out.get("dp-b"),
+    };
+  };
+
+  it("the refund resolves the pair: the later payment needs no invoice (a convention, said), the earlier keeps its own state", () => {
+    const { a, b } = settle([refund()]);
+    assert.equal(b?.state, "NO_INVOICE_NEEDED");
+    assert.match(b?.reason ?? "", /kettős fizetés/);
+    assert.match(b?.reason ?? "", /2026-10-02/);
+    assert.match(
+      b?.reason ?? "",
+      /megkülönböztethetetlen.*későbbi.*felesleges/,
+      "the later one is the extra by convention, and the reason says so",
+    );
+    assert.notEqual(a?.state, "DOUBLE_PAID");
+    assert.equal(a?.doublePaidWith, undefined);
+    assert.equal(b?.doublePaidWith, undefined);
+    // without the refund the pair stays what it was
+    const without = settle([]);
+    assert.deepEqual(
+      [without.a?.state, without.b?.state],
+      ["DOUBLE_PAID", "DOUBLE_PAID"],
+    );
+  });
+
+  it("a refund that is not exactly this one resolves nothing", () => {
+    for (const [label, credit] of [
+      ["another amount", refund({ amount: D(49999) })],
+      ["another currency", refund({ currency: "EUR" })],
+      ["before the second payment", refund({ bookingDate: "2026-09-28" })],
+      ["after 90 days", refund({ bookingDate: "2027-01-05" })],
+      ["another partner", refund({ counterpartyName: "Más Cég Zrt." })],
+      [
+        "not naming the number",
+        refund({ narrative: "visszautalas (dupla utalas)" }),
+      ],
+      [
+        "naming another number",
+        refund({ narrative: "kb-8888/2026 visszautalas" }),
+      ],
+    ] as const) {
+      const { a, b } = settle([credit]);
+      assert.deepEqual(
+        [a?.state, b?.state],
+        ["DOUBLE_PAID", "DOUBLE_PAID"],
+        label,
+      );
+    }
+    // on the day of the second payment, and on the 90th day, it still counts
+    assert.equal(
+      settle([refund({ bookingDate: "2026-09-29" })]).b?.state,
+      "NO_INVOICE_NEEDED",
+    );
+    assert.equal(
+      settle([refund({ bookingDate: "2026-12-28" })]).b?.state,
+      "NO_INVOICE_NEEDED",
+    );
+  });
+
+  it("three debits on one invoice are not resolved: a person looks", () => {
+    const third = payment("dp-c", "2026-09-30");
+    const { a, b } = settle([refund()], {
+      debits: [third],
+      documents: [read("dp-x0")],
+    });
+    assert.deepEqual([a?.state, b?.state], ["DOUBLE_PAID", "DOUBLE_PAID"]);
+  });
+
+  it("one refund closes one pair, not two", () => {
+    const c = payment("dp-c", "2026-09-30", { narrative: "KB-8888/2026" });
+    const d = payment("dp-d", "2026-10-01", { narrative: "KB-8888/2026" });
+    const documents = [
+      doc({
+        id: "dp-y1",
+        source: "UPLOAD",
+        gross: null,
+        number: "",
+        identities: ["sha:dp-2"],
+      }),
+      doc({ id: "dp-y2", number: "KB-8888/2026", identities: ["sha:dp-2"] }),
+      unread("dp-d1"),
+      read("dp-d2"),
+    ];
+    const out = matchMonth({
+      debits: [
+        payment("dp-a", "2026-09-28"),
+        payment("dp-b", "2026-09-29"),
+        c,
+        d,
+      ],
+      documents,
+      manual: new Map([
+        ["dp-a", ["dp-d1"]],
+        ["dp-b", ["dp-d2"]],
+        ["dp-c", ["dp-y1"]],
+        ["dp-d", ["dp-y2"]],
+      ]),
+      // one credit naming both numbers
+      credits: [
+        refund({ narrative: "kb-7777/2026 es kb-8888/2026 visszautalas" }),
+      ],
+    });
+    assert.deepEqual(
+      ["dp-b", "dp-d"].map((id) => out.get(id)?.state),
+      ["NO_INVOICE_NEEDED", "DOUBLE_PAID"],
+      "the earlier pair takes the credit; the second pair stays for a person",
+    );
+  });
+});
