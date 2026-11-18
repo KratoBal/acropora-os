@@ -136,7 +136,8 @@ describe("PilotWorksheetListPage -- redesign", () => {
       "Felelős",
       "Állapot",
       "Munkaóra",
-      "Hibajegy",
+      // a oszlopban hibajegy (HJ-) és karbantartási lap (KT-) száma is áll, ezért a fejléc semleges (hibajegy-maradek lista, 2026-11-18)
+      "Jegy / lap",
       null,
     ]);
   });

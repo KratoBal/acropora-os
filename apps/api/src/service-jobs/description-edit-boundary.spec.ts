@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import type { PartnerScope } from "../auth/partner-scope.util.js";
 import {
   DESCRIPTION_EDIT_BLOCKER_MESSAGES,
+  descriptionEditBlockerMessage,
   descriptionEditBlocker,
 } from "./description-edit-boundary.js";
 
@@ -133,6 +134,26 @@ describe("a leírás-szerkesztés határa", () => {
       assert.ok(
         !/nem található/i.test(mondat),
         `a mondat elfedi a határt: ${mondat}`,
+      );
+    }
+  });
+
+  /*
+    A KARBANTARTÁSI LAP MONDATAI (hibajegy-maradek lista, 2026-11-18): a három határ mondata KT-lapon "karbantartási lap", hibajegyen a régi. MI PIROSÍT: ha a MAINTENANCE fajta újra a
+    hibajegy mondatát kapja; ha egy határnak nincs külön karbantartási mondata; ha a hibajegy mondata megváltozik.
+  */
+  it("a karbantartási lap mondatai külön vannak, és egyik sem 'hibajegy'", () => {
+    for (const blocker of [
+      "FINISHED",
+      "HAS_WORKSHEET",
+      "OUT_OF_SCOPE",
+    ] as const) {
+      const maintenance = descriptionEditBlockerMessage(blocker, "MAINTENANCE");
+      assert.match(maintenance, /karbantartási lap/);
+      assert.doesNotMatch(maintenance, /hibajegy/i);
+      assert.equal(
+        descriptionEditBlockerMessage(blocker, "REPAIR"),
+        DESCRIPTION_EDIT_BLOCKER_MESSAGES[blocker],
       );
     }
   });

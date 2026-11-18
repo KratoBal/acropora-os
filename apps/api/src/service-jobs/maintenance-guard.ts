@@ -40,5 +40,5 @@ export function maintenanceBlock(
   action: MaintenanceBlockedAction,
 ): string | null {
   if (kind !== "MAINTENANCE") return null;
-  return `Karbantartási munkán nincs ${WHAT[action]}: a karbantartásnak nincs hibajegy-állapota, az aláírt munkalap a kész.`;
+  return `Karbantartási munkán nincs ${WHAT[action]}: a karbantartási lapnak nincs állapota, az aláírt munkalap a kész.`;
 }
