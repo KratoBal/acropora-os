@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  bankTransferListed,
   bankTransferPlanFrom,
   decideBankTransfer,
   runBankTransferMarks,
@@ -487,5 +488,88 @@ describe("the daily run's writer (barracuda, #2192 v2)", () => {
   it("BANK_TRANSFER writes its own way: one credit at a time, under its lock", () => {
     const source = PAID_MARK_SOURCES.find((s) => s.source === "BANK_TRANSFER");
     assert.equal(source?.run, runBankTransferMarks);
+  });
+});
+
+/*
+  THE PAGE'S LIST (the Banki átutalások survey, 2026-11-18, live: 15 of the 20 default rows were GLS/Foxpost credits another
+  source had WRITTEN, each with the sentence meant for a case a person must solve). WHAT TURNS THIS RED: a credit another source
+  closed for sure shown by default; one that is not sure (PLANNED, UNKNOWN) hidden; the page deciding by another definition than
+  the daily plan's (`attention`); a credit with our own written mark hidden; `all` not showing everything.
+*/
+describe("the page's list shows what a person looks at, by the plan's own definition", () => {
+  const usedBy = (...states: string[]) =>
+    decideBankTransfer(
+      credit({
+        existingMarks: states.map((state, i) => ({
+          source: i === 0 ? "GLS_COD" : "FOXPOST",
+          invoiceNumber: `ACRW-2026/0054${i}`,
+          state,
+        })),
+      }),
+      balazs(),
+    );
+
+  it("a credit another source closed for sure is not listed by default, but `all` lists it", () => {
+    for (const decision of [
+      usedBy("WRITTEN"),
+      usedBy("ALREADY_PAID"),
+      usedBy("WRITTEN", "ALREADY_PAID"),
+    ]) {
+      assert.equal(bankTransferListed(decision, [], false), false);
+      assert.equal(bankTransferListed(decision, [], true), true);
+    }
+  });
+
+  it("PLANNED, UNKNOWN or a mix is listed: a person still looks", () => {
+    for (const decision of [
+      usedBy("PLANNED"),
+      usedBy("UNKNOWN"),
+      usedBy("WRITTEN", "PLANNED"),
+    ])
+      assert.equal(bankTransferListed(decision, [], false), true);
+  });
+
+  it("the same definition as the daily plan: for a used credit, listed is the plan's attention", () => {
+    for (const decision of [
+      usedBy("WRITTEN"),
+      usedBy("PLANNED"),
+      usedBy("UNKNOWN"),
+      usedBy("WRITTEN", "PLANNED"),
+      usedBy("ALREADY_PAID"),
+    ]) {
+      const [line] = bankTransferPlanFrom([decision]).exceptions;
+      assert.equal(
+        bankTransferListed(decision, [], false),
+        line?.attention,
+        decision.markable ? "" : decision.detail,
+      );
+    }
+  });
+
+  it("a credit with our own written mark stays listed, even when another source also closed it", () => {
+    assert.equal(
+      bankTransferListed(usedBy("WRITTEN"), ["ACRW-2026/00090"], false),
+      true,
+    );
+  });
+
+  it("what was listed before stays: markable, unresolved, already paid; a transfer naming none of ours does not", () => {
+    const named = decideBankTransfer(
+      credit({ narrative: "2026/00083,86,85,84", amount: "100000.50" }),
+      balazs(),
+    );
+    assert.equal(bankTransferListed(named, [], false), true);
+    const none = decideBankTransfer(
+      credit({ narrative: "köszönöm" }),
+      balazs(),
+    );
+    assert.equal(bankTransferListed(none, [], false), false);
+    assert.equal(bankTransferListed(none, [], true), true);
+    const missing = decideBankTransfer(
+      credit({ narrative: "2026/00083,87", amount: "10000" }),
+      balazs(),
+    );
+    assert.equal(bankTransferListed(missing, [], false), true);
   });
 });
