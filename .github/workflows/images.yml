@@ -1,0 +1,126 @@
+name: Images
+
+# THE PRODUCTION AND STAGE IMAGES ARE BUILT HERE, NOT ON THE SERVER (task t-20261117-ghcr-kepek, card 0529e916).
+#
+# On 2026-11-17 two parallel builds on the 8 GB production host froze it (OS and the game went down, a power-off was needed). The repository is public
+# and the standard runner is free, so GitHub builds the images, pushes them to GHCR, and Coolify only pulls them (an application of the "Docker Image"
+# type). Nothing is built on the server any more. See docs/GHCR-IMAGES.md for the switch, the order and the rollback.
+#
+# WHEN: only after the CI workflow succeeded for a push to main (`workflow_run`), so an image exists only for a commit whose checks, including the
+# vulnerability scan of the same Dockerfiles, were green. A pull request never publishes.
+#
+# WHAT: the same Dockerfile and the same build context as the CI's docker-build-scan and as Coolify (apps/<app>/Dockerfile, the repository root).
+#   api                  one image for stage and production (no build-time value differs between them)
+#   web, partner         one image PER ENVIRONMENT: API_URL is read when the image is built (next.config.ts), so it is part of the image
+# The tag is `sha-<the full commit>`, never `latest`: a deploy names the exact commit, a rollback names the previous one.
+#
+# SECRETS: none. The registry login is the built-in GITHUB_TOKEN with `packages: write`; the build needs no secret and the image holds none (see
+# .dockerignore). The two API_URL values are repository VARIABLES (STAGE_API_URL, PROD_API_URL), not secrets, and they are NOT written into this
+# file: nobody can read them from the Coolify side, and a public address typed here in place of the internal one would be a new fault. An empty
+# variable STOPS the job before the build; it never builds an image with a guessed address.
+#
+# The fleet's key cannot push a workflow file: this file reaches main by a single push of the owner.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+# One publication per commit; a later commit does not cancel an earlier one that is already pushing.
+concurrency:
+  group: images-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish ${{ matrix.image }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: api
+            image: acropora-os-api
+            api_url: ""
+          - app: web
+            image: acropora-os-web-stage
+            api_url: ${{ vars.STAGE_API_URL }}
+          - app: web
+            image: acropora-os-web-prod
+            api_url: ${{ vars.PROD_API_URL }}
+          - app: partner
+            image: acropora-os-partner-stage
+            api_url: ${{ vars.STAGE_API_URL }}
+          - app: partner
+            image: acropora-os-partner-prod
+            api_url: ${{ vars.PROD_API_URL }}
+
+    steps:
+      # BEFORE anything is built: web and partner need their environment's API_URL, and an empty one is a fault to fix, not a value to guess.
+      - name: Require the API_URL of this image's environment
+        if: matrix.app != 'api'
+        env:
+          API_URL: ${{ matrix.api_url }}
+        run: |
+          if [ -z "$API_URL" ]; then
+            echo "::error::The repository variable for ${{ matrix.image }} is empty (STAGE_API_URL or PROD_API_URL). Set it in Settings > Secrets and variables > Actions > Variables; nothing was built."
+            exit 1
+          fi
+
+      - name: Checkout the commit that passed the CI
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Name the image and the build arguments
+        id: build
+        env:
+          API_URL: ${{ matrix.api_url }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          # the registry wants lower case; the owner name may not be
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "ref=ghcr.io/${owner}/${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+          {
+            echo "args<<ARGS_EOF"
+            echo "RELEASE_COMMIT_SHA=${SHA}"
+            echo "OS_PATCH_EPOCH=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            if [ -n "$API_URL" ]; then echo "API_URL=${API_URL}"; fi
+            echo "ARGS_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.image }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: true
+          tags: ${{ steps.build.outputs.ref }}:sha-${{ github.event.workflow_run.head_sha }}
+          # links the package to this repository (and its visibility settings) and names the commit it was built from
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha }}
+          build-args: ${{ steps.build.outputs.args }}
+          # reads the CI's cache of the same app (written by `docker-build-scan`) AND this image's own previous publish; writes only its own scope, so the CI cache is never overwritten
+          cache-from: |
+            type=gha,scope=${{ matrix.app }}
+            type=gha,scope=publish-${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=publish-${{ matrix.image }}
