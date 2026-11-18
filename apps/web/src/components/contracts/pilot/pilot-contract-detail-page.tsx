@@ -601,7 +601,7 @@ export function PilotContractDetailPage({
         setCreatingJob(false);
         return;
       }
-      router.push(`/szerviz/hibajegyek/${serviceJobId}`);
+      router.push(`/szerviz/karbantartas/${serviceJobId}`);
     } catch (cause) {
       const keep = keepsContractJobOperationId(cause);
       if (!keep) jobOperationId.current = newContractJobOperationId();
@@ -1410,7 +1410,7 @@ export function PilotContractDetailPage({
                           {createdJobIds.map((jobId, index) => (
                             <li key={jobId}>
                               <Link
-                                href={`/szerviz/hibajegyek/${jobId}`}
+                                href={`/szerviz/karbantartas/${jobId}`}
                                 className="font-medium text-pilot-aqua-700 underline"
                               >
                                 {index + 1}. karbantartási lap
@@ -1493,7 +1493,7 @@ export function PilotContractDetailPage({
                             ) : null}
                             {order.serviceJobId ? (
                               <Link
-                                href={`/szerviz/hibajegyek/${order.serviceJobId}`}
+                                href={`/szerviz/karbantartas/${order.serviceJobId}`}
                                 className="text-xs font-medium text-pilot-aqua-700 underline"
                               >
                                 Karbantartási lap

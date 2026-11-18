@@ -91,7 +91,7 @@ export const worksheetDetailInclude = {
    * mond semmit annak, aki nezi, a `HJ-2026-001` igen. Kulon lekerdezes nelkul
    * jon, ugyanabban a sorban.
    */
-  serviceJob: { select: { id: true, jobNumber: true } },
+  serviceJob: { select: { id: true, jobNumber: true, kind: true } },
   /** Both ends of the chain. A link only one side knows about is no use to
    * whoever finds the other side first -- and on a signed sheet the only way
    * onward IS the continuation, so the sheet has to name it. */
@@ -163,7 +163,7 @@ export const worksheetSummaryInclude = {
     take: 1,
   },
   // the list's "Hibajegy" column: the same pair the detail returns
-  serviceJob: { select: { id: true, jobNumber: true } },
+  serviceJob: { select: { id: true, jobNumber: true, kind: true } },
   _count: { select: { versions: true } },
 } satisfies Prisma.WorksheetInclude;
 
@@ -396,7 +396,11 @@ export function toWorksheetDetail(row: WorksheetDetailRow): WorksheetDetail {
     handedOverAt: row.handedOverAt?.toISOString() ?? null,
     handedOverByName: row.handedOverBy?.displayName ?? null,
     serviceJob: row.serviceJob
-      ? { id: row.serviceJob.id, jobNumber: row.serviceJob.jobNumber }
+      ? {
+          id: row.serviceJob.id,
+          jobNumber: row.serviceJob.jobNumber,
+          kind: row.serviceJob.kind,
+        }
       : null,
     assignees: row.assignees.map(toAssignee),
     assets: row.assets.map((link) => ({
@@ -449,7 +453,11 @@ export function toWorksheetListItem(
     ),
     laborHours: sumWorksheetLaborHours(current.lines).toString(),
     serviceJob: row.serviceJob
-      ? { id: row.serviceJob.id, jobNumber: row.serviceJob.jobNumber }
+      ? {
+          id: row.serviceJob.id,
+          jobNumber: row.serviceJob.jobNumber,
+          kind: row.serviceJob.kind,
+        }
       : null,
     updatedAt: row.updatedAt.toISOString(),
     /**

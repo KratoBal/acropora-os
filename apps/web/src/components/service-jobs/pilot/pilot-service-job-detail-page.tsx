@@ -24,6 +24,7 @@ import {
   uploadAccept,
 } from "@acropora/types";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -156,10 +157,27 @@ import {
  * kártyái közé.
  */
 
-function timelineLine(entry: ServiceJobTimelineEntry): string {
+/** A karbantartási lap naplójában a hibajegy-állapotváltások nem látszanak: ott nincs állapotgép, csak a létrejötte. */
+const visibleTimeline = (
+  timeline: readonly ServiceJobTimelineEntry[],
+  maintenance: boolean,
+) =>
+  maintenance
+    ? timeline.filter(
+        (entry) => entry.kind !== "status" || entry.event.fromStatus === null,
+      )
+    : timeline;
+
+function timelineLine(
+  entry: ServiceJobTimelineEntry,
+  maintenance: boolean,
+): string {
   if (entry.kind === "status") {
     const to = serviceJobStatusLabel[entry.event.toStatus];
-    if (entry.event.fromStatus === null) return `A hibajegy létrejött (${to}).`;
+    if (entry.event.fromStatus === null)
+      return maintenance
+        ? "A karbantartási lap létrejött."
+        : `A hibajegy létrejött (${to}).`;
     const from = serviceJobStatusLabel[entry.event.fromStatus];
     return `${from} → ${to}`;
   }
@@ -242,9 +260,32 @@ function TimelineIcon({ kind }: { kind: ServiceJobTimelineEntry["kind"] }) {
   );
 }
 
-export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
+/**
+ * A KARBANTARTÁSI LAP NEM HIBAJEGY (Balázs és Luca, 2026-11-18, Luca-Balázs-Acrobot szál; acrobot 55781-55787): ugyanez az adatlap
+ * szolgálja ki a háttérben ServiceJob(MAINTENANCE)-ként élő karbantartási lapot is, de a felhasználó SEHOL nem láthatja hibajegyként.
+ * `route`: melyik útvonalon áll a lap (`/szerviz/hibajegyek/[id]` vagy `/szerviz/karbantartas/[id]`); ha a jegy fajtája nem ehhez az
+ * útvonalhoz tartozik, a lap átvált a sajátjára (minden régi link, levél, keresési találat így működik tovább). Elhagyva: nincs átváltás.
+ *
+ * A karbantartási lapon NINCS hibajegy-állapotgép (a Következő lépés), partner-állapot, Kezelés blokk (Helyszín, Elrejtés), meglévő
+ * munkalap csatolása/leválasztása, és a partner felé szóló beszélgetés: az állapot a munkalapok aláírásából jön (minden aláírva = Kész,
+ * különben Folyamatban), és a munkalapok az első blokk.
+ */
+export type ServiceJobRoute = "hibajegyek" | "karbantartas";
+
+const routeOfKind = (kind: ServiceJobDetail["kind"]): ServiceJobRoute =>
+  kind === "MAINTENANCE" ? "karbantartas" : "hibajegyek";
+
+export function PilotServiceJobDetailPage({
+  jobId,
+  route,
+}: {
+  jobId: string;
+  route?: ServiceJobRoute;
+}) {
   const { session } = useAuth();
+  const router = useRouter();
   const listHref = useListHref("/szerviz/hibajegyek");
+  const maintenanceListHref = useListHref("/szerviz/karbantartas");
   const [job, setJob] = useState<ServiceJobDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -320,6 +361,13 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  // a lap a saját fajtájának útvonalára tér át (a régi hibajegy-linkek a karbantartási lapot is idehozzák)
+  const wrongRoute = job && route && route !== routeOfKind(job.kind);
+  useEffect(() => {
+    if (job && route && route !== routeOfKind(job.kind))
+      router.replace(`/szerviz/${routeOfKind(job.kind)}/${jobId}`);
+  }, [job, route, jobId, router]);
 
   const jobCustomerId = job?.customerId ?? null;
   useEffect(() => {
@@ -589,7 +637,7 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
       />
     );
 
-  if (loading && !job)
+  if ((loading && !job) || wrongRoute)
     return (
       <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50 p-8">
         {offlineSav}
@@ -622,7 +670,12 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
   const worksheets = job.timeline.flatMap((entry) =>
     entry.kind === "worksheet" ? [entry.worksheet] : [],
   );
-  const finished = isFinishedServiceJob(job.status);
+  const maintenance = job.kind === "MAINTENANCE";
+  // a karbantartás állapota a munkalapok aláírásából jön: minden aláírva = kész (nincs munkalap: még folyamatban)
+  const maintenanceDone =
+    worksheets.length > 0 &&
+    worksheets.every((worksheet) => worksheet.status === "SIGNED");
+  const finished = !maintenance && isFinishedServiceJob(job.status);
 
   const creation = job.timeline.find(
     (entry) => entry.kind === "status" && entry.event.fromStatus === null,
@@ -649,11 +702,11 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
       */}
       <div>
         <Link
-          href={listHref}
+          href={maintenance ? maintenanceListHref : listHref}
           className="text-sm text-pilot-aqua-700 transition-colors hover:text-pilot-aqua-800"
         >
           <span aria-hidden="true">← </span>
-          Hibajegyek
+          {maintenance ? "Karbantartás" : "Hibajegyek"}
         </Link>
         <PageHeader
           className="mt-4"
@@ -661,12 +714,22 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
           title={job.title}
           meta={
             <>
-              <PilotBadge variant={STATUS_BADGE_VARIANT[job.status]}>
-                {serviceJobStatusLabel[job.status]}
-              </PilotBadge>
-              <PilotBadge variant="blue">
-                Partner: {job.partnerStatusLabel}
-              </PilotBadge>
+              {maintenance ? (
+                <span data-testid="maintenance-status">
+                  <PilotBadge variant={maintenanceDone ? "success" : "blue"}>
+                    {maintenanceDone ? "Kész" : "Folyamatban"}
+                  </PilotBadge>
+                </span>
+              ) : (
+                <>
+                  <PilotBadge variant={STATUS_BADGE_VARIANT[job.status]}>
+                    {serviceJobStatusLabel[job.status]}
+                  </PilotBadge>
+                  <PilotBadge variant="blue">
+                    Partner: {job.partnerStatusLabel}
+                  </PilotBadge>
+                </>
+              )}
               {job.hidden ? (
                 <PilotBadge variant="amber">Rejtett</PilotBadge>
               ) : null}
@@ -675,12 +738,14 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
           actions={
             <>
               <ContextConversationButton kind="service-job" objectId={job.id} />
-              <ContextConversationButton
-                kind="service-job"
-                objectId={job.id}
-                partner
-              />
-              {job.partnerStatus === "COMPLETED" ? (
+              {maintenance ? null : (
+                <ContextConversationButton
+                  kind="service-job"
+                  objectId={job.id}
+                  partner
+                />
+              )}
+              {!maintenance && job.partnerStatus === "COMPLETED" ? (
                 <div className="flex flex-wrap gap-2">
                   <PilotButton
                     variant="secondary"
@@ -746,7 +811,7 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
         <div className="flex min-w-0 flex-col gap-5">
           <PilotCard>
             <PilotCardHeader
-              title="A bejelentés"
+              title={maintenance ? "Leírás" : "A bejelentés"}
               action={
                 finished ? (
                   <span className="text-xs italic text-pilot-grey-400">
@@ -865,9 +930,9 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
             </div>
           </PilotCard>
 
-          <PilotCard>
+          <PilotCard className={maintenance ? "order-first" : ""}>
             <PilotCardHeader
-              title="Munkalapok a jegy mögött"
+              title={maintenance ? "Munkalapok" : "Munkalapok a jegy mögött"}
               action={
                 canManage && job.customerId !== null ? (
                   <Link
@@ -880,7 +945,9 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
             />
             {worksheets.length === 0 ? (
               <p className="px-5 py-8 text-center text-sm text-pilot-grey-400">
-                Még nincs munkalap ehhez a hibajegyhez.
+                {maintenance
+                  ? "Még nincs munkalap ehhez a karbantartási laphoz."
+                  : "Még nincs munkalap ehhez a hibajegyhez."}
               </p>
             ) : (
               <div className="divide-y divide-pilot-grey-50">
@@ -934,7 +1001,7 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                           Átadva: {formatDateTime(worksheet.handedOverAt)}
                         </span>
                       ) : null}
-                      {canManage ? (
+                      {canManage && !maintenance ? (
                         <button
                           type="button"
                           className="cursor-pointer underline hover:text-pilot-aqua-700"
@@ -949,7 +1016,7 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                 ))}
               </div>
             )}
-            {canManage ? (
+            {canManage && !maintenance ? (
               <div className="space-y-2 border-t border-pilot-grey-100 px-5 py-4">
                 <label
                   className="block text-xs font-medium text-pilot-grey-700"
@@ -1081,9 +1148,9 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
               <p className="mb-2 text-xs text-pilot-grey-500">
                 A jegy, a munkalapok és a csatolmányok közös naplója.
               </p>
-              {job.timeline.length ? (
+              {visibleTimeline(job.timeline, maintenance).length ? (
                 <ol className="flex flex-col">
-                  {job.timeline.map((entry) => (
+                  {visibleTimeline(job.timeline, maintenance).map((entry) => (
                     <li
                       key={`${entry.kind}-${entry.sortKey}`}
                       className="grid grid-cols-[24px_96px_minmax(0,1fr)] gap-x-3 border-b border-pilot-grey-50 py-3 last:border-0 xl:grid-cols-[24px_96px_minmax(0,1fr)_minmax(0,1fr)]"
@@ -1093,7 +1160,7 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                         {formatDateTime(entry.at)}
                       </span>
                       <span className="text-sm font-medium text-pilot-grey-900">
-                        {timelineLine(entry)}
+                        {timelineLine(entry, maintenance)}
                       </span>
                       <span className="col-start-3 text-xs text-pilot-grey-600 xl:col-start-4">
                         {entry.kind === "status" && entry.event.actorName
@@ -1134,7 +1201,7 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
             the steps the server allows are drawn (`allowedSteps`); the page
             decides nothing about which step comes next.
           */}
-          {canManage ? (
+          {canManage && !maintenance ? (
             <section
               aria-label="Következő lépés"
               className="rounded-xl bg-pilot-aqua-50 px-5 py-5 ring-1 ring-pilot-aqua-200"
@@ -1240,11 +1307,13 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                 labelWidth="110px"
                 value={formatDateTime(job.createdAt)}
               />
-              <PilotDataRow
-                label="A partner ezt látja"
-                labelWidth="110px"
-                value={job.partnerStatusLabel}
-              />
+              {maintenance ? null : (
+                <PilotDataRow
+                  label="A partner ezt látja"
+                  labelWidth="110px"
+                  value={job.partnerStatusLabel}
+                />
+              )}
             </div>
           </PilotCard>
 
@@ -1267,7 +1336,7 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
             location and assets editor, hiding and restoring, and setting a
             partner on a job without one. Each keeps its own permission.
           */}
-          {canManage || canHide ? (
+          {(canManage || canHide) && !maintenance ? (
             <PilotCard>
               <PilotCardHeader title="Kezelés" />
               <div className="space-y-4 px-5 py-4">

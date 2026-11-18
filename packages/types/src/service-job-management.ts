@@ -118,6 +118,12 @@ export interface ServiceJobListItem {
    */
   assigneeNames?: string[];
   worksheetCount: number;
+  /**
+   * A JEGY EGYETLEN MUNKALAPJÁNAK AZONOSÍTÓJA (Luca és Balázs, 2026-11-18; acrobot 55781): ha a jegynek PONTOSAN EGY munkalapja van,
+   * a Karbantartás lista sora közvetlenül azt nyitja, nem a jegy adatlapját. Több vagy nulla munkalapnál `null`; hiányzik, ha a
+   * válasz nem hordozza. A PARTNER VÁLASZÁBAN NINCS (`partnerServiceJobListItem` elhagyja): a partner a saját útján éri el a lapjait.
+   */
+  soleWorksheetId?: string | null;
   createdAt: string;
   /**
    * EL VAN-E REJTVE. Ugyanaz a mező és ugyanaz a szabály, mint a
@@ -947,7 +953,7 @@ export type ServiceJobPartnerTimelineEntry =
 export function partnerServiceJobListItem(
   item: ServiceJobListItem,
 ): ServiceJobListItem {
-  const { assignees, ...partner } = item;
+  const { assignees, soleWorksheetId: _soleWorksheetId, ...partner } = item;
   return {
     ...partner,
     assigneeNames: (assignees ?? []).map((assignee) => assignee.name),

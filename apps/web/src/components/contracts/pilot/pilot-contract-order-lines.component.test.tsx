@@ -293,7 +293,9 @@ describe("PilotContractDetailPage -- munkalap tételenként, darab- és alkaloms
     ]);
     expect("separate" in sent).toBe(false);
     await waitFor(() =>
-      expect(navigation.push).toHaveBeenCalledWith("/szerviz/hibajegyek/job-9"),
+      expect(navigation.push).toHaveBeenCalledWith(
+        "/szerviz/karbantartas/job-9",
+      ),
     );
   });
 
@@ -312,10 +314,10 @@ describe("PilotContractDetailPage -- munkalap tételenként, darab- és alkaloms
     expect(orderApi.createContractJob.mock.calls[0]![1].separate).toBe(true);
     expect(await screen.findByText(/Létrejött 2 önálló lap/)).toBeTruthy();
     expect(screen.getByText("1. karbantartási lap").getAttribute("href")).toBe(
-      "/szerviz/hibajegyek/job-1",
+      "/szerviz/karbantartas/job-1",
     );
     expect(screen.getByText("2. karbantartási lap").getAttribute("href")).toBe(
-      "/szerviz/hibajegyek/job-2",
+      "/szerviz/karbantartas/job-2",
     );
     expect(navigation.push).not.toHaveBeenCalled();
   });
