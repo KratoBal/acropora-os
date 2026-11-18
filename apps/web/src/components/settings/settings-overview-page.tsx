@@ -361,6 +361,13 @@ export const WEBSHOP_SETTINGS_AREAS: SettingsArea[] = [
         href: "/webshop/kuponok",
         entryId: "webshop-coupons",
       },
+      {
+        label: "Egyedi kedvezmények",
+        description:
+          "Vevőnként beállítható százalékos kedvezmény a termékárból, minden rendelésére. Be- és kikapcsolás.",
+        href: "/webshop/egyedi-kedvezmenyek",
+        entryId: "webshop-coupons",
+      },
     ],
   },
   {

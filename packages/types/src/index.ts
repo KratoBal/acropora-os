@@ -2357,3 +2357,13 @@ export type {
   WebshopCouponParse,
   WebshopCouponState,
 } from "./webshop-coupons.js";
+export {
+  parseWebshopCustomerDiscountInput,
+  WEBSHOP_CUSTOMER_DISCOUNT_LIMITS,
+} from "./webshop-customer-discounts.js";
+export type {
+  WebshopCustomerDiscount,
+  WebshopCustomerDiscountInput,
+  WebshopCustomerDiscountParse,
+  WebshopCustomerHit,
+} from "./webshop-customer-discounts.js";
