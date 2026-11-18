@@ -26,7 +26,8 @@ export type CouponClientFactory = () => Promise<MedusaPromotionClient>;
 /**
  * EBBEN A KÖRNYEZETBEN SZABAD-E KUPONT ÍRNI A WEBSHOPBA (kártya 393ae5cb; Balázs: teszt kirakat, éles nem). A kupon a
  * webshop promóciója, tehát a felvétele írás a boltba: csak ott megy, ahol a `MEDUSA_WEBSHOP_COUPONS=true` áll (a teszt
- * OS-ben), ugyanúgy, ahogy a kezdőlap küldése a saját kapcsolója mögött áll. Ahol nincs, a lista sem kérdezi a webshopot.
+ * OS-ben), ugyanúgy, ahogy a kezdőlap küldése a saját kapcsolója mögött áll. Ahol nincs, a végpontok 404-et adnak, és a
+ * webshophoz nem nyúlnak.
  */
 export function couponsAllowed(
   env: Record<string, string | undefined>,
@@ -46,7 +47,6 @@ export function medusaMessage(body: string): string {
 }
 
 export type CouponList = {
-  enabled: boolean;
   coupons: WebshopCoupon[];
   truncated: boolean;
 };
@@ -60,11 +60,12 @@ export class WebshopCouponsService {
     @Inject(COUPON_CLOCK) private readonly now: () => Date,
   ) {}
 
+  /**
+   * Off: 404, like every endpoint behind a navigation switch (the home page editor, the ReefClub codes): where the switch
+   * is off the feature does not exist, and the menu does not offer it either.
+   */
   private requireAllowed() {
-    if (!couponsAllowed(this.environment))
-      throw new BadRequestException(
-        "Ebben a környezetben a kuponok kezelése nincs engedélyezve (MEDUSA_WEBSHOP_COUPONS).",
-      );
+    if (!couponsAllowed(this.environment)) throw new NotFoundException();
   }
 
   /** A webshop hibája az ember nyelvén; a kulcs és a fejlécek sosem kerülnek a válaszba. */
@@ -101,12 +102,10 @@ export class WebshopCouponsService {
   }
 
   async list(): Promise<CouponList> {
-    if (!couponsAllowed(this.environment))
-      return { enabled: false, coupons: [], truncated: false };
+    this.requireAllowed();
     const rows = await this.call((client) => client.listPromotions());
     const now = this.now();
     return {
-      enabled: true,
       coupons: rows
         .map((row) => toWebshopCoupon(row, now))
         .filter((c): c is WebshopCoupon => c !== null),

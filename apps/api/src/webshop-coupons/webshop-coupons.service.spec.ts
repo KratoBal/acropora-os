@@ -67,19 +67,15 @@ const service = (
 };
 
 describe("the environment switch", () => {
-  it("without MEDUSA_WEBSHOP_COUPONS=true the list is off and the shop is not asked; a write is refused", async () => {
+  it("without MEDUSA_WEBSHOP_COUPONS=true every endpoint is 404 and the shop is not asked", async () => {
     const { client, calls } = fakeClient();
     const { svc, built } = service(client, {});
-    assert.deepEqual(await svc.list(), {
-      enabled: false,
-      coupons: [],
-      truncated: false,
-    });
+    await assert.rejects(svc.list(), NotFoundException);
     await assert.rejects(
       svc.create({ code: "TAVASZ10", kind: "PERCENT", value: 10 }),
-      BadRequestException,
+      NotFoundException,
     );
-    await assert.rejects(svc.setActive("promo_1", false), BadRequestException);
+    await assert.rejects(svc.setActive("promo_1", false), NotFoundException);
     assert.deepEqual(calls, []);
     assert.equal(built(), 0);
   });
@@ -87,7 +83,6 @@ describe("the environment switch", () => {
   it("with it, the list reads the shop", async () => {
     const { client } = fakeClient();
     const list = await service(client).svc.list();
-    assert.equal(list.enabled, true);
     assert.deepEqual(
       list.coupons.map((c) => c.code),
       ["TAVASZ10"],
