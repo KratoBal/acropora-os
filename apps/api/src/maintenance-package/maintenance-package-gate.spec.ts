@@ -130,4 +130,54 @@ describe("maintenancePackageBlockMessage", () => {
     assert.match(message, /Nincs kiállítva teljesítési igazolás/);
     assert.match(message, /Nincs kiállítva számla/);
   });
+
+  /*
+    A STAGE-VÉGIGJÁRÁS TALÁLTA (2026-11-18, acrobot 56068): a szerződéstételekből jött munkalap-piszkozatnak még nincs száma, és a mondat négyszer ugyanazt írta: "szám nélküli munkalap, szám
+    nélküli munkalap, ..." -- a kezelő nem tudta, melyiket zárja. MI PIROSÍT: ha a számtalan munkalapot újra "szám nélküli munkalap" néven nevezi, amikor van tárgya; ha a számmal bíró
+    lapot nem a száma nevezi; ha a tárgy nélküli számtalan lap neve eltűnik (marad a régi mondat).
+  */
+  it("a számtalan munkalapot a tárgya nevezi meg, a számmal bírót a száma", () => {
+    const piszkozat = (id: string, subject: string | null) => ({
+      ...KESZ_LAP,
+      id,
+      number: null,
+      subject,
+      closed: false,
+      hasIssuedSheet: false,
+    });
+    const message = maintenancePackageBlockMessage(
+      maintenancePackageBlockers(
+        input({
+          worksheets: [
+            piszkozat("a", "Cápasuli kis medence"),
+            piszkozat("b", "Cápasuli nagymedence"),
+            { ...KESZ_LAP, id: "c", closed: false, hasIssuedSheet: false },
+          ],
+        }),
+      ),
+    );
+    assert.match(message, /„Cápasuli kis medence” \(piszkozat\)/);
+    assert.match(message, /„Cápasuli nagymedence” \(piszkozat\)/);
+    assert.match(message, /ML-2026-001/);
+    assert.doesNotMatch(message, /szám nélküli munkalap/);
+  });
+
+  it("a tárgy nélküli számtalan munkalap neve marad a régi mondat", () => {
+    const message = maintenancePackageBlockMessage(
+      maintenancePackageBlockers(
+        input({
+          worksheets: [
+            {
+              ...KESZ_LAP,
+              number: null,
+              subject: null,
+              closed: false,
+              hasIssuedSheet: false,
+            },
+          ],
+        }),
+      ),
+    );
+    assert.match(message, /Nincs lezárva: szám nélküli munkalap\./);
+  });
 });

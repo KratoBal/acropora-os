@@ -185,6 +185,60 @@ describe("ServiceJobEditorPage", () => {
     ).toBe("/szerviz/karbantartas");
   });
 
+  /*
+    A KARBANTARTÁS SZAVAI (Balázs 2026-11-18 11:31: "a karbantartásnak semmi köze a hibajegyekhez"; a stage-végigjárás találta, acrobot 56068): a karbantartási űrlap a hibajegy
+    szavait használta ("Hibajegy megnyitása", "A hiba leírása", "Mi a baj?", "értesítést kapnak a jegyről"), és a létrehozás után a hibajegyek útvonalára vitt. MI PIROSÍT: ha a
+    karbantartási űrlap bármely szövegében újra megjelenik a "jegy" szó; ha a gomb nem "Karbantartási lap megnyitása"; ha a címke újra "Mi a baj?"; ha a létrehozás után nem a
+    karbantartási lap útvonalára visz; és ha a hibajegy-űrlap szavai megváltoznak.
+  */
+  it("a karbantartási űrlap egyetlen szövegében sincs hibajegy-szó, a gomb és a címke a karbantartásé", async () => {
+    render(<ServiceJobEditorPage kind="MAINTENANCE" />);
+    await screen.findByText("Partner és helyszín");
+
+    const leftover = (document.body.textContent ?? "").match(
+      /.{0,30}(hiba|(?<![a-zé])jegy).{0,30}/i,
+    )?.[0];
+    if (leftover) throw new Error(`LEFTOVER<<${leftover}>>`);
+    expect(
+      screen.getByRole("button", { name: "Karbantartási lap megnyitása" }),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("Mi a feladat?")).toBeTruthy();
+    expect(screen.queryByLabelText("Mi a baj?")).toBeNull();
+    expect(screen.getByText("A munka leírása")).toBeTruthy();
+  });
+
+  it("a karbantartási lap létrehozása után a karbantartási lap útvonalára visz", async () => {
+    sheets.departments.mockResolvedValue({
+      items: [
+        {
+          id: "unit-1",
+          parentId: null,
+          code: "NAG",
+          name: "Nagy fókamedence",
+          isActive: true,
+        },
+      ],
+    });
+    render(<ServiceJobEditorPage kind="MAINTENANCE" />);
+    fireEvent.change(await screen.findByLabelText("Mi a feladat?"), {
+      target: { value: "Havi szűrőtisztítás" },
+    });
+    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
+      target: { value: "vevo-1" },
+    });
+    fireEvent.change(await listedSelect("Helyszín", "unit-1"), {
+      target: { value: "unit-1" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Karbantartási lap megnyitása" }),
+    );
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith(
+        "/szerviz/karbantartas/job-uj",
+      ),
+    );
+  });
+
   it("a hibajegy-űrlap a hibajegy nevét és listáját mutatja", async () => {
     render(<ServiceJobEditorPage />);
     await screen.findByText("Partner és helyszín");
@@ -901,7 +955,7 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
 
   const pickContract = async () => {
     render(<ServiceJobEditorPage kind="MAINTENANCE" />);
-    fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
+    fireEvent.change(await screen.findByLabelText("Mi a feladat?"), {
       target: { value: "Negyedéves karbantartás" },
     });
     fireEvent.change(await listedSelect("Partner", "vevo-1"), {
@@ -955,7 +1009,7 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
 
     await waitFor(() =>
       expect(navigation.push).toHaveBeenCalledWith(
-        "/szerviz/hibajegyek/job-szerz",
+        "/szerviz/karbantartas/job-szerz",
       ),
     );
     expect(api.create).not.toHaveBeenCalled();
@@ -1004,7 +1058,7 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
 
     await waitFor(() =>
       expect(navigation.push).toHaveBeenCalledWith(
-        "/szerviz/hibajegyek/job-szerz",
+        "/szerviz/karbantartas/job-szerz",
       ),
     );
     expect(orders.createContractJob).toHaveBeenCalledTimes(1);
@@ -1034,9 +1088,9 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
         .getByRole("checkbox", { name: /1\. Szűrőcsere/ })
         .hasAttribute("disabled"),
     ).toBe(true);
-    expect(screen.getByLabelText("Mi a baj?").hasAttribute("disabled")).toBe(
-      true,
-    );
+    expect(
+      screen.getByLabelText("Mi a feladat?").hasAttribute("disabled"),
+    ).toBe(true);
     expect(
       screen
         .getByRole("button", { name: "Másik partner" })
@@ -1048,7 +1102,7 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
     );
     await waitFor(() =>
       expect(navigation.push).toHaveBeenCalledWith(
-        "/szerviz/hibajegyek/job-szerz",
+        "/szerviz/karbantartas/job-szerz",
       ),
     );
     const [first, second] = orders.createContractJob.mock.calls.map(
@@ -1084,7 +1138,7 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
   it("WEB-JOB-CONTRACT-NONE: szerződés nélkül a régi út marad, a helyszín választható", async () => {
     api.create.mockResolvedValue({ id: "job-uj", jobNumber: "KB-2026-001" });
     render(<ServiceJobEditorPage kind="MAINTENANCE" />);
-    fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
+    fireEvent.change(await screen.findByLabelText("Mi a feladat?"), {
       target: { value: "Negyedéves karbantartás" },
     });
     fireEvent.change(await listedSelect("Partner", "vevo-1"), {
@@ -1095,7 +1149,7 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
       target: { value: "unit-1" },
     });
     fireEvent.click(
-      screen.getByRole("button", { name: "Hibajegy megnyitása" }),
+      screen.getByRole("button", { name: "Karbantartási lap megnyitása" }),
     );
     await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
     expect(orders.createContractJob).not.toHaveBeenCalled();

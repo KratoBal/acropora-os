@@ -30,8 +30,14 @@ import {
  */
 export function CompletionCertificatePanel({
   serviceJobId,
+  blockedReason = null,
+  onChanged,
 }: {
   serviceJobId: string;
+  /** A kiállítás vagy az aláírt PDF feltöltése UTÁN hívódik: a testvér-panelek (a számla-kártya) ebből tudják, hogy újra kell tölteniük az igazolást. */
+  onChanged?: () => void;
+  /** Ha meg van adva, a kiállítás gombja tiltott, és az ok látszik mellette (nincs forrás: a szerver úgyis 400-zal utasítaná el). */
+  blockedReason?: string | null;
 }) {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -70,6 +76,7 @@ export function CompletionCertificatePanel({
     try {
       await completionCertificatesApi.issue(token, serviceJobId);
       await load();
+      onChanged?.();
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -90,6 +97,7 @@ export function CompletionCertificatePanel({
         file,
       );
       await load();
+      onChanged?.();
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -132,9 +140,17 @@ export function CompletionCertificatePanel({
       {certificates === null ? (
         <p className="text-sm text-muted">Betöltés…</p>
       ) : certificates.length === 0 ? (
-        <PilotButton disabled={issuing} onClick={() => void issue()}>
-          {issuing ? "Kiállítás…" : "Teljesítési igazolás kiállítása"}
-        </PilotButton>
+        <>
+          <PilotButton
+            disabled={issuing || Boolean(blockedReason)}
+            onClick={() => void issue()}
+          >
+            {issuing ? "Kiállítás…" : "Teljesítési igazolás kiállítása"}
+          </PilotButton>
+          {blockedReason ? (
+            <p className="mt-2 text-sm text-muted">{blockedReason}</p>
+          ) : null}
+        </>
       ) : (
         certificates.map((certificate) => (
           <div key={certificate.id} className="rounded-lg border p-3 text-sm">

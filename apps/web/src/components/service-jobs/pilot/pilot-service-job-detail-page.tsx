@@ -53,6 +53,7 @@ import { MaintenanceInvoicePanel } from "../maintenance-invoice-panel";
 import { MaintenancePackagePanel } from "../maintenance-package-panel";
 import {
   serviceJobNoteDescription,
+  completionCertificateBlockedReason,
   serviceJobSourceText,
   serviceJobStatusLabel,
   serviceJobWorksheetLabel,
@@ -288,6 +289,8 @@ export function PilotServiceJobDetailPage({
   const listHref = useListHref("/szerviz/hibajegyek");
   const maintenanceListHref = useListHref("/szerviz/karbantartas");
   const [job, setJob] = useState<ServiceJobDetail | null>(null);
+  // A teljesítési igazolás panel változása (kiállítás, aláírt PDF) újratölti a mellette álló számla-kártyát (stage-végigjárás, 2026-11-18).
+  const [certificateVersion, setCertificateVersion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   /*
@@ -1434,14 +1437,21 @@ export function PilotServiceJobDetailPage({
             KISZOLGÁL" szakaszát.
           */}
           {job.kind === "MAINTENANCE" ? (
-            <CompletionCertificatePanel serviceJobId={job.id} />
+            <CompletionCertificatePanel
+              serviceJobId={job.id}
+              blockedReason={completionCertificateBlockedReason(job.source)}
+              onChanged={() => setCertificateVersion((value) => value + 1)}
+            />
           ) : null}
           {/*
             A PISZKOZAT-SZÁMLA (ADR-014, 4. szelet), VISSZAHOZVA (kártya 0baba3b9, acrobot 44712): a régi részletlapon
             állt, és a pilot lapra váltáskor csendben kimaradt. Ugyanaz a hely, mint ott: a teljesítési igazolás után.
           */}
           {job.kind === "MAINTENANCE" ? (
-            <MaintenanceInvoicePanel serviceJobId={job.id} />
+            <MaintenanceInvoicePanel
+              serviceJobId={job.id}
+              refreshKey={certificateVersion}
+            />
           ) : null}
           {job.kind === "MAINTENANCE" ? (
             <MaintenancePackagePanel

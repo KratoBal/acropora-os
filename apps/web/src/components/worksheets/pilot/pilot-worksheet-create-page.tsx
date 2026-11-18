@@ -170,6 +170,12 @@ export function PilotWorksheetCreatePage() {
     string | null
   >(null);
   const [ticketJobNumber, setTicketJobNumber] = useState<string | null>(null);
+  // A karbantartásnak semmi köze a hibajegyekhez (Balázs, 2026-11-18): a karbantartási lapról nyitott űrlap a karbantartás szavait és útvonalát használja.
+  const [ticketKind, setTicketKind] = useState<"REPAIR" | "MAINTENANCE">(
+    "REPAIR",
+  );
+  const maintenance = ticketKind === "MAINTENANCE";
+  const parentHref = `${maintenance ? "/szerviz/karbantartas" : "/szerviz/hibajegyek"}/${ticketId}`;
   const [ticketError, setTicketError] = useState<string | null>(null);
 
   const { candidates, error: candidatesError } = useAssignableUsers(
@@ -242,9 +248,12 @@ export function PilotWorksheetCreatePage() {
       .then((job) => {
         setTicketError(null);
         setTicketJobNumber(job.jobNumber);
+        setTicketKind(job.kind === "MAINTENANCE" ? "MAINTENANCE" : "REPAIR");
         if (job.customerId === null) {
           setTicketError(
-            "Ehhez a hibajegyhez még nincs partner. Először állítsd be a hibajegy partnerét, és utána nyiss alá munkalapot.",
+            job.kind === "MAINTENANCE"
+              ? "Ehhez a karbantartási laphoz még nincs partner. Először állítsd be a lap partnerét, és utána nyiss alá munkalapot."
+              : "Ehhez a hibajegyhez még nincs partner. Először állítsd be a hibajegy partnerét, és utána nyiss alá munkalapot.",
           );
           return;
         }
@@ -259,7 +268,7 @@ export function PilotWorksheetCreatePage() {
         setTicketError(
           cause instanceof Error
             ? cause.message
-            : "A hibajegy nem tölthető be, ezért a partnere sem állítható be automatikusan.",
+            : "A lap nem tölthető be, ezért a partnere sem állítható be automatikusan.",
         );
       });
     return () => controller.abort();
@@ -367,7 +376,9 @@ export function PilotWorksheetCreatePage() {
         {ticketError ? (
           <Alert
             variant="danger"
-            title="A hibajegy oldaláról"
+            title={
+              maintenance ? "A karbantartási lapról" : "A hibajegy oldaláról"
+            }
             description={ticketError}
           />
         ) : null}
@@ -378,9 +389,9 @@ export function PilotWorksheetCreatePage() {
         */}
         {ticketId && ticketJobNumber ? (
           <div className="rounded-lg bg-pilot-grey-50 px-4 py-3 text-sm text-pilot-grey-600 ring-1 ring-pilot-grey-200">
-            Hibajegy:{" "}
+            {maintenance ? "Karbantartási lap:" : "Hibajegy:"}{" "}
             <Link
-              href={`/szerviz/hibajegyek/${ticketId}`}
+              href={parentHref}
               className="font-mono font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
             >
               {ticketJobNumber}
@@ -426,11 +437,13 @@ export function PilotWorksheetCreatePage() {
               required
               help={
                 ticketUnitArchived
-                  ? `A hibajegy helyszíne (${ticketDepartmentName ?? "ismeretlen"}) archivált, ezért nem tölthető elő. Válassz aktív alegységet.`
+                  ? `A ${maintenance ? "karbantartási lap" : "hibajegy"} helyszíne (${ticketDepartmentName ?? "ismeretlen"}) archivált, ezért nem tölthető elő. Válassz aktív alegységet.`
                   : noSelectableUnits
                     ? ticketPartnerIsMirror
                       ? "Ehhez a partnerhez még nincs alegység. Vegyél fel egyet lent."
-                      : "Ehhez a hibajegyhez nem tartozhat alegység: a partnere nem szerviz partnerként van felvéve. A jegy partnerét kell rendbe tenni."
+                      : maintenance
+                        ? "Ehhez a karbantartási laphoz nem tartozhat alegység: a partnere nem szerviz partnerként van felvéve. A lap partnerét kell rendbe tenni."
+                        : "Ehhez a hibajegyhez nem tartozhat alegység: a partnere nem szerviz partnerként van felvéve. A jegy partnerét kell rendbe tenni."
                     : "A munkalapszám első tagja is ebből lesz."
               }
             >
@@ -620,8 +633,9 @@ export function PilotWorksheetCreatePage() {
             {departmentId ? (
               <>
                 <p className="mb-3 text-xs text-pilot-grey-400">
-                  Elhagyható. A hibajegyből nyitott lap a jegy eszközeivel
-                  indul; itt levehetők és továbbiak felvehetők.
+                  {maintenance
+                    ? "Elhagyható. A karbantartási lapból nyitott munkalap a lap eszközeivel indul; itt levehetők és továbbiak felvehetők."
+                    : "Elhagyható. A hibajegyből nyitott lap a jegy eszközeivel indul; itt levehetők és továbbiak felvehetők."}
                 </p>
                 <JobAssetPicker
                   departmentId={departmentId}

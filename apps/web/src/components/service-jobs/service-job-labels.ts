@@ -158,3 +158,18 @@ export function serviceJobSourceText(source: ServiceJobSource | null): {
       : "Nincs rögzített szerződéstétel, ezért teljesítési igazolás nem állítható ki rá.",
   };
 }
+
+/**
+ * WHY THE COMPLETION CERTIFICATE CANNOT BE ISSUED, or null when it can (stage walkthrough, 2026-11-18). The server refuses a sheet with
+ * no order form and no recorded contract item ("a tételek forrása ismeretlen"); the button says so first instead of failing on a click.
+ * The same condition as `serviceJobSourceText`'s refusing branches, and as `CompletionCertificatesService.issue`.
+ */
+export function completionCertificateBlockedReason(
+  source: ServiceJobSource | null,
+): string | null {
+  if (!source)
+    return "A teljesítési igazolás nem állítható ki: a lapnak nincs megrendelőlapja és szerződéstétele.";
+  if (source.kind === "CONTRACT" && source.itemDescriptions.length === 0)
+    return "A teljesítési igazolás nem állítható ki: nincs rögzített szerződéstétel.";
+  return null;
+}

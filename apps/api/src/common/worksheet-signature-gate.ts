@@ -201,6 +201,11 @@ export interface PackageWorksheetState {
   id: string;
   /** A lap szama, vagy `null`. A mondat ezt nevezi meg. */
   number: string | null;
+  /**
+   * A JELENLEGI verzio targya. Csak a szam nelkuli (piszkozat) lapnal szamit: ott ez nevezi meg a lapot, mert tobb piszkozat
+   * "szam nelkuli munkalap" neven megkulonboztethetetlen volt (stage-vegigjaras, 2026-11-18). Elhagyhato: a hibajegyes csomag nem adja at.
+   */
+  subject?: string | null;
   hidden: boolean;
   /** A JELENLEGI verzio le van-e zarva (`closedAt`). */
   closed: boolean;

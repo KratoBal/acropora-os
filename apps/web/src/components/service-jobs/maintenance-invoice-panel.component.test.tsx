@@ -334,3 +334,20 @@ describe("MaintenanceInvoicePanel", () => {
     expect(screen.queryByRole("button", { name: /letöltése/ })).toBeNull();
   });
 });
+
+/*
+  A SZÁMLA-KÁRTYA ÚJRATÖLT, HA A TESTVÉR-PANEL VÁLTOZTATOTT (stage-végigjárás, 2026-11-18): az aláírt igazolás feltöltése után a kártya a régi mondatot mutatta. MI PIROSÍT: ha a
+  `refreshKey` változása nem tölti újra az igazolást és a számlát.
+*/
+describe("MaintenanceInvoicePanel -- újratöltés a testvér-panel jelzésére", () => {
+  it("a refreshKey változására újra lekéri az igazolást", async () => {
+    auth.session = session("dev-token");
+    certificatesApi.list.mockReset().mockResolvedValue([]);
+    const { rerender } = render(
+      <MaintenanceInvoicePanel serviceJobId="job-1" refreshKey={0} />,
+    );
+    await waitFor(() => expect(certificatesApi.list).toHaveBeenCalledTimes(1));
+    rerender(<MaintenanceInvoicePanel serviceJobId="job-1" refreshKey={1} />);
+    await waitFor(() => expect(certificatesApi.list).toHaveBeenCalledTimes(2));
+  });
+});

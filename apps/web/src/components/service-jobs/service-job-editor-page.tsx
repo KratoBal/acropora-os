@@ -84,6 +84,9 @@ export function ServiceJobEditorPage({
   // Where the way out leads: the list this form was opened from (the tickets, or the maintenance sheets).
   const listHref =
     kind === "MAINTENANCE" ? "/szerviz/karbantartas" : "/szerviz/hibajegyek";
+  // A karbantartásnak semmi köze a hibajegyekhez (Balázs, 2026-11-18): a karbantartási űrlap a saját szavait használja.
+  const maintenance = kind === "MAINTENANCE";
+  const titleLabel = maintenance ? "Mi a feladat?" : "Mi a baj?";
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [customer, setCustomer] = useState<WorksheetSelectablePartner | null>(
@@ -250,7 +253,7 @@ export function ServiceJobEditorPage({
     return (
       <Alert
         variant="danger"
-        title="Nincs jogosultságod hibajegyet nyitni"
+        title={`Nincs jogosultságod ${maintenance ? "karbantartási lapot" : "hibajegyet"} nyitni`}
         description="service.manage jogosultság szükséges."
       />
     );
@@ -347,7 +350,9 @@ export function ServiceJobEditorPage({
             ? cause.message
             : contractChoice
               ? "A karbantartási lap nem jött létre."
-              : "A hibajegy nem jött létre.",
+              : maintenance
+                ? "A karbantartási lap nem jött létre."
+                : "A hibajegy nem jött létre.",
         );
         setSaving(false);
         return;
@@ -385,10 +390,10 @@ export function ServiceJobEditorPage({
         setError(
           (job.viaContract
             ? "A karbantartási lap LÉTREJÖTT"
-            : `A(z) ${job.jobNumber} hibajegy LÉTREJÖTT`) +
+            : `A(z) ${job.jobNumber} ${maintenance ? "karbantartási lap" : "hibajegy"} LÉTREJÖTT`) +
             ", de a csatolmányok feltöltése nem sikerült: " +
             (cause instanceof Error ? cause.message : "ismeretlen hiba") +
-            ". A fájlok kiválasztva maradtak, a gombbal újrapróbálhatod, vagy a jegy lapján is feltöltheted.",
+            `. A fájlok kiválasztva maradtak, a gombbal újrapróbálhatod, vagy a ${maintenance ? "lapon" : "jegy lapján"} is feltöltheted.`,
         );
         setSaving(false);
         return;
@@ -397,7 +402,7 @@ export function ServiceJobEditorPage({
 
     // A FRISS JEGY LAPJÁRA VISZÜNK, nem a listára: aki most nyitotta, azt
     // akarja folytatni - munkalapot csatolni, léptetni.
-    router.push(`/szerviz/hibajegyek/${job.id}`);
+    router.push(`${listHref}/${job.id}`);
   };
 
   return (
@@ -534,7 +539,8 @@ export function ServiceJobEditorPage({
                 ) : nincsValaszthatoHelyszin ? (
                   <p className="text-sm text-dusk-500">
                     Ehhez a partnerhez nincs felvéve helyszín, ezért egyelőre
-                    nem nyitható jegy rá. Vegyél fel egyet a partner lapján.
+                    nem nyitható {maintenance ? "lap" : "jegy"} rá. Vegyél fel
+                    egyet a partner lapján.
                   </p>
                 ) : (
                   <PilotSelect
@@ -556,17 +562,24 @@ export function ServiceJobEditorPage({
             )}
           </ServiceJobStepCard>
 
-          <ServiceJobStepCard number="02" title="A hiba leírása">
+          <ServiceJobStepCard
+            number="02"
+            title={maintenance ? "A munka leírása" : "A hiba leírása"}
+          >
             <div className="space-y-1">
               <label className="text-sm font-semibold" htmlFor="hibajegy-cim">
-                Mi a baj?
+                {titleLabel}
               </label>
               <PilotInput
                 id="hibajegy-cim"
                 value={title}
                 disabled={contractUnresolved}
                 onChange={setTitle}
-                placeholder="Például: a hármas medence szivattyúja nem indul"
+                placeholder={
+                  maintenance
+                    ? "Például: a hármas medence havi szűrőtisztítása"
+                    : "Például: a hármas medence szivattyúja nem indul"
+                }
               />
             </div>
 
@@ -644,7 +657,7 @@ export function ServiceJobEditorPage({
           */}
               <p className="pt-1 text-xs text-dusk-500">
                 {files.length
-                  ? `${files.length} fájl feltöltésre vár. A hibajegy megnyitása után töltjük fel.`
+                  ? `${files.length} fájl feltöltésre vár. A ${maintenance ? "karbantartási lap" : "hibajegy"} megnyitása után töltjük fel.`
                   : "Elhagyható. JPEG, PNG vagy PDF, fájlonként legfeljebb 10 MB."}
               </p>
             </div>
@@ -676,7 +689,8 @@ export function ServiceJobEditorPage({
             kiadja, a legvegen dont rola.
           */}
               <p className="pt-1 text-xs text-dusk-500">
-                Elhagyható. A delegált kollégák értesítést kapnak a jegyről.
+                Elhagyható. A delegált kollégák értesítést kapnak a{" "}
+                {maintenance ? "lapról" : "jegyről"}.
               </p>
             </div>
           </ServiceJobStepCard>
@@ -692,8 +706,8 @@ export function ServiceJobEditorPage({
           */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dusk-200/80 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
             <p className="text-xs text-dusk-500">
-              A „Mi a baj?”, a partner és a helyszín megadása kötelező, a többi
-              elhagyható.
+              A „{titleLabel}”, a partner és a helyszín megadása kötelező, a
+              többi elhagyható.
             </p>
             <div className="flex items-center gap-2">
               <Link href={listHref}>
@@ -709,7 +723,9 @@ export function ServiceJobEditorPage({
                     : "Csatolmányok feltöltése újra"
                   : contractChoice
                     ? "Karbantartási lap megnyitása"
-                    : "Hibajegy megnyitása"}
+                    : maintenance
+                      ? "Karbantartási lap megnyitása"
+                      : "Hibajegy megnyitása"}
               </PilotButton>
             </div>
           </div>
@@ -727,8 +743,9 @@ export function ServiceJobEditorPage({
             Rövid út a kész feladatig
           </h2>
           <p className="text-sm leading-6 text-dusk-500">
-            A hibajegy összefogja a bejelentést, az eszközöket és a
-            munkalapokat.
+            {maintenance
+              ? "A karbantartási lap összefogja a feladatot, az eszközöket és a munkalapokat."
+              : "A hibajegy összefogja a bejelentést, az eszközöket és a munkalapokat."}
           </p>
           <ol className="space-y-2 text-sm text-dusk-600">
             <li className="flex gap-2">

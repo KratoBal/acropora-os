@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   serviceJobNoteDescription,
+  completionCertificateBlockedReason,
   serviceJobSourceText,
   serviceJobWorksheetLabel,
 } from "./service-job-labels";
@@ -142,5 +143,46 @@ describe("serviceJobSourceText", () => {
     expect(serviceJobSourceText(null).detail).toMatch(
       /Teljesítési igazolás nem állítható ki/,
     );
+  });
+});
+
+/*
+  A TELJESÍTÉSI IGAZOLÁS GOMBJA OKKAL TILTOTT, HA NINCS FORRÁS (stage-végigjárás, 2026-11-18, acrobot 56068): a gomb aktív volt, és kattintásra a szerver 400-zal mondta, hogy a lapnak se
+  megrendelőlapja, se szerződéstétele. MI PIROSÍT: ha a forrás nélküli vagy tétel nélküli szerződéses lapra nincs ok (a gomb aktív marad); ha a megrendelőlapos vagy a tételes szerződéses
+  lapra van (a gomb feleslegesen tiltott); ha az ok üres szöveg.
+*/
+describe("completionCertificateBlockedReason", () => {
+  const contract = { id: "c1", number: "SZ-2026-001", title: "Karbantartás" };
+
+  it("forrás nélkül és tétel nélküli szerződéses lapnál okot ad", () => {
+    expect(completionCertificateBlockedReason(null)).toMatch(
+      /nincs megrendelőlapja/,
+    );
+    expect(
+      completionCertificateBlockedReason({
+        kind: "CONTRACT",
+        contract,
+        itemDescriptions: [],
+      }),
+    ).toMatch(/nincs rögzített szerződéstétel/);
+  });
+
+  it("megrendelőlapos és tételes szerződéses lapnál nincs ok", () => {
+    expect(
+      completionCertificateBlockedReason({
+        kind: "MAINTENANCE_ORDER",
+        orderId: "o1",
+        orderNumber: "MR-2026-0008",
+        customerForm: false,
+        contract,
+      }),
+    ).toBeNull();
+    expect(
+      completionCertificateBlockedReason({
+        kind: "CONTRACT",
+        contract,
+        itemDescriptions: ["Szűrőcsere"],
+      }),
+    ).toBeNull();
   });
 });

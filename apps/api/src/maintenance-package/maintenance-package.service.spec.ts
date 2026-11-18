@@ -125,6 +125,26 @@ describe("a karbantartási lap dokumentumcsomagja", () => {
     );
   });
 
+  it("a lezáratlan számtalan munkalapot a tárgya nevezi meg a letöltés hibájában", async () => {
+    await assert.rejects(
+      () =>
+        serviceWith(
+          job({
+            worksheets: [
+              worksheet({
+                number: null,
+                versions: [
+                  { id: "v1", closedAt: null, subject: "Cápasuli kis medence" },
+                ],
+                documents: [],
+              }),
+            ],
+          }),
+        ).assemble("job-a", "download"),
+      /„Cápasuli kis medence” \(piszkozat\)/,
+    );
+  });
+
   it("teljesítési igazolás nélkül a LETÖLTÉS átmegy, a csomagban nincs igazolás", async () => {
     const csomag = await serviceWith(
       job({ completionCertificate: null }),
