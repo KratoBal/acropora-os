@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -24,6 +25,7 @@ import {
 } from "./webshop-customer-discounts.client.js";
 import {
   customerIdOfCode,
+  isReusablePersonalGroup,
   personalCode,
   personalGroupMetadata,
   personalGroupName,
@@ -149,8 +151,13 @@ export class WebshopCustomerDiscountsService {
           })
         : await (async () => {
             const name = personalGroupName(customerId);
+            const found = await client.findGroupByName(name);
+            if (found && !isReusablePersonalGroup(found, customerId))
+              throw new ConflictException(
+                `A webshopban már van „${name}” nevű vevőcsoport, de nem ez a felület hozta létre ennek a vevőnek, vagy más vevő is van benne. A webshop adminjában töröld vagy nevezd át, utána újra beállítható.`,
+              );
             const group =
-              (await client.findGroupByName(name)) ??
+              found ??
               (await client.createGroup(
                 name,
                 personalGroupMetadata(customerId),
