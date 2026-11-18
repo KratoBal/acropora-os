@@ -18,6 +18,7 @@ import { MedusaConnectionError } from "../../integrations/medusa/medusa-connecti
 import type { MedusaCredentialProvider } from "../../integrations/medusa/medusa-credential.provider.js";
 import type { WebshopParcelService } from "../../integrations/carriers/webshop-parcel.service.js";
 import type { WebshopOrdersRepository } from "./webshop-orders.repository.js";
+import { STORE_PICKUP_METHOD } from "./webshop-orders.rules.js";
 import {
   OVERVIEW_MAX_PAGES,
   OVERVIEW_PAGE_SIZE,
@@ -599,6 +600,10 @@ describe("WebshopOrdersService.changeStatus", () => {
       transitionError?: MedusaAdminHttpError;
       resendError?: MedusaAdminHttpError;
       noStatus?: boolean;
+      /** The gate's facts: by default the order has an issued invoice and a confirmed parcel, and ships. */
+      invoice?: boolean;
+      parcel?: boolean;
+      storePickup?: boolean;
     } = {},
   ) {
     const sent: Record<string, unknown>[] = [];
@@ -619,7 +624,9 @@ describe("WebshopOrdersService.changeStatus", () => {
         shipping_address: null,
         billing_address: null,
         items: [],
-        shipping_methods: [],
+        shipping_methods: options.storePickup
+          ? [{ name: STORE_PICKUP_METHOD, shipping_option_id: null }]
+          : [{ name: "GLS házhozszállítás", shipping_option_id: null }],
         payment_collections: [],
       }),
       orderBusinessStatus: async () =>
@@ -665,7 +672,15 @@ describe("WebshopOrdersService.changeStatus", () => {
       recordStatusChange: async (input: unknown) => void audited.push(input),
       recordStatusMailResent: async (input: unknown) =>
         void audited.push(input),
-      invoices: async () => new Map(),
+      invoices: async () =>
+        options.invoice === false
+          ? new Map()
+          : new Map([
+              [
+                "order_38",
+                { id: "inv_1", status: "ISSUED", number: "ACRW-2026/00600" },
+              ],
+            ]),
       staleThresholds: async () => thresholdsNow.list,
       osCustomerByKey: async () => null,
       internalNote: async () => null,
@@ -677,7 +692,23 @@ describe("WebshopOrdersService.changeStatus", () => {
       orders: new WebshopOrdersService(
         credentials,
         repository,
-        NO_PARCELS,
+        {
+          activeParcelsFor: async () =>
+            options.parcel === false
+              ? {}
+              : {
+                  order_38: {
+                    carrier: "gls",
+                    reference: "38",
+                    parcelNumber: "3400000001",
+                    carrierParcelId: null,
+                    stub: false,
+                    size: null,
+                    codHuf: null,
+                    createdAt: new Date("2026-10-05T11:00:00.000Z"),
+                  },
+                },
+        } as unknown as WebshopParcelService,
         () => client,
       ),
       sent,
@@ -765,6 +796,88 @@ describe("WebshopOrdersService.changeStatus", () => {
       },
     );
     assert.deepEqual([sent, audited], [[], []]);
+  });
+
+  /**
+   * A KISZÁLLÍTÁS KAPUJA (kártya 33a0d3c7). MI PIROSÍT: ha a Kiszállítás számla vagy csomag nélkül átmegy (a kártyás levonás
+   * erre az állapotra fut); ha a 409 nem nevezi meg, mi hiányzik; ha a kérés mégis eljut a webshopig vagy auditba kerül; ha a
+   * bolti átvétel vagy egy másik lépés (sikertelen lezárás) elakad rajta; ha egy elavult lap a kapu mondatát kapja a „frissítsd
+   * az oldalt” helyett.
+   */
+  it("shipping needs an issued invoice AND a confirmed parcel: the 409 names what is missing, nothing reaches the webshop or the audit", async () => {
+    for (const [options, missing] of [
+      [{ invoice: false, parcel: false }, "kiállított számla, feladott csomag"],
+      [{ invoice: false }, "kiállított számla"],
+      [{ parcel: false }, "feladott csomag"],
+    ] as const) {
+      const { orders, sent, audited } = statusService(options);
+      await assert.rejects(
+        orders.changeStatus(
+          "order_38",
+          "out_for_delivery",
+          "user_1",
+          true,
+          NOW,
+        ),
+        (error: unknown) => {
+          assert.equal((error as Error).constructor.name, "ConflictException");
+          assert.match(
+            (error as Error).message,
+            new RegExp(`Hiányzik: ${missing}\\.`),
+          );
+          return true;
+        },
+      );
+      assert.deepEqual([sent, audited], [[], []]);
+    }
+  });
+
+  it("with the invoice and the parcel, shipping goes (the default of the other tests)", async () => {
+    const { orders, sent } = statusService({ invoice: true, parcel: true });
+    await orders.changeStatus(
+      "order_38",
+      "out_for_delivery",
+      "user_1",
+      true,
+      NOW,
+    );
+    assert.equal(sent.length, 1);
+  });
+
+  it("a store pickup is not gated: it has no parcel", async () => {
+    const { orders, sent } = statusService({
+      storePickup: true,
+      invoice: false,
+      parcel: false,
+    });
+    await orders.changeStatus(
+      "order_38",
+      "out_for_delivery",
+      "user_1",
+      true,
+      NOW,
+    );
+    assert.equal(sent.length, 1);
+  });
+
+  it("only shipping is gated: closing unsuccessfully needs neither", async () => {
+    const { orders, sent } = statusService({ invoice: false, parcel: false });
+    await orders.changeStatus(
+      "order_38",
+      "closed_unsuccessfully",
+      "user_1",
+      true,
+      NOW,
+    );
+    assert.equal(sent.length, 1);
+  });
+
+  it("a stale page gets the 'refresh' sentence, not the gate's: the table is checked first", async () => {
+    const { orders } = statusService({ invoice: false, parcel: false });
+    await assert.rejects(
+      orders.changeStatus("order_38", "closed", "user_1", true, NOW),
+      /Frissítsd az oldalt/,
+    );
   });
 
   it("a refused capture is 422 with the webshop's own sentence, and nothing is audited", async () => {

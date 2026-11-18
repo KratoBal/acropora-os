@@ -60,6 +60,10 @@ import {
   proformaOf,
 } from "./webshop-order-invoice.rules.js";
 import { parcelOf } from "./webshop-order-parcel.rules.js";
+import {
+  shippingGateRefusal,
+  type ShippingGateFacts,
+} from "./webshop-order-shipping-gate.rules.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 
 /** A webshop hibaüzenete a törzsből (`{type, message}`); ha nem olvasható, `null`. */
@@ -412,6 +416,15 @@ export class WebshopOrdersService {
       throw new ConflictException(
         `A rendelés „${current.label}” állapotból nem léptethető „${WEBSHOP_ORDER_STATUS_LABELS[to]}” állapotba. Frissítsd az oldalt.`,
       );
+    /*
+      A KISZÁLLÍTÁS KAPUJA (kártya 33a0d3c7): számla és csomag nélkül nem lép, mert a kártyás levonás erre az állapotra fut. A
+      táblázat-ellenőrzés UTÁN áll, hogy egy elavult lapról küldött kérés előbb a „frissítsd az oldalt” mondatot kapja. Csak a
+      Kiszállításnál olvas (nem bolti átvételnél): a többi lépés költsége nem változik.
+    */
+    if (to === "out_for_delivery") {
+      const refusal = shippingGateRefusal(to, await this.shippingGateFacts(id));
+      if (refusal) throw new ConflictException(refusal);
+    }
     let mail: WebshopStatusMailOutcome;
     try {
       mail = await client.transitionBusinessStatus(id, to, notifyCustomer);
@@ -437,6 +450,34 @@ export class WebshopOrdersService {
       to,
     });
     return { order: await this.detail(id, now), mail };
+  }
+
+  /** A kapu tényei egy rendelésről: bolti átvétel-e, a kiállított számla és az aktív, csomagszámos csomag (ugyanaz, mint a lépéssoré). */
+  private async shippingGateFacts(id: string): Promise<ShippingGateFacts> {
+    const client = await this.client();
+    const order = await this.fromWebshop(() => client.order(id));
+    if (!order)
+      throw new NotFoundException("A rendelés nem található a webshopban.");
+    const storePickup = shippingOf(order.shipping_methods ?? []).storePickup;
+    if (storePickup)
+      return { storePickup, invoiceNumber: null, hasParcel: false };
+    const [invoices, parcels, externals] = await Promise.all([
+      this.repository.invoices([id]),
+      this.parcels.activeParcelsFor([id]),
+      this.repository.externalInvoices([id]),
+    ]);
+    const facts = factsOf(
+      invoices.get(id),
+      parcelOf(parcels[id]),
+      false,
+      false,
+      externals.get(id)?.number ?? null,
+    );
+    return {
+      storePickup,
+      invoiceNumber: facts.invoiceNumber,
+      hasParcel: facts.hasParcel,
+    };
   }
 
   /**
