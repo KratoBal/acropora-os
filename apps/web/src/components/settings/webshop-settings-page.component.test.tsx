@@ -22,8 +22,8 @@ import { WebshopSettingsPage } from "./webshop-settings-page";
   THE WEBSHOP SETTINGS PAGE (Balázs, 2026-10-26 13:05 UTC, msg
   1564263673932026020; acrobot's decision). WHAT TURNS RED: a card links to a
   page that does not exist; a card shows to someone its own entry or right
-  would hide it from; the feature-gated home page card ignores the served
-  switch; the menu entry's rule drifts from the union of its cards.
+  would hide it from; a feature-gated card (the home page, the coupons) ignores
+  its served switch; the menu entry's rule drifts from the union of its cards.
 */
 const auth = vi.hoisted(() => ({
   role: "OWNER" as UserRole,
@@ -84,6 +84,8 @@ describe("Webshop beállítások", () => {
       "/admin/integrations/medusa/redirect-plan",
       "/beallitasok/rendeles-elavulas",
       "/beallitasok/levelsablonok?csoport=webshop",
+      // the coupons (card 393ae5cb): behind their own served switch, like the home page
+      "/webshop/kuponok",
       "/admin/kezdolap",
     ]);
     expect(links.filter((link) => !existsSync(oldalFajlja(link.href)))).toEqual(
@@ -94,16 +96,17 @@ describe("Webshop beállítások", () => {
     expect(existsSync(oldalFajlja("/webshop/beallitasok"))).toBe(true);
   });
 
-  it("shows the owner every card, the home page one only with the served switch", () => {
+  it("shows the owner every card, the home page and the coupon ones only with their served switches", () => {
     render(<WebshopSettingsPage />);
     expect(screen.getByRole("heading", { name: "Webshop beállítások" }));
     const without = hrefsOnScreen();
     expect(without).not.toContain("/admin/kezdolap");
+    expect(without).not.toContain("/webshop/kuponok");
     expect(without).toContain("/admin/integrations/medusa/connection");
   });
 
-  it("the served home page switch brings its card", () => {
-    auth.navigation = [{ id: "homepage-content" }];
+  it("the served switches bring their cards", () => {
+    auth.navigation = [{ id: "homepage-content" }, { id: "webshop-coupons" }];
     render(<WebshopSettingsPage />);
     expect(hrefsOnScreen().sort()).toEqual(
       links.map((link) => link.href).sort(),
@@ -111,7 +114,7 @@ describe("Webshop beállítások", () => {
   });
 
   it("shows each role exactly the cards its rights reach", () => {
-    auth.navigation = [{ id: "homepage-content" }];
+    auth.navigation = [{ id: "homepage-content" }, { id: "webshop-coupons" }];
     for (const role of USER_ROLES) {
       auth.role = role;
       const { unmount } = render(<WebshopSettingsPage />);

@@ -135,6 +135,13 @@ export class WebshopCouponsService {
   /** Be- és kikapcsolás. Törlés nincs: a felhasználások nyoma és a kód története a webshopban marad. */
   async setActive(id: string, active: boolean): Promise<WebshopCoupon> {
     this.requireAllowed();
+    // only what the list shows as a coupon (barracuda on #2723): an automatic or a line-targeted promotion made in the
+    // Medusa admin is not switched from here, even by its id
+    const current = await this.call((client) => client.getPromotion(id));
+    if (!toWebshopCoupon(current, this.now()))
+      throw new NotFoundException(
+        "Ez a promóció nem kupon (a felület nem kezeli).",
+      );
     const updated = await this.call((client) =>
       client.setPromotionStatus(id, active ? "active" : "inactive"),
     );

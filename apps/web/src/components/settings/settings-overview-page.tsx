@@ -351,6 +351,19 @@ export const WEBSHOP_SETTINGS_AREAS: SettingsArea[] = [
     ],
   },
   {
+    title: "Kuponok",
+    icon: "cart",
+    links: [
+      {
+        label: "Kuponok",
+        description:
+          "Kuponkódok a webshop pénztárához: százalék vagy forint a termékárból, érvényesség, felhasználási korlát, be- és kikapcsolás.",
+        href: "/webshop/kuponok",
+        entryId: "webshop-coupons",
+      },
+    ],
+  },
+  {
     title: "Kezdőlap",
     icon: "store",
     links: [

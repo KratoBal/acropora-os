@@ -1,6 +1,7 @@
 import type { NavigationFeature } from "@acropora/types";
 
 import { homepageProjectionAllowed } from "../homepage-content/homepage-content.service.js";
+import { couponsAllowed } from "../webshop-coupons/webshop-coupons.service.js";
 import {
   enrichmentAvailabilityFor,
   pilotUserIds,
@@ -27,6 +28,9 @@ export const NAVIGATION_ENV = Symbol("NAVIGATION_ENV");
  *                            The API endpoints follow the same switch (404 off).
  *   reefclub-linking         issuing ReefClub codes: `reefClubLinkingOn`. The
  *                            endpoints follow the same switch (404 off).
+ *   webshop-coupons          the web shop's coupons: the environment may write
+ *                            the test shop (`MEDUSA_WEBSHOP_COUPONS=true`). The
+ *                            endpoints follow the same switch (404 off).
  */
 export function navigationFeatures(
   env: NodeJS.ProcessEnv,
@@ -38,6 +42,7 @@ export function navigationFeatures(
   if (quotesMenuOn(env, userId)) features.add("quotes");
   if (homepageProjectionAllowed(env)) features.add("homepage-content");
   if (reefClubLinkingOn(env)) features.add("reefclub-linking");
+  if (couponsAllowed(env)) features.add("webshop-coupons");
   return features;
 }
 
