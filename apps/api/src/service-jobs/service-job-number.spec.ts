@@ -115,21 +115,21 @@ describe("a karbantartási lap száma: külön KT sorozat", () => {
   számot kapná); ha a szűrés elmarad (a KT a HJ törölt számaiból számolna); ha egyik forrás sem ad számot, nem `null`.
 */
 describe("az utolsó szám az élő és a törölt számokból", () => {
-  const db = (live: string | null, deleted: string | null) => {
+  const db = (live: string[], deleted: string[]) => {
     const asked: { live?: unknown; deleted?: unknown } = {};
     return {
       asked,
       client: {
         serviceJob: {
-          findFirst: async (query: unknown) => {
+          findMany: async (query: unknown) => {
             asked.live = query;
-            return live === null ? null : { jobNumber: live };
+            return live.map((jobNumber) => ({ jobNumber }));
           },
         },
         serviceJobDeletion: {
-          findFirst: async (query: unknown) => {
+          findMany: async (query: unknown) => {
             asked.deleted = query;
-            return deleted === null ? null : { jobNumber: deleted };
+            return deleted.map((jobNumber) => ({ jobNumber }));
           },
         },
       },
@@ -137,7 +137,7 @@ describe("az utolsó szám az élő és a törölt számokból", () => {
   };
 
   it("a törölt legmagasabb szám is számít: a következő nem használja újra", async () => {
-    const { client } = db("HJ-2026-038", "HJ-2026-043");
+    const { client } = db(["HJ-2026-038"], ["HJ-2026-043"]);
     assert.equal(
       await lastServiceJobNumber(client as never, "HJ-2026-"),
       "HJ-2026-043",
@@ -151,8 +151,28 @@ describe("az utolsó szám az élő és a törölt számokból", () => {
     );
   });
 
+  /*
+    A SORSZÁM SZÁMSZERŰEN NŐ, NEM BETŰRENDBEN (barracuda, #2691): a "…-1000" betűrendben a "…-999" előtt áll, egy `orderBy jobNumber desc` az utóbbit adná,
+    és a következő szám megint "…-1000" lenne (egyedi kulcs ütközés). MI PIROSÍT: ha a legnagyobbat a betűrendi sorrend adja (az első sor, vagy egy `orderBy`).
+  */
+  it("999 fölött is a számszerű maximum: …-1000 a …-999 után, élőben és törölve is", async () => {
+    const { client } = db(
+      ["HJ-2026-998", "HJ-2026-999", "HJ-2026-1000"],
+      ["HJ-2026-1001", "HJ-2026-999"],
+    );
+    assert.equal(
+      await lastServiceJobNumber(client as never, "HJ-2026-"),
+      "HJ-2026-1001",
+    );
+    const { client: live } = db(["HJ-2026-999", "HJ-2026-1000"], []);
+    assert.equal(
+      await lastServiceJobNumber(live as never, "HJ-2026-"),
+      "HJ-2026-1000",
+    );
+  });
+
   it("mindkét forrást az előtagra szűri, és semmi esetén null", async () => {
-    const { client, asked } = db(null, null);
+    const { client, asked } = db([], []);
     assert.equal(await lastServiceJobNumber(client as never, "KT-2026-"), null);
     assert.deepEqual(
       JSON.stringify(asked.live).includes('"startsWith":"KT-2026-"'),

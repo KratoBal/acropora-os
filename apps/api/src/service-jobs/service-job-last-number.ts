@@ -13,17 +13,14 @@ export async function lastServiceJobNumber(
   prefix: string,
 ): Promise<string | null> {
   const where = { jobNumber: { startsWith: prefix } };
+  // MINDEN szám, nem a betűrendi első: a "…-1000" betűrendben a "…-999" előtt áll (barracuda, #2691), tehát a maximumot számszerűen kell venni.
+  // Egy előtag egy év (néhány száz rövid sor), tehát egy kiválasztott oszlop ára elhanyagolható.
   const [live, deleted] = await Promise.all([
-    db.serviceJob.findFirst({
-      where,
-      orderBy: { jobNumber: "desc" },
-      select: { jobNumber: true },
-    }),
-    db.serviceJobDeletion.findFirst({
-      where,
-      orderBy: { jobNumber: "desc" },
-      select: { jobNumber: true },
-    }),
+    db.serviceJob.findMany({ where, select: { jobNumber: true } }),
+    db.serviceJobDeletion.findMany({ where, select: { jobNumber: true } }),
   ]);
-  return latestServiceJobNumber(live?.jobNumber, deleted?.jobNumber);
+  return latestServiceJobNumber(
+    ...live.map((row) => row.jobNumber),
+    ...deleted.map((row) => row.jobNumber),
+  );
 }
