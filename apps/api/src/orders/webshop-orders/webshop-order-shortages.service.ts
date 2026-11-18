@@ -26,9 +26,10 @@ const LINES_MAX = 50;
 const FUTURE_SLACK_MS = 5 * 60 * 1000;
 
 export interface WebshopShortageStore {
-  /** The order items that sit in an OPEN or AGREED case: one active case per item. */
-  activeItemIds(orderId: string): Promise<string[]>;
-  /** The case, its lines and the audit entry, in one transaction. */
+  /**
+   * The case, its lines and the audit entry, in one transaction. Null when an item of it already sits in an OPEN or AGREED case of the
+   * order: the check is INSIDE the transaction, under a lock on the order, so two requests for the same item cannot both pass.
+   */
   create(input: {
     orderId: string;
     userId: string;
@@ -40,7 +41,7 @@ export interface WebshopShortageStore {
       orderedQuantity: number;
       availableQuantity: number | null;
     }[];
-  }): Promise<WebshopOrderShortageView>;
+  }): Promise<WebshopOrderShortageView | null>;
   find(orderId: string, id: string): Promise<WebshopOrderShortageView | null>;
   /** Null when the case is no longer in one of the `expect` statuses (another request moved it): nothing is written then. */
   saveAgreement(input: {
@@ -65,6 +66,8 @@ export interface WebshopShortageStore {
     id: string;
     userId: string;
     expect: WebshopShortageStatus[];
+    /** The choice the close was checked against: a re-recorded agreement (SPLIT to REPLACE) in between makes the update match nothing. */
+    expectChoice: WebshopShortageChoice | null;
     outcome: "DONE" | "WITHDRAWN";
     splitOrderId: string | null;
     note: string | null;
@@ -136,13 +139,17 @@ export class WebshopOrderShortagesService {
         availableQuantity: available ?? null,
       };
     });
-    const active = new Set(await this.store.activeItemIds(orderId));
-    const busy = lines.filter((l) => active.has(l.itemId));
-    if (busy.length > 0)
+    const created = await this.store.create({
+      orderId,
+      userId: user.id,
+      now,
+      lines,
+    });
+    if (!created)
       throw new ConflictException(
         "A tételhez már tartozik nyitott vagy megállapodott hiány.",
       );
-    return this.store.create({ orderId, userId: user.id, now, lines });
+    return created;
   }
 
   async agree(
@@ -263,6 +270,7 @@ export class WebshopOrderShortagesService {
         shortageId,
         user,
         ["AGREED"],
+        current.choice,
         "DONE",
         splitOrderId,
         note,
@@ -280,6 +288,7 @@ export class WebshopOrderShortagesService {
       shortageId,
       user,
       ["OPEN", "AGREED"],
+      current.choice,
       "WITHDRAWN",
       null,
       note,
@@ -291,6 +300,7 @@ export class WebshopOrderShortagesService {
     id: string,
     user: AuthenticatedUser,
     expect: WebshopShortageStatus[],
+    expectChoice: WebshopShortageChoice | null,
     outcome: "DONE" | "WITHDRAWN",
     splitOrderId: string | null,
     note: string | null,
@@ -300,6 +310,7 @@ export class WebshopOrderShortagesService {
       id,
       userId: user.id,
       expect,
+      expectChoice,
       outcome,
       splitOrderId,
       note,

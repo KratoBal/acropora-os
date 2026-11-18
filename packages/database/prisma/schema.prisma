@@ -10514,6 +10514,8 @@ model WebshopOrderShortageLine {
   /// A vevő által jóváhagyott mennyiség, amit MOST kap ebben a rendelésben; a többi (rendelt - jóváhagyott) a választás szerint
   /// külön rendelésbe, cserére vagy a törlésre kerül.
   agreedQuantity       Int?
+  /// A SNAPSHOT: the variant is NOT checked against the shop when recorded, because the record executes nothing. If anything ever starts
+  /// an order change from this field, that check is mandatory there (barracuda on #2670).
   replacementVariantId String? @db.VarChar(64)
   replacementSku       String?
 

@@ -59,18 +59,21 @@ function toView(row: ShortageRow): WebshopOrderShortageView {
 export class PrismaWebshopShortageStore implements WebshopShortageStore {
   constructor(private readonly db: Db = prisma) {}
 
-  async activeItemIds(orderId: string): Promise<string[]> {
-    const rows = await this.db.webshopOrderShortage.findMany({
-      where: { orderId, status: { in: ACTIVE } },
-      include: { lines: true },
-    });
-    return rows.flatMap((row) => row.lines.map((l) => l.itemId));
-  }
-
   async create(
     input: Parameters<WebshopShortageStore["create"]>[0],
-  ): Promise<WebshopOrderShortageView> {
+  ): Promise<WebshopOrderShortageView | null> {
     return this.db.$transaction(async (tx) => {
+      // ONE ACTIVE CASE PER ITEM: the check and the insert run under a transaction-scoped lock on the order, so two requests for the same
+      // item queue up and the second sees the first's row (the unique key on the line guards a case only against itself).
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`webshop-order-shortage:${input.orderId}`}, 0))`;
+      const active = await tx.webshopOrderShortage.findMany({
+        where: { orderId: input.orderId, status: { in: ACTIVE } },
+        select: { lines: { select: { itemId: true } } },
+      });
+      const taken = new Set(
+        active.flatMap((c) => c.lines.map((l) => l.itemId)),
+      );
+      if (input.lines.some((l) => taken.has(l.itemId))) return null;
       const row = await tx.webshopOrderShortage.create({
         data: {
           orderId: input.orderId,
@@ -171,7 +174,11 @@ export class PrismaWebshopShortageStore implements WebshopShortageStore {
   ): Promise<WebshopOrderShortageView | null> {
     return this.db.$transaction(async (tx) => {
       const moved = await tx.webshopOrderShortage.updateMany({
-        where: { id: input.id, status: { in: input.expect } },
+        where: {
+          id: input.id,
+          status: { in: input.expect },
+          choice: input.expectChoice,
+        },
         data: {
           status: input.outcome,
           splitOrderId: input.splitOrderId,

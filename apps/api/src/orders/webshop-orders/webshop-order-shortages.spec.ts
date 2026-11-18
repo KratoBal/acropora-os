@@ -81,19 +81,20 @@ function fakeStore(options: { ignoreExpect?: boolean } = {}) {
   const calls: string[] = [];
   let seq = 0;
   let loseTheRace = false;
+  let beforeResolve: (() => void) | null = null;
   const store: WebshopShortageStore = {
-    activeItemIds: async (orderId) => {
-      calls.push("activeItemIds");
-      return rows
-        .filter(
-          (row) =>
-            row.orderId === orderId &&
-            (row.status === "OPEN" || row.status === "AGREED"),
-        )
-        .flatMap((row) => row.lines.map((l) => l.itemId));
-    },
     create: async (input) => {
       calls.push(`create:${input.userId}`);
+      const taken = new Set(
+        rows
+          .filter(
+            (row) =>
+              row.orderId === input.orderId &&
+              (row.status === "OPEN" || row.status === "AGREED"),
+          )
+          .flatMap((row) => row.lines.map((l) => l.itemId)),
+      );
+      if (input.lines.some((l) => taken.has(l.itemId))) return null;
       const view: WebshopOrderShortageView = {
         id: `s${++seq}`,
         orderId: input.orderId,
@@ -149,11 +150,14 @@ function fakeStore(options: { ignoreExpect?: boolean } = {}) {
     },
     resolve: async (input) => {
       calls.push(`resolve:${input.userId}`);
+      beforeResolve?.();
       const row = rows.find((r) => r.id === input.id);
       if (
         !row ||
         loseTheRace ||
-        (!options.ignoreExpect && !input.expect.includes(row.status))
+        (!options.ignoreExpect &&
+          (!input.expect.includes(row.status) ||
+            row.choice !== input.expectChoice))
       )
         return null;
       row.status = input.outcome;
@@ -172,6 +176,9 @@ function fakeStore(options: { ignoreExpect?: boolean } = {}) {
     store,
     loseNextWrite: () => {
       loseTheRace = true;
+    },
+    beforeNextResolve: (fn: () => void) => {
+      beforeResolve = fn;
     },
   };
 }
@@ -633,6 +640,41 @@ describe("a szolgáltatás saját állapot-ellenőrzése", () => {
   });
 });
 
+describe("a lezárás a megállapodás közbeni változását nem írja felül", () => {
+  it("a SPLIT agreement re-recorded as REPLACE between the check and the close makes the close a 409 that writes nothing", async () => {
+    const ctx = setup();
+    const view = await ctx.service.open(
+      "order_1",
+      { lines: [{ itemId: "i1" }] },
+      user,
+      NOW,
+    );
+    await ctx.service.agree(
+      "order_1",
+      view.id,
+      agreement({ lines: [{ itemId: "i1", agreedQuantity: 3 }] }),
+      user,
+      NOW,
+    );
+    // another request re-records the agreement just before the close reaches the store
+    ctx.beforeNextResolve(() => {
+      ctx.rows[0]!.choice = "REPLACE";
+    });
+    await assert.rejects(
+      ctx.service.resolve(
+        "order_1",
+        view.id,
+        { outcome: "done", splitOrderId: "order_2" },
+        user,
+        NOW,
+      ),
+      ConflictException,
+    );
+    assert.equal(ctx.rows[0]!.status, "AGREED");
+    assert.equal(ctx.rows[0]!.splitOrderId, null);
+  });
+});
+
 describe("a lista", () => {
   it("lists the cases of the order", async () => {
     const ctx = setup();
@@ -711,6 +753,10 @@ function fakePrisma(updateCount = 1) {
       updateMany: rec("line.updateMany", { count: 1 }),
     },
     auditLog: { create: rec("audit.create") },
+    $executeRaw: (strings: TemplateStringsArray, ...values: unknown[]) => {
+      log.push({ op: "lock", args: { sql: strings.join("?"), values } });
+      return Promise.resolve(1);
+    },
   };
   return { db, log };
 }
@@ -736,6 +782,8 @@ describe("a Prisma tároló", () => {
     const ops = log.map((l) => l.op);
     assert.deepEqual(ops, [
       "transaction:begin",
+      "lock",
+      "shortage.findMany",
       "shortage.create",
       "audit.create",
       "transaction:end",
@@ -816,6 +864,7 @@ describe("a Prisma tároló", () => {
       id: "s1",
       userId: "u1",
       expect: ["AGREED"],
+      expectChoice: "SPLIT",
       outcome: "DONE",
       splitOrderId: null,
       note: null,
@@ -825,5 +874,186 @@ describe("a Prisma tároló", () => {
     assert.equal(resolved, null);
     assert.equal(log.filter((l) => l.op === "line.updateMany").length, 0);
     assert.equal(log.filter((l) => l.op === "audit.create").length, 0);
+  });
+});
+
+/*
+  THE ONE-ACTIVE-CASE-PER-ITEM RULE UNDER A RACE (barracuda on #2670). A fake database with a real transaction-scoped lock on the key
+  and a yield between the read and the insert: without the lock both requests read an empty active list and both insert.
+*/
+function lockingDb() {
+  const cases: {
+    id: string;
+    orderId: string;
+    status: string;
+    lines: { itemId: string }[];
+  }[] = [];
+  const tails = new Map<string, Promise<void>>();
+  let seq = 0;
+  const yieldTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
+  const db = {
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+      const releases: (() => void)[] = [];
+      const tx = {
+        $executeRaw: async (_s: TemplateStringsArray, ...values: unknown[]) => {
+          const key = String(values[0]);
+          const before = tails.get(key) ?? Promise.resolve();
+          let release!: () => void;
+          const mine = new Promise<void>((resolve) => (release = resolve));
+          tails.set(
+            key,
+            before.then(() => mine),
+          );
+          await before;
+          releases.push(release);
+          return 1;
+        },
+        webshopOrderShortage: {
+          findMany: async (args: { where: { orderId: string } }) => {
+            const found = cases
+              .filter(
+                (c) =>
+                  c.orderId === args.where.orderId &&
+                  (c.status === "OPEN" || c.status === "AGREED"),
+              )
+              .map((c) => ({ lines: [...c.lines] }));
+            await yieldTurn(); // the window in which a second request would read the same empty list
+            return found;
+          },
+          create: async (args: {
+            data: { orderId: string; lines: { create: { itemId: string }[] } };
+          }) => {
+            await yieldTurn();
+            const row = {
+              id: `c${++seq}`,
+              orderId: args.data.orderId,
+              status: "OPEN",
+              lines: args.data.lines.create.map((l) => ({ itemId: l.itemId })),
+            };
+            cases.push(row);
+            return {
+              ...row,
+              choice: null,
+              channel: null,
+              agreedAt: null,
+              agreementNote: null,
+              splitOrderId: null,
+              resolutionNote: null,
+              detectedAt: NOW,
+              detectedByUserId: "u1",
+              resolvedAt: null,
+              resolvedByUserId: null,
+              lines: row.lines.map((l, i) => ({
+                id: `l${seq}-${i}`,
+                shortageId: row.id,
+                itemId: l.itemId,
+                sku: null,
+                title: "T",
+                orderedQuantity: 5,
+                availableQuantity: null,
+                agreedQuantity: null,
+                replacementVariantId: null,
+                replacementSku: null,
+              })),
+            };
+          },
+        },
+        auditLog: { create: async () => ({}) },
+      };
+      try {
+        return await fn(tx);
+      } finally {
+        for (const release of releases) release();
+      }
+    },
+  };
+  return { db, cases };
+}
+
+describe("egy tétel egy aktív hiányban (versenyhelyzet)", () => {
+  const request = (itemId: string, orderId = "order_1") => ({
+    orderId,
+    userId: "u1",
+    now: NOW,
+    lines: [
+      {
+        itemId,
+        sku: "S",
+        title: "T",
+        orderedQuantity: 5,
+        availableQuantity: null,
+      },
+    ],
+  });
+
+  it("two concurrent requests for the same item: exactly one case is created, the other gets null", async () => {
+    const { db, cases } = lockingDb();
+    const store = new PrismaWebshopShortageStore(db as never);
+    const [a, b] = await Promise.all([
+      store.create(request("i1")),
+      store.create(request("i1")),
+    ]);
+    assert.equal([a, b].filter((r) => r !== null).length, 1);
+    assert.equal(cases.length, 1);
+  });
+
+  it("the lock is per order: the same item id on another order is not held up, and different items on one order both go in", async () => {
+    const { db, cases } = lockingDb();
+    const store = new PrismaWebshopShortageStore(db as never);
+    const results = await Promise.all([
+      store.create(request("i1", "order_1")),
+      store.create(request("i2", "order_1")),
+      store.create(request("i1", "order_2")),
+    ]);
+    assert.equal(results.filter((r) => r !== null).length, 3);
+    assert.equal(cases.length, 3);
+  });
+
+  it("an active case that already holds the item makes create return null and write no case and no audit", async () => {
+    const { db, log } = fakePrisma();
+    (db.webshopOrderShortage.findMany as unknown) = async () => [
+      { lines: [{ itemId: "i1" }] },
+    ];
+    const store = new PrismaWebshopShortageStore(db as never);
+    const result = await store.create({
+      orderId: "order_1",
+      userId: "u1",
+      now: NOW,
+      lines: [
+        {
+          itemId: "i1",
+          sku: null,
+          title: "T",
+          orderedQuantity: 5,
+          availableQuantity: null,
+        },
+      ],
+    });
+    assert.equal(result, null);
+    assert.equal(log.filter((l) => l.op === "shortage.create").length, 0);
+    assert.equal(log.filter((l) => l.op === "audit.create").length, 0);
+  });
+
+  it("the close matches the status AND the choice it was checked against", async () => {
+    const { db, log } = fakePrisma();
+    const store = new PrismaWebshopShortageStore(db as never);
+    await store.resolve({
+      id: "s1",
+      userId: "u1",
+      expect: ["AGREED"],
+      expectChoice: "SPLIT",
+      outcome: "DONE",
+      splitOrderId: "order_2",
+      note: null,
+      now: NOW,
+    });
+    const guard = log.find((l) => l.op === "shortage.updateMany")!.args as {
+      where: unknown;
+    };
+    assert.deepEqual(guard.where, {
+      id: "s1",
+      status: { in: ["AGREED"] },
+      choice: "SPLIT",
+    });
   });
 });
