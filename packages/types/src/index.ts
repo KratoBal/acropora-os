@@ -2310,3 +2310,19 @@ export type {
   ContentResults,
   ContentResultsSummary,
 } from "./content-results.js";
+
+export {
+  WEBSHOP_SHORTAGE_CHANNELS,
+  WEBSHOP_SHORTAGE_CHOICES,
+  WEBSHOP_SHORTAGE_STATUSES,
+} from "./webshop-order-shortages.js";
+export type {
+  WebshopOrderShortageAgreementInput,
+  WebshopOrderShortageLineView,
+  WebshopOrderShortageOpenInput,
+  WebshopOrderShortageResolveInput,
+  WebshopOrderShortageView,
+  WebshopShortageChannel,
+  WebshopShortageChoice,
+  WebshopShortageStatus,
+} from "./webshop-order-shortages.js";

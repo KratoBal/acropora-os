@@ -12,6 +12,13 @@ import { WebshopOrderPaymentService } from "./webshop-order-payment.service.js";
 import { WebshopOrderEditsService } from "./webshop-order-edits.service.js";
 import { WebshopOrderParcelService } from "./webshop-order-parcel.service.js";
 import { WebshopOrderSplitService } from "./webshop-order-split.service.js";
+import { WebshopOrderShortagesController } from "./webshop-order-shortages.controller.js";
+import { PrismaWebshopShortageStore } from "./webshop-order-shortages.repository.js";
+import {
+  WEBSHOP_SHORTAGE_STORE,
+  WebshopOrderShortagesService,
+} from "./webshop-order-shortages.service.js";
+import { prisma } from "@acropora/database";
 import { WebshopOrderShippingMethodService } from "./webshop-order-shipping-method.service.js";
 import { WebshopOrdersController } from "./webshop-orders.controller.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
@@ -33,7 +40,11 @@ import { WebshopMailOutboxService } from "./webshop-mail-outbox.service.js";
     CarriersModule,
     NotificationsModule,
   ],
-  controllers: [WebshopOrdersController, WebshopMailOutboxController],
+  controllers: [
+    WebshopOrdersController,
+    WebshopOrderShortagesController,
+    WebshopMailOutboxController,
+  ],
   providers: [
     WebshopOrdersService,
     WebshopParcelStatusService,
@@ -50,6 +61,11 @@ import { WebshopMailOutboxService } from "./webshop-mail-outbox.service.js";
     WebshopMailOutboxService,
     WebshopOrderEditsService,
     WebshopOrderSplitService,
+    WebshopOrderShortagesService,
+    {
+      provide: WEBSHOP_SHORTAGE_STORE,
+      useFactory: () => new PrismaWebshopShortageStore(prisma),
+    },
     WebshopOrderShippingMethodService,
     WebshopOrderTransferService,
   ],

@@ -10442,6 +10442,87 @@ model WebshopInvoiceDownload {
   @@index([orderId, redeemedAt])
 }
 
+/// A WEBSHOP-RENDELÉS UTÁN FELFEDEZETT KÉSZLETHIÁNY ÉS A VEVŐVEL KÖTÖTT MEGÁLLAPODÁS (kártya ac167fc2). Balázs szabálya három
+/// választást ad a vevőnek: szétbontjuk a rendelést, cserélünk, vagy elhagyjuk a hiányzó tételt. A telefonbeszélgetés után eddig NEM
+/// maradt nyom. A rekord a rendelés Medusa-azonosítójára épül (mint a WebshopOrderNote), mert a webshop-rendelés NEM SalesOrder
+/// (ADR-015); a rendelést NEM szerkeszti: a tétel-művelet és a szétbontás marad a módosítás, a rekord azokra hivatkozik.
+enum WebshopShortageStatus {
+  /// A hiányt felvették, a vevő még nem döntött.
+  OPEN
+  /// A vevővel megállapodtak, a végrehajtás még hátra van.
+  AGREED
+  /// A megállapodást végrehajtották.
+  DONE
+  /// Visszavonták (a hiány megszűnt, vagy a vevő lemondta).
+  WITHDRAWN
+}
+
+enum WebshopShortageChoice {
+  /// A hiányzó rész külön, kapcsolt rendelésbe kerül.
+  SPLIT
+  /// A hiányzó részt másik változat helyettesíti.
+  REPLACE
+  /// A hiányzó részt elhagyjuk a rendelésből.
+  REMOVE
+}
+
+enum WebshopShortageChannel {
+  PHONE
+  EMAIL
+  OTHER
+}
+
+model WebshopOrderShortage {
+  id               String                  @id @default(cuid())
+  /// A Medusa-rendelés azonosítója (nem kapcsolt kulcs: a rendelés a webshopé).
+  orderId          String                  @db.VarChar(64)
+  status           WebshopShortageStatus   @default(OPEN)
+  choice           WebshopShortageChoice?
+  channel          WebshopShortageChannel?
+  /// Mikor egyeztek meg a vevővel (a kezelő adja meg, alapból a rögzítés ideje).
+  agreedAt         DateTime?
+  /// Mit mondtak: szabad szöveg, a rögzítő írja.
+  agreementNote    String?
+  /// A SPLIT végrehajtásakor az új, kapcsolt rendelés azonosítója.
+  splitOrderId     String?                 @db.VarChar(64)
+  /// A lezárás vagy a visszavonás indoka.
+  resolutionNote   String?
+  detectedAt       DateTime                @default(now())
+  detectedByUserId String?
+  resolvedAt       DateTime?
+  resolvedByUserId String?
+  updatedAt        DateTime                @updatedAt
+
+  lines WebshopOrderShortageLine[]
+
+  @@index([orderId, detectedAt])
+  @@index([status, detectedAt])
+}
+
+model WebshopOrderShortageLine {
+  id                   String  @id @default(cuid())
+  shortageId           String
+  /// A Medusa-rendelés tételének azonosítója.
+  itemId               String  @db.VarChar(64)
+  /// A rögzítéskori pillanatkép: a tétel később változhat vagy eltűnhet.
+  sku                  String?
+  title                String
+  /// Az eredetileg rendelt mennyiség (a szerver a rendelésből veszi, nem a kliens adja).
+  orderedQuantity      Int
+  /// A ténylegesen meglévő mennyiség, ha ismert.
+  availableQuantity    Int?
+  /// A vevő által jóváhagyott mennyiség, amit MOST kap ebben a rendelésben; a többi (rendelt - jóváhagyott) a választás szerint
+  /// külön rendelésbe, cserére vagy a törlésre kerül.
+  agreedQuantity       Int?
+  replacementVariantId String? @db.VarChar(64)
+  replacementSku       String?
+
+  shortage WebshopOrderShortage @relation(fields: [shortageId], references: [id], onDelete: Cascade)
+
+  @@unique([shortageId, itemId])
+  @@index([itemId])
+}
+
 /// A WEBSHOP RENDELÉS BELSŐ MEGJEGYZÉSE (a Figma 494:386 Megjegyzések kártyája).
 /// Csak az OS-é: a webshopnak és a vevőnek nem kell tudnia róla. Rendelésenként
 /// egy szöveg; a webshop rendelés-azonosítója a kulcs.
