@@ -119,7 +119,7 @@ describe("egy meglévő munkalap a hibajegy alá", () => {
 
     await assert.rejects(
       () => service.attachWorksheet("nincs-ilyen", "worksheet-1", BELSOS),
-      /hibajegy nem található/,
+      /hibajegy vagy karbantartási lap nem található/,
     );
   });
 

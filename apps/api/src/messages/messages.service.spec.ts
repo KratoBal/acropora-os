@@ -184,6 +184,8 @@ function fakeRepository(users: MessagingUserRow[]) {
             .map((c) => repo.conversation(c.id)),
         )
       ).filter((c): c is ConversationRow => c !== null),
+    // the list reads the linked jobs' kind (acrobot 56118); these conversations link none
+    serviceJobKinds: async () => [],
     messagesByIds: async (ids: readonly string[]) =>
       messages.filter((m) => ids.includes(m.id)),
     unreadCounts: async () =>
