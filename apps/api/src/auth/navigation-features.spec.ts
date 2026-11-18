@@ -77,18 +77,21 @@ describe("the production switches before the 40524dac release (acrobot 34365)", 
     assert.equal(off.has("homepage-content"), false);
     assert.equal(off.has("reefclub-linking"), false);
     assert.equal(off.has("webshop-coupons"), false);
+    assert.equal(off.has("webshop-shipping-settings"), false);
     const on = navigationFeatures(
       {
         MEDUSA_PROJECT_HOMEPAGE_CONTENT: "true",
         REEFCLUB_WEB_URL: "https://reefclub-staging.acropora.hu",
         REEFCLUB_LINKING_ENABLED: "true",
         MEDUSA_WEBSHOP_COUPONS: "true",
+        MEDUSA_WEBSHOP_SHIPPING_SETTINGS: "true",
       },
       "u1",
     );
     assert.equal(on.has("homepage-content"), true);
     assert.equal(on.has("reefclub-linking"), true);
     assert.equal(on.has("webshop-coupons"), true);
+    assert.equal(on.has("webshop-shipping-settings"), true);
     assert.equal(
       navigationFeatures(
         { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "false" },
