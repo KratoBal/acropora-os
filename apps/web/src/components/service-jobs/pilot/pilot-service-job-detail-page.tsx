@@ -53,6 +53,7 @@ import { MaintenanceInvoicePanel } from "../maintenance-invoice-panel";
 import { MaintenancePackagePanel } from "../maintenance-package-panel";
 import {
   serviceJobNoteDescription,
+  completionCertificateBlockedReason,
   serviceJobSourceText,
   serviceJobStatusLabel,
   serviceJobWorksheetLabel,
@@ -1434,7 +1435,10 @@ export function PilotServiceJobDetailPage({
             KISZOLGÁL" szakaszát.
           */}
           {job.kind === "MAINTENANCE" ? (
-            <CompletionCertificatePanel serviceJobId={job.id} />
+            <CompletionCertificatePanel
+              serviceJobId={job.id}
+              blockedReason={completionCertificateBlockedReason(job.source)}
+            />
           ) : null}
           {/*
             A PISZKOZAT-SZÁMLA (ADR-014, 4. szelet), VISSZAHOZVA (kártya 0baba3b9, acrobot 44712): a régi részletlapon

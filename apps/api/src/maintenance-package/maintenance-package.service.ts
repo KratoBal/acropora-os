@@ -124,6 +124,7 @@ export class MaintenancePackageService {
       worksheets: job.worksheets.map((worksheet) => ({
         id: worksheet.id,
         number: worksheet.number,
+        subject: worksheet.versions[0]?.subject ?? null,
         hidden: worksheet.hiddenAt !== null,
         closed: worksheet.versions[0]?.closedAt != null,
         hasIssuedSheet: worksheet.documents.some(

@@ -362,6 +362,87 @@ describe("PilotWorksheetCreatePage assignees", () => {
     ).toBeTruthy();
   });
 
+  /*
+    A KARBANTARTÁSBÓL NYITOTT MUNKALAP-ŰRLAP A KARBANTARTÁS SZAVAIT HASZNÁLJA (Balázs 2026-11-18: "a karbantartásnak semmi köze a hibajegyekhez"; stage-végigjárás, acrobot 56068): a
+    fejléc "Hibajegy: KT-2026-004" volt, az eszköz-szöveg "A hibajegyből nyitott lap a jegy eszközeivel indul". MI PIROSÍT: ha a karbantartási lapról nyitott űrlapon újra megjelenik
+    a hibajegy szó vagy a "jegy"; ha a fejléc hivatkozása a hibajegyek útvonalára mutat; és ha a hibajegyből nyitott űrlap szavai megváltoznak.
+  */
+  it("a karbantartási lapról nyitott űrlap a karbantartás szavait és útvonalát használja", async () => {
+    query.params = new URLSearchParams("hibajegy=job-1");
+    jobs.detail.mockResolvedValue({
+      id: "job-1",
+      kind: "MAINTENANCE",
+      jobNumber: "KT-2026-004",
+      customerId: "customer-42",
+      customerName: "Fankó Kft.",
+      departmentId: "department-1",
+      departmentName: "Biotóp",
+      assets: [],
+    });
+    worksheets.selectablePartners.mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    worksheets.departments.mockResolvedValue({
+      items: [
+        {
+          id: "department-1",
+          name: "Biotóp",
+          code: "BIO",
+          parentId: null,
+          isActive: true,
+        },
+      ],
+    });
+    render(<PilotWorksheetCreatePage />);
+
+    const link = await screen.findByRole("link", { name: "KT-2026-004" });
+    expect(link.getAttribute("href")).toBe("/szerviz/karbantartas/job-1");
+    expect(screen.getByText(/Karbantartási lap:/)).toBeTruthy();
+    await screen.findByText(/A karbantartási lapból nyitott munkalap/);
+    const leftover = (document.body.textContent ?? "").match(
+      /.{0,30}(hiba|(?<![a-zé])jegy).{0,30}/i,
+    )?.[0];
+    if (leftover) throw new Error(`LEFTOVER<<${leftover}>>`);
+  });
+
+  it("a hibajegyből nyitott űrlap a hibajegy szavait és útvonalát tartja", async () => {
+    query.params = new URLSearchParams("hibajegy=job-1");
+    jobs.detail.mockResolvedValue({
+      id: "job-1",
+      kind: "REPAIR",
+      jobNumber: "HJ-2026-009",
+      customerId: "customer-42",
+      customerName: "Fankó Kft.",
+      departmentId: "department-1",
+      departmentName: "Biotóp",
+      assets: [],
+    });
+    worksheets.selectablePartners.mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    worksheets.departments.mockResolvedValue({
+      items: [
+        {
+          id: "department-1",
+          name: "Biotóp",
+          code: "BIO",
+          parentId: null,
+          isActive: true,
+        },
+      ],
+    });
+    render(<PilotWorksheetCreatePage />);
+
+    const link = await screen.findByRole("link", { name: "HJ-2026-009" });
+    expect(link.getAttribute("href")).toBe("/szerviz/hibajegyek/job-1");
+    expect(screen.getByText(/Hibajegy:/)).toBeTruthy();
+    expect(screen.getByText(/A hibajegyből nyitott lap/)).toBeTruthy();
+  });
+
   function jegyHelyszinnel(
     departmentId: string | null,
     name: string | null,

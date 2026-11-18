@@ -66,3 +66,35 @@ describe("CompletionCertificatePanel -- betöltés token nélkül", () => {
     expect(api.list).toHaveBeenCalledWith("dev-token", "job-1");
   });
 });
+
+describe("CompletionCertificatePanel -- forrás nélküli lap", () => {
+  beforeEach(() => {
+    api.list.mockReset().mockResolvedValue([]);
+    auth.session = session("dev-token");
+  });
+
+  /*
+    MI PIROSÍT: ha az ok megadásakor a gomb aktív marad; ha az ok nem látszik a gomb mellett; ha ok nélkül a gomb tiltott lenne (a megrendelőlapos és a tételes szerződéses lap).
+  */
+  it("ok megadásakor a gomb tiltott, és az ok látszik mellette", async () => {
+    render(
+      <CompletionCertificatePanel
+        serviceJobId="job-1"
+        blockedReason="A teljesítési igazolás nem állítható ki: a lapnak nincs megrendelőlapja és szerződéstétele."
+      />,
+    );
+    const button = await screen.findByRole("button", {
+      name: "Teljesítési igazolás kiállítása",
+    });
+    expect(button.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText(/nincs megrendelőlapja/)).toBeTruthy();
+  });
+
+  it("ok nélkül a gomb aktív", async () => {
+    render(<CompletionCertificatePanel serviceJobId="job-1" />);
+    const button = await screen.findByRole("button", {
+      name: "Teljesítési igazolás kiállítása",
+    });
+    expect(button.hasAttribute("disabled")).toBe(false);
+  });
+});

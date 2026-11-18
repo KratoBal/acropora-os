@@ -31,7 +31,7 @@ export class MaintenancePackageRepository {
             versions: {
               orderBy: { version: "desc" },
               take: 1,
-              select: { id: true, closedAt: true },
+              select: { id: true, closedAt: true, subject: true },
             },
             documents: {
               where: { type: { in: [...WORKSHEET_ISSUED_SHEET_TYPES] } },

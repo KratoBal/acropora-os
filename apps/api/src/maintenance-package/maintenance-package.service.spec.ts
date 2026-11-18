@@ -99,6 +99,26 @@ describe("a karbantartási lap dokumentumcsomagja", () => {
     (aláíratlan). A KIKÜLDÉS kapuja marad. MI PIROSÍT: ha az igazolás nélküli letöltés elutasít; ha a csomagba nem kerül be a kiállított igazolás aláírt hiányában; ha az aláírt mellett a
     kiállított is bekerül (az aláírt a csomag igazolása); ha a kiküldés már nem kéri az igazolást vagy az aláírt példányát.
   */
+  it("a lezáratlan számtalan munkalapot a tárgya nevezi meg a letöltés hibájában", async () => {
+    await assert.rejects(
+      () =>
+        serviceWith(
+          job({
+            worksheets: [
+              worksheet({
+                number: null,
+                versions: [
+                  { id: "v1", closedAt: null, subject: "Cápasuli kis medence" },
+                ],
+                documents: [],
+              }),
+            ],
+          }),
+        ).assemble("job-a", "download"),
+      /„Cápasuli kis medence” \(piszkozat\)/,
+    );
+  });
+
   it("teljesítési igazolás nélkül a LETÖLTÉS átmegy, a csomagban nincs igazolás", async () => {
     const csomag = await serviceWith(
       job({ completionCertificate: null }),

@@ -82,7 +82,11 @@ export function maintenancePackageBlockMessage(
   blockers: MaintenancePackageBlockers,
 ): string {
   const nev = (sheet: PackageWorksheetState): string => {
-    const alap = sheet.number ?? "szám nélküli munkalap";
+    const alap =
+      sheet.number ??
+      (sheet.subject
+        ? `„${sheet.subject}” (piszkozat)`
+        : "szám nélküli munkalap");
     return sheet.hidden ? `${alap} (rejtett)` : alap;
   };
   const nevekAhol = (ok: "not-closed" | "no-issued-sheet"): string =>
