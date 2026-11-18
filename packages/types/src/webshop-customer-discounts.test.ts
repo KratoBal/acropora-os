@@ -21,6 +21,8 @@ describe("parseWebshopCustomerDiscountInput", () => {
     for (const [over, field] of [
       [{ customerId: "" }, "customerId"],
       [{ customerId: "user_1234567890" }, "customerId"],
+      // a lower-case id would not come back the same from the upper-cased promotion code
+      [{ customerId: "cus_01abcdef12" }, "customerId"],
       [{ percent: 0 }, "percent"],
       [{ percent: 101 }, "percent"],
       [{ percent: 2.5 }, "percent"],

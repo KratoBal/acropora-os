@@ -45,7 +45,9 @@ export function parseWebshopCustomerDiscountInput(
   const errors: Record<string, string> = {};
   const customerId =
     typeof input.customerId === "string" ? input.customerId.trim() : "";
-  if (!/^cus_[A-Za-z0-9]{8,64}$/.test(customerId))
+  // upper case only, as Medusa makes its ids (ULID): the promotion code upper-cases the id, and a lower-case id would not
+  // come back the same from the code (barracuda, #2727)
+  if (!/^cus_[0-9A-Z]{8,64}$/.test(customerId))
     errors.customerId = "Válassz vevőt a keresőből.";
   const percent =
     typeof input.percent === "number" ? input.percent : Number.NaN;
