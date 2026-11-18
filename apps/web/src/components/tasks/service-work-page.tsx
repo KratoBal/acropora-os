@@ -21,8 +21,8 @@ import { ServiceStatusBadge } from "@/components/service/service-list-chrome";
 import { tasksApi } from "@/lib/api/tasks";
 
 import {
-  SERVICE_WORK_KIND_LABEL,
   serviceWorkHref,
+  serviceWorkKindLabel,
   serviceWorkNextStep,
   serviceWorkOverdueText,
   serviceWorkStatusLabel,
@@ -233,7 +233,7 @@ function WorkCard({ item }: { item: MyServiceWorkItem }) {
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-dusk-500">
-          {SERVICE_WORK_KIND_LABEL[item.kind]}
+          {serviceWorkKindLabel(item)}
         </span>
         <span className="text-base font-semibold text-dusk-900">
           {item.number ?? "Számozatlan munkalap"}

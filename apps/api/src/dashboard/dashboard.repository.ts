@@ -491,7 +491,13 @@ export class DashboardRepository extends Repository {
   async activity(): Promise<DashboardActivity> {
     const [tickets, worksheets, measurements] = await Promise.all([
       this.database.serviceJobEvent.findMany({
-        where: { kind: "STATUS_CHANGE", fromStatus: null, toStatus: "NEW" },
+        // a ticket's opening only: a maintenance sheet is created too, but it is no ticket, and "új hibajegyet nyitott" would be untrue (acrobot 56109)
+        where: {
+          kind: "STATUS_CHANGE",
+          fromStatus: null,
+          toStatus: "NEW",
+          serviceJob: { kind: "REPAIR" },
+        },
         orderBy: { createdAt: "desc" },
         take: 10,
         select: {

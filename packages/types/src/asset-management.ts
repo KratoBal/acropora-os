@@ -597,7 +597,13 @@ export interface AssetDetail extends AssetListItem {
  * allitas irhato.
  */
 export interface AssetDeletionBlockers {
+  /** A HIBAJEGYEK (`kind: "REPAIR"`), amelyeken az eszköz áll. */
   serviceJobs: number;
+  /**
+   * A KARBANTARTÁSI LAPOK (`kind: "MAINTENANCE"`), amelyeken az eszköz áll: KÜLÖN szám és külön szó, mert a karbantartási lap nem hibajegy
+   * (Balázs, 2026-11-18 11:31 UTC; acrobot 56109). Akadály ugyanúgy, mint a hibajegy (a kapcsolat `Restrict`).
+   */
+  maintenanceSheets: number;
   worksheetLines: number;
   childAssets: number;
   /**
