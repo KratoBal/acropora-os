@@ -234,6 +234,23 @@ const usable = (value: string | undefined): string | null => {
 };
 
 /**
+ * A STRIPE-SZÁMLA SZÁMA HÁROM CELLÁBAN: `Invoice number | 20D3D94E | NUL | 0001` (a kötőjel NUL, kötőjel vagy gondolatjel cellaként
+ * jön át). A teljes szám `20D3D94E-0001`; az előtag az ügyfél számla-előtagja, minden számlán ugyanaz. Eddig ez nem adott számot, és a
+ * fájlnév-ág a `Invoice-20D3D94E-0001.pdf` darabjai közül az önálló szóként álló előtagot vette számnak: Balázs 2026-11-18-án két
+ * OpenAI-számlát (-0001, -0002) töltött fel két tranzakcióhoz, mindkettő `20D3D94E` lett, azonos azonosság, és a rendszer duplának
+ * mondta. Ugyanaz a megkötés, mint a külföldi számla olvasójának `hostedInvoiceNumber`-ében: 6-12 karakteres nagybetűs-számjegyes
+ * előtag, üres/NUL/kötőjeles középső cella, 3-6 jegyű sorszám. Más alakot nem fűz össze.
+ */
+function hostedSplitNumber(prefix: string, after: string): string | null {
+  if (!/^[A-Z0-9]{6,12}$/.test(prefix)) return null;
+  const serial =
+    /^\s*\|[\s\u0000-\u001f\-\u2013]*\|\s*(\d{3,6})\s*(?:\||$)/.exec(
+      after,
+    )?.[1];
+  return serial ? `${prefix}-${serial}` : null;
+}
+
+/**
  * A CÍMKE UTÁNI ÉRTÉK, A CELLÁJÁVAL EGYÜTT MEGÍTÉLVE (2026-10-04, a `|` előtag
  * bekapcsolásakor az exchange 517 számlaszerű PDF-jén mérve):
  *
@@ -249,6 +266,8 @@ function cellValue(text: string): string | null {
   const match = NUMBER_TOKEN.exec(text);
   if (!match) return null;
   const after = text.slice(match[0].length);
+  const hosted = hostedSplitNumber(match[1]!, after);
+  if (hosted) return hosted;
   const raw = `${match[1]}${after.split("|")[0]}`.trim();
   const cell = raw.replace(/\s+/g, "");
   if (BANK_ACCOUNT.test(cell) || GROUPED_BANK_ACCOUNT.test(raw)) return null;
