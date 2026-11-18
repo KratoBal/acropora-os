@@ -175,7 +175,8 @@ describe("a munkalap-űrlap a lap fajtájából dönt", () => {
   const urlap = forras("app", "worksheets", "new.tsx");
 
   it("a fajtát átadja a mondat-függvényeknek", () => {
-    assert.match(urlap, /ticketNotice\(jegy, jegyKind\)/);
+    // a feltétel és a kirajzolt szöveg is a fajtával hívja (két hívás)
+    assert.equal(urlap.match(/ticketNotice\(jegy, jegyKind\)/g)?.length, 2);
     assert.match(urlap, /kind: jegyKind/);
     assert.match(urlap, /jobWords\(jegyKind\)/);
   });
