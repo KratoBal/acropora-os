@@ -12,17 +12,14 @@ import type { MaintenanceOrdersRepository } from "./maintenance-orders.repositor
 import { MaintenanceOrdersService } from "./maintenance-orders.service.js";
 
 /*
-  MÉRÉS, KÓDMÓDOSÍTÁS NÉLKÜL (kártya f1c14dcb, acrobot 56144): mi történik MA, ha a karbantartási lap létrehozása közben a szerződés alkalomkeretét egy párhuzamos foglalás elviszi.
+  A SIKERTELEN LÉTREHOZÁS VISSZAVONÁSA (kártya f1c14dcb, acrobot 56144 és 56153): ha a karbantartási lap létrehozása közben a szerződés alkalomkeretét egy párhuzamos foglalás elviszi, a lap és a
+  munkalap-piszkozatai már léteznek. A visszavonás eddig a FELHASZNÁLÓI lezárási kapun (`move` CANCELLED) akadt el: a frissen létrehozott piszkozatok átadása nincs rögzítve, a hívó a keret 409-e
+  helyett a kapu hibajegy-szavas 400-át kapta, és egy tételsor nélküli, nyitott lap maradt. MOSTANTÓL a rendszer saját visszavonása külön út (`cancelFailedCreation`): nem esik a felhasználói
+  kapu alá (a lap másodperce jött létre, gép nem érkezett), a lap LEMONDVA marad (acrobot: nyom marad róla), az érintetlen piszkozatok el vannak rejtve, a hívó a keret 409-ét kapja.
 
-  A menet (`createOneContractJob`): előellenőrzés (átmegy) -> a lap és a tételenkénti munkalapok LÉTREJÖNNEK -> a tételsorok foglalása a zár alatt, ELBUKIK -> a szolgáltatás a BELSŐ
-  visszavonást hívja: `serviceJobs.move(id, CANCELLED)`, majd 409-et dob a keretről. A `move` viszont a FELHASZNÁLÓI lezárási kaput is futtatja (`requireClosableWorksheets`): a CANCELLED lépéshez
-  minden munkalap átadása rögzítve kell legyen, a frissen létrehozott piszkozatoké pedig nincs.
-
-  A TESZT A VALÓDI `ServiceJobsService.move`-ot futtatja, csak a tárolója és a lap/munkalap létrehozás (a kapu előtti rész) dupla.
-
-  MA, MÉRVE: a visszavonás elbukik a kapun (400, "Ez a hibajegy nem állítható elállt állapotba. Az átadás nincs rögzítve: ..."), a hívó a 409 helyett EZT kapja, a lap állapota NEM változik
-  (a tároló `move`-ja nem fut), és a munkalap-piszkozatok megmaradnak: egy tételek nélküli, nyitott karbantartási lap marad, amit senki nem kért. Ez a teszt a MAI viselkedést rögzíti; a
-  javítás átírja (a helyes viselkedés a kártya leírásában, acrobot jóváhagyásával).
+  A TESZT A VALÓDI `ServiceJobsService`-t futtatja (a tárolója dupla), így a felhasználói kapu is a valódi.
+  MI PIROSÍT: ha a visszavonás újra a felhasználói kapun át megy (400 a 409 helyett); ha a lap nem mondódik le; ha a megjegyzés elveszik; ha a felhasználói `move` CANCELLED kapuja gyengül;
+  ha egy közben másik állapotba lépett lapot a visszavonás átírja; ha a már lemondott lapon a visszavonás újra ír.
 */
 const ACTOR = { id: "user-1" } as AuthenticatedUser;
 const ITEM = {
@@ -35,11 +32,14 @@ const ITEM = {
   vatRatePercent: 27,
 };
 
-function world() {
+function world(status: string = "NEW") {
   const moved: unknown[] = [];
+  const cancelled: Array<{ id: string; note: string; actorUserId: string }> =
+    [];
   const createdSheets: unknown[] = [];
   const jobRepository = {
-    statusOf: async () => "NEW",
+    statusOf: async () => status,
+    kindOf: async () => "MAINTENANCE",
     // a frissen létrehozott piszkozat-munkalap: nincs aláírva, az átadás nincs rögzítve
     worksheetSignatureStates: async () => [
       {
@@ -54,11 +54,19 @@ function world() {
       moved.push(input);
       return { ok: true };
     },
+    cancelFailedCreation: async (input: {
+      id: string;
+      note: string;
+      actorUserId: string;
+    }) => {
+      cancelled.push(input);
+      return { ok: true as const, hiddenSheets: 1 };
+    },
   } as unknown as ServiceJobsRepository;
   const realJobs = new ServiceJobsService(jobRepository);
   const serviceJobs = {
     create: async () => ({ id: "job-1", jobNumber: "KT-2026-001" }),
-    move: realJobs.move.bind(realJobs),
+    cancelFailedCreation: realJobs.cancelFailedCreation.bind(realJobs),
   } as unknown as ServiceJobsService;
   const worksheets = {
     create: async (input: unknown) => {
@@ -99,38 +107,70 @@ function world() {
   } as unknown as MaintenanceOrdersRepository;
   return {
     service: new MaintenanceOrdersService(repository, serviceJobs, worksheets),
+    realJobs,
     moved,
+    cancelled,
     createdSheets,
   };
 }
 
+const dto = {
+  contractId: "contract-1",
+  itemIds: ["item-1"],
+  clientOperationId: "k1",
+} as never;
+
 describe("a karbantartási lap létrehozása, ha a foglalás a lap létrehozása után bukik", () => {
-  it("MA: a belső visszavonás a lezárási kapun akad el, a hívó a kapu mondatát kapja a keret 409-e helyett, a lap nem mondódik le", async () => {
-    const { service, moved, createdSheets } = world();
+  it("a visszavonás nem akad el a lezárási kapun: a hívó a keret 409-ét kapja, a lap lemondva marad a megjegyzéssel", async () => {
+    const { service, moved, cancelled, createdSheets } = world();
 
     await assert.rejects(
-      () =>
-        service.createJobFromContract(
-          {
-            contractId: "contract-1",
-            itemIds: ["item-1"],
-            clientOperationId: "k1",
-          } as never,
-          ACTOR,
-        ),
+      () => service.createJobFromContract(dto, ACTOR),
       (error: unknown) => {
-        // a kapu mondata, nem a keret 409-e
-        assert.ok(error instanceof BadRequestException);
-        assert.ok(!(error instanceof ConflictException));
+        assert.ok(error instanceof ConflictException);
         assert.match(
           error.message,
-          /Ez a hibajegy nem állítható elállt állapotba\. Az átadás nincs rögzítve: szám nélküli munkalap/,
+          /elfogyott az évi alkalomkeret: Cápasuli RO karbantartás/,
         );
         return true;
       },
     );
-    // a munkalap-piszkozat létrejött, a lap állapota viszont nem változott
     assert.equal(createdSheets.length, 1);
+    assert.equal(cancelled.length, 1);
+    assert.equal(cancelled[0]?.id, "job-1");
+    assert.equal(cancelled[0]?.actorUserId, "user-1");
+    assert.match(cancelled[0]?.note ?? "", /tételek nélkül lemondva/);
+    // a felhasználói út (`move`) nem futott
     assert.deepEqual(moved, []);
+  });
+
+  it("a felhasználói CANCELLED lépés kapuja változatlan: aláíratlan, át nem adott piszkozat mellett 400", async () => {
+    const { realJobs, moved } = world();
+    await assert.rejects(
+      () =>
+        realJobs.move("job-1", { to: "CANCELLED" } as never, "user-1", ACTOR),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /Az átadás nincs rögzítve/.test(error.message),
+    );
+    assert.deepEqual(moved, []);
+  });
+
+  it("ha a lap közben másik állapotba lépett, a visszavonás nem írja át, a hívó így is a keret 409-ét kapja", async () => {
+    const { service, cancelled } = world("IN_PROGRESS");
+    await assert.rejects(
+      () => service.createJobFromContract(dto, ACTOR),
+      ConflictException,
+    );
+    assert.deepEqual(cancelled, []);
+  });
+
+  it("a már lemondott lapon a visszavonás nem ír újra", async () => {
+    const { service, cancelled } = world("CANCELLED");
+    await assert.rejects(
+      () => service.createJobFromContract(dto, ACTOR),
+      ConflictException,
+    );
+    assert.deepEqual(cancelled, []);
   });
 });

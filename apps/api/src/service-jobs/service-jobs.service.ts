@@ -1759,6 +1759,30 @@ export class ServiceJobsService {
     await this.repository.setHidden(id, hidden ? new Date() : null, user.id);
   }
 
+  /**
+   * A RENDSZER SAJÁT VISSZAVONÁSA egy sikertelen létrehozásnál (kártya f1c14dcb; acrobot 56144, 56153): a karbantartási lap létrehozása közben a szerződés alkalomkeretét egy párhuzamos
+   * foglalás elvitte, a lap és a munkalap-piszkozatai viszont már léteznek. NEM esik a felhasználói lezárási kapu alá (`move` -> `requireClosableWorksheets`): az a vevő eszközét védi, ez a
+   * lap másodperce jött létre, gép nem érkezett. A lap LEMONDVA marad (nyom marad róla), az érintetlen piszkozatai el vannak rejtve. Csak NEW állapotú lapot ír át: ha közben más
+   * lépett, vagy már lemondták, nem nyúl hozzá (nem hiba: a hívó a saját hibáját dobja tovább). Felhasználói útról nem hívható: nincs végpontja.
+   */
+  async cancelFailedCreation(
+    id: string,
+    note: string,
+    actorUserId: string,
+  ): Promise<void> {
+    const from = await this.repository.statusOf(id);
+    if (from !== "NEW") return;
+    const result = await this.repository.cancelFailedCreation({
+      id,
+      note,
+      actorUserId,
+    });
+    if (!result.ok)
+      this.logger.warn(
+        `A sikertelen létrehozás visszavonása kimaradt (${id}): közben más állapotba lépett.`,
+      );
+  }
+
   async move(
     id: string,
     input: MoveServiceJobDto,

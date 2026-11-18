@@ -1270,6 +1270,46 @@ export class ServiceJobsRepository {
   }
 
   /**
+   * A SIKERTELEN LÉTREHOZÁS VISSZAVONÁSA (kártya f1c14dcb): a lap LEMONDVA marad (a napló megjegyzéssel mutatja, mi történt), és a hozzá tartozó ÉRINTETLEN munkalapok
+   * (nem lezártak, nem átadottak, nincs bejegyzésük és dokumentumuk, a lap létrehozása közben készült piszkozatok) el vannak rejtve, hogy ne maradjanak árván a listán.
+   * Egy tranzakció, és a `NEW` feltétel a WHERE-ben: egy közben más állapotba lépett lapot nem ír át (`ok: false`).
+   */
+  async cancelFailedCreation(input: {
+    id: string;
+    note: string;
+    actorUserId: string;
+  }) {
+    return this.database.$transaction(async (transaction) => {
+      const moved = await transaction.serviceJob.updateMany({
+        where: { id: input.id, status: "NEW" },
+        data: { status: "CANCELLED" },
+      });
+      if (moved.count !== 1) return { ok: false as const };
+      await transaction.serviceJobEvent.create({
+        data: {
+          serviceJobId: input.id,
+          fromStatus: "NEW",
+          toStatus: "CANCELLED",
+          note: input.note,
+          actorUserId: input.actorUserId,
+        },
+      });
+      const hidden = await transaction.worksheet.updateMany({
+        where: {
+          serviceJobId: input.id,
+          hiddenAt: null,
+          handedOverAt: null,
+          entries: { none: {} },
+          documents: { none: {} },
+          versions: { every: { closedAt: null } },
+        },
+        data: { hiddenAt: new Date(), hiddenById: input.actorUserId },
+      });
+      return { ok: true as const, hiddenSheets: hidden.count };
+    });
+  }
+
+  /**
    * A RÉSZLETLAP HÁROM FORRÁSA, EGY LEKÉRDEZÉSBEN.
    *
    * Külön hívásokban N+1 lenne, és ami rosszabb: a három lista MÁS
