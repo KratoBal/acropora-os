@@ -277,7 +277,7 @@ export function TicketDetail({
                   items={visibleTimeline(ticket.timeline, maintenance).map(
                     (entry) => ({
                       key: `${entry.kind}-${entry.sortKey}`,
-                      text: naploSor(entry),
+                      text: naploSor(entry, maintenance),
                       /*
                       A BELSŐ MEGJEGYZÉS NEM MEGY A PARTNER ELÉ (Balázs
                       döntése, 2026-09-21 10:5x UTC, Discord, szó szerint:

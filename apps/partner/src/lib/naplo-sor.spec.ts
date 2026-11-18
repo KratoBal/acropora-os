@@ -235,3 +235,72 @@ describe("a partner naplósora", () => {
     );
   });
 });
+
+/**
+ * A KARBANTARTÁSI LAP NAPLÓJA A LAP SZAVAIT HASZNÁLJA, ÁLLAPOT NÉLKÜL (Balázs, 2026-11-18 11:31 UTC; acrobot 56074). A stage-bejárás
+ * (KT-2026-006) a partner lapon ezt mutatta: "A hibajegy létrejött. Állapota: Új." -- karbantartáson kétszer rossz: nem hibajegy, és a
+ * karbantartásnak nincs hibajegy-állapota. A belső adatlap (`timelineLine`) már a lap szavait mondja; ez a partneri tükre.
+ * MI PIROSÍT: ha a karbantartás létrejövése állapotot nevez meg vagy hibajegynek mondja magát; ha a munkalap vagy az eszköz sora "jegy"-et
+ * mond karbantartáson; ha a hibajegy sorai megváltoznak (a második paraméter alapértéke a hibajegy).
+ */
+describe("a karbantartási lap naplósora", () => {
+  const munkalap: ServiceJobPartnerTimelineEntry = {
+    kind: "worksheet",
+    at: "2026-11-18T15:00:00.000Z",
+    sortKey: "w1",
+    worksheet: {
+      id: "w1",
+      number: "BIO-2026-004",
+      subject: "Szivattyú csere",
+      createdAt: "2026-11-18T15:00:00.000Z",
+      handedOverAt: null,
+    },
+  };
+  const eszkoz: ServiceJobPartnerTimelineEntry = {
+    kind: "asset",
+    at: "2026-11-18T15:00:00.000Z",
+    sortKey: "a1",
+    asset: {
+      id: "link1",
+      assetId: "asset1",
+      assetNumber: "ESZ-0042",
+      assetName: "Fő szivattyú",
+      assetCategoryName: null,
+      attachedAt: "2026-11-18T15:00:00.000Z",
+    },
+  };
+
+  it("a létrejötte a lap szava, állapot nélkül", () => {
+    assert.equal(
+      naploSor(status(true, "Új"), true),
+      "A karbantartási lap létrejött.",
+    );
+  });
+
+  it("a munkalap és az eszköz sora a karbantartási lapot nevezi meg", () => {
+    assert.equal(
+      naploSor(munkalap, true),
+      "Munkalap a karbantartási lap alatt: Szivattyú csere (BIO-2026-004)",
+    );
+    assert.equal(
+      naploSor(eszkoz, true),
+      "Eszköz a karbantartási lapon: ESZ-0042 (Fő szivattyú)",
+    );
+  });
+
+  it("a hibajegy sorai változatlanok (a második paraméter alapértéke a hibajegy)", () => {
+    assert.equal(
+      naploSor(status(true, "Új")),
+      "A hibajegy létrejött. Állapota: Új.",
+    );
+    assert.equal(
+      naploSor(status(true, "Új"), false),
+      "A hibajegy létrejött. Állapota: Új.",
+    );
+    assert.equal(
+      naploSor(munkalap),
+      "Munkalap a jegy alatt: Szivattyú csere (BIO-2026-004)",
+    );
+    assert.equal(naploSor(eszkoz), "Eszköz a jegyen: ESZ-0042 (Fő szivattyú)");
+  });
+});
