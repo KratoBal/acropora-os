@@ -6,7 +6,11 @@ import { useCallback, useEffect, useState } from "react";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { ServiceDocumentGallery } from "@/components/service/service-document-gallery";
 import { splitWorksheetDocuments } from "./worksheet-issued-sheet";
-import { PilotCard, PilotCardHeader } from "@/components/pilot/pilot-ui";
+import {
+  PilotButton,
+  PilotCard,
+  PilotCardHeader,
+} from "@/components/pilot/pilot-ui";
 
 /**
  * A MUNKALAP CSATOLMANYAI A WEBES LAPON.
@@ -41,14 +45,19 @@ export function WorksheetDocuments({
   worksheetId,
   token,
   canView,
+  canRegenerate = false,
 }: {
   worksheetId: string;
   token: string;
   canView: boolean;
+  /** A kiadott PDF újragenerálása kezelői jog (a lap kezelője); a partner oldalán nincs ilyen. */
+  canRegenerate?: boolean;
 }) {
   const [items, setItems] = useState<WorksheetDocumentSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [regenerating, setRegenerating] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -137,8 +146,25 @@ export function WorksheetDocuments({
         <p className="mb-3 text-sm font-medium text-rose-600">{error}</p>
       ) : null}
       <PilotCard>
-        <PilotCardHeader title="A kiadott munkalap" />
+        <PilotCardHeader
+          title="A kiadott munkalap"
+          action={
+            canRegenerate && issued.length > 0 ? (
+              <PilotButton
+                variant="secondary"
+                size="regular"
+                disabled={regenerating}
+                onClick={() => void ujragenerals()}
+              >
+                PDF újragenerálása
+              </PilotButton>
+            ) : undefined
+          }
+        />
         <div className="p-5">
+          {notice ? (
+            <p className="mb-3 text-sm text-pilot-grey-700">{notice}</p>
+          ) : null}
           {error ? null : loading ? (
             <p className="text-sm text-dusk-500">A kiadott lap töltődik…</p>
           ) : (
@@ -164,6 +190,37 @@ export function WorksheetDocuments({
       </PilotCard>
     </>
   );
+
+  /**
+   * A KIADOTT PDF UJRAGENERALASA (kartya 47e07a53). A gomb a hivas alatt tiltott (dupla kattintas), siker utan a lista ujratoltodik: a regi peldany a Csatolmanyok kozott jelenik meg.
+   * A "nem valtozott" es a "megtortent" KULON mondat: az elso azt mondja, hogy a lap mar a mostani elrendezes szerinti.
+   */
+  async function ujragenerals() {
+    if (regenerating) return;
+    setRegenerating(true);
+    setNotice(null);
+    try {
+      const result = await worksheetsApi.regenerateIssuedSheet(
+        token,
+        worksheetId,
+      );
+      setNotice(
+        result.changed
+          ? "A PDF újragenerálva a mostani elrendezéssel. A korábbi példány a Csatolmányok között marad."
+          : "A PDF már a mostani elrendezésű, nem változott semmi.",
+      );
+      setError(null);
+      if (result.changed) await load();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "A PDF újragenerálása nem sikerült.",
+      );
+    } finally {
+      setRegenerating(false);
+    }
+  }
 
   /**
    * A LETOLTES UGYANAZT A BLOBOT HASZNALJA, amit a galeria a csempehez: egy

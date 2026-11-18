@@ -141,7 +141,11 @@ export function requireClosedSheetLabel(
  */
 export async function worksheetSheetDocument(
   input: WorksheetSheetInput,
-  options: MinimalPdfOptions = {},
+  /**
+   * A `creationDate` CSAK AZ ÚJRAGENERÁLÁSÉ (acrobot 56321): a rögzített idő (#1582 P2) mellett azonos bemenetre azonos bájtok jönnek, tehát a gomb össze tudja vetni az újat a
+   * tárolttal, és ha egyeznek, nem ír archívumot. A lezáráskori út nem adja meg: ott minden úgy marad, ahogy volt.
+   */
+  options: MinimalPdfOptions & { creationDate?: Date } = {},
 ): Promise<WorksheetSheetDocument> {
   const content = await renderWorksheetPdf(input, options);
 
@@ -281,13 +285,16 @@ function rule(document: PDFKit.PDFDocument, y: number): void {
 
 function renderWorksheetPdf(
   input: WorksheetSheetInput,
-  options: MinimalPdfOptions,
+  options: MinimalPdfOptions & { creationDate?: Date },
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let document: PDFKit.PDFDocument;
     try {
-      document = createBrandedPdf({ fontPath: options.fontPath });
+      document = createBrandedPdf({
+        fontPath: options.fontPath,
+        creationDate: options.creationDate,
+      });
       registerNotoSans(document);
     } catch (error) {
       reject(error);

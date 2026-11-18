@@ -612,6 +612,7 @@ export function PilotWorksheetDetailPage({
             worksheetId={worksheet.id}
             token={token}
             canView={canView}
+            canRegenerate={canManage}
           />
 
           <PilotCard>

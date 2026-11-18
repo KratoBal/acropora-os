@@ -80,6 +80,7 @@ import {
   type NormalizedWorksheetContent,
   type NormalizedWorksheetLine,
 } from "./worksheet-content.js";
+import { isSheetArchive } from "./worksheet-sheet-regeneration.js";
 import { diffWorksheetVersions } from "./worksheet-diff.js";
 import {
   WORKSHEET_NUMBER_ISSUE_MESSAGES,
@@ -102,6 +103,31 @@ import {
 
 function isNumberIssue(reason: string): reason is WorksheetNumberIssue {
   return reason in WORKSHEET_NUMBER_ISSUE_MESSAGES;
+}
+
+function regenerationFailure(
+  reason: Extract<
+    Awaited<ReturnType<WorksheetsRepository["regenerateIssuedSheet"]>>,
+    { ok: false }
+  >["reason"],
+) {
+  if (reason === "NOT_FOUND")
+    return new NotFoundException("A munkalap nem található.");
+  if (reason === "NOT_CLOSED")
+    return new ConflictException(
+      "A munkalap még nincs lezárva: a PDF a lezáráskor készül, addig nincs mit újragenerálni.",
+    );
+  if (reason === "NO_SHEET")
+    return new ConflictException(
+      "A lezárt laphoz nincs kiadott PDF, ezért nincs mit újragenerálni. A hiányzó PDF pótlása külön lépés.",
+    );
+  if (reason === "SIGNED_SHEET_MISSING")
+    return new ConflictException(
+      "Az aláírt laphoz nincs végleges PDF, ezért nincs mit újragenerálni. A lezáráskori példány az aláírás előtti állapotot rögzíti, azt nem írjuk át.",
+    );
+  return new ConflictException(
+    "A PDF-et közben más is újragenerálta: töltsd újra a lapot.",
+  );
 }
 
 function closeFailure(reason: WorksheetCloseFailure) {
@@ -264,7 +290,14 @@ export class WorksheetsService {
   async documents(id: string, scope: PartnerScope) {
     const lap = await this.repository.detail(id, scope);
     if (!lap) throw new NotFoundException("A munkalap nem található.");
-    return { items: await this.repository.documents(id) };
+    const items = await this.repository.documents(id);
+    // A régi elrendezésű (archív) példány belső előzmény: a partner portál a lap összes csatolmányát listázza, ezért itt szűrünk (és a letöltésben is, lásd `documentBytes`)
+    return {
+      items:
+        scope.kind === "internal"
+          ? items
+          : items.filter((item) => !isSheetArchive(item)),
+    };
   }
 
   /**
@@ -302,6 +335,9 @@ export class WorksheetsService {
 
     const document = await this.repository.document(id, documentId);
     if (!document) throw new NotFoundException("A csatolmány nem található.");
+    // az archív példány a partner elől rejtett: azonosítóval sem érhető el (ugyanaz a 404, mint a nem létezőé)
+    if (scope.kind !== "internal" && isSheetArchive(document))
+      throw new NotFoundException("A csatolmány nem található.");
 
     if (document.content) return { ...document, bytes: document.content };
 
@@ -984,6 +1020,27 @@ export class WorksheetsService {
    * kero mégis ide jutna, az nem "kevesebb jog" kerdese, hanem ertelmetlen
    * muvelet -- sajat maganak kuldene ki.
    */
+  /**
+   * A LEZÁRT LAP KIADOTT PDF-JE ÚJRA, A MOSTANI ELRENDEZÉSSEL (Balázs 2026-11-18 19:17 UTC, kártya 47e07a53; acrobot 56321). BELSŐS LÉPÉS: a partner a saját lapját nem generálja újra
+   * (a `PARTNER_SERVICE` viseli a `SERVICE_MANAGE` jogot, ezért a jog nem elég: a hatókör dönt). A régi bájtok a lap csatolmányai közé kerülnek, lásd `worksheet-sheet-regeneration.ts`.
+   */
+  async regenerateIssuedSheet(
+    id: string,
+    actor: AuthenticatedUser,
+    now: Date = new Date(),
+  ): Promise<{ changed: boolean }> {
+    requireInternalWriter(actor, "A kiadott PDF újragenerálása");
+    await this.requireWorksheet(id, { kind: "internal" });
+    const result = await this.repository.regenerateIssuedSheet(id, {
+      actorName: actor.displayName,
+      at: now
+        .toLocaleString("sv-SE", { timeZone: "Europe/Budapest" })
+        .slice(0, 16),
+    });
+    if (!result.ok) throw regenerationFailure(result.reason);
+    return { changed: result.changed };
+  }
+
   async sendForSignature(
     id: string,
     signerUserId: string,
