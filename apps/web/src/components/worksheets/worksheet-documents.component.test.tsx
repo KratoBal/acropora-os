@@ -257,7 +257,8 @@ describe("a kiadott PDF újragenerálása", () => {
       <WorksheetDocuments worksheetId="ws-1" token="t" canView canRegenerate />,
     );
     await answered(api.documents);
-    await screen.findByText("A kiadott munkalap");
+    // a betöltés UTÁN mérünk: a fejléc a betöltés előtt is áll, és a gomb a kiadott sor megérkezésével jelenik meg
+    await screen.findByText("munkalap-NMD-2026-028.pdf");
     expect(
       within(szakasz("A kiadott munkalap")).getByRole("button", {
         name: "PDF újragenerálása",
@@ -267,7 +268,7 @@ describe("a kiadott PDF újragenerálása", () => {
 
     api.documents.mockResolvedValue({ items: kiadott() });
     render(<WorksheetDocuments worksheetId="ws-1" token="t" canView />);
-    await screen.findByText("A kiadott munkalap");
+    await screen.findByText("munkalap-NMD-2026-028.pdf");
     expect(
       screen.queryByRole("button", { name: "PDF újragenerálása" }),
     ).toBeNull();
@@ -279,7 +280,10 @@ describe("a kiadott PDF újragenerálása", () => {
       <WorksheetDocuments worksheetId="ws-1" token="t" canView canRegenerate />,
     );
     await answered(api.documents);
-    await screen.findByText("A kiadott munkalap");
+    // a betöltés UTÁN mérünk: a piszkozat szakasza kimondja, miért üres
+    await screen.findByText(
+      /még nincs lezárva, ezért kiadott példány sem készült/,
+    );
     expect(
       screen.queryByRole("button", { name: "PDF újragenerálása" }),
     ).toBeNull();
