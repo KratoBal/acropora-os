@@ -22,6 +22,7 @@ import { AuthModule } from "./auth/auth.module.js";
 import { CatalogActionsModule } from "./catalog-actions/catalog-actions.module.js";
 import { BrandsModule } from "./brands/brands.module.js";
 import { HomepageContentModule } from "./homepage-content/homepage-content.module.js";
+import { WebshopCouponsModule } from "./webshop-coupons/webshop-coupons.module.js";
 import { SeoLandingModule } from "./seo-landing/seo-landing.module.js";
 import { AuthGuard } from "./auth/guards/auth.guard.js";
 import { PermissionGuard } from "./auth/guards/permission.guard.js";
@@ -111,6 +112,7 @@ import { OperationsLogModule } from "./operations-log/operations-log.module.js";
     CatalogActionsModule,
     SeoLandingModule,
     HomepageContentModule,
+    WebshopCouponsModule,
     ProductModule,
     UnasImportModule,
     InventoryModule,
