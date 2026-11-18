@@ -132,6 +132,71 @@ describe("BankTransfersPage", () => {
     );
   });
 
+  // the calibration of kapu.py found it (2026-11-18): the reason sentence of a row was changed to "" and every test stayed green
+  it("a row that needs a person shows WHY, in the server's own words", async () => {
+    api.list.mockResolvedValue([
+      credit({
+        decision: {
+          markable: false,
+          refusal: "UNRESOLVED",
+          reason:
+            "Nem minden számlaszám található meg egyértelműen (hiányzik, sztornózott vagy díjbekérő).",
+          detail: "D-CRPR-7 nem fizetendő: D-CRPR-7 díjbekérő",
+        },
+      }),
+    ]);
+    render(<BankTransfersPage />);
+    expect(
+      await screen.findByText(
+        /Nem minden számlaszám található meg egyértelműen.*\(D-CRPR-7 nem fizetendő: D-CRPR-7 díjbekérő\)/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Kézi párosítás kell")).toBeInTheDocument();
+  });
+
+  it("a credit that is not an invoice's payment says what it is, grey, not 'Kézi párosítás kell'", async () => {
+    const decision = (
+      refusal:
+        "OWN_ACCOUNT" | "CARD_SETTLEMENT" | "PAYMENT_PROVIDER" | "OTHER_SYSTEM",
+      reason: string,
+    ) => ({ markable: false as const, refusal, reason, detail: "" });
+    api.list.mockResolvedValue([
+      credit({
+        id: "own",
+        decision: decision(
+          "OWN_ACCOUNT",
+          "A saját cég nevén érkezett jóváírás.",
+        ),
+      }),
+      credit({
+        id: "card",
+        decision: decision(
+          "CARD_SETTLEMENT",
+          "Bankkártya-elfogadói elszámolás.",
+        ),
+      }),
+      credit({
+        id: "sp",
+        decision: decision("PAYMENT_PROVIDER", "SimplePay-elszámolás."),
+      }),
+      credit({
+        id: "ebiz",
+        decision: decision("OTHER_SYSTEM", "Ez eBIZ-számla."),
+      }),
+    ]);
+    render(<BankTransfersPage />);
+    for (const [label, reason] of [
+      ["Saját számla", /A saját cég nevén érkezett jóváírás/],
+      ["Kártya-elszámolás", /Bankkártya-elfogadói elszámolás/],
+      ["SimplePay-elszámolás", /^SimplePay-elszámolás\.$/],
+      ["Más rendszer (eBIZ)", /Ez eBIZ-számla/],
+    ] as const) {
+      expect(await screen.findByText(label)).toBeInTheDocument();
+      expect(screen.getByText(reason)).toBeInTheDocument();
+    }
+    expect(screen.queryByText("Kézi párosítás kell")).not.toBeInTheDocument();
+  });
+
   it("writes only after a matching check of the same text, sends that text, and reads again", async () => {
     api.list.mockResolvedValue([credit()]);
     api.check.mockResolvedValue({
