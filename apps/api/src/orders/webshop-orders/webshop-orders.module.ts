@@ -25,6 +25,7 @@ import { WebshopOrderShippingMethodService } from "./webshop-order-shipping-meth
 import { WebshopOrdersController } from "./webshop-orders.controller.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
+import { WebshopParcelStatusHealthController } from "./webshop-parcel-status-health.controller.js";
 import { WebshopParcelStatusScheduler } from "./webshop-parcel-status.scheduler.js";
 import { WebshopParcelStatusService } from "./webshop-parcel-status.service.js";
 import { WebshopProblemReportPullScheduler } from "./webshop-problem-report-pull.scheduler.js";
@@ -47,6 +48,7 @@ import { WebshopMailOutboxService } from "./webshop-mail-outbox.service.js";
     WebshopOrdersController,
     WebshopOrderShortagesController,
     WebshopMailOutboxController,
+    WebshopParcelStatusHealthController,
   ],
   providers: [
     WebshopOrdersService,
