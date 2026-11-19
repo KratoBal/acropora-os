@@ -1511,7 +1511,7 @@ describe("PilotContractDetailPage -- a tétel összege és az Összesen mező", 
     const value = {
       ...contract(),
       items: [lucaItem(extra)],
-    } as ContractSummary;
+    } as unknown as ContractSummary;
     api.detail.mockReset().mockResolvedValue(value);
     api.update.mockReset().mockResolvedValue(value);
     orderApi.list.mockReset().mockResolvedValue([]);
