@@ -444,7 +444,7 @@ export interface MedusaCollectionInput {
 
 export interface MedusaCollectionListResult {
   rows: MedusaCollectionRow[];
-  /** Igaz, ha a valasz kimeritette a limitet, tehat lehet tobb is. */
+  /** Igaz, ha a lapozas a biztonsagi felso hatarba utkozott, tehat lehet tobb is (nem a 500-as oldalmeret miatt). */
   truncated: boolean;
 }
 
@@ -457,6 +457,9 @@ export interface MedusaCollectionListResult {
  * letrehozni, amik mar leteznek.
  */
 export const COLLECTION_LIST_LIMIT = 500;
+
+/** A lapozas biztonsagi felso hatara: 20 oldal x 500 = 10 000 gyujtemeny. Ennel tobbnel a lista csonkoltnak szamit. */
+export const COLLECTION_LIST_MAX_PAGES = 20;
 
 /**
  * A kategoria-lista felso hatara.
@@ -900,6 +903,63 @@ export interface MedusaOrderPayment {
   due?: { amount: number; reason: "released" | "difference" } | null;
 }
 
+/**
+ * STRIPE'S PAYOUTS AND THEIR BALANCE TRANSACTIONS, as the backend's read-only feed gives them (A9, commerce #803, #804): the OS has
+ * no Stripe key of its own. Amounts come in Stripe's smallest unit (`*_minor`) and in the major unit (forint). A transaction names
+ * the shop orders its PaymentIntent paid (`orders`), none when no order carries it.
+ */
+export interface MedusaStripePayout {
+  id: string;
+  status: string;
+  currency: string;
+  amount_minor: number;
+  amount: number;
+  /** Unix seconds. */
+  arrival_date: number;
+  created: number;
+  automatic: boolean;
+}
+
+export interface MedusaStripePayoutPage {
+  payouts: MedusaStripePayout[];
+  has_more: boolean;
+  next_cursor: string | null;
+}
+
+export interface MedusaStripeTransaction {
+  id: string;
+  type: string;
+  reporting_category: string | null;
+  /** Unix seconds. */
+  created: number;
+  currency: string;
+  amount_minor: number;
+  fee_minor: number;
+  net_minor: number;
+  amount: number;
+  fee: number;
+  net: number;
+  source_kind: string | null;
+  /** The id of what the transaction came from (a charge, a refund, a payout...). */
+  source_id: string | null;
+  payment_intent: string | null;
+  charge: string | null;
+  refund: string | null;
+  orders: {
+    id: string;
+    display_id: number | null;
+    total: number;
+    currency_code: string;
+  }[];
+}
+
+export interface MedusaStripeTransactionPage {
+  transactions: MedusaStripeTransaction[];
+  has_more: boolean;
+  next_cursor: string | null;
+  orders_truncated: boolean;
+}
+
 /** Egy változat a cseréhez (`GET /admin/product-variants`). */
 export interface MedusaVariantSearchRow {
   id: string;
@@ -1089,6 +1149,20 @@ export interface MedusaAdminClient {
    * szállítás”) és a fizetési link küldése.
    */
   orderPayment(orderId: string): Promise<MedusaOrderPayment | null>;
+  /**
+   * Stripe's payouts from `createdGte` (unix seconds) on, one page, paid ones only (the backend's read-only feed). `startingAfter`
+   * is the previous page's `next_cursor`.
+   */
+  stripePayouts(input: {
+    createdGte?: number;
+    startingAfter?: string;
+    limit?: number;
+  }): Promise<MedusaStripePayoutPage>;
+  /** The balance transactions one payout paid out, with the orders each intent paid; one page. */
+  stripePayoutTransactions(
+    payoutId: string,
+    input?: { startingAfter?: string },
+  ): Promise<MedusaStripeTransactionPage>;
   /** Megjött az előre utalás: a webshop levont fizetéssé teszi (commerce #509). */
   recordTransferReceipt(
     orderId: string,
@@ -1207,6 +1281,13 @@ export interface MedusaAdminClient {
    * A reszletek a megvalositas mellett allnak.
    */
   listProductCollections(): Promise<MedusaCollectionListResult>;
+  /**
+   * Egy gyujtemeny termekeinek azonositoi, lapozva (kartya ec82b629: a handle-t foglalo gyujtemeny tartalma). `truncated`: a
+   * lapozas a biztonsagi felso hatarba utkozott.
+   */
+  listCollectionProductIds(
+    collectionId: string,
+  ): Promise<{ ids: string[]; truncated: boolean }>;
   /** Egy gyujtemeny letrehozasa. EZ IR A BOLTI OLDALRA. */
   createProductCollection(
     input: MedusaCollectionInput,
@@ -1449,6 +1530,43 @@ export interface MedusaAdminClient {
    */
   listVariantPrices(productId: string): Promise<MedusaVariantPriceLookupResult>;
   /**
+   * A VÁLTOZAT AKCIÓS ÁRLISTÁI (kártya 54bb3779): a `description` pontosan a kulcs (`os-sale:<változat>`). A keresés (`q`)
+   * csak szűkít, a pontos egyezést ez a metódus nézi. Egynél több találat is lehet, ha egy korábbi futás kettőt hozott
+   * létre: a hívó nem találgat (a vetítés megáll).
+   */
+  findSaleLists(key: string): Promise<MedusaPriceListRow[]>;
+  /** Új `sale` árlista egyetlen árral. A `description` a kulcs, a `status` aktív. */
+  createSaleList(input: {
+    key: string;
+    title: string;
+    variantId: string;
+    amount: number;
+    currencyCode: string;
+    startsAt: Date | null;
+    endsAt: Date | null;
+  }): Promise<MedusaPriceListRow>;
+  /** Az árlista ideje és állapota; a kihagyott mező nem változik, a `null` törli a határt. */
+  updateSaleList(
+    listId: string,
+    patch: {
+      startsAt?: Date | null;
+      endsAt?: Date | null;
+      status?: "active";
+    },
+  ): Promise<void>;
+  /** Az árlista sorai a Medusa köteg-útján. */
+  batchSaleListPrices(
+    listId: string,
+    ops: {
+      variantId: string;
+      currencyCode: string;
+      create: { amount: number }[];
+      update: { id: string; amount: number }[];
+      delete: string[];
+    },
+  ): Promise<void>;
+  deleteSaleList(listId: string): Promise<void>;
+  /**
    * A változatok vonalkód-mezői (SEO P0 PR 4): a frissítés-ág ebből látja, mi áll
    * ma a boltban, és csak az eltérőt írja. A töröltek nélkül: egy eltemetett
    * változatra nem írunk.
@@ -1596,6 +1714,26 @@ export interface MedusaVariantPriceRow {
    * hogy nincs ára, a hiány viszont azt jelentené, hogy nem kérdeztünk jól.
    */
   prices?: MedusaPriceRow[];
+}
+
+/**
+ * A SALE PRICE LIST OF OURS, AS THE SHOP REPORTS IT (`GET /admin/price-lists`, card 54bb3779). The planner's input
+ * (`ExistingSaleList`) is built from this. The row's `variant_id` is read when the answer brings it; the planner does not
+ * need it (our list holds one price).
+ */
+export interface MedusaPriceListRow {
+  id: string;
+  title?: string | null;
+  description?: string | null;
+  status: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  prices?: {
+    id: string;
+    variant_id?: string | null;
+    currency_code: string;
+    amount: number;
+  }[];
 }
 
 export interface MedusaVariantPriceLookupResult {
@@ -2197,6 +2335,32 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     }
   }
 
+  async stripePayouts(input: {
+    createdGte?: number;
+    startingAfter?: string;
+    limit?: number;
+  }): Promise<MedusaStripePayoutPage> {
+    const params = new URLSearchParams({ status: "paid" });
+    if (input.createdGte !== undefined)
+      params.set("created_gte", String(input.createdGte));
+    if (input.startingAfter) params.set("starting_after", input.startingAfter);
+    params.set("limit", String(input.limit ?? 50));
+    return this.request<MedusaStripePayoutPage>(
+      `/admin/stripe-settlement/payouts?${params.toString()}`,
+    );
+  }
+
+  async stripePayoutTransactions(
+    payoutId: string,
+    input: { startingAfter?: string } = {},
+  ): Promise<MedusaStripeTransactionPage> {
+    const params = new URLSearchParams({ limit: "100" });
+    if (input.startingAfter) params.set("starting_after", input.startingAfter);
+    return this.request<MedusaStripeTransactionPage>(
+      `/admin/stripe-settlement/payouts/${encodeURIComponent(payoutId)}/transactions?${params.toString()}`,
+    );
+  }
+
   async releaseHold(
     orderId: string,
     notifyCustomer: boolean,
@@ -2417,15 +2581,60 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
    * A valasz kulcsa ugyanebbol a forrasbol: `{ collections, count, offset, limit }`.
    */
   async listProductCollections(): Promise<MedusaCollectionListResult> {
-    const params = new URLSearchParams({
-      fields: "id,title,handle,external_id",
-      limit: String(COLLECTION_LIST_LIMIT),
-    });
-    const body = await this.request<{
-      collections: MedusaCollectionRow[];
-    }>(`/admin/collections?${params.toString()}`);
-    const rows = body.collections ?? [];
-    return { rows, truncated: rows.length >= COLLECTION_LIST_LIMIT };
+    /*
+      LAPOZVA (kartya ec82b629): az elso oldal 500 sornal megallt, es `truncated` megtagadta a lepest, amint a bolt gyujtemenyeinek
+      szama ezt elerte -- pedig a valasz a `count`-ot es az `offset`-et is hozza. Most a `count`-ig (vagy az elso nem teli oldalig)
+      lapozunk, es CSAK a biztonsagi felso hatar (`COLLECTION_LIST_MAX_PAGES` oldal) elerese csonkolt: egy vegtelen ciklus ellen
+      kell, nem a normal eset.
+    */
+    const rows: MedusaCollectionRow[] = [];
+    for (let page = 0; page < COLLECTION_LIST_MAX_PAGES; page += 1) {
+      const params = new URLSearchParams({
+        fields: "id,title,handle,external_id",
+        limit: String(COLLECTION_LIST_LIMIT),
+        offset: String(rows.length),
+      });
+      const body = await this.request<{
+        collections: MedusaCollectionRow[];
+        count?: number;
+      }>(`/admin/collections?${params.toString()}`);
+      const batch = body.collections ?? [];
+      rows.push(...batch);
+      const more =
+        typeof body.count === "number"
+          ? rows.length < body.count
+          : batch.length >= COLLECTION_LIST_LIMIT;
+      // egy ures oldal a `count` ellenere is megall: a visszaadott szam nem tarthat vegtelen ciklusban
+      if (!more || batch.length === 0) return { rows, truncated: false };
+    }
+    return { rows, truncated: true };
+  }
+
+  async listCollectionProductIds(
+    collectionId: string,
+  ): Promise<{ ids: string[]; truncated: boolean }> {
+    // ugyanaz a lapozas, mint a gyujtemeny-listanal: a `count`-ig, a biztonsagi felso hataron belul
+    const ids: string[] = [];
+    for (let page = 0; page < COLLECTION_LIST_MAX_PAGES; page += 1) {
+      const params = new URLSearchParams({
+        fields: "id",
+        limit: String(COLLECTION_LIST_LIMIT),
+        offset: String(ids.length),
+      });
+      params.append("collection_id[]", collectionId);
+      const body = await this.request<{
+        products: { id: string }[];
+        count?: number;
+      }>(`/admin/products?${params.toString()}`);
+      const batch = body.products ?? [];
+      ids.push(...batch.map((product) => product.id));
+      const more =
+        typeof body.count === "number"
+          ? ids.length < body.count
+          : batch.length >= COLLECTION_LIST_LIMIT;
+      if (!more || batch.length === 0) return { ids, truncated: false };
+    }
+    return { ids, truncated: true };
   }
 
   /**
@@ -3026,6 +3235,117 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       `/admin/products/${encodeURIComponent(productId)}` +
         `/variants/${encodeURIComponent(variantId)}`,
       { method: "POST", body: JSON.stringify({ prices }) },
+    );
+  }
+
+  async findSaleLists(key: string): Promise<MedusaPriceListRow[]> {
+    const params = new URLSearchParams({
+      q: key,
+      fields: "id,title,description,status,starts_at,ends_at,*prices",
+      limit: "20",
+    });
+    const body = await this.request<{ price_lists?: MedusaPriceListRow[] }>(
+      `/admin/price-lists?${params.toString()}`,
+    );
+    // the search narrows; the exact key is the match (a list named alike by hand is not ours)
+    return (body.price_lists ?? []).filter((row) => row.description === key);
+  }
+
+  async createSaleList(input: {
+    key: string;
+    title: string;
+    variantId: string;
+    amount: number;
+    currencyCode: string;
+    startsAt: Date | null;
+    endsAt: Date | null;
+  }): Promise<MedusaPriceListRow> {
+    const body = await this.request<{ price_list: MedusaPriceListRow }>(
+      `/admin/price-lists`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          title: input.title,
+          description: input.key,
+          type: "sale",
+          status: "active",
+          starts_at: input.startsAt?.toISOString() ?? null,
+          ends_at: input.endsAt?.toISOString() ?? null,
+          metadata: { acropora_os_sale: true },
+          prices: [
+            {
+              variant_id: input.variantId,
+              currency_code: input.currencyCode,
+              amount: input.amount,
+            },
+          ],
+        }),
+      },
+    );
+    return body.price_list;
+  }
+
+  async updateSaleList(
+    listId: string,
+    patch: {
+      startsAt?: Date | null;
+      endsAt?: Date | null;
+      status?: "active";
+    },
+  ): Promise<void> {
+    await this.request<unknown>(
+      `/admin/price-lists/${encodeURIComponent(listId)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          ...(patch.startsAt !== undefined
+            ? { starts_at: patch.startsAt?.toISOString() ?? null }
+            : {}),
+          ...(patch.endsAt !== undefined
+            ? { ends_at: patch.endsAt?.toISOString() ?? null }
+            : {}),
+          ...(patch.status ? { status: patch.status } : {}),
+        }),
+      },
+    );
+  }
+
+  async batchSaleListPrices(
+    listId: string,
+    ops: {
+      variantId: string;
+      currencyCode: string;
+      create: { amount: number }[];
+      update: { id: string; amount: number }[];
+      delete: string[];
+    },
+  ): Promise<void> {
+    await this.request<unknown>(
+      `/admin/price-lists/${encodeURIComponent(listId)}/prices/batch`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          create: ops.create.map((row) => ({
+            variant_id: ops.variantId,
+            currency_code: ops.currencyCode,
+            amount: row.amount,
+          })),
+          update: ops.update.map((row) => ({
+            id: row.id,
+            variant_id: ops.variantId,
+            currency_code: ops.currencyCode,
+            amount: row.amount,
+          })),
+          delete: ops.delete,
+        }),
+      },
+    );
+  }
+
+  async deleteSaleList(listId: string): Promise<void> {
+    await this.request<unknown>(
+      `/admin/price-lists/${encodeURIComponent(listId)}`,
+      { method: "DELETE" },
     );
   }
 

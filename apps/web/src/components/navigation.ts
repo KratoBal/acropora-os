@@ -111,6 +111,12 @@ export const SETTLEMENT_TABS: ReadonlyArray<{
     entryId: "simplepay-settlement",
   },
   {
+    // Balázs, 2026-11-18 20:16 UTC: "átállunk majd a stripera. Ilyen elszámolásunk nincs." (kártya 6339b04c)
+    href: "/penzugy/stripe",
+    label: "Stripe",
+    entryId: "stripe-settlement",
+  },
+  {
     // Balázs, 2026-11-04: egy utalás négy számlára (kártya aeddb2c3)
     href: "/penzugy/atutalasok",
     label: "Banki átutalások",
@@ -365,6 +371,10 @@ const mainNavigationGroups: AppNavigationGroup[] = [
           "/admin/integrations/medusa/price-stops",
           "/admin/integrations/medusa/redirect-plan",
           "/beallitasok/rendeles-elavulas",
+          "/webshop/kuponok",
+          "/webshop/egyedi-kedvezmenyek",
+          "/webshop/szallitas-fizetes",
+          "/webshop/ajandekkartyak",
         ],
       },
     ],

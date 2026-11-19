@@ -4,6 +4,7 @@ import type {
   MedusaVariantPriceRow,
 } from "./medusa-admin.client.js";
 import { MEDUSA_CURRENCY_CODE } from "./medusa-pricing.policy.js";
+import { baseRowsOf } from "./medusa-price-rows.js";
 
 /**
  * A KETTOS FORINT AR KIZAROLAG OLVASO MERESE (task t-20261116-ket-forint-ar, acrobot 53839).
@@ -67,6 +68,8 @@ export interface PriceAuditResult {
   /** a forint sorok (a nem forint sorok csak a szamukban latszanak) */
   hufRows: PriceAuditRow[];
   foreignRows: number;
+  /** a sale price list's rows: legitimate, never ours to count, replace or delete (`baseRowsOf`) */
+  priceListRows: number;
   osAmount: number | null;
   verdict: PriceAuditVerdict;
   /** a javaslat: melyik sor marad / torlendo. Csak ADAT; ez a modul semmit nem torol. */
@@ -80,7 +83,9 @@ export function auditVariantPrices(input: {
   rows: readonly MedusaPriceRow[];
   osAmount: number | null;
 }): PriceAuditResult {
-  const huf = input.rows.filter(
+  // a price list's row is not a duplicate of the base row: only the base rows are judged
+  const base = baseRowsOf(input.rows);
+  const huf = base.filter(
     (row) => row.currency_code.toLowerCase() === MEDUSA_CURRENCY_CODE,
   );
   const result = (
@@ -94,7 +99,8 @@ export function auditVariantPrices(input: {
       kind: priceRowKind(row),
       matchesOs: input.osAmount === null ? null : row.amount === input.osAmount,
     })),
-    foreignRows: input.rows.length - huf.length,
+    foreignRows: base.length - huf.length,
+    priceListRows: input.rows.length - base.length,
     osAmount: input.osAmount,
     verdict,
     keepId,
@@ -143,7 +149,8 @@ export function formatAuditLine(
     .join(",");
   return (
     `${osProductId} ${variantId} sku=${sku} huf=${result.hufRows.length}` +
-    `${result.foreignRows ? ` foreign=${result.foreignRows}` : ""} rows=[${rows}]` +
+    `${result.foreignRows ? ` foreign=${result.foreignRows}` : ""}` +
+    `${result.priceListRows ? ` lists=${result.priceListRows}` : ""} rows=[${rows}]` +
     ` os=${result.osAmount ?? "-"} verdict=${result.verdict}` +
     ` keep=${result.keepId ?? "-"} delete=${result.deleteIds.join(",") || "-"}`
   );

@@ -115,6 +115,8 @@ function fake(
           ];
           return;
         }
+        // a sale price list's rows survive the whole-list write (Medusa's `updatePriceSets_` touches only `price_list_id = null`)
+        const listRows = variant.prices.filter((row) => row.price_list_id);
         variant.prices = prices.map((input) => {
           const previous = variant.prices.find((row) => row.id === input.id);
           if (options.writeAs === "id")
@@ -125,6 +127,7 @@ function fake(
             ? { ...previous, amount: input.amount }
             : plain(`price_new_${variantId}`, input.amount);
         });
+        variant.prices = [...listRows, ...variant.prices];
       },
     },
   };
@@ -165,6 +168,32 @@ describe("a két forint ár javítása", () => {
     );
   });
 
+  /*
+    AZ AKCIÓS ÁRLISTA SORA A JAVÍTÁSNÁL (kártya 54bb3779). MI PIROSÍT: az árlistás sor "nem egyszerű" sorként elutasítja a
+    két alapár javítását; a javítás kiírásakor a lista sora törlődik vagy a megtartott sorok közé kerül; a visszaolvasás az
+    árlista sorát második sorként számolja, és a jó javítást `read-back-mismatch`-nek mondja.
+  */
+  it("két egyenlő alapár mellett az árlistás sor marad, és a javítás fixed (a visszaolvasás csak az alapárat számolja)", async () => {
+    const sale = plain("price_01M1YGHW2SALE0000000000001", 300, {
+      price_list_id: "pl_sale",
+    });
+    const { shop, deps } = fake({
+      variant_1: { sku: "SKU-1", prices: [plain(B, 500), plain(A, 500), sale] },
+    });
+    const entries = await dedupeProducts(["os_1"], deps, { apply: true });
+    assert.equal(entries[0]!.action, "fixed");
+    assert.deepEqual(shop.writes[0]!.prices, [
+      { id: A, currency_code: "huf", amount: 500 },
+    ]);
+    assert.deepEqual(
+      shop.variants
+        .get("variant_1")!
+        .prices.map((row) => row.id)
+        .sort(),
+      [A, sale.id].sort(),
+    );
+  });
+
   it("minden más alak elutasítva, és semmit nem ír", async () => {
     const cases: [
       string,
@@ -177,7 +206,7 @@ describe("a két forint ár javítása", () => {
         {
           v: {
             sku: "S",
-            prices: [plain(A, 500), plain(B, 500, { price_list_id: "pl_1" })],
+            prices: [plain(A, 500), plain(B, 500, { min_quantity: 5 })],
           },
         },
         {},

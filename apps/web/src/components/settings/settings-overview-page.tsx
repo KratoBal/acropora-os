@@ -351,6 +351,46 @@ export const WEBSHOP_SETTINGS_AREAS: SettingsArea[] = [
     ],
   },
   {
+    title: "Kuponok",
+    icon: "cart",
+    links: [
+      {
+        label: "Kuponok",
+        description:
+          "Kuponkódok a webshop pénztárához: százalék vagy forint a termékárból, érvényesség, felhasználási korlát, be- és kikapcsolás.",
+        href: "/webshop/kuponok",
+        entryId: "webshop-coupons",
+      },
+      {
+        label: "Egyedi kedvezmények",
+        description:
+          "Vevőnként beállítható százalékos kedvezmény a termékárból, minden rendelésére. Be- és kikapcsolás.",
+        href: "/webshop/egyedi-kedvezmenyek",
+        entryId: "webshop-coupons",
+      },
+      {
+        label: "Ajándékkártyák",
+        description:
+          "Ajándékkártya kiadása (a kód csak a kiadáskor látszik), a kártyák egyenlege és naplója, kikapcsolás.",
+        href: "/webshop/ajandekkartyak",
+        entryId: "webshop-gift-cards",
+      },
+    ],
+  },
+  {
+    title: "Szállítás és fizetés",
+    icon: "cart",
+    links: [
+      {
+        label: "Szállítási díjak és fizetési módok",
+        description:
+          "A szállítási díjak, az ingyenes szállítás küszöbei, az utánvét díja, és szállítási módonként a fizetési módok sorrendje.",
+        href: "/webshop/szallitas-fizetes",
+        entryId: "webshop-shipping-settings",
+      },
+    ],
+  },
+  {
     title: "Kezdőlap",
     icon: "store",
     links: [

@@ -45,6 +45,7 @@ import { PartnerPicker } from "../partner-picker";
 import { ServiceDocumentGallery } from "@/components/service/service-document-gallery";
 import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { PilotDelegatedColleaguesCard } from "./pilot-delegated-colleagues-card";
+import { PilotLinkedWorksheetsCard } from "./pilot-linked-worksheets-card";
 import { ServiceJobPlacementEditor } from "../service-job-placement-editor";
 import { ServiceJobFieldsEditor } from "../service-job-fields-editor";
 import { ServiceJobDelete } from "../service-job-delete";
@@ -1087,6 +1088,14 @@ export function PilotServiceJobDetailPage({
               </div>
             ) : null}
           </PilotCard>
+
+          {maintenance ? (
+            <PilotLinkedWorksheetsCard
+              token={token}
+              jobId={jobId}
+              canManage={canManage}
+            />
+          ) : null}
 
           <div id="hibajegy-eszkoz" className="scroll-mt-6">
             <PilotCard>

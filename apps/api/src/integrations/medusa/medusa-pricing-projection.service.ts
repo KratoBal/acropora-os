@@ -12,7 +12,15 @@ import {
   priceConflictShape,
   type PriceConflictShape,
 } from "./medusa-price-sync.js";
-import type { PriceOwner } from "./medusa-price-source.js";
+import { baseRowsOf } from "./medusa-price-rows.js";
+import type { PriceOwner, ResolvedSale } from "./medusa-price-source.js";
+import {
+  planSaleList,
+  saleListKey,
+  type ExistingSaleList,
+  type SaleListPlan,
+  type WantedSale,
+} from "./medusa-sale-price-list.js";
 import type { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
 import {
   decidePricingProjection,
@@ -64,6 +72,11 @@ export interface ProjectablePricedVariant {
    */
   surcharge: PrismaTypes.Decimal | null;
   price: ProjectablePrice;
+  /**
+   * A FUTÓ AKCIÓ ÁRLISTÁNAK (kártya 54bb3779), vagy `null`/hiányzik: nincs. Ha van, a változat ALAPÁRA a `sale.regular`
+   * (a `price` az akciós ár maradna, és a bolt nem tudna áthúzni), az akció pedig egy `sale` árlista a bolton.
+   */
+  sale?: ResolvedSale | null;
 }
 
 export interface PricingProjectionReport {
@@ -88,6 +101,13 @@ export interface PricingProjectionReport {
    */
   priceId: string;
   result: "created" | "updated" | "no-change";
+  /**
+   * AZ AKCIÓS ÁRLISTA: `created`, `updated`, `unchanged` (a futó akció listája már jó), `removed` (a változatnak nem
+   * volt már akciója, és a listája megmaradt: törölve), `none` (nincs akció, nincs lista).
+   */
+  saleList?: "created" | "updated" | "unchanged" | "removed" | "none";
+  /** az akciós ár a boltban, ha van lista */
+  saleAmount?: number | null;
 }
 
 export type PricingProjectionStopReason =
@@ -151,6 +171,11 @@ export type PricingProjectionStopReason =
   | "medusa-read-failed"
   /** EGY ÍRÓ hívás elhasalt. A cél oldali állapot BIZONYTALAN. */
   | "medusa-write-failed"
+  /**
+   * Egy kulcs alatt TÖBB akciós árlista áll (kártya 54bb3779). Nem találgatjuk, melyik a miénk: az egyiket egy korábbi
+   * futás hozta létre, mielőtt az első nyoma látszott volna. A javítás kézi (a felesleges törlése), és a név megmondja.
+   */
+  | "sale-list-ambiguous"
   /** A döntési modul utasította el az árat. Lásd `PricingRefusal`. */
   | PricingRefusal;
 
@@ -214,12 +239,40 @@ export class MedusaPricingProjectionService {
       ...(conflict ? { conflict } : {}),
     });
 
-    const decision = decidePricingProjection(variant.price);
+    /*
+      AZ ALAPÁR AKCIÓ ESETÉN A RENDES ÁR (kártya 54bb3779): az akció egy `sale` árlista, amit a bolt az órával vált, és
+      az alapár marad, amihez az áthúzott ár mér. Akció nélkül (vagy ha az akció nem küldhető árlistának, lásd
+      `ResolvedSale`) a `price` megy alapárként, ahogy eddig.
+    */
+    const sale = variant.sale ?? null;
+    const decision = decidePricingProjection(
+      sale ? sale.regular : variant.price,
+    );
     if (!decision.send)
       return stop(
         decision.reason,
         `${variant.osProductId} (${variant.sku}): ${decision.details}`,
       );
+    // az akciós árra ugyanaz a szabály áll, mint az alapárra: egész forint, nem nulla, nem negatív
+    const saleDecision = sale
+      ? decidePricingProjection({
+          sellingGrossPrice: sale.amount,
+          sellingPriceCurrency: sale.regular.sellingPriceCurrency,
+        })
+      : null;
+    if (saleDecision && !saleDecision.send)
+      return stop(
+        saleDecision.reason,
+        `${variant.osProductId} (${variant.sku}): az akciós ár: ${saleDecision.details}`,
+      );
+    const wanted: WantedSale | null =
+      sale && saleDecision && saleDecision.send
+        ? {
+            amount: saleDecision.amount,
+            startsAt: sale.startsAt,
+            endsAt: sale.endsAt,
+          }
+        : null;
 
     const link = await this.links.findByProductId(variant.osProductId);
     if (!link)
@@ -283,7 +336,9 @@ export class MedusaPricingProjectionService {
           `nincs ára, holott csak nem kérdeztünk jól.`,
       );
 
-    const foreign = target.prices.filter(
+    // a sale price list's row is not ours to count or to replace: only the base rows (`baseRowsOf`)
+    const baseRows = baseRowsOf(target.prices);
+    const foreign = baseRows.filter(
       (row) => row.currency_code.toLowerCase() !== MEDUSA_CURRENCY_CODE,
     );
     if (foreign.length > 0)
@@ -296,7 +351,7 @@ export class MedusaPricingProjectionService {
           `változás, és döntést igényel.`,
       );
 
-    const ours = target.prices.filter(
+    const ours = baseRows.filter(
       (row) => row.currency_code.toLowerCase() === MEDUSA_CURRENCY_CODE,
     );
     if (ours.length >= 2)
@@ -311,7 +366,33 @@ export class MedusaPricingProjectionService {
 
     const existing = ours[0];
 
-    if (existing && existing.amount === decision.amount)
+    /*
+      A SORREND SZÁMÍT (kártya 54bb3779): ha akció van, az ÁRLISTA kerül fel ELŐSZÖR, és csak utána változik az alapár,
+      mert egy régi, akciós alapárat (a korábbi vetítés) a lista fölé emelni egy pillanatra a rendes árat mutatná. Ha
+      akció nincs, az alapár megy előre, és az esetleg megmaradt lista törlődik utána: egy lejárt akció listája a
+      boltban már nem hat (a Medusa az órával vált), de a törlés tartja rendben.
+    */
+    let saleList: NonNullable<PricingProjectionReport["saleList"]> = "none";
+    if (wanted) {
+      const reconciled = await this.reconcileSaleList(
+        variant,
+        target.id,
+        wanted,
+      );
+      if ("stopped" in reconciled) return reconciled.stopped;
+      saleList = reconciled.result;
+    }
+
+    if (existing && existing.amount === decision.amount) {
+      if (!wanted) {
+        const reconciled = await this.reconcileSaleList(
+          variant,
+          target.id,
+          null,
+        );
+        if ("stopped" in reconciled) return reconciled.stopped;
+        saleList = reconciled.result;
+      }
       return {
         action: "projected",
         report: buildReport(
@@ -320,8 +401,11 @@ export class MedusaPricingProjectionService {
           target.id,
           existing.id,
           "no-change",
+          saleList,
+          wanted?.amount ?? null,
         ),
       };
+    }
 
     /**
      * A MEGLÉVŐ SOR AZONOSÍTÓJÁVAL megy, ha van. Enélkül a Medusa törölné a
@@ -365,11 +449,13 @@ export class MedusaPricingProjectionService {
       );
     }
 
-    const written = after.rows
-      .find((row) => row.id === target.id)
-      ?.prices?.filter(
-        (row) => row.currency_code.toLowerCase() === MEDUSA_CURRENCY_CODE,
-      );
+    // `undefined` stays "the answer brought no prices" (not an empty list); a price list's row is not counted
+    const writtenRows = after.rows.find((row) => row.id === target.id)?.prices;
+    const written = writtenRows
+      ? baseRowsOf(writtenRows).filter(
+          (row) => row.currency_code.toLowerCase() === MEDUSA_CURRENCY_CODE,
+        )
+      : undefined;
 
     if (
       !written ||
@@ -385,6 +471,12 @@ export class MedusaPricingProjectionService {
           `külön ellenőrizzük.`,
       );
 
+    if (!wanted) {
+      const reconciled = await this.reconcileSaleList(variant, target.id, null);
+      if ("stopped" in reconciled) return reconciled.stopped;
+      saleList = reconciled.result;
+    }
+
     return {
       action: "projected",
       report: buildReport(
@@ -393,8 +485,117 @@ export class MedusaPricingProjectionService {
         target.id,
         written[0]!.id,
         existing ? "updated" : "created",
+        saleList,
+        wanted?.amount ?? null,
       ),
     };
+  }
+
+  /**
+   * A VÁLTOZAT AKCIÓS ÁRLISTÁJA A KÍVÁNT ÁLLAPOTRA (kártya 54bb3779). A kulcs alapján KERESI a listát (az OS semmit nem
+   * jegyez meg róla), a tiszta `planSaleList` dönt, ez csak végrehajt. `wanted: null`: nincs akció, a lista (ha van)
+   * törlődik. Egy olvasó hiba "nem változott semmi", egy író hiba "bizonytalan": ugyanaz a megkülönböztetés, mint az
+   * alapárnál.
+   */
+  private async reconcileSaleList(
+    variant: ProjectablePricedVariant,
+    medusaVariantId: string,
+    wanted: WantedSale | null,
+  ): Promise<
+    | { result: NonNullable<PricingProjectionReport["saleList"]> }
+    | { stopped: PricingProjectionOutcome }
+  > {
+    const stopped = (
+      reason: PricingProjectionStopReason,
+      details: string,
+    ): { stopped: PricingProjectionOutcome } => ({
+      stopped: { action: "stopped", reason, details },
+    });
+    const key = saleListKey(medusaVariantId);
+
+    let found: Awaited<ReturnType<MedusaAdminClient["findSaleLists"]>>;
+    try {
+      found = await this.medusa.findSaleLists(key);
+    } catch (error) {
+      return stopped(
+        "medusa-read-failed",
+        `${variant.osProductId}: az akciós árlista lekérdezése elhasalt a ${medusaVariantId} változaton ` +
+          `(${describeMedusaFailure(error)}). Az árlistán nem írtunk semmit.`,
+      );
+    }
+    if (found.length >= 2)
+      return stopped(
+        "sale-list-ambiguous",
+        `${variant.osProductId}: a ${medusaVariantId} változat kulcsa (${key}) alatt ${found.length} árlista áll ` +
+          `(${found.map((row) => row.id).join(", ")}). Nem dönthető el, melyik a miénk: a feleslegeset kézzel ` +
+          `kell törölni.`,
+      );
+    const row = found[0] ?? null;
+    const existingList: ExistingSaleList | null = row
+      ? {
+          id: row.id,
+          status: row.status,
+          startsAt: row.starts_at,
+          endsAt: row.ends_at,
+          prices: (row.prices ?? []).map((price) => ({
+            id: price.id,
+            variantId: price.variant_id ?? null,
+            currencyCode: price.currency_code,
+            amount: price.amount,
+          })),
+        }
+      : null;
+    const plan: SaleListPlan = planSaleList(
+      existingList,
+      wanted,
+      medusaVariantId,
+      MEDUSA_CURRENCY_CODE,
+    );
+
+    try {
+      switch (plan.kind) {
+        case "none":
+          return { result: "none" };
+        case "unchanged":
+          return { result: "unchanged" };
+        case "create":
+          await this.medusa.createSaleList({
+            key,
+            title: `OS akció: ${variant.sku}`,
+            variantId: medusaVariantId,
+            amount: plan.wanted.amount,
+            currencyCode: MEDUSA_CURRENCY_CODE,
+            startsAt: plan.wanted.startsAt,
+            endsAt: plan.wanted.endsAt,
+          });
+          return { result: "created" };
+        case "update":
+          if (Object.keys(plan.list).length > 0)
+            await this.medusa.updateSaleList(plan.listId, plan.list);
+          if (
+            plan.prices.create.length +
+              plan.prices.update.length +
+              plan.prices.delete.length >
+            0
+          )
+            await this.medusa.batchSaleListPrices(plan.listId, {
+              variantId: medusaVariantId,
+              currencyCode: MEDUSA_CURRENCY_CODE,
+              ...plan.prices,
+            });
+          return { result: "updated" };
+        case "delete":
+          await this.medusa.deleteSaleList(plan.listId);
+          return { result: "removed" };
+      }
+    } catch (error) {
+      return stopped(
+        "medusa-write-failed",
+        `${variant.osProductId}: az akciós árlista írása elhasalt a ${medusaVariantId} változaton ` +
+          `(${plan.kind}, ${describeMedusaFailure(error)}). A cél oldali állapot BIZONYTALAN, a következő kör ` +
+          `újra olvassa.`,
+      );
+    }
   }
 }
 
@@ -412,6 +613,8 @@ function buildReport(
   variantId: string,
   priceId: string,
   result: PricingProjectionReport["result"],
+  saleList: NonNullable<PricingProjectionReport["saleList"]> = "none",
+  saleAmount: number | null = null,
 ): PricingProjectionReport {
   return {
     sku: variant.sku,
@@ -424,6 +627,8 @@ function buildReport(
     variantId,
     priceId,
     result,
+    saleList,
+    saleAmount,
   };
 }
 

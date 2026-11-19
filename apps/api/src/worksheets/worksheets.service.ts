@@ -5,6 +5,7 @@ import {
 } from "../auth/partner-scope.util.js";
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
 import { mayHideRows } from "../common/hidden-rows.js";
+import { budapestDayKey } from "../dashboard/budapest-day.js";
 import {
   canEditWorksheetEntry,
   describeEntryEditRefusal,
@@ -25,6 +26,7 @@ import {
   BadRequestException,
   ForbiddenException,
   ConflictException,
+  HttpException,
   Inject,
   Injectable,
   Logger,
@@ -49,6 +51,7 @@ import { hasPermission, PERMISSIONS } from "@acropora/types";
 import type {
   AuthenticatedUser,
   WorksheetAttachableListResponse,
+  WorksheetCopyResult,
   WorksheetDetail,
   WorksheetVersionDiff,
 } from "@acropora/types";
@@ -80,8 +83,19 @@ import {
   type NormalizedWorksheetContent,
   type NormalizedWorksheetLine,
 } from "./worksheet-content.js";
+import {
+  BULK_SHEETS_MAX,
+  mergeSheets,
+  pickIssuedSheet,
+  zipSheets,
+} from "./worksheet-bulk-sheets.js";
 import { isSheetArchive } from "./worksheet-sheet-regeneration.js";
 import { diffWorksheetVersions } from "./worksheet-diff.js";
+import {
+  copyOperationId,
+  WORKSHEET_COPY_MAX,
+  worksheetCopyInput,
+} from "./worksheet-copy.js";
 import {
   WORKSHEET_NUMBER_ISSUE_MESSAGES,
   type WorksheetNumberIssue,
@@ -287,6 +301,56 @@ export class WorksheetsService {
   }
 
   /** Egy lap csatolmanyai, tartalom nelkul. */
+  /**
+   * A KIJELÖLT LAPOK KIADOTT PDF-JEI EGY FÁJLBAN (kártya a785e580). Minden lapra a SAJÁT hatókör-ellenőrzés
+   * fut (ugyanaz a `detail`, mint az egy csatolmány letöltésénél): a hatókörön kívüli és a nem létező azonosító
+   * UGYANAZ a kihagyott, nem derül ki belőle, melyik volt. A kihagyott lap nem hiba: a hívó kimondja a
+   * felhasználónak, hányat és melyiket (a sorszámukkal) hagytuk ki. Ha egyetlen lapnak sincs kiadott PDF-je,
+   * a válasz 400, nem üres fájl.
+   */
+  async bulkIssuedSheets(
+    ids: readonly string[],
+    format: "zip" | "merged",
+    scope: PartnerScope,
+    now: Date = new Date(),
+  ) {
+    const unique = [...new Set(ids)];
+    if (unique.length === 0 || unique.length > BULK_SHEETS_MAX)
+      throw new BadRequestException(
+        `Egyszerre legfeljebb ${BULK_SHEETS_MAX} munkalapot lehet kijelölni.`,
+      );
+    const files: { fileName: string; bytes: Uint8Array }[] = [];
+    const skipped: { id: string; number: string | null }[] = [];
+    for (const id of unique) {
+      const lap = await this.repository.detail(id, scope);
+      if (!lap) {
+        skipped.push({ id, number: null });
+        continue;
+      }
+      const documents = await this.repository.documents(id);
+      const sheet = pickIssuedSheet(documents);
+      if (!sheet) {
+        skipped.push({ id, number: lap.number ?? null });
+        continue;
+      }
+      const document = await this.documentBytes(id, sheet.id, scope);
+      files.push({ fileName: document.fileName, bytes: document.bytes });
+    }
+    if (files.length === 0)
+      throw new BadRequestException(
+        "A kijelölt munkalapok egyikének sincs még kiadott PDF-je (lezáratlanok).",
+      );
+    const day = budapestDayKey(now);
+    const body = format === "zip" ? zipSheets(files) : await mergeSheets(files);
+    return {
+      bytes: body,
+      fileName: `munkalapok-${day}.${format === "zip" ? "zip" : "pdf"}`,
+      contentType: format === "zip" ? "application/zip" : "application/pdf",
+      included: files.length,
+      skipped,
+    };
+  }
+
   async documents(id: string, scope: PartnerScope) {
     const lap = await this.repository.detail(id, scope);
     if (!lap) throw new NotFoundException("A munkalap nem található.");
@@ -748,6 +812,51 @@ export class WorksheetsService {
     return assetIds;
   }
 
+  /**
+   * A KIJELÖLT MUNKALAPOK MÁSOLÁSA (kártya a785e580, 2. szelet): laponként egy új piszkozat a kézi nyitás útján
+   * (`create`), a forrás adataival (`worksheetCopyInput`: mi jön át, mi nem). Laponként sorban (a sorszám sorban adódik),
+   * és laponként eredménnyel: egy lap, amit a szülője már nem fogad (lezárt hibajegy), nem állítja meg a többit, hanem a
+   * saját sorában mondja meg, miért nem lett belőle másolat. A forrás a hívó hatókörében olvasódik, mint a megnyitásnál.
+   */
+  async copyWorksheets(
+    ids: readonly string[],
+    actor: AuthenticatedUser,
+    requestId?: string,
+  ): Promise<WorksheetCopyResult> {
+    requireInternalWriter(actor, "Munkalap másolása");
+    const unique = [...new Set(ids)];
+    if (unique.length === 0 || unique.length > WORKSHEET_COPY_MAX)
+      throw new BadRequestException(
+        `Egyszerre 1 és ${WORKSHEET_COPY_MAX} közötti munkalap másolható.`,
+      );
+    const scope = partnerScopeOf(actor);
+    const results: WorksheetCopyResult["results"] = [];
+    for (const sourceId of unique) {
+      try {
+        const source = await this.detail(sourceId, scope);
+        const copy = await this.create(
+          worksheetCopyInput(source, copyOperationId(requestId, sourceId)),
+          actor,
+        );
+        results.push({ sourceId, ok: true, id: copy.id, number: copy.number });
+      } catch (error) {
+        results.push({
+          sourceId,
+          ok: false,
+          message:
+            error instanceof HttpException
+              ? error.message
+              : "A munkalap másolása nem sikerült.",
+        });
+        if (!(error instanceof HttpException))
+          this.logger.error(
+            `Munkalap másolása (${sourceId}) váratlan hibával: ${error instanceof Error ? error.message : String(error)}`,
+          );
+      }
+    }
+    return { results };
+  }
+
   async create(
     input: CreateWorksheetDto,
     actor: AuthenticatedUser,
@@ -777,6 +886,12 @@ export class WorksheetsService {
       input.departmentId,
     );
 
+    // A munkalap a karbantartási lap felelőseit követi, ha a nyitáskor pontosan azok a felelősei (kártya d91005e9):
+    // az előtöltött és érintetlenül hagyott lista, és a rendszer által a lap alá nyitott (még kiosztatlan) munkalap is
+    // ilyen. Egy másképp kiosztott lap önálló.
+    const followsJobAssignees =
+      serviceJobId !== null &&
+      (await this.followsJobAssignees(serviceJobId, assigneeIds));
     const id = await this.repository.createDraft({
       customerId: input.customerId,
       departmentId: input.departmentId,
@@ -785,6 +900,7 @@ export class WorksheetsService {
       assigneeIds,
       assetIds,
       serviceJobId,
+      followsJobAssignees,
       clientOperationId: input.clientOperationId,
     });
     const detail = await this.detailAfterWrite(id);
@@ -1853,6 +1969,21 @@ export class WorksheetsService {
    * MONDAT viszont ezé az uté: itt a lap MOST keletkezne, tehat a felhasznalo
    * nem masik lapot valaszt, hanem vagy a jegyet, vagy a partnert javitja.
    */
+  /**
+   * KÖVETI-E A MUNKALAP A LAP FELELŐSEIT (kártya d91005e9): csak karbantartási lap alatt, és csak ha a megadott lista
+   * a lap felelőseinek pontosan az egyezése (sorrendtől függetlenül). Hibajegy alatt a munkalap önálló marad.
+   */
+  private async followsJobAssignees(
+    serviceJobId: string,
+    assigneeIds: readonly string[],
+  ): Promise<boolean> {
+    const ticket = await this.repository.ticketPartner(serviceJobId);
+    if (!ticket || ticket.kind !== "MAINTENANCE") return false;
+    const job = new Set((ticket.assignees ?? []).map((row) => row.userId));
+    const mine = new Set(assigneeIds);
+    return job.size === mine.size && [...job].every((id) => mine.has(id));
+  }
+
   private async requireTicketFor(serviceJobId: string, customerId: string) {
     const ticket = await this.repository.ticketPartner(serviceJobId);
     if (!ticket)

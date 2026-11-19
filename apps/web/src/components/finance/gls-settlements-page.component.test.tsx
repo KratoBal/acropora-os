@@ -359,6 +359,40 @@ describe("GlsSettlementsPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("GLS-WEBSHOP-PARCEL: a webshop parcel's line says how it was paired, and why a webshop line waits", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      lines: [
+        {
+          ...detail.lines[0]!,
+          resolutionSource: "WEBSHOP_PARCEL",
+        },
+        {
+          ...detail.lines[1]!,
+          errorCode: "WEBSHOP_ORDER_AMBIGUOUS",
+        },
+        {
+          ...detail.lines[1]!,
+          id: "line-3",
+          rowNumber: 11,
+          errorCode: "WEBSHOP_INVOICE_AMBIGUOUS",
+        },
+      ],
+    });
+    render(createElement(GlsSettlementsPage));
+    fireEvent.click(
+      await screen.findByText("100031291_HUF_20260903_080032.xlsx"),
+    );
+    const lines = await screen.findAllByTestId("gls-sor");
+    expect(lines[0]).toHaveTextContent("Párosítva webshop-csomagból");
+    expect(lines[1]).toHaveTextContent(
+      "A csomagszámhoz több webshop-rendelés tartozik",
+    );
+    expect(lines[2]).toHaveTextContent(
+      "A webshop-rendelésnek több élő számlája van",
+    );
+  });
+
   it("GLS-MONTH-SUMMARY: the month's transfers, parcels and fee invoices, from the loaded list", async () => {
     api.invoices.mockResolvedValue([
       {

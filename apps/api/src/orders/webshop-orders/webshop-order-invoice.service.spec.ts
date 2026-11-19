@@ -5,6 +5,7 @@ import type {
   AuthenticatedUser,
   BillingDocumentDetail,
   WebshopOrderDetail,
+  WebshopOrderTaxCheck,
 } from "@acropora/types";
 
 import type { BillingDocumentIssueService } from "../../billing/billing-document-issue.service.js";
@@ -102,6 +103,8 @@ function setup(
     buyerEmail?: string | null;
     /** The mail service throws (a closed gate, a provider error). */
     sendFails?: boolean;
+    /** The NAV check of the order's tax number (c977aed2, P2); alapból NONE. */
+    taxCheck?: WebshopOrderTaxCheck;
   } = {},
 ) {
   const calls: string[] = [];
@@ -238,9 +241,66 @@ function setup(
       issuing,
       email as never,
       emailDrafts as never,
+      {
+        check: async () => {
+          return (
+            over.taxCheck ?? {
+              state: "NONE",
+              taxNumber: null,
+              navName: null,
+              nameMatches: null,
+            }
+          );
+        },
+      } as never,
     ),
   };
 }
+
+/**
+ * A NAV-ELLENŐRZÉS A SZÁMLA ELŐTT (kártya c977aed2, P2). MI PIROSÍT: ha a NAV által ismeretlen vagy hibás alakú adószámra számla
+ * indul; ha emiatt előbb már OS-partner vagy vázlat jött létre; ha a NAV kiesése megállítja a számlát.
+ */
+describe("WebshopOrderInvoiceService: the tax number check", () => {
+  const check = (
+    state: WebshopOrderTaxCheck["state"],
+    taxNumber: string | null = "12345678-2-41",
+  ): WebshopOrderTaxCheck => ({
+    state,
+    taxNumber,
+    navName: null,
+    nameMatches: null,
+  });
+
+  for (const state of ["INVALID", "MALFORMED"] as const)
+    it(`${state}: 409 that names the number, before any partner or draft is created`, async () => {
+      const { calls, service } = setup({ taxCheck: check(state) });
+      await assert.rejects(
+        service.issue("order_38", USER, NOW),
+        (error: unknown) => {
+          assert.equal((error as { status: number }).status, 409);
+          assert.match((error as Error).message, /12345678-2-41/);
+          return true;
+        },
+      );
+      assert.deepEqual(calls, ["source"]);
+    });
+
+  it("the summary window asks the same question, and stops the same way", async () => {
+    const { calls, service } = setup({ taxCheck: check("INVALID") });
+    await assert.rejects(service.invoiceSummary("order_38", USER, NOW), {
+      status: 409,
+    });
+    assert.deepEqual(calls, ["source"]);
+  });
+
+  for (const state of ["VALID", "UNAVAILABLE", "NONE"] as const)
+    it(`${state}: the invoice goes on (NAV being down does not stop an invoice)`, async () => {
+      const { calls, service } = setup({ taxCheck: check(state) });
+      await service.issue("order_38", USER, NOW);
+      assert.ok(calls.some((call) => call.startsWith("issue ")));
+    });
+});
 
 describe("WebshopOrderInvoiceService", () => {
   it("a guest gets a partner and a link, then one draft and one issue", async () => {

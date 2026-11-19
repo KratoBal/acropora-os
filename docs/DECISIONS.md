@@ -1022,3 +1022,32 @@ azonnal látja (ugyanaz a sor). Az archív példány belső előzmény: a partne
 partner hatókörű olvasásból kiszűri (`isSheetArchive`: `OTHER` típus és az archív felirat eleje). A partner a saját feltöltött `OTHER` fájlját továbbra is látja.
 Ismert határ: ha a kiadott sor tartalma a dokumentum-tárolóban áll (`storageKey`, `content` nélkül), az archív sor a tároló-kulcs miatt nem olvasható ki
 (a kulcs a régi azonosítót hordozza); ma a kiadott lapok a soron belül állnak.
+
+## ADR-020 – Az akció a Medusában akciós árlista, az alapár a rendes ár (áthúzott ár a kirakaton)
+
+**Döntés (acrobot, 2026-11-19 01:05, kártya 54bb3779):** mind a saját akció (`own-sale`), mind a UNAS-tükör akciója (`mirror-sale`) egy `sale` típusú Medusa árlistaként
+megy ki. A változat ALAPÁRA mindig a rendes ár. Eddig az akciós ár ment alapárként, ezért a bolt nem ismerte az eredeti árat, és nem tudott áthúzni.
+
+**Mért alap (a teszt Medusán, 2026-11-19, `exchange/a4-arlista-proba/futas-3.log`).** Egy `sale` árlistával a kirakat `calculated_price` = az akciós ár, `original_amount` =
+a rendes ár, `price_list_type` = `sale` (a kirakat erre húz át). A kosár sora az árlistás árat veszi, kedvezmény-sor (adjustment) nélkül. Az árlista vége (`ends_at`)
+esemény nélkül, a Medusa óráján áll vissza a rendes árra. Az OS teljes-lista alapár-írása után az árlista sora megmarad. A törlés után az alapár érintetlen. A változat
+`prices` relációja (az az út, amit az OS olvas: `GET .../variants?fields=id,sku,deleted_at,*prices`) az árlista sorát NEM hozza.
+
+**Szabályok.**
+
+1. Az árlista kulcsa a `description`: `os-sale:<Medusa változat azonosító>`. Az OS nem jegyzi meg az árlista azonosítóját: a boltól kérdezi vissza kulcs szerint (`findSaleLists`,
+   pontos egyezés), tehát egy elveszett futás nyoma is megtalálható. Két lista egy kulcs alatt `sale-list-ambiguous` megállás: nem találgatunk, a feleslegest kézzel kell törölni.
+2. A tiszta `planSaleList` dönt (none, create, update, delete, unchanged); az update a meglévő sort helyben módosítja (azonosító marad), nem töröl és újra létrehoz.
+3. A SORREND számít: akció esetén az árlista kerül fel előbb, és csak utána változik az alapár; akció nélkül az alapár megy előre, és a megmaradt lista törlődik utána.
+   Egy régi, akciós alapárat így nem emelünk egy pillanatra a lista fölé.
+4. Árlista csak akkor megy, ha a rendes ár ismert és az akciós ár ALACSONYABB nála (`ResolvedSale`). Egy ugyanakkora vagy magasabb "akciós" ár, vagy egy tükör-sor rendes ár
+   nélkül a régi utat kapja: az akciós ár megy alapárként, áthúzás nélkül.
+5. Az akció KEZDETE UTÁN jön létre az árlista (az ütemező határ-köre írja, legfeljebb egy kör késéssel): az Omnibus-metaadat a termék-vetítéssel előbb kikerül, mint az
+   árlista, így nincs ablak áthúzott ár referenciaár nélkül. A VÉG pontos (a Medusa vált). Az előre, jövőbeli kezdettel létrehozott árlista külön szelet: ahhoz a jövőbeli akció
+   referenciaárát kellene kiszámolni.
+6. Az ár-vetítés, az audit és a duplikátum-javító csak az árlista nélküli sorokat számolja (`baseRowsOf`, #2732): ha egy későbbi Medusa az árlistás sort is hozná a változat
+   áraiban, az nem lesz második alapár.
+
+**Nem döntöttük el / nincs lemérve.** Az OS-féle árlista-lekérdezés (`GET /admin/price-lists?q=...&fields=...*prices`) és az árlista módosító útjai (`POST /admin/price-lists/:id`, `.../prices/batch`) a
+telepített Medusa 2.22.4 validátoraiból vannak véve, a stage-en még nem futottak. A kirakat gyorsítótára az árlista határain csak a commerce határ-jobbal ürül (commerce #810);
+amíg a stage `STOREFRONT_REVALIDATE_URL`-je nincs beállítva, a lap késhet.

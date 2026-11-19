@@ -576,3 +576,127 @@ describe("a változat felára a termék-szintű tükör-ár tetejére kerül", (
     assert.equal(d.surcharge, null);
   });
 });
+
+/*
+  A FUTÓ AKCIÓ MINT ÁRLISTA-JELÖLT (kártya 54bb3779). MI PIROSÍT: az akció mellett a rendes ár nem jön vissza (a bolt nem
+  tud áthúzni); a felár az akciós árról elmarad a tükörnél (a vevő kevesebbet fizetne), vagy a saját ágon ráragad;
+  egy ugyanakkora vagy magasabb "akciós" ár árlistának megy (nem kedvezmény: a `price` marad az akciós ár, ahogy eddig);
+  egy tükör-sor csak akciós árral (nincs rendes ár) árlistát kap; akció nélkül `sale` van; a nyitott határ elvész.
+*/
+describe("a futó akció árlistának", () => {
+  const KEZD = new Date("2026-11-10T00:00:00Z");
+  const VEG = new Date("2026-11-17T00:00:00Z");
+  const belul = new Date("2026-11-12T10:00:00Z");
+  const sajatAkcio = (ar: string) => ({
+    sellingSaleGrossPrice: forint(ar),
+    sellingSaleStartsAt: KEZD,
+    sellingSaleEndsAt: VEG,
+  });
+
+  it("saját akció: a rendes ár a saját ár, az akciós ár az akció, a határokkal; a price az akciós ár marad", () => {
+    const d = resolvePriceSource({
+      authority: "ACROPORA",
+      mirror: null,
+      own: sajat,
+      ownSale: sajatAkcio("7900"),
+      variantSurcharge: forint("150"),
+      now: belul,
+    });
+    assert.ok(d.ok);
+    assert.equal(d.source, "own-sale");
+    assert.equal(d.price.sellingGrossPrice?.toString(), "7900");
+    assert.ok(d.sale);
+    assert.equal(d.sale.regular.sellingGrossPrice?.toString(), "9900");
+    assert.equal(d.sale.regular.sellingPriceCurrency, "HUF");
+    assert.equal(d.sale.amount.toString(), "7900");
+    assert.deepEqual(d.sale.startsAt, KEZD);
+    assert.deepEqual(d.sale.endsAt, VEG);
+  });
+
+  it("tükör akció: a rendes és az akciós ár is a felárral, a nyitott határ null marad, a pénznem tartaléka forint", () => {
+    const d = resolvePriceSource({
+      authority: "UNAS",
+      mirror: tukor({ saleGrossPrice: forint("6000") }),
+      own: nincsSajat,
+      ownSale: null,
+      variantSurcharge: forint("150"),
+      now: most,
+    });
+    assert.ok(d.ok);
+    assert.equal(d.source, "mirror-sale");
+    assert.ok(d.sale);
+    assert.equal(d.sale.regular.sellingGrossPrice?.toString(), "7950");
+    assert.equal(d.sale.regular.sellingPriceCurrency, "HUF");
+    assert.equal(d.sale.amount.toString(), "6150");
+    assert.equal(d.sale.startsAt, null);
+    assert.equal(d.sale.endsAt, null);
+  });
+
+  it("nem kedvezmény az ugyanakkora vagy magasabb akciós ár: nincs sale, a price az akciós ár marad", () => {
+    for (const ar of ["9900", "12000"]) {
+      const d = resolvePriceSource({
+        authority: "ACROPORA",
+        mirror: null,
+        own: sajat,
+        ownSale: sajatAkcio(ar),
+        variantSurcharge: null,
+        now: belul,
+      });
+      assert.ok(d.ok, ar);
+      assert.equal(d.source, "own-sale", ar);
+      assert.equal(d.sale ?? null, null, ar);
+      assert.equal(d.price.sellingGrossPrice?.toString(), ar, ar);
+    }
+  });
+
+  it("tükör-sor rendes ár nélkül (csak akciós ár): nincs sale, a price az akciós ár (ahogy eddig)", () => {
+    const d = resolvePriceSource({
+      authority: "UNAS",
+      mirror: tukor({ grossPrice: null, saleGrossPrice: forint("6000") }),
+      own: nincsSajat,
+      ownSale: null,
+      variantSurcharge: null,
+      now: most,
+    });
+    assert.ok(d.ok);
+    assert.equal(d.source, "mirror-sale");
+    assert.equal(d.sale ?? null, null);
+    assert.equal(d.price.sellingGrossPrice?.toString(), "6000");
+  });
+
+  it("akció nélkül nincs sale, sem a sajátnál, sem a tükörnél", () => {
+    const own = resolvePriceSource({
+      authority: "ACROPORA",
+      mirror: null,
+      own: sajat,
+      ownSale: null,
+      variantSurcharge: null,
+      now: belul,
+    });
+    const mirror = resolvePriceSource({
+      authority: "UNAS",
+      mirror: tukor(),
+      own: nincsSajat,
+      ownSale: null,
+      variantSurcharge: null,
+      now: most,
+    });
+    assert.ok(own.ok && mirror.ok);
+    assert.equal(own.sale ?? null, null);
+    assert.equal(mirror.sale ?? null, null);
+  });
+
+  it("a lejárt akció már nem sale: a vég pillanatában a rendes ár", () => {
+    const d = resolvePriceSource({
+      authority: "ACROPORA",
+      mirror: null,
+      own: sajat,
+      ownSale: sajatAkcio("7900"),
+      variantSurcharge: null,
+      now: VEG,
+    });
+    assert.ok(d.ok);
+    assert.equal(d.source, "own");
+    assert.equal(d.sale ?? null, null);
+  });
+});

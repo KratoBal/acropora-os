@@ -9,6 +9,22 @@ import {
 
 import { prisma } from "@acropora/database";
 
+import {
+  brandCollectionsFailedStep,
+  brandCollectionsOffStep,
+  brandCollectionsStep,
+  describeBrandCollections,
+  ensureBrandCollections,
+  ensureBrandCollectionsInRound,
+  type BrandCollectionsOutcome,
+  type BrandCollectionsStep,
+} from "./medusa-brand-collections-round.js";
+import {
+  MedusaBrandImportRefusedError,
+  MedusaBrandImportService,
+} from "./medusa-brand-import.service.js";
+import { handleContentReader } from "./medusa-brand-handle-content.js";
+import { MedusaBrandLinkRepository } from "./medusa-brand-link.repository.js";
 import { decideProjectionDue } from "./medusa-projection-due.js";
 import {
   MEDUSA_ORPHAN_METADATA_KEY,
@@ -379,6 +395,11 @@ export type RoundStepCounts = {
         unpaired: number;
       }
     | null;
+  /**
+   * a marka-gyujtemenyek lepese (kartya ec82b629): a kapcsolo ALLAPOTA is itt latszik (`enabled: false`, nem null), mert a stage
+   * naploja a flottanak nem olvashato, es a lepes eredmenye eddig csak naplo-sor volt. Lasd `BrandCollectionsStep`.
+   */
+  brandCollections: BrandCollectionsStep | null;
   arrivals:
     | { failed: true }
     | {
@@ -404,6 +425,13 @@ function korMasolat(kor: KorAllapot): ProjectionRoundSnapshot {
     priceConflictRows: kor.priceConflictRows && { ...kor.priceConflictRows },
     steps: {
       leftoverKind: kor.steps.leftoverKind && { ...kor.steps.leftoverKind },
+      brandCollections: kor.steps.brandCollections && {
+        ...kor.steps.brandCollections,
+        ...("planned" in kor.steps.brandCollections &&
+        kor.steps.brandCollections.planned
+          ? { planned: { ...kor.steps.brandCollections.planned } }
+          : {}),
+      },
       arrivals: kor.steps.arrivals && { ...kor.steps.arrivals },
     },
   };
@@ -457,6 +485,8 @@ export interface MedusaProjectionSchedulerDeps {
   runLivestockArrivals?: () => Promise<LivestockArrivalsOutcome>;
   /** A boltban maradt élő állat fajta letörlésének köre (kártya 4b30b373). */
   runLeftoverKinds?: () => Promise<LeftoverKindReport>;
+  /** A hiányzó márka-gyűjtemények biztosítása a kör elején (kártya ec82b629). */
+  runBrandCollections?: () => Promise<BrandCollectionsOutcome>;
 }
 
 /**
@@ -500,6 +530,7 @@ export class MedusaProjectionScheduler
   private readonly homepageOn: () => Promise<boolean>;
   private readonly runLivestockArrivals: () => Promise<LivestockArrivalsOutcome>;
   private readonly runLeftoverKinds: () => Promise<LeftoverKindReport>;
+  private readonly runBrandCollections: () => Promise<BrandCollectionsOutcome>;
   /** Az első lefutás összegzést is naplóz (ez a futás látható jele), a többi csak, ha törölt valamit. */
   private fajtaElsoKor = true;
   /** Hany URES kor telt el egymas utan. A nem-ures kor nullazza. */
@@ -514,6 +545,16 @@ export class MedusaProjectionScheduler
   private frissitesProbalt = new Map<string, number>();
   /** Az utolso `frissitesAzonositok` valasztasa (id -> `lastSyncedAt` ms): a kor a ténylegesen vitt tagokat jegyzi fel. */
   private frissitesValasztott = new Map<string, number>();
+  /**
+   * A FUTO AKCIÓ EGYSZERI ÚJRA-VETÍTÉSE (card 54bb3779, a #2733 éles kiadása): a termékek, amelyeknek a futó akciója EBBEN a
+   * folyamatban már sorra került (id-k). A #2733 az akció vetítésének ALAKJÁT változtatta (alapár az alapár, az akció `sale`
+   * árlista), de egy már vetített termék csak akkor esedékes, ha a forrása újabb a kötésénél: a futó akciók a régi alakban
+   * maradtak volna a következő módosításukig. Memóriában él, tehát minden újraindítás (egy kiadás is) egyszer újra végigviszi
+   * őket; az újra-vetítés idempotens, egy listát, ami már jó, nem ír át.
+   */
+  private readonly futoAkcioVetitve = new Set<string>();
+  /** Az utolsó `akcioHatarAzonositok` azon tagjai, amelyek CSAK a futó akció szabálya miatt esedékesek: a kör a vitteket jegyzi fel. */
+  private futoAkcioJeloltek = new Set<string>();
 
   /**
    * EGY OPCIONALIS FUGGOSEG-OBJEKTUM, ES EZ A REPO MINTAJA, NEM ROGTONZES: a
@@ -608,6 +649,109 @@ export class MedusaProjectionScheduler
           apply: true,
         });
       });
+    this.runBrandCollections =
+      deps?.runBrandCollections ??
+      (async () => {
+        const client = await medusaClientForProjection(
+          storedCredentialProvider(),
+          {
+            stdout: (value) => this.logNemUres(value, "log"),
+            stderr: (value) => this.logNemUres(value, "warn"),
+          },
+        );
+        const links = new MedusaBrandLinkRepository();
+        const service = new MedusaBrandImportService(links);
+        /*
+          A HANDLE-T FOGLALO GYUJTEMENY TARTALMA (57247): a bolti termek -> a mi termekunk a kotes-sorral, ennek hianyaban az
+          egyertelmu SKU-parral (a szallitasi jellemzok szabalya; a teszt bolt termekeinek nagy reszen nincs kotes-sor), abbol a
+          marka. A SKU-parositas a bolt teljes SKU-listajat olvassa: lusta, egy korben legfeljebb egyszer, es csak ha kell.
+        */
+        const database = prisma as unknown as ShippingAttributesCliDatabase;
+        const shipping = new MedusaShippingAttributesService(
+          new MedusaProductLinkRepository(),
+          client,
+        );
+        let boltiOs: Map<string, string> | null = null;
+        const readContent = handleContentReader(
+          {
+            collectionProductIds: (collectionId) =>
+              client.listCollectionProductIds(collectionId),
+            osProductsOfShop: async (shopIds) => {
+              const out = new Map<string, string>();
+              if (!shopIds.length) return out;
+              const sorok = await prisma.externalReference.findMany({
+                where: {
+                  system: MEDUSA_PRODUCT_REFERENCE.system,
+                  entityType: MEDUSA_PRODUCT_REFERENCE.entityType,
+                  externalId: { in: shopIds },
+                },
+                select: { entityId: true, externalId: true },
+              });
+              for (const sor of sorok) out.set(sor.externalId, sor.entityId);
+              const hianyzo = shopIds.filter((id) => !out.has(id));
+              if (hianyzo.length) {
+                boltiOs ??= new Map(
+                  [...(await skuParositas(shipping, database)).osToShop].map(
+                    ([os, bolti]) => [bolti, os],
+                  ),
+                );
+                for (const id of hianyzo) {
+                  const os = boltiOs.get(id);
+                  if (os) out.set(id, os);
+                }
+              }
+              return out;
+            },
+            brandsOfOsProducts: async (ids) =>
+              new Map(
+                (
+                  await prisma.product.findMany({
+                    where: { id: { in: ids } },
+                    select: { id: true, brandId: true },
+                  })
+                ).map((termek) => [termek.id, termek.brandId]),
+              ),
+          },
+          (collectionId, error) =>
+            this.logNemUres(
+              `Márka-gyűjtemények: a(z) ${collectionId} gyűjtemény tartalma nem mérhető, a márka nem kötődik össze (${error instanceof Error ? error.message : String(error)})`,
+              "warn",
+            ),
+        );
+        const brands = await prisma.brand.findMany({
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            isActive: true,
+            archivedAt: true,
+          },
+        });
+        return ensureBrandCollections({
+          plan: () => service.plan(client, brands, readContent),
+          apply: () => service.run(client, brands, this.now(), readContent),
+          mappedAmong: async (ids) => {
+            const wanted = new Set(ids);
+            return (await links.all())
+              .filter((row) => wanted.has(row.brandId))
+              .map((row) => row.brandId);
+          },
+          touchBrands: async (ids, now) =>
+            ids.length
+              ? (
+                  await prisma.brand.updateMany({
+                    where: { id: { in: ids } },
+                    data: { updatedAt: now },
+                  })
+                ).count
+              : 0,
+          now: () => this.now(),
+          refusedReason: (error) =>
+            error instanceof MedusaBrandImportRefusedError
+              ? error.reason
+              : null,
+        });
+      });
     this.homepageOn =
       deps?.homepageSwitchedOn ??
       (() =>
@@ -700,7 +844,7 @@ export class MedusaProjectionScheduler
       pricingExit: null,
       productFailures: null,
       priceConflictRows: null,
-      steps: { leftoverKind: null, arrivals: null },
+      steps: { leftoverKind: null, brandCollections: null, arrivals: null },
     };
     this.utolsoKor = kor;
     try {
@@ -727,6 +871,8 @@ export class MedusaProjectionScheduler
       közül egyik sem mozdul, és a bolt a régi árat tartja. Az akciós termékek
       állnak elöl, hogy egy teli kör ne szorítsa ki őket.
     */
+    // A MÁRKA-GYŰJTEMÉNYEK ELŐBB, a termékek előtt: ami itt leképeződik, azt a termék-vetítés ugyanebben a körben viszi
+    await this.markaGyujtemenyKor(allapot);
     await this.atiranyitasKor();
     await this.landingKor();
     await this.kezdolapKor();
@@ -761,6 +907,9 @@ export class MedusaProjectionScheduler
         ...frissites,
       ]),
     ].slice(0, limit);
+    // a futó akció szabálya CSAK a ténylegesen vitt terméket jegyzi fel (a keret által levágott a következő körben jön)
+    for (const id of esedekes)
+      if (this.futoAkcioJeloltek.has(id)) this.futoAkcioVetitve.add(id);
     // a forgásból CSAK a ténylegesen vitt termék számít kipróbáltnak (a keret által levágott nem)
     for (const id of esedekes) {
       const mikor = this.frissitesValasztott.get(id);
@@ -981,6 +1130,38 @@ export class MedusaProjectionScheduler
   }
 
   /**
+   * A HIÁNYZÓ MÁRKA-GYŰJTEMÉNYEK EGY KÖRE (kártya ec82b629), a kör elején: a hiba csak napló, a termék-vetítést nem állítja
+   * meg. Kapcsolóval, alapból KI (a lépés a boltba ír). Az ütközés és a megállás figyelmeztetés minden körben, a változás
+   * egy napló-sor.
+   */
+  private async markaGyujtemenyKor(allapot: KorAllapot): Promise<void> {
+    if (!ensureBrandCollectionsInRound(this.environment)) {
+      allapot.steps.brandCollections = brandCollectionsOffStep(
+        this.environment,
+      );
+      return;
+    }
+    try {
+      const eredmeny = await this.runBrandCollections();
+      allapot.steps.brandCollections = brandCollectionsStep(eredmeny);
+      if (
+        eredmeny.status === "refused" ||
+        (eredmeny.status === "applied" && eredmeny.conflicts.length)
+      )
+        this.naplo.warn(describeBrandCollections(eredmeny));
+      else if (eredmeny.status !== "unchanged")
+        this.naplo.log(describeBrandCollections(eredmeny));
+    } catch (error) {
+      allapot.steps.brandCollections = brandCollectionsFailedStep(error);
+      this.naplo.warn(
+        `Márka-gyűjtemények: a kör nem futott le (${
+          error instanceof Error ? error.message : String(error)
+        })`,
+      );
+    }
+  }
+
+  /**
    * AZ ÉRKEZŐ ÁLLATOK EGY KÖRE (V2.6 S4b), a kezdőlap után, ugyanazzal a szabállyal: a hiba csak napló, a termék-vetítést
    * nem állítja meg. Kapcsolóval, alapból KI (a commerce modul, #719, előbb kerül ki).
    */
@@ -1096,10 +1277,20 @@ export class MedusaProjectionScheduler
    */
   private async akcioHatarAzonositok(): Promise<string[]> {
     const most = this.now();
+    const jeloltek = new Set<string>();
+    this.futoAkcioJeloltek = jeloltek;
     const ablak = { gt: new Date(most.getTime() - AKCIO_ABLAK_MS), lte: most };
     const tukor = await this.db.unasProductSnapshot.findMany({
       where: {
-        OR: [{ saleStartsAt: ablak }, { saleEndsAt: ablak }],
+        OR: [
+          { saleStartsAt: ablak },
+          { saleEndsAt: ablak },
+          // a futó akció, a határ korától függetlenül: a #2733 utáni egyszeri újra-vetítés (`futoAkcioVetitve`)
+          {
+            saleStartsAt: { lte: most },
+            OR: [{ saleEndsAt: null }, { saleEndsAt: { gt: most } }],
+          },
+        ],
         product: { isActive: true, webshopExcluded: false },
       },
       select: { productId: true, saleStartsAt: true, saleEndsAt: true },
@@ -1113,7 +1304,17 @@ export class MedusaProjectionScheduler
     const sajat = await this.db.productVariant.findMany({
       where: {
         isActive: true,
-        OR: [{ sellingSaleStartsAt: ablak }, { sellingSaleEndsAt: ablak }],
+        OR: [
+          { sellingSaleStartsAt: ablak },
+          { sellingSaleEndsAt: ablak },
+          {
+            sellingSaleStartsAt: { lte: most },
+            OR: [
+              { sellingSaleEndsAt: null },
+              { sellingSaleEndsAt: { gt: most } },
+            ],
+          },
+        ],
         product: {
           isActive: true,
           webshopExcluded: false,
@@ -1151,6 +1352,16 @@ export class MedusaProjectionScheduler
       sorok
         .filter((sor) => {
           if (!utoljara.has(sor.productId)) return false;
+          // a futó akció, ha ebben a folyamatban még nem vetítettük: akkor is esedékes, ha a határa a legutóbbi vetítés előtt volt
+          if (
+            sor.saleStartsAt !== null &&
+            sor.saleStartsAt <= most &&
+            (sor.saleEndsAt === null || sor.saleEndsAt > most) &&
+            !this.futoAkcioVetitve.has(sor.productId)
+          ) {
+            jeloltek.add(sor.productId);
+            return true;
+          }
           const vetitve = utoljara.get(sor.productId) ?? null;
           const hatarok = [sor.saleStartsAt, sor.saleEndsAt].filter(
             (hatar): hatar is Date => hatar !== null && hatar <= most,

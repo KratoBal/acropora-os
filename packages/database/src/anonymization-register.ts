@@ -941,6 +941,9 @@ export const ANONYMIZATION_REGISTER: Readonly<
   ServiceJobAsset: {
     notes: "freeText",
   },
+  ServiceJobLinkedWorksheet: {
+    linkedById: "identifier",
+  },
   WorksheetDepartment: {
     code: "business",
     name: "business",
@@ -1152,6 +1155,28 @@ export const ANONYMIZATION_REGISTER: Readonly<
     errorCode: "business",
   },
   SimplePaySyncRun: {
+    activeKey: "business",
+    errorCode: "business",
+  },
+  StripePayout: {
+    stripePayoutId: "identifier",
+    currency: "business",
+    errorCode: "business",
+  },
+  StripeTransactionLine: {
+    stripeTransactionId: "identifier",
+    type: "business",
+    reportingCategory: "business",
+    currency: "business",
+    paymentIntentId: "identifier",
+    chargeId: "identifier",
+    refundId: "identifier",
+    webshopOrderIds: "identifier",
+    orderNumbers: "identifier",
+    invoiceNumbers: "identifier",
+    errorCode: "business",
+  },
+  StripeSyncRun: {
     activeKey: "business",
     errorCode: "business",
   },
