@@ -22,6 +22,7 @@ import {
   webshopMailText,
   type WebshopMailFacts,
   type WebshopMailOrder,
+  type WebshopPlacedOrder,
 } from "./webshop-mail.js";
 
 const BLOCKS = new Set(
@@ -161,6 +162,36 @@ describe("the derived content", () => {
       content.blocks.rendeles_tetelek?.html ?? "",
       /Só &lt;22 kg&gt; × 2/,
     );
+  });
+
+  // A15: "we are getting your order ready" would promise the parcel before the money has arrived
+  it("the next step of a shipped order paid by bank transfer waits for the payment", () => {
+    const next = (orders: WebshopPlacedOrder[], locale?: "en") =>
+      webshopMailContent({ template: "order-placed", orders, locale }).values
+        .kovetkezo_lepes;
+    const transfer = {
+      ...ORDER,
+      payment: "BANK_TRANSFER" as const,
+      pickup: false,
+    };
+    assert.equal(
+      next([transfer]),
+      "A rendelésedet a befizetés beérkezése után állítjuk össze. Követési szám csak a csomag feladása után lesz.",
+    );
+    // some shipped orders by transfer, some by card: the general sentence and the transfer one
+    assert.equal(
+      next([transfer, { ...ORDER, display_id: 39, pickup: false }]),
+      "Összekészítjük a rendelésedet. Követési szám csak a csomag feladása után lesz. Az előre utalással fizetett rendelést a befizetés beérkezése után állítjuk össze.",
+    );
+    // a pickup order paid by transfer does not change the shipped order's sentence
+    assert.equal(
+      next([
+        { ...ORDER, pickup: false },
+        { ...ORDER, display_id: 39, payment: "BANK_TRANSFER", pickup: true },
+      ]),
+      "Összekészítjük a rendelésedet. Követési szám csak a csomag feladása után lesz.\nAz élő állatos rendelést a boltban veszed át.",
+    );
+    assert.match(next([transfer], "en") ?? "", /once the payment has arrived/);
   });
 
   it("the pay-on-pickup box only where something is due on pickup", () => {

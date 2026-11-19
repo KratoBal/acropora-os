@@ -1520,6 +1520,43 @@ export interface MedusaAdminClient {
    */
   listVariantPrices(productId: string): Promise<MedusaVariantPriceLookupResult>;
   /**
+   * A VÁLTOZAT AKCIÓS ÁRLISTÁI (kártya 54bb3779): a `description` pontosan a kulcs (`os-sale:<változat>`). A keresés (`q`)
+   * csak szűkít, a pontos egyezést ez a metódus nézi. Egynél több találat is lehet, ha egy korábbi futás kettőt hozott
+   * létre: a hívó nem találgat (a vetítés megáll).
+   */
+  findSaleLists(key: string): Promise<MedusaPriceListRow[]>;
+  /** Új `sale` árlista egyetlen árral. A `description` a kulcs, a `status` aktív. */
+  createSaleList(input: {
+    key: string;
+    title: string;
+    variantId: string;
+    amount: number;
+    currencyCode: string;
+    startsAt: Date | null;
+    endsAt: Date | null;
+  }): Promise<MedusaPriceListRow>;
+  /** Az árlista ideje és állapota; a kihagyott mező nem változik, a `null` törli a határt. */
+  updateSaleList(
+    listId: string,
+    patch: {
+      startsAt?: Date | null;
+      endsAt?: Date | null;
+      status?: "active";
+    },
+  ): Promise<void>;
+  /** Az árlista sorai a Medusa köteg-útján. */
+  batchSaleListPrices(
+    listId: string,
+    ops: {
+      variantId: string;
+      currencyCode: string;
+      create: { amount: number }[];
+      update: { id: string; amount: number }[];
+      delete: string[];
+    },
+  ): Promise<void>;
+  deleteSaleList(listId: string): Promise<void>;
+  /**
    * A változatok vonalkód-mezői (SEO P0 PR 4): a frissítés-ág ebből látja, mi áll
    * ma a boltban, és csak az eltérőt írja. A töröltek nélkül: egy eltemetett
    * változatra nem írunk.
@@ -1667,6 +1704,26 @@ export interface MedusaVariantPriceRow {
    * hogy nincs ára, a hiány viszont azt jelentené, hogy nem kérdeztünk jól.
    */
   prices?: MedusaPriceRow[];
+}
+
+/**
+ * A SALE PRICE LIST OF OURS, AS THE SHOP REPORTS IT (`GET /admin/price-lists`, card 54bb3779). The planner's input
+ * (`ExistingSaleList`) is built from this. The row's `variant_id` is read when the answer brings it; the planner does not
+ * need it (our list holds one price).
+ */
+export interface MedusaPriceListRow {
+  id: string;
+  title?: string | null;
+  description?: string | null;
+  status: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  prices?: {
+    id: string;
+    variant_id?: string | null;
+    currency_code: string;
+    amount: number;
+  }[];
 }
 
 export interface MedusaVariantPriceLookupResult {
@@ -3123,6 +3180,117 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       `/admin/products/${encodeURIComponent(productId)}` +
         `/variants/${encodeURIComponent(variantId)}`,
       { method: "POST", body: JSON.stringify({ prices }) },
+    );
+  }
+
+  async findSaleLists(key: string): Promise<MedusaPriceListRow[]> {
+    const params = new URLSearchParams({
+      q: key,
+      fields: "id,title,description,status,starts_at,ends_at,*prices",
+      limit: "20",
+    });
+    const body = await this.request<{ price_lists?: MedusaPriceListRow[] }>(
+      `/admin/price-lists?${params.toString()}`,
+    );
+    // the search narrows; the exact key is the match (a list named alike by hand is not ours)
+    return (body.price_lists ?? []).filter((row) => row.description === key);
+  }
+
+  async createSaleList(input: {
+    key: string;
+    title: string;
+    variantId: string;
+    amount: number;
+    currencyCode: string;
+    startsAt: Date | null;
+    endsAt: Date | null;
+  }): Promise<MedusaPriceListRow> {
+    const body = await this.request<{ price_list: MedusaPriceListRow }>(
+      `/admin/price-lists`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          title: input.title,
+          description: input.key,
+          type: "sale",
+          status: "active",
+          starts_at: input.startsAt?.toISOString() ?? null,
+          ends_at: input.endsAt?.toISOString() ?? null,
+          metadata: { acropora_os_sale: true },
+          prices: [
+            {
+              variant_id: input.variantId,
+              currency_code: input.currencyCode,
+              amount: input.amount,
+            },
+          ],
+        }),
+      },
+    );
+    return body.price_list;
+  }
+
+  async updateSaleList(
+    listId: string,
+    patch: {
+      startsAt?: Date | null;
+      endsAt?: Date | null;
+      status?: "active";
+    },
+  ): Promise<void> {
+    await this.request<unknown>(
+      `/admin/price-lists/${encodeURIComponent(listId)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          ...(patch.startsAt !== undefined
+            ? { starts_at: patch.startsAt?.toISOString() ?? null }
+            : {}),
+          ...(patch.endsAt !== undefined
+            ? { ends_at: patch.endsAt?.toISOString() ?? null }
+            : {}),
+          ...(patch.status ? { status: patch.status } : {}),
+        }),
+      },
+    );
+  }
+
+  async batchSaleListPrices(
+    listId: string,
+    ops: {
+      variantId: string;
+      currencyCode: string;
+      create: { amount: number }[];
+      update: { id: string; amount: number }[];
+      delete: string[];
+    },
+  ): Promise<void> {
+    await this.request<unknown>(
+      `/admin/price-lists/${encodeURIComponent(listId)}/prices/batch`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          create: ops.create.map((row) => ({
+            variant_id: ops.variantId,
+            currency_code: ops.currencyCode,
+            amount: row.amount,
+          })),
+          update: ops.update.map((row) => ({
+            id: row.id,
+            variant_id: ops.variantId,
+            currency_code: ops.currencyCode,
+            amount: row.amount,
+          })),
+          delete: ops.delete,
+        }),
+      },
+    );
+  }
+
+  async deleteSaleList(listId: string): Promise<void> {
+    await this.request<unknown>(
+      `/admin/price-lists/${encodeURIComponent(listId)}`,
+      { method: "DELETE" },
     );
   }
 

@@ -577,6 +577,10 @@ export interface WebshopMailText {
   readonly mixedOrders: string;
   readonly mixedOneCardPayment: string;
   readonly nextShipped: string;
+  /** Every shipped order is paid by advance bank transfer: it is packed only after the money has arrived (A15). */
+  readonly nextShippedTransfer: string;
+  /** Added to `nextShipped` when only SOME of the shipped orders are paid by advance bank transfer. */
+  readonly nextShippedTransferNote: string;
   readonly nextPickup: string;
   /** The sentence that carries the guest order page's address (`order_view_url`). */
   readonly orderViewLine: (url: string) => string;
@@ -641,6 +645,10 @@ const HU_TEXT: WebshopMailText = {
     "A kártyás fizetés a kettőre együtt, egy lépésben történt.",
   nextShipped:
     "Összekészítjük a rendelésedet. Követési szám csak a csomag feladása után lesz.",
+  nextShippedTransfer:
+    "A rendelésedet a befizetés beérkezése után állítjuk össze. Követési szám csak a csomag feladása után lesz.",
+  nextShippedTransferNote:
+    "Az előre utalással fizetett rendelést a befizetés beérkezése után állítjuk össze.",
   nextPickup: "Az élő állatos rendelést a boltban veszed át.",
   orderViewLine: (url) =>
     `A rendelésed állapotát bármikor megnézheted a rendelésszámmal és az e-mail-címeddel: ${url}`,
@@ -707,6 +715,10 @@ const EN_TEXT: WebshopMailText = {
   mixedOneCardPayment: "The card payment covered both in one step.",
   nextShipped:
     "We are getting your order ready. You will get a tracking number only once the parcel has been shipped.",
+  nextShippedTransfer:
+    "We will get your order ready once the payment has arrived. You will get a tracking number only once the parcel has been shipped.",
+  nextShippedTransferNote:
+    "The order paid by bank transfer is made ready once the payment has arrived.",
   nextPickup: "You pick up the live-animal order at the store.",
   orderViewLine: (url) =>
     `You can check your order at any time with your order number and e-mail address: ${url}`,
@@ -834,8 +846,22 @@ function templateContent(
       }));
       const items = listBlock(sections, false);
       const total = orders.reduce((sum, o) => sum + o.total, 0);
+      // an advance bank transfer is packed only after the money has arrived: "we are getting it ready" would promise it too early
+      const shipped = orders.filter((o) => !o.pickup);
+      const transferShipped = shipped.filter(
+        (o) => o.payment === "BANK_TRANSFER",
+      );
+      const nextShipped = !shipped.length
+        ? []
+        : transferShipped.length === shipped.length
+          ? [t.nextShippedTransfer]
+          : [
+              transferShipped.length
+                ? `${t.nextShipped} ${t.nextShippedTransferNote}`
+                : t.nextShipped,
+            ];
       const next = [
-        ...(orders.some((o) => !o.pickup) ? [t.nextShipped] : []),
+        ...nextShipped,
         ...(orders.some((o) => o.pickup) ? [t.nextPickup] : []),
       ].join("\n");
       return {

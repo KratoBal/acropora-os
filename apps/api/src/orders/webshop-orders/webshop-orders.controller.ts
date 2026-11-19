@@ -37,6 +37,7 @@ import { WebshopOrderShippingMethodService } from "./webshop-order-shipping-meth
 import { WebshopStaleThresholdsDto } from "./dto/webshop-order-stale-thresholds.dto.js";
 import { WebshopOrderPaymentService } from "./webshop-order-payment.service.js";
 import { WebshopOrderInvoiceService } from "./webshop-order-invoice.service.js";
+import { WebshopOrderTaxCheckService } from "./webshop-order-tax-check.service.js";
 import {
   WebshopOrderInvoiceIssueDto,
   WebshopProformaSendDto,
@@ -53,6 +54,7 @@ export class WebshopOrdersController {
   constructor(
     private readonly orders: WebshopOrdersService,
     private readonly invoices: WebshopOrderInvoiceService,
+    private readonly taxCheck: WebshopOrderTaxCheckService,
     private readonly parcels: WebshopOrderParcelService,
     private readonly lines: WebshopOrderLinesService,
     private readonly payments: WebshopOrderPaymentService,
@@ -251,6 +253,16 @@ export class WebshopOrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.orders.saveStaleThresholds(body.thresholds, user.id);
+  }
+
+  /**
+   * A RENDELÉS ADÓSZÁMA A NAV-NÁL (kártya c977aed2, P2): kérésre, nem az adatlap minden megnyitásakor (minden hívás egy NAV-kérés).
+   * Csak olvas. A számla kiállítása ugyanezt az ellenőrzést futtatja, és csak a NAV "nincs ilyen" válaszánál áll meg.
+   */
+  @Get(":id/tax-check")
+  @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
+  checkTaxNumber(@Param("id") id: string) {
+    return this.taxCheck.checkOrder(id);
   }
 
   @Get(":id")

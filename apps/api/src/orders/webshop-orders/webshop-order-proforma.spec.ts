@@ -231,6 +231,7 @@ function setup(over: {
         }
       ),
     } as never,
+    { check: async () => ({ state: "NONE" }) } as never,
   );
   return {
     service,
