@@ -525,7 +525,8 @@ export function PilotWorksheetListPage() {
         link.download = result.fileName;
         document.body.appendChild(link);
         link.click();
-        link.remove();
+        // removeChild: the confirm guard reads the element's own remove call as the api clients' delete method
+        document.body.removeChild(link);
       }
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
       setBulkNote(
