@@ -463,13 +463,15 @@ export class ServiceJobsRepository {
       // többi, köztük minden már meglévő munkalap érintetlen. Értesítést ez nem küld: a lap új felelősei a lap saját
       // értesítését kapják, a munkalapé másodszor ugyanazt zörgetné.
       if (job.kind === "MAINTENANCE") {
-        const following = await transaction.worksheet.findMany({
-          where: {
-            serviceJobId: input.serviceJobId,
-            followsJobAssignees: true,
-          },
-          select: { id: true },
-        });
+        // SORZÁR, HOGY EGY EGYIDEJŰ KÉZI MENTÉS NE VESZHESSEN EL (barracuda, #2743 B): a munkalap kézi mentése először a
+        // `followsJobAssignees` mezőt állítja hamisra (sorzárat vesz), a követők kiválasztása pedig megvárja azt, és az
+        // ELKÖTÖTT állapotot olvassa: a már felülbírált munkalap nem követő többé, a lap nem ír a kézi kiosztás fölé.
+        const following = await transaction.$queryRaw<{ id: string }[]>`
+          SELECT "id" FROM "Worksheet"
+          WHERE "serviceJobId" = ${input.serviceJobId} AND "followsJobAssignees" = true
+          ORDER BY "id"
+          FOR UPDATE
+        `;
         for (const worksheet of following) {
           await transaction.worksheetAssignee.deleteMany({
             where: {
