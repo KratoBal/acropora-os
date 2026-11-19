@@ -160,6 +160,124 @@ describe("ServiceJobListPage", () => {
   });
 
   /*
+    A KARBANTARTÁS-LISTA SORA IS NYIT (Luca, 2026-11-19; nautilus OS hibakör): eddig csak a cím-link vitt a lapra, a hibajegy- és a munkalap-lista
+    sora viszont nyit. MI PIROSÍT: ha a sor kattintása nem a karbantartási lapra visz (egy, több és nulla munkalapnál is); ha a cím-link kattintása
+    a sort is aktiválja (kétszeri lépés a lapra, a buborékozó kattintás miatt); ha a billentyűzet (a sorra fókuszálva Enter) nem nyit; ha a
+    link Entere a SORT nyitja a link helyett; ha a sornak nincs megnyitás-felirata (a képernyőolvasó nem tudja, mit nyit).
+  */
+  it("a sorra kattintva a karbantartási lap nyílik (egy, több és nulla munkalapnál is), soha a munkalap vagy a hibajegy", async () => {
+    const base = response().items[0]!;
+    api.list.mockResolvedValue(
+      response({
+        items: [
+          {
+            ...base,
+            id: "job-1",
+            title: "Egy munkalapos",
+            kind: "MAINTENANCE",
+            worksheetCount: 1,
+          },
+          {
+            ...base,
+            id: "job-2",
+            title: "Két munkalapos",
+            kind: "MAINTENANCE",
+            worksheetCount: 2,
+          },
+          {
+            ...base,
+            id: "job-3",
+            title: "Munkalap nélküli",
+            kind: "MAINTENANCE",
+            worksheetCount: 0,
+          },
+        ],
+      }),
+    );
+    render(<ServiceJobListPage kind="MAINTENANCE" />);
+    const rows = await screen.findAllByTestId("maintenance-job-row");
+    expect(rows).toHaveLength(3);
+    for (const [index, id] of ["job-1", "job-2", "job-3"].entries()) {
+      urlNavigation.push.mockClear();
+      // a click on a plain cell (the partner column), not on the title link
+      fireEvent.click(rows[index]!.querySelectorAll("td")[1]!);
+      expect(urlNavigation.push).toHaveBeenCalledTimes(1);
+      expect(urlNavigation.push).toHaveBeenCalledWith(
+        `/szerviz/karbantartas/${id}`,
+      );
+    }
+  });
+
+  it("a cím-link kattintása nem aktiválja a sort is (a link maga visz a lapra, egyszer)", async () => {
+    api.list.mockResolvedValue(
+      response({
+        items: [
+          {
+            ...response().items[0]!,
+            id: "job-1",
+            title: "Linkes cím",
+            kind: "MAINTENANCE",
+          },
+        ],
+      }),
+    );
+    render(<ServiceJobListPage kind="MAINTENANCE" />);
+    const link = await screen.findByRole("link", { name: "Linkes cím" });
+    urlNavigation.push.mockClear();
+    fireEvent.click(link);
+    expect(urlNavigation.push).not.toHaveBeenCalled();
+  });
+
+  it("a billentyűzettel is nyit: a sorra fókuszálva Enter, a linken álló Enter viszont a linké, nem a soré", async () => {
+    api.list.mockResolvedValue(
+      response({
+        items: [
+          {
+            ...response().items[0]!,
+            id: "job-1",
+            title: "Billentyűs sor",
+            kind: "MAINTENANCE",
+          },
+        ],
+      }),
+    );
+    render(<ServiceJobListPage kind="MAINTENANCE" />);
+    const row = (await screen.findAllByTestId("maintenance-job-row"))[0]!;
+    urlNavigation.push.mockClear();
+    fireEvent.keyDown(row, { key: "Enter" });
+    expect(urlNavigation.push).toHaveBeenCalledWith(
+      "/szerviz/karbantartas/job-1",
+    );
+    urlNavigation.push.mockClear();
+    fireEvent.keyDown(screen.getByRole("link", { name: "Billentyűs sor" }), {
+      key: "Enter",
+    });
+    expect(urlNavigation.push).not.toHaveBeenCalled();
+  });
+
+  it("a sor megnyitás-feliratot visel: sorszám, cím, megnyitása", async () => {
+    api.list.mockResolvedValue(
+      response({
+        items: [
+          {
+            ...response().items[0]!,
+            id: "job-1",
+            jobNumber: "KT-2026-007",
+            title: "Feliratos sor",
+            kind: "MAINTENANCE",
+          },
+        ],
+      }),
+    );
+    render(<ServiceJobListPage kind="MAINTENANCE" />);
+    const row = (await screen.findAllByTestId("maintenance-job-row"))[0]!;
+    expect(row.getAttribute("aria-label")).toBe(
+      "KT-2026-007 Feliratos sor megnyitása",
+    );
+    expect(row.getAttribute("tabindex")).toBe("0");
+  });
+
+  /*
     A KARBANTARTÁS-LISTA NEM MUTAT HIBAJEGY-ÁLLAPOTOT (Balázs, 2026-11-18 11:31; acrobot 55782): az állapot a munkalapok aláírásából jön
     (minden aláírva = Kész, különben Folyamatban), nincs partner-állapot sor, és nincs hibajegy-állapot szerinti csempe vagy fül. MI PIROSÍT:
     ha a sor a hibajegy állapotát (Alkatrészre vár) vagy a partner-állapotot mutatja; ha a Kész/Folyamatban felcserélődik; ha a hibajegy-állapot szerinti csempék a karbantartási listán megjelennek (a fülek külön, későbbi
