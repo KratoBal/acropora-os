@@ -393,6 +393,23 @@ describe("PilotWorksheetListPage -- a Megnyitva oszlop és a tól-ig szűrő (k�
     expect(urlOfLast().searchParams.get("createdTo")).toBe("2026-11-19");
   });
 
+  /**
+   * A TÓL-IG SOR TÖRHET (OS hibakör, 2026-11-19): 390 pixeles telefonon a felirat és a két 160 pixeles mező nem fért el, és
+   * az egész lap 47 pixellel oldalra gördült. A jsdom nem számol elrendezést, tehát ez az állítás az osztályt nézi; a valódi
+   * bizonyíték az os-hibakor-stage.mjs 390 pixeles kilógás-mérése. MI PIROSIT: a `flex-wrap` lekerül a csoportról.
+   */
+  it("a tól-ig sor keskeny képernyőn törhet", async () => {
+    navigation.search = "";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    expect(
+      screen
+        .getByRole("group", { name: "Megnyitás napja" })
+        .className.split(/\s+/),
+    ).toContain("flex-wrap");
+  });
+
   it("a félig beírt nap nem szűrőváltozás: nem megy kérés, amíg a nap nincs készen", async () => {
     navigation.search = "";
     api.list.mockResolvedValue(response([row()]));
