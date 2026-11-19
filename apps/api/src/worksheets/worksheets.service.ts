@@ -51,6 +51,7 @@ import { hasPermission, PERMISSIONS } from "@acropora/types";
 import type {
   AuthenticatedUser,
   WorksheetAttachableListResponse,
+  WorksheetCopyResult,
   WorksheetDetail,
   WorksheetVersionDiff,
 } from "@acropora/types";
@@ -821,12 +822,7 @@ export class WorksheetsService {
     ids: readonly string[],
     actor: AuthenticatedUser,
     requestId?: string,
-  ): Promise<{
-    results: (
-      | { sourceId: string; ok: true; id: string; number: string | null }
-      | { sourceId: string; ok: false; message: string }
-    )[];
-  }> {
+  ): Promise<WorksheetCopyResult> {
     requireInternalWriter(actor, "Munkalap másolása");
     const unique = [...new Set(ids)];
     if (unique.length === 0 || unique.length > WORKSHEET_COPY_MAX)
@@ -834,9 +830,7 @@ export class WorksheetsService {
         `Egyszerre 1 és ${WORKSHEET_COPY_MAX} közötti munkalap másolható.`,
       );
     const scope = partnerScopeOf(actor);
-    const results: Awaited<
-      ReturnType<WorksheetsService["copyWorksheets"]>
-    >["results"] = [];
+    const results: WorksheetCopyResult["results"] = [];
     for (const sourceId of unique) {
       try {
         const source = await this.detail(sourceId, scope);

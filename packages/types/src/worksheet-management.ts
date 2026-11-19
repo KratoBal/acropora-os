@@ -691,6 +691,18 @@ export interface WorksheetListItem {
   hidden: boolean;
 }
 
+/**
+ * A kijelölt munkalapok másolásának válasza (`POST service/worksheets/bulk/copy`, kártya a785e580): laponként egy sor,
+ * a forrás azonosítójával. Sikernél az új piszkozat azonosítója és sorszáma (a piszkozatnak még lehet, hogy nincs), hibánál
+ * a mondat, amiért abból a lapból nem lett másolat.
+ */
+export interface WorksheetCopyResult {
+  results: (
+    | { sourceId: string; ok: true; id: string; number: string | null }
+    | { sourceId: string; ok: false; message: string }
+  )[];
+}
+
 export interface WorksheetListResponse {
   items: WorksheetListItem[];
   pagination: {

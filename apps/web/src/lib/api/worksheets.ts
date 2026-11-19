@@ -10,6 +10,7 @@ import type {
   UpdateWorksheetDraftInput,
   WorksheetAssignableUserListResponse,
   WorksheetAttachableListResponse,
+  WorksheetCopyResult,
   WorksheetSelectablePartnerListResponse,
   WorksheetDepartmentListResponse,
   WorksheetDepartmentSummary,
@@ -87,6 +88,17 @@ export const worksheetsApi = {
       skipped: Number(response.headers.get("X-Sheets-Skipped") ?? "0"),
       skippedNumbers: numbers ? numbers.split(",") : [],
     };
+  },
+  /**
+   * A kijelölt lapok másolata: laponként egy új piszkozat ugyanazon a szülőn, laponként eredménnyel. Ugyanazzal a
+   * `requestId`-vel újraküldve a szerver a már elkészült másolatokat adja vissza, nem újakat.
+   */
+  copy(token: string, ids: readonly string[], requestId: string) {
+    return apiRequest<WorksheetCopyResult>(`${base}/bulk/copy`, token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids, requestId }),
+    });
   },
   list(token: string, query: URLSearchParams, signal?: AbortSignal) {
     return apiRequest<WorksheetListResponse>(`${base}?${query}`, token, {

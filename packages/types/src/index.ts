@@ -1181,6 +1181,7 @@ export type {
   WorksheetListItem,
   WorksheetListResponse,
   WorksheetChainLink,
+  WorksheetCopyResult,
   WorksheetSelectablePartner,
   WorksheetSelectablePartnerListResponse,
   WorksheetSignerCandidate,
