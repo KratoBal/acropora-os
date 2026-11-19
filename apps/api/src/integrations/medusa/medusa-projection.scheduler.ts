@@ -9,6 +9,17 @@ import {
 
 import { prisma } from "@acropora/database";
 
+import {
+  describeBrandCollections,
+  ensureBrandCollections,
+  ensureBrandCollectionsInRound,
+  type BrandCollectionsOutcome,
+} from "./medusa-brand-collections-round.js";
+import {
+  MedusaBrandImportRefusedError,
+  MedusaBrandImportService,
+} from "./medusa-brand-import.service.js";
+import { MedusaBrandLinkRepository } from "./medusa-brand-link.repository.js";
 import { decideProjectionDue } from "./medusa-projection-due.js";
 import {
   MEDUSA_ORPHAN_METADATA_KEY,
@@ -457,6 +468,8 @@ export interface MedusaProjectionSchedulerDeps {
   runLivestockArrivals?: () => Promise<LivestockArrivalsOutcome>;
   /** A boltban maradt élő állat fajta letörlésének köre (kártya 4b30b373). */
   runLeftoverKinds?: () => Promise<LeftoverKindReport>;
+  /** A hiányzó márka-gyűjtemények biztosítása a kör elején (kártya ec82b629). */
+  runBrandCollections?: () => Promise<BrandCollectionsOutcome>;
 }
 
 /**
@@ -500,6 +513,7 @@ export class MedusaProjectionScheduler
   private readonly homepageOn: () => Promise<boolean>;
   private readonly runLivestockArrivals: () => Promise<LivestockArrivalsOutcome>;
   private readonly runLeftoverKinds: () => Promise<LeftoverKindReport>;
+  private readonly runBrandCollections: () => Promise<BrandCollectionsOutcome>;
   /** Az első lefutás összegzést is naplóz (ez a futás látható jele), a többi csak, ha törölt valamit. */
   private fajtaElsoKor = true;
   /** Hany URES kor telt el egymas utan. A nem-ures kor nullazza. */
@@ -616,6 +630,52 @@ export class MedusaProjectionScheduler
           // lusta: a bolt SKU-listajat csak akkor olvassuk, ha van kotes-sor nelkuli, fajtat viselo bolti sor
           pairing: async () => (await skuParositas(service, database)).osToShop,
           apply: true,
+        });
+      });
+    this.runBrandCollections =
+      deps?.runBrandCollections ??
+      (async () => {
+        const client = await medusaClientForProjection(
+          storedCredentialProvider(),
+          {
+            stdout: (value) => this.logNemUres(value, "log"),
+            stderr: (value) => this.logNemUres(value, "warn"),
+          },
+        );
+        const links = new MedusaBrandLinkRepository();
+        const service = new MedusaBrandImportService(links);
+        const brands = await prisma.brand.findMany({
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            isActive: true,
+            archivedAt: true,
+          },
+        });
+        return ensureBrandCollections({
+          plan: () => service.plan(client, brands),
+          apply: () => service.run(client, brands, this.now()),
+          mappedAmong: async (ids) => {
+            const wanted = new Set(ids);
+            return (await links.all())
+              .filter((row) => wanted.has(row.brandId))
+              .map((row) => row.brandId);
+          },
+          touchBrands: async (ids, now) =>
+            ids.length
+              ? (
+                  await prisma.brand.updateMany({
+                    where: { id: { in: ids } },
+                    data: { updatedAt: now },
+                  })
+                ).count
+              : 0,
+          now: () => this.now(),
+          refusedReason: (error) =>
+            error instanceof MedusaBrandImportRefusedError
+              ? error.reason
+              : null,
         });
       });
     this.homepageOn =
@@ -737,6 +797,8 @@ export class MedusaProjectionScheduler
       közül egyik sem mozdul, és a bolt a régi árat tartja. Az akciós termékek
       állnak elöl, hogy egy teli kör ne szorítsa ki őket.
     */
+    // A MÁRKA-GYŰJTEMÉNYEK ELŐBB, a termékek előtt: ami itt leképeződik, azt a termék-vetítés ugyanebben a körben viszi
+    await this.markaGyujtemenyKor();
     await this.atiranyitasKor();
     await this.landingKor();
     await this.kezdolapKor();
@@ -987,6 +1049,31 @@ export class MedusaProjectionScheduler
     } catch (error) {
       this.naplo.warn(
         `Landing oldalak: a kor nem futott le (${
+          error instanceof Error ? error.message : String(error)
+        })`,
+      );
+    }
+  }
+
+  /**
+   * A HIÁNYZÓ MÁRKA-GYŰJTEMÉNYEK EGY KÖRE (kártya ec82b629), a kör elején: a hiba csak napló, a termék-vetítést nem állítja
+   * meg. Kapcsolóval, alapból KI (a lépés a boltba ír). Az ütközés és a megállás figyelmeztetés minden körben, a változás
+   * egy napló-sor.
+   */
+  private async markaGyujtemenyKor(): Promise<void> {
+    if (!ensureBrandCollectionsInRound(this.environment)) return;
+    try {
+      const eredmeny = await this.runBrandCollections();
+      if (
+        eredmeny.status === "refused" ||
+        (eredmeny.status === "applied" && eredmeny.conflicts.length)
+      )
+        this.naplo.warn(describeBrandCollections(eredmeny));
+      else if (eredmeny.status !== "unchanged")
+        this.naplo.log(describeBrandCollections(eredmeny));
+    } catch (error) {
+      this.naplo.warn(
+        `Márka-gyűjtemények: a kör nem futott le (${
           error instanceof Error ? error.message : String(error)
         })`,
       );
