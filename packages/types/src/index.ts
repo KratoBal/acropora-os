@@ -1047,6 +1047,21 @@ export type {
   SimplePaySyncStatus,
   SimplePayTransactionLine,
 } from "./integrations/simplepay-settlement.js";
+export type {
+  StripeLineError,
+  StripeLineStatus,
+  StripeManualApprovalInput,
+  StripePayoutDetail,
+  StripePayoutError,
+  StripePayoutListResponse,
+  StripePayoutStatus,
+  StripePayoutSummary,
+  StripeResolutionSource,
+  StripeSyncRunSummary,
+  StripeSyncState,
+  StripeSyncStatus,
+  StripeTransactionLine,
+} from "./integrations/stripe-settlement.js";
 export {
   AI_ACCURACY_RATINGS,
   AI_LANGUAGE_RATINGS,

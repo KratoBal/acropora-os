@@ -54,6 +54,7 @@ import { GlsSettlementModule } from "./integrations/gls/gls-settlement.module.js
 import { PaidMarksModule } from "./billing/paid-marks/paid-marks.module.js";
 import { EbizModule } from "./integrations/ebiz/ebiz.module.js";
 import { SimplePaySettlementModule } from "./integrations/simplepay/simplepay-settlement.module.js";
+import { StripeSettlementModule } from "./integrations/stripe-settlement/stripe-settlement.module.js";
 import { InventoryModule } from "./inventory/inventory.module.js";
 import { AssetCategoriesModule } from "./asset-categories/asset-categories.module.js";
 import { AssetFunctionsModule } from "./asset-functions/asset-functions.module.js";
@@ -148,6 +149,7 @@ import { OperationsLogModule } from "./operations-log/operations-log.module.js";
     PaidMarksModule,
     EbizModule,
     SimplePaySettlementModule,
+    StripeSettlementModule,
     SuppliersModule,
     PurchasingModule,
     ContentModule,
