@@ -399,6 +399,7 @@ describe("AuthController", () => {
         REEFCLUB_WEB_URL: "https://reefclub-staging.acropora.hu",
         REEFCLUB_LINKING_ENABLED: "true",
         MEDUSA_WEBSHOP_COUPONS: "true",
+        MEDUSA_WEBSHOP_SHIPPING_SETTINGS: "true",
       },
     ]) {
       const controller = new AuthController(

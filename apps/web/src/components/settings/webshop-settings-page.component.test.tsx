@@ -88,6 +88,8 @@ describe("Webshop beállítások", () => {
       "/webshop/kuponok",
       // the customer discount (card 20713f62): the same switch and right as the coupons
       "/webshop/egyedi-kedvezmenyek",
+      // the shipping fees and payment methods (card e0e2378b): behind their own served switch
+      "/webshop/szallitas-fizetes",
       "/admin/kezdolap",
     ]);
     expect(links.filter((link) => !existsSync(oldalFajlja(link.href)))).toEqual(
@@ -105,11 +107,16 @@ describe("Webshop beállítások", () => {
     expect(without).not.toContain("/admin/kezdolap");
     expect(without).not.toContain("/webshop/kuponok");
     expect(without).not.toContain("/webshop/egyedi-kedvezmenyek");
+    expect(without).not.toContain("/webshop/szallitas-fizetes");
     expect(without).toContain("/admin/integrations/medusa/connection");
   });
 
   it("the served switches bring their cards", () => {
-    auth.navigation = [{ id: "homepage-content" }, { id: "webshop-coupons" }];
+    auth.navigation = [
+      { id: "homepage-content" },
+      { id: "webshop-coupons" },
+      { id: "webshop-shipping-settings" },
+    ];
     render(<WebshopSettingsPage />);
     expect(hrefsOnScreen().sort()).toEqual(
       links.map((link) => link.href).sort(),
@@ -117,7 +124,11 @@ describe("Webshop beállítások", () => {
   });
 
   it("shows each role exactly the cards its rights reach", () => {
-    auth.navigation = [{ id: "homepage-content" }, { id: "webshop-coupons" }];
+    auth.navigation = [
+      { id: "homepage-content" },
+      { id: "webshop-coupons" },
+      { id: "webshop-shipping-settings" },
+    ];
     for (const role of USER_ROLES) {
       auth.role = role;
       const { unmount } = render(<WebshopSettingsPage />);

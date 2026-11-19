@@ -70,7 +70,9 @@ export type NavigationVisibility =
  * no customer gets a letter about a service that is not there, or a localhost link.
  *
  * `webshop-coupons` is `MEDUSA_WEBSHOP_COUPONS=true`: the coupon list and entry write the TEST shop's promotions
- * (card 393ae5cb), so they exist only where the OS may write it.
+ * (card 393ae5cb), so they exist only where the OS may write it. `webshop-shipping-settings` is
+ * `MEDUSA_WEBSHOP_SHIPPING_SETTINGS=true`: the shipping fees and the payment methods per shipping method write the TEST
+ * shop's settings (card e0e2378b), so they exist only where the OS may write it.
  *
  * `jev-product-enrichment` is `JEV_PRODUCT_ENRICHMENT` not being `off`
  * (docs/jev-product-intelligence/v1-discovery.md, answer 6). Only the server
@@ -84,6 +86,7 @@ export const NAVIGATION_FEATURES = [
   "homepage-content",
   "reefclub-linking",
   "webshop-coupons",
+  "webshop-shipping-settings",
 ] as const;
 export type NavigationFeature = (typeof NAVIGATION_FEATURES)[number];
 
@@ -614,6 +617,17 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
     feature: "webshop-coupons",
+  },
+  {
+    /**
+     * A WEBSHOP SZÁLLÍTÁSI DÍJAI ÉS FIZETÉSI MÓDJAI (/webshop/szallitas-fizetes; kártya e0e2378b). Nem menüpont: a Webshop
+     * beállítások lap kártyája. Ugyanaz a jog, mint a végpontoké (`settings.manage`), és csak ahol az OS a teszt-webshopba
+     * írhat (`webshop-shipping-settings`).
+     */
+    id: "webshop-shipping-settings",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+    feature: "webshop-shipping-settings",
   },
   {
     id: "settings-general",

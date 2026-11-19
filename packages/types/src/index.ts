@@ -2378,3 +2378,23 @@ export type {
   WebshopLoyaltyEntry,
   WebshopOrderLoyalty,
 } from "./webshop-order-loyalty.js";
+export {
+  impossiblePaymentReason,
+  parseWebshopPaymentMatrixInput,
+  parseWebshopShippingFeesInput,
+  WEBSHOP_PAYMENT_ROLE_LABELS,
+  WEBSHOP_PAYMENT_ROLES,
+  WEBSHOP_SHIPPING_FEE_MAX,
+  WEBSHOP_SHIPPING_FEES,
+  WEBSHOP_SHIPPING_ROLE_LABELS,
+  WEBSHOP_SHIPPING_ROLES,
+} from "./webshop-shipping-settings.js";
+export type {
+  WebshopPaymentMatrix,
+  WebshopPaymentMatrixParse,
+  WebshopShippingFeeField,
+  WebshopShippingFees,
+  WebshopShippingFeesParse,
+  WebshopShippingRole,
+  WebshopShippingSettings,
+} from "./webshop-shipping-settings.js";

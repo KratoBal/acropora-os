@@ -371,6 +371,19 @@ export const WEBSHOP_SETTINGS_AREAS: SettingsArea[] = [
     ],
   },
   {
+    title: "Szállítás és fizetés",
+    icon: "cart",
+    links: [
+      {
+        label: "Szállítási díjak és fizetési módok",
+        description:
+          "A szállítási díjak, az ingyenes szállítás küszöbei, az utánvét díja, és szállítási módonként a fizetési módok sorrendje.",
+        href: "/webshop/szallitas-fizetes",
+        entryId: "webshop-shipping-settings",
+      },
+    ],
+  },
+  {
     title: "Kezdőlap",
     icon: "store",
     links: [
