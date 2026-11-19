@@ -815,8 +815,16 @@ describe("MedusaProjectionScheduler, az akció határa", () => {
     const { kapott } = await korLista(
       [
         { productId: "jovo", saleStartsAt: ORAJA(30), saleEndsAt: null },
-        { productId: "vetitve", saleStartsAt: ORAJA(-20), saleEndsAt: null },
-        { productId: "kotetlen", saleStartsAt: ORAJA(-20), saleEndsAt: null },
+        {
+          productId: "vetitve",
+          saleStartsAt: ORAJA(-20),
+          saleEndsAt: ORAJA(-10),
+        },
+        {
+          productId: "kotetlen",
+          saleStartsAt: ORAJA(-20),
+          saleEndsAt: ORAJA(-10),
+        },
       ],
       [
         { entityId: "jovo", lastSyncedAt: ORAJA(-60) },
@@ -836,7 +844,14 @@ describe("MedusaProjectionScheduler, az akció határa", () => {
       lte: MOST_ORA,
     };
     assert.deepEqual(args.where, {
-      OR: [{ saleStartsAt: ablak }, { saleEndsAt: ablak }],
+      OR: [
+        { saleStartsAt: ablak },
+        { saleEndsAt: ablak },
+        {
+          saleStartsAt: { lte: MOST_ORA },
+          OR: [{ saleEndsAt: null }, { saleEndsAt: { gt: MOST_ORA } }],
+        },
+      ],
       product: { isActive: true, webshopExcluded: false },
     });
   });
@@ -943,7 +958,7 @@ describe("MedusaProjectionScheduler, a saját akció határa", () => {
         {
           productId: "vetitve",
           sellingSaleStartsAt: ORAJA(-20),
-          sellingSaleEndsAt: ORAJA(600),
+          sellingSaleEndsAt: ORAJA(-10),
         },
       ],
       [
@@ -965,13 +980,135 @@ describe("MedusaProjectionScheduler, a saját akció határa", () => {
     };
     assert.deepEqual(args.where, {
       isActive: true,
-      OR: [{ sellingSaleStartsAt: ablak }, { sellingSaleEndsAt: ablak }],
+      OR: [
+        { sellingSaleStartsAt: ablak },
+        { sellingSaleEndsAt: ablak },
+        {
+          sellingSaleStartsAt: { lte: MOST_ORA },
+          OR: [
+            { sellingSaleEndsAt: null },
+            { sellingSaleEndsAt: { gt: MOST_ORA } },
+          ],
+        },
+      ],
       product: {
         isActive: true,
         webshopExcluded: false,
         catalogAuthority: "ACROPORA",
       },
     });
+  });
+});
+
+/**
+ * A FUTÓ AKCIÓ EGYSZERI ÚJRA-VETÍTÉSE (card 54bb3779, a #2733 éles kiadása). A #2733 az akció vetítésének alakját változtatta; a már
+ * vetített, futó akciójú termék a határa miatt nem esedékes, ezért a régi alakban maradna. MI PIROSÍT: a futó akció (UNAS tükör vagy
+ * saját) a vetítés UTÁN sem kerül be az első körben; ugyanabban a folyamatban újra bekerül (nem egyszeri); a keret által levágott
+ * nem számít vetítettnek; a lejárt, a jövőbeli vagy a kötés nélküli bekerül; a vég nélküli futó akció kimarad.
+ */
+describe("MedusaProjectionScheduler, a futó akció egyszeri újra-vetítése", () => {
+  const MOST_ORA = new Date("2026-11-19T03:00:00.000Z");
+  const ORAJA = (perc: number) => new Date(MOST_ORA.getTime() + perc * 60_000);
+  const futo = (productId: string, vegeperc: number | null = 600) => ({
+    productId,
+    saleStartsAt: ORAJA(-300),
+    saleEndsAt: vegeperc === null ? null : ORAJA(vegeperc),
+  });
+  const sajatFuto = (productId: string) => ({
+    productId,
+    sellingSaleStartsAt: ORAJA(-300),
+    sellingSaleEndsAt: ORAJA(600),
+  });
+  // a vetítés a határ UTÁN volt: a régi szabály szerint nem esedékes
+  const vetitve = (...azonositok: string[]) =>
+    azonositok.map((entityId) => ({ entityId, lastSyncedAt: ORAJA(-5) }));
+
+  const korok = async (
+    meret: number,
+    kor: number,
+    akcioSorok: Parameters<typeof adatbazis>[3],
+    lekepezesek: { entityId: string; lastSyncedAt: Date | null }[],
+    sajatAkcioSorok: {
+      productId: string;
+      sellingSaleStartsAt: Date | null;
+      sellingSaleEndsAt: Date | null;
+    }[] = [],
+  ) => {
+    const { db } = adatbazis(
+      [],
+      lekepezesek,
+      undefined,
+      akcioSorok,
+      [],
+      [],
+      [],
+      [],
+      sajatAkcioSorok,
+    );
+    const { run, kapott } = futtato();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: {
+        ...BEKAPCSOLVA,
+        MEDUSA_PROJECTION_SCHEDULE_BATCH_SIZE: String(meret),
+      } as NodeJS.ProcessEnv,
+      logger: naplo().logger,
+      now: () => MOST_ORA,
+    });
+    for (let i = 0; i < kor; i += 1) await scheduler.runOnce();
+    return kapott;
+  };
+
+  it("a vetítés után futó tükör-akció az első körben bekerül, a másodikban nem", async () => {
+    const kapott = await korok(100, 2, [futo("tukros")], vetitve("tukros"));
+    assert.deepEqual(kapott, [["tukros"]]);
+  });
+
+  it("a saját futó akció is: az első körben bekerül, a másodikban nem", async () => {
+    const kapott = await korok(100, 2, [], vetitve("sajat"), [
+      sajatFuto("sajat"),
+    ]);
+    assert.deepEqual(kapott, [["sajat"]]);
+  });
+
+  it("a lejárt és a jövőbeli akció, a kötés nélküli és a vég nélküli futó akció a határ szabálya szerint marad", async () => {
+    const kapott = await korok(
+      100,
+      1,
+      [
+        {
+          productId: "lejart",
+          saleStartsAt: ORAJA(-300),
+          saleEndsAt: ORAJA(-10),
+        },
+        { productId: "jovo", saleStartsAt: ORAJA(60), saleEndsAt: ORAJA(600) },
+        futo("kotetlen"),
+      ],
+      vetitve("lejart", "jovo"),
+    );
+    assert.deepEqual(kapott, []);
+  });
+
+  it("a vég nélküli futó akció is újra-vetítődik", async () => {
+    const kapott = await korok(
+      100,
+      1,
+      [futo("nyitott", null)],
+      vetitve("nyitott"),
+    );
+    assert.deepEqual(kapott, [["nyitott"]]);
+  });
+
+  it("a keret által levágott futó akció a következő körben jön, a vitt nem ismétlődik", async () => {
+    const kapott = await korok(
+      1,
+      3,
+      [futo("egy"), futo("ketto")],
+      vetitve("egy", "ketto"),
+    );
+    assert.deepEqual(kapott, [["egy"], ["ketto"]]);
   });
 });
 
