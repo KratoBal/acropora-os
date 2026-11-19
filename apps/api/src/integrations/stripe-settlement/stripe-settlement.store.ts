@@ -12,6 +12,7 @@ import type {
   StripeTransactionLine,
 } from "@acropora/types";
 
+import { stripeLineChanged } from "./stripe-line-change.js";
 import { payoutTotals } from "./stripe-payout-totals.js";
 
 /** A line to store: the feed's figures and the resolution (see `stripe-resolution.ts`). Money in major units. */
@@ -287,7 +288,26 @@ export class PrismaStripeSettlementStore implements StripeSettlementStore {
       for (const line of payout.lines) {
         const existing = await tx.stripeTransactionLine.findUnique({
           where: { stripeTransactionId: line.stripeTransactionId },
-          select: { id: true, resolutionSource: true },
+          select: {
+            id: true,
+            resolutionSource: true,
+            type: true,
+            reportingCategory: true,
+            stripeCreatedAt: true,
+            currency: true,
+            amount: true,
+            fee: true,
+            net: true,
+            paymentIntentId: true,
+            chargeId: true,
+            refundId: true,
+            webshopOrderIds: true,
+            orderNumbers: true,
+            orderTotal: true,
+            invoiceNumbers: true,
+            status: true,
+            errorCode: true,
+          },
         });
         // a line a person approved stays as approved: the figures are Stripe's and do not move
         if (existing?.resolutionSource === "MANUAL") continue;
@@ -312,12 +332,14 @@ export class PrismaStripeSettlementStore implements StripeSettlementStore {
             line.status === "RESOLVED" ? ("PAYMENT_INTENT" as const) : null,
           errorCode: line.errorCode,
         };
-        if (existing)
-          await tx.stripeTransactionLine.update({
-            where: { id: existing.id },
-            data,
-          });
-        else
+        // an unchanged line is not written: its `updatedAt` is the version an approval is checked against
+        if (existing) {
+          if (stripeLineChanged(existing, data))
+            await tx.stripeTransactionLine.update({
+              where: { id: existing.id },
+              data,
+            });
+        } else
           await tx.stripeTransactionLine.create({
             data: {
               ...data,
