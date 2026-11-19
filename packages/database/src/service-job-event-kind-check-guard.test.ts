@@ -44,6 +44,38 @@ export function kindsMissingFromCheck(
   return values.filter((value) => !checkSql.includes(`'${value}'`));
 }
 
+/** The kinds that speak of ONE worksheet: their `worksheetId` is set at insert and NULLED by `ON DELETE SET NULL` when the worksheet goes. */
+export const WORKSHEET_KINDS = [
+  "WORKSHEET_ATTACHED",
+  "WORKSHEET_DETACHED",
+  "WORKSHEET_LINKED",
+  "WORKSHEET_UNLINKED",
+] as const;
+
+/** The `OR (...)` branch of the CHECK that names a kind, or `null`. */
+export function branchFor(checkSql: string, kind: string): string | null {
+  const body = checkSql.slice(checkSql.indexOf("CHECK"));
+  return (
+    body.split(/\n\s*OR\s*\(/).find((branch) => branch.includes(`'${kind}'`)) ??
+    null
+  );
+}
+
+/**
+ * WHICH WORKSHEET KINDS THE CHECK FORBIDS A NULL `worksheetId` ON. `ServiceJobEvent.worksheetId` is `ON DELETE SET NULL`, and Postgres
+ * runs the CHECK on the row the referential action rewrites: a branch that demands `worksheetId IS NOT NULL` makes the DELETE of a
+ * worksheet that has such an event fail (barracuda, #2753; on main it already held for `WORKSHEET_DETACHED`).
+ */
+export function kindsForbiddingNullWorksheet(
+  checkSql: string,
+  kinds: readonly string[],
+): string[] {
+  return kinds.filter((kind) => {
+    const branch = branchFor(checkSql, kind);
+    return branch === null || /"worksheetId"\s+IS\s+NOT\s+NULL/.test(branch);
+  });
+}
+
 describe("ServiceJobEventKind and its kind/fields CHECK", () => {
   const schema = readFileSync(new URL("schema.prisma", root), "utf8");
   const migrations = readdirSync(new URL("migrations/", root), {
@@ -98,6 +130,45 @@ describe("ServiceJobEventKind and its kind/fields CHECK", () => {
         "x",
       ).name,
       "2027_b",
+    );
+  });
+
+  it("lets every worksheet kind keep a NULL worksheetId, so deleting a worksheet with a log row can SET NULL", () => {
+    const check = latestCheck(migrations, "ServiceJobEvent_kind_fields_agree");
+    assert.deepEqual(
+      kindsForbiddingNullWorksheet(check.sql, WORKSHEET_KINDS),
+      [],
+      check.name,
+    );
+  });
+
+  // NEGATIVE CONTROLS: the old shape (worksheetId IS NOT NULL on the worksheet branch) is named, and so is a kind with no branch
+  it("names a worksheet kind whose branch demands a worksheet", () => {
+    const old = `CHECK (
+      ("kind" = 'STATUS_CHANGE' AND "toStatus" IS NOT NULL AND "worksheetId" IS NULL)
+      OR ("kind" IN ('WORKSHEET_ATTACHED', 'WORKSHEET_LINKED') AND "toStatus" IS NULL AND "worksheetId" IS NOT NULL)
+    )`;
+    assert.deepEqual(
+      kindsForbiddingNullWorksheet(old, [
+        "WORKSHEET_ATTACHED",
+        "WORKSHEET_LINKED",
+      ]),
+      ["WORKSHEET_ATTACHED", "WORKSHEET_LINKED"],
+    );
+    assert.deepEqual(
+      kindsForbiddingNullWorksheet(old, ["WORKSHEET_UNLINKED"]),
+      ["WORKSHEET_UNLINKED"],
+    );
+  });
+
+  it("does not blame a kind that sits in a branch allowing NULL", () => {
+    const fixed = `CHECK (
+      ("kind" = 'STATUS_CHANGE' AND "toStatus" IS NOT NULL AND "worksheetId" IS NULL)
+      OR ("kind" IN ('WORKSHEET_LINKED') AND "toStatus" IS NULL)
+    )`;
+    assert.deepEqual(
+      kindsForbiddingNullWorksheet(fixed, ["WORKSHEET_LINKED"]),
+      [],
     );
   });
 });

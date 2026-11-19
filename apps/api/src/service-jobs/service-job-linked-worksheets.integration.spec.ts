@@ -284,7 +284,13 @@ describe(
       );
     });
 
-    it("a lap vagy a munkalap törlése elviszi a hivatkozást, a másikat nem bántja", async () => {
+    /*
+      A TORLES A NAPLOSOR MELLETT (barracuda, #2753): a `ServiceJobEvent.worksheetId` `ON DELETE SET NULL`, a Postgres pedig a CHECK-et a
+      hivatkozasi muvelet altal modositott sorra is lefuttatja. Egy munkalap torlese, amelyhez HOZZAKAPCSOLAS vagy LEVETEL naplosor
+      tartozik, ezert elbukna, ha a megkotes a munkalap-fajtakon `worksheetId IS NOT NULL`-t kovetelne. A fixture munkalapjai szam
+      nelkuli piszkozatok: a torlesuket a szolgaltatas is engedi.
+    */
+    it("a hozzákapcsolt, majd törölt munkalap törlése sikerül, a naplósor megmarad worksheetId nélkül, a jegyzettel", async () => {
       await repository.link({
         jobId: jobB,
         worksheetId: ws["w-medence"]!,
@@ -298,12 +304,39 @@ describe(
         note: note("w-bejarat"),
       });
       await prisma.worksheet.delete({ where: { id: ws["w-bejarat"]! } });
+      const events = await prisma.serviceJobEvent.findMany({
+        where: { serviceJobId: jobB, kind: "WORKSHEET_LINKED" },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { worksheetId: true, note: true },
+      });
+      assert.deepEqual(events, [
+        { worksheetId: ws["w-medence"]!, note: note("w-medence") },
+        { worksheetId: null, note: note("w-bejarat") },
+      ]);
+    });
+
+    it("a levett kapcsolat naplósora mellett a munkalap törlése is sikerül (a mainen ma is álló DETACHED eset párja)", async () => {
+      // `w-jegy` a korábbi tesztben már hozzá lett kapcsolva és le lett véve: UNLINKED sor tartozik hozzá
       assert.equal(
-        await prisma.serviceJobLinkedWorksheet.count({
-          where: { serviceJobId: jobB },
+        await prisma.serviceJobEvent.count({
+          where: { worksheetId: ws["w-jegy"]!, kind: "WORKSHEET_UNLINKED" },
         }),
         1,
       );
+      await prisma.worksheet.delete({ where: { id: ws["w-jegy"]! } });
+      assert.equal(
+        await prisma.serviceJobEvent.count({
+          where: {
+            serviceJobId: jobA,
+            kind: "WORKSHEET_UNLINKED",
+            worksheetId: null,
+          },
+        }),
+        1,
+      );
+    });
+
+    it("a lap törlése elviszi a hivatkozást, a munkalapot nem bántja", async () => {
       await prisma.serviceJob.delete({ where: { id: jobB } });
       assert.equal(
         await prisma.serviceJobLinkedWorksheet.count({
