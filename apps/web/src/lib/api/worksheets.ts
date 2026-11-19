@@ -32,7 +32,62 @@ function worksheetPath(id: string, suffix = "") {
   return `${base}/${encodeURIComponent(id)}${suffix}`;
 }
 
+/** A kijelölt lapok kiadott PDF-jei egy fájlban: a fájl és a kihagyottakról szóló fejlécek (kártya a785e580). */
+export interface BulkSheetsResult {
+  blob: Blob;
+  fileName: string;
+  included: number;
+  skipped: number;
+  /** A kihagyott lapok sorszámai (a sorszám nélküli piszkozat nem szerepel, de a `skipped` számolja). */
+  skippedNumbers: string[];
+}
+
+/** A `Content-Disposition` fájlneve (`filename*=UTF-8''...`), vagy az alapérték. */
+export function dispositionFileName(
+  header: string | null,
+  fallback: string,
+): string {
+  const match = /filename\*=UTF-8''([^;]+)/i.exec(header ?? "");
+  if (!match) return fallback;
+  try {
+    return decodeURIComponent(match[1]!);
+  } catch {
+    return fallback;
+  }
+}
+
 export const worksheetsApi = {
+  /**
+   * A kijelölt lapok kiadott PDF-jei: `zip` a letöltéshez, `merged` a nyomtatáshoz. A kihagyottak (nincs még
+   * kiadott PDF-jük) száma és sorszámai a válasz fejlécében jönnek.
+   */
+  async bulkSheets(
+    token: string,
+    ids: readonly string[],
+    format: "zip" | "merged",
+  ): Promise<BulkSheetsResult> {
+    const response = await fetch(`${API_PREFIX}${base}/bulk/sheets`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        ...apiAuthHeaders(token, "POST"),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ ids, format }),
+    });
+    if (!response.ok) throw await apiErrorOf(response);
+    const numbers = response.headers.get("X-Sheets-Skipped-Numbers") ?? "";
+    return {
+      blob: await response.blob(),
+      fileName: dispositionFileName(
+        response.headers.get("Content-Disposition"),
+        format === "zip" ? "munkalapok.zip" : "munkalapok.pdf",
+      ),
+      included: Number(response.headers.get("X-Sheets-Included") ?? "0"),
+      skipped: Number(response.headers.get("X-Sheets-Skipped") ?? "0"),
+      skippedNumbers: numbers ? numbers.split(",") : [],
+    };
+  },
   list(token: string, query: URLSearchParams, signal?: AbortSignal) {
     return apiRequest<WorksheetListResponse>(`${base}?${query}`, token, {
       signal,
