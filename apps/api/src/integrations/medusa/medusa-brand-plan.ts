@@ -186,6 +186,16 @@ export function planBrandImport(
     if (!handleSzerint.has(collection.handle))
       handleSzerint.set(collection.handle, collection);
   const sorunk = new Map(mappings.map((m) => [m.ourId, m.medusaId]));
+  /*
+    MASIK MARKAE-E A GYUJTEMENY: csak akkor, ha a kulso azonositoja egy MAI markank azonositoja (kartya ec82b629, merve a teszt
+    kirakaton 2026-11-19 15:51 UTC). A teszt Medusa 09-15-i 65 gyujtemenye a 09-25-i OS-ujratoltes ELOTTI marka-azonositokat
+    viseli: ezek ma egyik markankat sem jelolik. A korabbi alak barmilyen kulso azonositot "masik marka"-nak vett, igy a sajat,
+    lekepezett 59 marka-gyujtemenyunket utkozeskent jelentette. A halott azonosito ugy szamit, mintha nem lenne: a sajat sorunk
+    ervenyes (`skip`), a handle-ag pedig a tartalmi feltetelre megy.
+  */
+  const maiMarkak = new Set(brands.map((b) => b.id));
+  const masikMarkae = (collection: ExistingCollection): boolean =>
+    collection.externalId !== null && maiMarkak.has(collection.externalId);
 
   const create: BrandCreate[] = [];
   const mapOnly: BrandMapping[] = [];
@@ -229,13 +239,13 @@ export function planBrandImport(
       continue;
     }
 
-    // ERVENYES SOR, a cel gyujtemeny letezik (kulso azonosito nelkul is): nincs teendo
+    // ERVENYES SOR, a cel gyujtemeny letezik (kulso azonosito nelkul vagy halott azonositoval is): nincs teendo
     const sorunkGyujtemenye = aSorunk
       ? (gyujtemenyIdSzerint.get(aSorunk) ?? null)
       : null;
     if (sorunkGyujtemenye) {
       // a sor egy MASIK marka azonositojat viselo gyujtemenyre mutat: ket marka egy gyujtemenyen, ember donti el
-      if (sorunkGyujtemenye.externalId)
+      if (masikMarkae(sorunkGyujtemenye))
         handleTaken.push({
           ourId: brand.id,
           handle: sorunkGyujtemenye.handle,
@@ -248,8 +258,8 @@ export function planBrandImport(
 
     const foglalo = handleSzerint.get(brand.slug) ?? null;
     if (foglalo) {
-      if (foglalo.externalId) {
-        // MASIK marka azonositojat viseli (a miénket nem, azt fent kezeltuk): nem a mienk
+      if (masikMarkae(foglalo)) {
+        // MASIK MAI marka azonositojat viseli (a miénket nem, azt fent kezeltuk): nem a mienk
         handleTaken.push({
           ourId: brand.id,
           handle: brand.slug,

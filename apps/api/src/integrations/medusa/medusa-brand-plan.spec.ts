@@ -293,7 +293,11 @@ describe("planBrandImport", () => {
 
   it("a masik marka azonositojat viselo, azonos handle-u gyujtemenyt nem vesszuk at: foglalt handle, nem hozunk letre", () => {
     const terv = planBrandImport(
-      [brand()],
+      // a brand-2 MAI markank (archivalt): a gyujtemenye az ove, nem halott azonosito
+      [
+        brand(),
+        brand({ id: "brand-2", name: "Masik", slug: "masik", isActive: false }),
+      ],
       [collection({ externalId: "brand-2" })],
       [],
     );
@@ -331,7 +335,11 @@ describe("planBrandImport", () => {
 
   it("az a sor, ami egy masik marka azonositojat viselo gyujtemenyre mutat, foglalt, nem ervenyes", () => {
     const terv = planBrandImport(
-      [brand()],
+      // a brand-2 MAI markank (archivalt): a gyujtemenye az ove, nem halott azonosito
+      [
+        brand(),
+        brand({ id: "brand-2", name: "Masik", slug: "masik", isActive: false }),
+      ],
       [collection({ externalId: "brand-2" })],
       [{ ourId: "brand-1", medusaId: "pcol_1" }],
     );
@@ -361,6 +369,7 @@ describe("planBrandImport", () => {
       [
         brand(),
         brand({ id: "brand-3", name: "Fauna Marin", slug: "fauna-marin" }),
+        brand({ id: "brand-2", name: "Masik", slug: "masik", isActive: false }),
       ],
       [collection({ externalId: "brand-2" })],
       [],
@@ -374,5 +383,45 @@ describe("planBrandImport", () => {
       terv.create.map((c) => c.ourId),
       ["brand-3"],
     );
+  });
+
+  /*
+    A HALOTT AZONOSITO (merve a teszt kirakaton 2026-11-19 15:51 UTC): a 09-15-i gyujtemenyek a 09-25-i OS-ujratoltes elotti
+    marka-azonositokat viselik. MI PIROSIT: ha a sajat, lekepezett gyujtemenyunk halott azonositoval "masik marka" lesz (a mert
+    59 hamis utkozes); ha a halott azonositoju, azonos handle-u gyujtemeny utkozes lesz a tartalmi feltetel helyett.
+  */
+  it("a sajat sorunk celja halott azonositot visel: ervenyes sor, skip, nem utkozes", () => {
+    const terv = planBrandImport(
+      [brand()],
+      [collection({ externalId: "cmtr-regi-azonosito" })],
+      [{ ourId: "brand-1", medusaId: "pcol_1" }],
+    );
+
+    assert.deepEqual(terv.skip, ["brand-1"]);
+    assert.deepEqual(terv.handleTaken, []);
+    assert.deepEqual(terv.create, []);
+  });
+
+  it("a halott azonositoju, azonos handle-u gyujtemeny a tartalmi feltetelre megy, nem utkozes", () => {
+    const nelkule = planBrandImport(
+      [brand()],
+      [collection({ externalId: "cmtr-regi-azonosito" })],
+      [],
+    );
+    assert.deepEqual(
+      nelkule.handleTaken.map((h) => h.reason),
+      ["content-unchecked"],
+    );
+
+    const tartalommal = planBrandImport(
+      [brand()],
+      [collection({ externalId: "cmtr-regi-azonosito" })],
+      [],
+      new Map([
+        ["pcol_1", { total: 4, sameBrand: 4, otherBrand: 0, unknown: 0 }],
+      ]),
+    );
+    assert.deepEqual(tartalommal.mapByHandle, ["brand-1"]);
+    assert.deepEqual(tartalommal.handleTaken, []);
   });
 });
