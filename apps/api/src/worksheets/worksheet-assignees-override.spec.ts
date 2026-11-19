@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { Prisma } from "@acropora/database";
+
 import { WorksheetsRepository } from "./worksheets.repository.js";
 
 /**
@@ -82,5 +84,79 @@ describe("WorksheetsRepository.setAssignees: a felülbírálás", () => {
       { ok: false, added: [] },
     );
     assert.deepEqual(calls, []);
+  });
+});
+
+describe("WorksheetsRepository.createDraft: a követés kezdőértéke", () => {
+  /**
+   * MI PIROSÍT: ha a szolgáltatás döntése (követő-e a munkalap) nem jut el a tárolt sorig; ha az alap nem hamis (minden
+   * munkalap, amit nem a karbantartási lap alá nyitottak, követőnek születne).
+   */
+  const content = {
+    subject: "t",
+    description: null,
+    issueDate: null,
+    fulfillmentDate: null,
+    dueDate: null,
+    lines: [],
+    totals: {
+      netAmount: new Prisma.Decimal(0),
+      vatAmount: new Prisma.Decimal(0),
+      grossAmount: new Prisma.Decimal(0),
+    },
+  };
+
+  function fakeCreate() {
+    const created: unknown[] = [];
+    const tx = {
+      worksheetDepartment: {
+        findUniqueOrThrow: async () => ({ name: "Biotóp" }),
+      },
+      worksheet: {
+        create: async (q: unknown) => (
+          created.push(q),
+          { id: "ws-1", versions: [{ id: "v-1" }] }
+        ),
+      },
+      worksheetAsset: { createMany: async () => ({ count: 0 }) },
+      worksheetAssignee: { createMany: async () => ({ count: 0 }) },
+    };
+    const repository = new WorksheetsRepository();
+    Object.assign(repository, {
+      database: {
+        $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
+      },
+    });
+    return { repository, created };
+  }
+  const base = {
+    customerId: "c",
+    departmentId: "d",
+    content: content as never,
+    actorUserId: "u",
+  };
+
+  it("a megadott követés a lap sorába kerül", async () => {
+    const { repository, created } = fakeCreate();
+    await repository.createDraft({
+      ...base,
+      serviceJobId: "job-1",
+      followsJobAssignees: true,
+    });
+    assert.equal(
+      (created[0] as { data: { followsJobAssignees: boolean } }).data
+        .followsJobAssignees,
+      true,
+    );
+  });
+
+  it("az alap hamis: megadás nélkül a lap önálló", async () => {
+    const { repository, created } = fakeCreate();
+    await repository.createDraft(base);
+    assert.equal(
+      (created[0] as { data: { followsJobAssignees: boolean } }).data
+        .followsJobAssignees,
+      false,
+    );
   });
 });

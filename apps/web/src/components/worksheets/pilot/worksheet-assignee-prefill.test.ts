@@ -1,7 +1,6 @@
-import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, expect, it } from "vitest";
 
-import { maintenanceAssigneePrefill } from "./worksheet-assignee-prefill.js";
+import { maintenanceAssigneePrefill } from "./worksheet-assignee-prefill";
 
 /**
  * A KARBANTARTÁSI LAP FELELŐSEI AZ ÚJ MUNKALAPON (kártya d91005e9). MI PIROSÍT: hibajegynél is előtölt; egy kiosztható
@@ -18,35 +17,29 @@ describe("maintenanceAssigneePrefill", () => {
       jobAssignees: [assignee("anna"), assignee("bela"), assignee("cili")],
       candidates: kolleganak("cili", "anna", "dani"),
     });
-    assert.deepEqual(result.selected, ["anna", "cili"]);
-    assert.deepEqual(result.dropped, [{ userId: "bela", name: "BELA" }]);
+    expect(result.selected).toEqual(["anna", "cili"]);
+    expect(result.dropped).toEqual([{ userId: "bela", name: "BELA" }]);
   });
 
   it("hibajegynél semmi nem töltődik elő", () => {
-    for (const kind of ["REPAIR", "", "maintenance"]) {
-      assert.deepEqual(
+    for (const kind of ["REPAIR", "", "maintenance"])
+      expect(
         maintenanceAssigneePrefill({
           kind,
           jobAssignees: [assignee("anna")],
           candidates: kolleganak("anna"),
         }),
-        { selected: [], dropped: [] },
-      );
-    }
+      ).toEqual({ selected: [], dropped: [] });
   });
 
   it("felelős nélküli lapnál nincs mit előtölteni", () => {
-    assert.deepEqual(
+    expect(
       maintenanceAssigneePrefill({
         kind: "MAINTENANCE",
         jobAssignees: [],
         candidates: kolleganak("anna"),
       }),
-      {
-        selected: [],
-        dropped: [],
-      },
-    );
+    ).toEqual({ selected: [], dropped: [] });
   });
 
   it("egy kétszer szereplő felelős egyszer kerül a listára", () => {
@@ -55,18 +48,16 @@ describe("maintenanceAssigneePrefill", () => {
       jobAssignees: [assignee("anna"), assignee("anna")],
       candidates: kolleganak("anna"),
     });
-    assert.deepEqual(result.selected, ["anna"]);
+    expect(result.selected).toEqual(["anna"]);
   });
 
   it("ha senki nem kiosztható, mindenki a kimaradtak között van", () => {
-    const result = maintenanceAssigneePrefill({
-      kind: "MAINTENANCE",
-      jobAssignees: [assignee("anna")],
-      candidates: [],
-    });
-    assert.deepEqual(result, {
-      selected: [],
-      dropped: [{ userId: "anna", name: "ANNA" }],
-    });
+    expect(
+      maintenanceAssigneePrefill({
+        kind: "MAINTENANCE",
+        jobAssignees: [assignee("anna")],
+        candidates: [],
+      }),
+    ).toEqual({ selected: [], dropped: [{ userId: "anna", name: "ANNA" }] });
   });
 });
