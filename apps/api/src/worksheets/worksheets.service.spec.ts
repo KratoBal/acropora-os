@@ -118,6 +118,8 @@ function worksheetRow(
     // lap keletkezhet hibajegy nélkül, és addig nincs átadva, amíg a szerelő
     // nem végzett. Ami ezt méri, az `overrides`-szal állítja be.
     serviceJobId: null,
+    // alapból önálló munkalap: a karbantartási lap felelőseit nem követi (kártya d91005e9)
+    followsJobAssignees: false,
     // A BETOLTOTT JEGY IS `null` ALAPBOL, nem csak az azonosito. A ketto kulon
     // mezo: az egyik a kapcsolat, a masik az, amit a reszletlap KIIR. Ha csak
     // az azonosito allna itt, a lekepezes egy nem letezo sorra hivatkozna.
@@ -757,6 +759,73 @@ describe("WorksheetsService.create és a felelősök", () => {
       (received as { serviceJobId?: string | null }).serviceJobId,
       "job-1",
     );
+  });
+
+  /**
+   * A MUNKALAP A KARBANTARTÁSI LAP FELELŐSEIT KÖVETI, HA A NYITÁSKOR PONTOSAN AZOK A FELELŐSEI (kártya d91005e9). MI
+   * PIROSÍT: a követés hibajegy alatt vagy jegy nélkül; egy másképp kiosztott (vagy részben egyező) lista követőnek
+   * számít; az üres lista egy kiosztatlan karbantartási lap alatt nem követő (a rendszer által nyitott lap ilyen); a
+   * sorrend számít az egyezésnél.
+   */
+  describe("a karbantartási lap felelőseinek követése", () => {
+    const open = async (
+      ticket: unknown,
+      assigneeIds: string[] | undefined,
+      withJob = true,
+    ) => {
+      let received: unknown = null;
+      const service = new WorksheetsService(
+        repository({
+          ticketPartner: async () => ticket as never,
+          assignableUserIds: async (ids: readonly string[]) => new Set(ids),
+          createDraft: async (input: unknown) => {
+            received = input;
+            return "worksheet-1";
+          },
+        }),
+      );
+      await service.create(
+        {
+          ...contentDto(),
+          ...(withJob ? { serviceJobId: "job-1" } : {}),
+          ...(assigneeIds ? { assigneeIds } : {}),
+        },
+        BELSOS_KERO,
+      );
+      return (received as { followsJobAssignees?: boolean })
+        .followsJobAssignees;
+    };
+    const lap = (kind: string, ids: string[]) => ({
+      customerId: "customer-1",
+      kind,
+      assignees: ids.map((userId) => ({ userId })),
+    });
+
+    it("a lap felelőseivel azonos lista követő, sorrendtől függetlenül", async () => {
+      assert.equal(
+        await open(lap("MAINTENANCE", ["a", "b"]), ["b", "a"]),
+        true,
+      );
+    });
+
+    it("más lista, részben egyező, vagy több/kevesebb nem követő", async () => {
+      assert.equal(await open(lap("MAINTENANCE", ["a", "b"]), ["a"]), false);
+      assert.equal(await open(lap("MAINTENANCE", ["a"]), ["a", "b"]), false);
+      assert.equal(
+        await open(lap("MAINTENANCE", ["a", "b"]), ["a", "c"]),
+        false,
+      );
+    });
+
+    it("a kiosztatlan karbantartási lap alá kiosztatlanul nyitott lap követő (a rendszer által nyitott lap ilyen)", async () => {
+      assert.equal(await open(lap("MAINTENANCE", []), undefined), true);
+      assert.equal(await open(lap("MAINTENANCE", []), []), true);
+    });
+
+    it("hibajegy alatt, jegy nélkül és ismeretlen jegynél önálló, ha az azonos lista is", async () => {
+      assert.equal(await open(lap("REPAIR", ["a"]), ["a"]), false);
+      assert.equal(await open(lap("MAINTENANCE", ["a"]), ["a"], false), false);
+    });
   });
 
   /**
