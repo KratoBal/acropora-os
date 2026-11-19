@@ -8,6 +8,9 @@ import { ServiceJobDocumentsService } from "./service-job-documents.service.js";
 import { ServiceJobDeleteController } from "./service-job-delete.controller.js";
 import { ServiceJobDeleteRepository } from "./service-job-delete.repository.js";
 import { ServiceJobDeleteService } from "./service-job-delete.service.js";
+import { ServiceJobLinkedWorksheetsController } from "./service-job-linked-worksheets.controller.js";
+import { ServiceJobLinkedWorksheetsRepository } from "./service-job-linked-worksheets.repository.js";
+import { ServiceJobLinkedWorksheetsService } from "./service-job-linked-worksheets.service.js";
 import { ServiceJobsController } from "./service-jobs.controller.js";
 import { ServiceJobsRepository } from "./service-jobs.repository.js";
 import { ServiceJobsService } from "./service-jobs.service.js";
@@ -50,6 +53,7 @@ import { ServiceJobPackageService } from "./service-job-package.service.js";
     ServiceJobsController,
     ServiceJobDocumentsController,
     ServiceJobDeleteController,
+    ServiceJobLinkedWorksheetsController,
     HandoverMailController,
   ],
   providers: [
@@ -62,6 +66,8 @@ import { ServiceJobPackageService } from "./service-job-package.service.js";
     ServiceJobPackageService,
     ServiceJobDeleteRepository,
     ServiceJobDeleteService,
+    ServiceJobLinkedWorksheetsRepository,
+    ServiceJobLinkedWorksheetsService,
   ],
   exports: [ServiceJobsRepository, ServiceJobsService],
 })

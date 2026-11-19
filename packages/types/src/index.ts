@@ -369,6 +369,11 @@ export type {
   ServiceJobStatusValue,
   ServiceJobTimelineEntry,
   ServiceJobWorksheetLink,
+  ServiceJobLinkedWorksheet,
+  ServiceJobLinkedWorksheetEvent,
+  ServiceJobLinkedWorksheetsResponse,
+  ServiceJobLinkableWorksheet,
+  ServiceJobLinkableWorksheetsResponse,
 } from "./service-job-management.js";
 export type { NamedPerson } from "./person-name.js";
 export type {

@@ -1231,3 +1231,60 @@ export type MaintenancePackageMailResult =
       readonly reason: MaintenancePackageMailSendSkipReason;
     }
   | { readonly kind: "refused"; readonly message: string };
+
+/**
+ * A WORKSHEET REFERENCED ON A MAINTENANCE SHEET (card 5b366f5d, Luca 2026-11-19). A REFERENCE, NOT A MOVE: the worksheet stays
+ * where it is (its `serviceJobId` does not change) and counts into no sum, settlement or invoice of the maintenance sheet; the
+ * link only makes the settlement traceable. Deliberately WITHOUT labour hours and price: a field added here would invite a sum.
+ */
+export interface ServiceJobLinkedWorksheet {
+  worksheetId: string;
+  number: string | null;
+  subject: string;
+  createdAt: string;
+  handedOverAt: string | null;
+  status: WorksheetVersionStatus;
+  /** The location of the worksheet, root first; `null` when it cannot be derived. */
+  departmentPath: string[] | null;
+  /** The number of the ticket or maintenance sheet the worksheet lives under; `null` for a standalone worksheet. */
+  homeJobNumber: string | null;
+  /** When the link was made. */
+  linkedAt: string;
+  /** Internal only: a partner never sees who linked. */
+  linkedByName: string | null;
+}
+
+/** One entry of the link history (internal only): who linked or unlinked which worksheet, and when. */
+export interface ServiceJobLinkedWorksheetEvent {
+  id: string;
+  kind: "LINKED" | "UNLINKED";
+  worksheetId: string | null;
+  /** The worksheet number and subject as they were when the event happened. */
+  note: string | null;
+  actorName: string | null;
+  createdAt: string;
+}
+
+export interface ServiceJobLinkedWorksheetsResponse {
+  items: ServiceJobLinkedWorksheet[];
+  /** Empty for a partner: the history is the internal log. */
+  history: ServiceJobLinkedWorksheetEvent[];
+}
+
+/** A worksheet offered for linking. The ones in the maintenance sheet's own location (and below it) come first. */
+export interface ServiceJobLinkableWorksheet {
+  worksheetId: string;
+  number: string | null;
+  subject: string;
+  createdAt: string;
+  status: WorksheetVersionStatus;
+  departmentPath: string[] | null;
+  homeJobNumber: string | null;
+  inSameLocation: boolean;
+}
+
+export interface ServiceJobLinkableWorksheetsResponse {
+  items: ServiceJobLinkableWorksheet[];
+  /** True when more matched than the page shows: the picker asks for a narrower search. */
+  truncated: boolean;
+}
