@@ -1,0 +1,130 @@
+import "reflect-metadata";
+
+import assert from "node:assert/strict";
+import { after, before, describe, it } from "node:test";
+
+import { prisma } from "@acropora/database";
+
+import { integrationDatabaseGate } from "../../common/integration-database.js";
+import { nincsMaradek } from "../../common/takaritas-leltar.js";
+import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
+
+/**
+ * A STÁTUSZVÁLTÁS NAPLÓJA ÉS A KISZÁLLÍTÁSI KAPU FELÜLBÍRÁLÁSÁNAK NAPLÓJA VALÓDI ADATBÁZISON (kártya 33a0d3c7). MI PIROSÍT: ha a sima váltás
+ * bármi mást ír, mint az eddigi egy sort; ha a felülbírálás nem külön, szűrhető sor (külön `action`) az indokkal, a hiányzó résszel és az
+ * állapotokkal; ha a váltás sora a felülbírálásnál megváltozik (az alakja a régi marad); ha a két sor nem ugyanahhoz a felhasználóhoz és
+ * rendeléshez tartozik.
+ */
+const gate = integrationDatabaseGate(process.env);
+const ORDER = "order_status_audit_it";
+const EMAIL = "status-audit-it@status-audit-integration.invalid";
+
+describe(
+  "the order status audit and the shipping gate override",
+  { skip: gate.mode === "skip" },
+  () => {
+    const repository = new WebshopOrdersRepository();
+    let userId = "";
+
+    async function removeLeftovers() {
+      await prisma.auditLog.deleteMany({ where: { entityId: ORDER } });
+      await prisma.user.deleteMany({ where: { email: EMAIL } });
+    }
+
+    before(async () => {
+      if (gate.mode === "refuse") throw new Error(gate.reason);
+      await removeLeftovers();
+      userId = (
+        await prisma.user.create({
+          data: {
+            email: EMAIL,
+            displayName: "Státusz napló teszt",
+            role: "OWNER",
+            isActive: true,
+          },
+        })
+      ).id;
+    });
+
+    after(async () => {
+      if (gate.mode !== "run") return;
+      await removeLeftovers();
+      nincsMaradek([
+        {
+          nev: "AuditLog of the test order",
+          darab: await prisma.auditLog.count({ where: { entityId: ORDER } }),
+        },
+        {
+          nev: "User by test domain",
+          darab: await prisma.user.count({ where: { email: EMAIL } }),
+        },
+      ]);
+    });
+
+    const rows = () =>
+      prisma.auditLog.findMany({
+        where: { entityId: ORDER },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: {
+          userId: true,
+          action: true,
+          entityType: true,
+          metadata: true,
+        },
+      });
+
+    it("a plain change writes exactly the one status row it always did", async () => {
+      await repository.recordStatusChange({
+        userId,
+        orderId: ORDER,
+        from: "confirmed",
+        to: "stocking",
+      });
+      assert.deepEqual(await rows(), [
+        {
+          userId,
+          action: "webshop-order.status-changed",
+          entityType: "WebshopOrder",
+          metadata: { from: "confirmed", to: "stocking" },
+        },
+      ]);
+      await prisma.auditLog.deleteMany({ where: { entityId: ORDER } });
+    });
+
+    it("an overridden shipping gate adds its own row with the reason and what was missing, and leaves the status row's shape unchanged", async () => {
+      await repository.recordStatusChange({
+        userId,
+        orderId: ORDER,
+        from: "stocking",
+        to: "out_for_delivery",
+        override: {
+          reason: "A csomagot a GLS portálján adtuk fel kézzel",
+          missing: ["kiállított számla", "feladott csomag"],
+        },
+      });
+      const written = await rows();
+      assert.equal(written.length, 2);
+      const byAction = Object.fromEntries(
+        written.map((row) => [row.action, row]),
+      );
+      assert.deepEqual(byAction["webshop-order.status-changed"]!.metadata, {
+        from: "stocking",
+        to: "out_for_delivery",
+      });
+      assert.deepEqual(
+        byAction["webshop-order.shipping-gate-overridden"]!.metadata,
+        {
+          from: "stocking",
+          to: "out_for_delivery",
+          reason: "A csomagot a GLS portálján adtuk fel kézzel",
+          missing: ["kiállított számla", "feladott csomag"],
+        },
+      );
+      assert.ok(
+        written.every(
+          (row) => row.userId === userId && row.entityType === "WebshopOrder",
+        ),
+      );
+    });
+  },
+);

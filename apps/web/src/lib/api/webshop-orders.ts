@@ -84,13 +84,19 @@ export const webshopOrdersApi = {
     id: string,
     status: WebshopOrderStatus,
     notifyCustomer = true,
+    /** A kiszállítási kapu felülbírálásának indoka (kártya 33a0d3c7); csak akkor megy, ha van. */
+    overrideReason?: string,
   ) {
     return apiRequest<WebshopOrderStatusChangeResult>(
       `/webshop-orders/${encodeURIComponent(id)}/status`,
       token,
       {
         method: "POST",
-        body: JSON.stringify({ status, notifyCustomer }),
+        body: JSON.stringify({
+          status,
+          notifyCustomer,
+          ...(overrideReason ? { overrideReason } : {}),
+        }),
       },
     );
   },

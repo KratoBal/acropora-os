@@ -381,9 +381,24 @@ export interface WebshopOrderMailState {
 export type WebshopStatusMailOutcome =
   { sent: true } | { sent: false; reason: string };
 
+/**
+ * A KISZÁLLÍTÁSI KAPU FELÜLBÍRÁLÁSÁNAK INDOKA (kártya 33a0d3c7): kötelező, szabad szöveg, a naplóba kerül. Az alsó határ nem kényelem:
+ * egy "x" vagy "ok" indok nem indok, és a napló épp az indokért van.
+ */
+export const SHIPPING_OVERRIDE_REASON_MIN = 10;
+
+/**
+ * A KAPU 409-ES MONDATÁNAK ELEJE: a felület ebből ismeri fel, hogy a váltást a kiszállítási kapu tartotta vissza (és nem egy másik
+ * ütközés, például egy elavult lap), és csak akkor kínálja a felülbírálást. A mondatot a szerver ezzel kezdi (`shippingGateRefusal`).
+ */
+export const SHIPPING_GATE_SENTENCE_PREFIX = "A Kiszállítás előtt kell:";
+export const SHIPPING_OVERRIDE_REASON_MAX = 500;
+
 export interface WebshopOrderStatusChangeResult {
   order: WebshopOrderDetail;
   mail: WebshopStatusMailOutcome;
+  /** Igaz, ha a Kiszállítás a kapu felülbírálásával ment át (a napló az indokot tartalmazza). */
+  shippingGateOverridden?: boolean;
 }
 
 export interface WebshopOrderDetail {

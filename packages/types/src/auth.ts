@@ -124,6 +124,14 @@ export const PERMISSIONS = {
   TASKS_VIEW: "tasks.view",
   ORDERS_VIEW: "orders.view",
   ORDERS_MANAGE: "orders.manage",
+  /**
+   * A KISZÁLLÍTÁS KAPUJÁNAK FELÜLBÍRÁLÁSA (kártya 33a0d3c7, acrobot döntése: szerveroldali kapu naplózott felülbírálással). A Kiszállításra
+   * számla és feladott csomag nélkül nem lehet lépni, mert a kártyás levonás erre az állapotra fut; ez a jog a kivételes utat nyitja:
+   * kötelező indoklással, és az indok a naplóba kerül. SAJÁT JOG, NEM AZ `ORDERS_MANAGE`: a rendelések kezelését a saját kollégáink
+   * mind kapják, a felülbírálás viszont pénzt mozgat számla és csomag nélkül. OWNER és ADMIN kapja, a MANAGER nem (lásd
+   * `BASE_ROLE_PERMISSIONS`): egy észrevétlen felülbírálás addig áll, amíg valaki a számlát keresi.
+   */
+  ORDERS_SHIPPING_OVERRIDE: "orders.shipping-override",
   PRODUCTS_VIEW: "products.view",
   PRODUCTS_MANAGE: "products.manage",
   CUSTOMERS_VIEW: "customers.view",
@@ -402,6 +410,8 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
         permission !== PERMISSIONS.SERVICE_WORKSHEET_AMEND &&
         permission !== PERMISSIONS.SERVICE_ASSET_DELETE &&
         permission !== PERMISSIONS.SERVICE_JOB_DELETE &&
+        // A KISZÁLLÍTÁSI KAPU FELÜLBÍRÁLÁSA NEM VEZETŐI JOG: számla és csomag nélkül indítana kártyás levonást (33a0d3c7).
+        permission !== PERMISSIONS.ORDERS_SHIPPING_OVERRIDE &&
         // A REJTES SEM VEZETOI JOG: Balazs "admin jogos felhasznalot" kert
         // (2026-09-18 11:09 UTC). Egy MANAGER, aki rejthet, csendben kivehetne
         // sorokat masok listajabol -- es a hianyt senki nem keresne, mert a

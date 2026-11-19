@@ -832,6 +832,137 @@ describe("WebshopOrdersService.changeStatus", () => {
     }
   });
 
+  /*
+    A FELÜLBÍRÁLÁS (kártya 33a0d3c7). MI PIROSÍT: ha jog nélkül átmegy; ha indok nélkül átmegy; ha a felülbírált váltás nem hagy külön
+    naplósort az indokkal és a hiányzó résszel; ha a jog nélküli vagy indok nélküli kérés eljut a webshopig vagy auditba kerül; ha egy
+    nem szükséges felülbírálás is felülbírálásként naplózódik; ha a váltás eredménye nem jelzi, hogy felülbírálással ment.
+  */
+  it("an override with the right and a reason ships without the invoice and the parcel, and the audit row carries the reason and what was missing", async () => {
+    const { orders, sent, audited } = statusService({
+      invoice: false,
+      parcel: false,
+    });
+    const result = await orders.changeStatus(
+      "order_38",
+      "out_for_delivery",
+      "user_1",
+      true,
+      NOW,
+      {
+        overrideReason: "  A csomagot a GLS portálján adtuk fel kézzel  ",
+        canOverride: true,
+      },
+    );
+    assert.equal(sent.length, 1);
+    assert.equal(result.shippingGateOverridden, true);
+    assert.deepEqual(audited, [
+      {
+        userId: "user_1",
+        orderId: "order_38",
+        from: "stocking",
+        to: "out_for_delivery",
+        override: {
+          reason: "A csomagot a GLS portálján adtuk fel kézzel",
+          missing: ["kiállított számla", "feladott csomag"],
+        },
+      },
+    ]);
+  });
+
+  it("a reason without the right is a 403: nothing reaches the webshop and nothing is audited", async () => {
+    const { orders, sent, audited } = statusService({
+      invoice: false,
+      parcel: false,
+    });
+    await assert.rejects(
+      orders.changeStatus("order_38", "out_for_delivery", "user_1", true, NOW, {
+        overrideReason: "A csomagot a GLS portálján adtuk fel kézzel",
+        canOverride: false,
+      }),
+      (error: unknown) =>
+        (error as Error).constructor.name === "ForbiddenException",
+    );
+    assert.deepEqual([sent, audited], [[], []]);
+  });
+
+  it("a missing or too short reason is a 400 even with the right: nothing is sent or audited", async () => {
+    for (const reason of ["", "   ", "rövid"]) {
+      const { orders, sent, audited } = statusService({ invoice: false });
+      await assert.rejects(
+        orders.changeStatus(
+          "order_38",
+          "out_for_delivery",
+          "user_1",
+          true,
+          NOW,
+          {
+            overrideReason: reason,
+            canOverride: true,
+          },
+        ),
+        (error: unknown) =>
+          (error as Error).constructor.name === "BadRequestException",
+        JSON.stringify(reason),
+      );
+      assert.deepEqual([sent, audited], [[], []]);
+    }
+  });
+
+  it("without a reason the right alone does not open the gate: it is the 409 as before", async () => {
+    const { orders, sent } = statusService({ parcel: false });
+    await assert.rejects(
+      orders.changeStatus("order_38", "out_for_delivery", "user_1", true, NOW, {
+        canOverride: true,
+      }),
+      (error: unknown) =>
+        (error as Error).constructor.name === "ConflictException",
+    );
+    assert.equal(sent.length, 0);
+  });
+
+  it("a reason sent when the gate does not hold is ignored: no override trace, the result says it was not overridden", async () => {
+    const { orders, audited } = statusService({ invoice: true, parcel: true });
+    const result = await orders.changeStatus(
+      "order_38",
+      "out_for_delivery",
+      "user_1",
+      true,
+      NOW,
+      {
+        overrideReason: "Felesleges indoklás szöveg",
+        canOverride: true,
+      },
+    );
+    assert.equal(result.shippingGateOverridden, false);
+    assert.deepEqual(audited, [
+      {
+        userId: "user_1",
+        orderId: "order_38",
+        from: "stocking",
+        to: "out_for_delivery",
+      },
+    ]);
+  });
+
+  it("only the missing part is named in the audit: an issued invoice with no parcel logs 'feladott csomag' only", async () => {
+    const { orders, audited } = statusService({ parcel: false });
+    await orders.changeStatus(
+      "order_38",
+      "out_for_delivery",
+      "user_1",
+      true,
+      NOW,
+      {
+        overrideReason: "Csomag a portálon feladva, számmal",
+        canOverride: true,
+      },
+    );
+    assert.deepEqual(
+      (audited[0] as { override: { missing: string[] } }).override.missing,
+      ["feladott csomag"],
+    );
+  });
+
   it("with the invoice and the parcel, shipping goes (the default of the other tests)", async () => {
     const { orders, sent } = statusService({ invoice: true, parcel: true });
     await orders.changeStatus(

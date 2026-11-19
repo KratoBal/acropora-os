@@ -10,7 +10,11 @@ import {
   Query,
   StreamableFile,
 } from "@nestjs/common";
-import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
+import {
+  hasPermission,
+  PERMISSIONS,
+  type AuthenticatedUser,
+} from "@acropora/types";
 
 import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
@@ -284,6 +288,12 @@ export class WebshopOrdersController {
       body.status,
       user.id,
       body.notifyCustomer ?? true,
+      new Date(),
+      {
+        overrideReason: body.overrideReason,
+        // a külön jog dönti el, nem a rendelés-kezelés: a kapu felülbírálása számla és csomag nélkül mozgat pénzt (33a0d3c7)
+        canOverride: hasPermission(user, PERMISSIONS.ORDERS_SHIPPING_OVERRIDE),
+      },
     );
   }
 

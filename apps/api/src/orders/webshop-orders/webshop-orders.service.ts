@@ -1,5 +1,7 @@
 import {
+  BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -14,6 +16,8 @@ import {
   unfinishedSplitOf,
 } from "./webshop-order-detail.rules.js";
 import {
+  SHIPPING_OVERRIDE_REASON_MAX,
+  SHIPPING_OVERRIDE_REASON_MIN,
   WEBSHOP_ORDER_STATUS_LABELS,
   staleHoursOf,
   type WebshopOrderStatus,
@@ -61,7 +65,7 @@ import {
 } from "./webshop-order-invoice.rules.js";
 import { parcelOf } from "./webshop-order-parcel.rules.js";
 import {
-  shippingGateRefusal,
+  shippingGateDecision,
   type ShippingGateFacts,
 } from "./webshop-order-shipping-gate.rules.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
@@ -405,6 +409,7 @@ export class WebshopOrdersService {
     userId: string,
     notifyCustomer = true,
     now = new Date(),
+    options: { overrideReason?: string; canOverride?: boolean } = {},
   ): Promise<WebshopOrderStatusChangeResult> {
     const client = await this.client();
     const current = await this.fromWebshop(() =>
@@ -421,9 +426,31 @@ export class WebshopOrdersService {
       táblázat-ellenőrzés UTÁN áll, hogy egy elavult lapról küldött kérés előbb a „frissítsd az oldalt” mondatot kapja. Csak a
       Kiszállításnál olvas (nem bolti átvételnél): a többi lépés költsége nem változik.
     */
+    let override: { reason: string; missing: string[] } | null = null;
     if (to === "out_for_delivery") {
-      const refusal = shippingGateRefusal(to, await this.shippingGateFacts(id));
-      if (refusal) throw new ConflictException(refusal);
+      const decision = shippingGateDecision({
+        to,
+        facts: await this.shippingGateFacts(id),
+        overrideReason: options.overrideReason,
+        canOverride: options.canOverride === true,
+      });
+      /*
+        A FELÜLBÍRÁLÁS (kártya 33a0d3c7, acrobot döntése: naplózott): külön jog és kötelező indok; a jog előbb, mint az indok formája.
+        A naplósor a sikeres váltás UTÁN íródik (az állapot-váltás naplójával együtt), így egy elbukott levonás után nem marad hamis
+        "felülbírálva" nyom.
+      */
+      if (decision.kind === "refuse")
+        throw new ConflictException(decision.sentence);
+      if (decision.kind === "forbidden")
+        throw new ForbiddenException(
+          "A kiszállítási kapu felülbírálásához külön jog kell. Kérd egy adminisztrátortól, vagy állítsd ki a számlát és add fel a csomagot.",
+        );
+      if (decision.kind === "bad-reason")
+        throw new BadRequestException(
+          `A felülbíráláshoz indoklás kell (${SHIPPING_OVERRIDE_REASON_MIN}-${SHIPPING_OVERRIDE_REASON_MAX} karakter): a napló az indokért van.`,
+        );
+      if (decision.kind === "override")
+        override = { reason: decision.reason, missing: decision.missing };
     }
     let mail: WebshopStatusMailOutcome;
     try {
@@ -448,8 +475,13 @@ export class WebshopOrdersService {
       orderId: id,
       from: current.status,
       to,
+      ...(override ? { override } : {}),
     });
-    return { order: await this.detail(id, now), mail };
+    return {
+      order: await this.detail(id, now),
+      mail,
+      shippingGateOverridden: override !== null,
+    };
   }
 
   /** A kapu tényei egy rendelésről: bolti átvétel-e, a kiállított számla és az aktív, csomagszámos csomag (ugyanaz, mint a lépéssoré). */

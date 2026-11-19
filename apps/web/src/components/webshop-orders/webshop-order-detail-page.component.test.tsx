@@ -492,6 +492,111 @@ describe("WebshopOrderDetailPage", () => {
     ).toBeTruthy();
   });
 
+  /*
+    A KISZÁLLÍTÁSI KAPU FELÜLBÍRÁLÁSA (kártya 33a0d3c7). MI PIROSÍT: ha a felülbírálás a kapu mondata nélkül (más 409-nél, elavult lapnál) is
+    megjelenik; ha jog nélkül megjelenik; ha indok nélkül (vagy 10 karakter alatt) elküldhető; ha az indok nem jut el a kérésig; ha az
+    első, indok nélküli próbálkozás is indokot küld.
+  */
+  describe("shipping gate override", () => {
+    const GATE =
+      "A Kiszállítás előtt kell: kiállított számla és feladott csomag. Hiányzik: kiállított számla, feladott csomag. (A sorrend: számla, csomag, kiszállítás; a kártyás levonás a Kiszállításra fut.)";
+    const shippingDetail = {
+      ...detail,
+      nextStatuses: [{ status: "out_for_delivery", label: "Kiszállítás" }],
+    } as WebshopOrderDetail;
+    const openDialog = async () => {
+      api.detail.mockResolvedValue(shippingDetail);
+      render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Státusz módosítása" }),
+      );
+      return screen.getByRole("dialog", { name: "Státusz módosítása" });
+    };
+
+    it("the gate's sentence shows the override for a user with the right; the reason is required and goes with the request", async () => {
+      api.changeStatus.mockRejectedValueOnce(new Error(GATE));
+      const dialog = await openDialog();
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Státusz módosítása" }),
+      );
+      expect((await within(dialog).findByRole("alert")).textContent).toContain(
+        "Hiányzik: kiállított számla, feladott csomag",
+      );
+      // the first, plain attempt sent no reason
+      expect(api.changeStatus).toHaveBeenCalledWith(
+        "token",
+        "order_38",
+        "out_for_delivery",
+        true,
+      );
+      const save = within(dialog).getByRole("button", {
+        name: "Mentés felülbírálással",
+      }) as HTMLButtonElement;
+      const reason = within(dialog).getByLabelText(
+        "Indoklás a felülbíráláshoz",
+      );
+      expect(save.disabled).toBe(true);
+      fireEvent.change(reason, { target: { value: "rövid" } });
+      expect(save.disabled).toBe(true);
+      fireEvent.change(reason, {
+        target: { value: "  A csomagot a GLS portálján adtuk fel kézzel  " },
+      });
+      expect(save.disabled).toBe(false);
+      api.changeStatus.mockResolvedValueOnce({
+        order: { ...shippingDetail, nextStatuses: [] },
+        mail: { sent: false, reason: "no_mail_for_status" },
+        shippingGateOverridden: true,
+      });
+      fireEvent.click(save);
+      await waitFor(() => expect(api.changeStatus).toHaveBeenCalledTimes(2));
+      expect(api.changeStatus).toHaveBeenLastCalledWith(
+        "token",
+        "order_38",
+        "out_for_delivery",
+        true,
+        "A csomagot a GLS portálján adtuk fel kézzel",
+      );
+    });
+
+    it("a user without the right sees the gate's sentence and no way around it", async () => {
+      auth.session = session("SALES");
+      api.changeStatus.mockRejectedValueOnce(new Error(GATE));
+      const dialog = await openDialog();
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Státusz módosítása" }),
+      );
+      expect((await within(dialog).findByRole("alert")).textContent).toContain(
+        "Hiányzik",
+      );
+      expect(
+        within(dialog).queryByLabelText("Indoklás a felülbíráláshoz"),
+      ).toBeNull();
+      expect(
+        within(dialog).queryByRole("button", {
+          name: "Mentés felülbírálással",
+        }),
+      ).toBeNull();
+    });
+
+    it("another conflict (a stale page) does not offer the override, even with the right", async () => {
+      api.changeStatus.mockRejectedValueOnce(
+        new Error(
+          "A rendelés „Visszaigazolva” állapotból nem léptethető „Kiszállítás” állapotba. Frissítsd az oldalt.",
+        ),
+      );
+      const dialog = await openDialog();
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Státusz módosítása" }),
+      );
+      expect((await within(dialog).findByRole("alert")).textContent).toContain(
+        "Frissítsd az oldalt",
+      );
+      expect(
+        within(dialog).queryByLabelText("Indoklás a felülbíráláshoz"),
+      ).toBeNull();
+    });
+  });
+
   /**
    * A STÁTUSZLEVÉL (commerce #479). MI PIROSÍT: a „Vevő értesítése” jelölő
    * kikapcsolása nem jut el a kérésig; a sor levele nem látszik; az

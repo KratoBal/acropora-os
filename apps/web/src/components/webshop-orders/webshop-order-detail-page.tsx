@@ -5,6 +5,9 @@ import {
   formatMoney,
   hasPermission,
   PERMISSIONS,
+  SHIPPING_GATE_SENTENCE_PREFIX,
+  SHIPPING_OVERRIDE_REASON_MAX,
+  SHIPPING_OVERRIDE_REASON_MIN,
   WEBSHOP_ORDER_PAYMENT_STATE_LABELS,
   WEBSHOP_PROFORMA_DUE_DAYS,
   WEBSHOP_PARCEL_SIZES,
@@ -216,39 +219,57 @@ const TERMINAL: readonly WebshopOrderStatus[] = [
 function StatusDialog({
   order,
   open,
+  canOverrideShipping,
   onClose,
   onSubmit,
 }: {
   order: WebshopOrderDetail;
   open: boolean;
+  canOverrideShipping: boolean;
   onClose: () => void;
   onSubmit: (
     status: WebshopOrderStatus,
     notifyCustomer: boolean,
+    overrideReason?: string,
   ) => Promise<void>;
 }) {
   const [next, setNext] = useState<string>("");
   const [notify, setNotify] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A KISZÁLLÍTÁSI KAPU FELÜLBÍRÁLÁSA (kártya 33a0d3c7): csak akkor jelenik meg, ha a szerver a kapu mondatával utasította el a váltást,
+  // és a kérőnek van joga; a kötelező indok a naplóba kerül
+  const [gateHeld, setGateHeld] = useState(false);
+  const [overrideReason, setOverrideReason] = useState("");
+  const reason = overrideReason.trim();
+  const reasonValid =
+    reason.length >= SHIPPING_OVERRIDE_REASON_MIN &&
+    reason.length <= SHIPPING_OVERRIDE_REASON_MAX;
   useEffect(() => {
     if (open) {
       setNext(order.nextStatuses[0]?.status ?? "");
       setNotify(true);
       setError(null);
+      setGateHeld(false);
+      setOverrideReason("");
     }
   }, [open, order.nextStatuses]);
-  const submit = async () => {
+  const submit = async (withOverride: boolean) => {
     if (!next) return;
     setBusy(true);
     setError(null);
     try {
-      await onSubmit(next as WebshopOrderStatus, notify);
+      await onSubmit(
+        next as WebshopOrderStatus,
+        notify,
+        withOverride ? reason : undefined,
+      );
       onClose();
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "A státusz nem változott.",
-      );
+      const message =
+        cause instanceof Error ? cause.message : "A státusz nem változott.";
+      setGateHeld(message.startsWith(SHIPPING_GATE_SENTENCE_PREFIX));
+      setError(message);
     } finally {
       setBusy(false);
     }
@@ -305,6 +326,37 @@ function StatusDialog({
             {error}
           </p>
         ) : null}
+        {gateHeld && canOverrideShipping ? (
+          <div className="space-y-2 rounded-lg border border-pilot-amber-200 bg-pilot-amber-50 p-3">
+            <p className="text-sm text-pilot-grey-800">
+              Felülbírálhatod a kaput, de a kártyás levonás számla és csomag
+              nélkül indul. Az indok és a te neved a naplóba kerül.
+            </p>
+            <label className="block text-xs text-pilot-grey-600">
+              Indoklás a felülbíráláshoz
+              <textarea
+                aria-label="Indoklás a felülbíráláshoz"
+                value={overrideReason}
+                onChange={(event) => setOverrideReason(event.target.value)}
+                maxLength={SHIPPING_OVERRIDE_REASON_MAX}
+                rows={3}
+                className="mt-1 w-full rounded-lg border border-pilot-grey-300 p-2 text-sm"
+              />
+              <span className="mt-1 block">
+                {reason.length}/{SHIPPING_OVERRIDE_REASON_MAX} karakter,
+                legalább {SHIPPING_OVERRIDE_REASON_MIN}
+              </span>
+            </label>
+            <PilotButton
+              size="regular"
+              variant="secondary"
+              onClick={() => void submit(true)}
+              disabled={busy || !reasonValid}
+            >
+              {busy ? "Folyamatban…" : "Mentés felülbírálással"}
+            </PilotButton>
+          </div>
+        ) : null}
         <div className="flex justify-end gap-2">
           <PilotButton
             size="regular"
@@ -316,7 +368,7 @@ function StatusDialog({
           </PilotButton>
           <PilotButton
             size="regular"
-            onClick={() => void submit()}
+            onClick={() => void submit(false)}
             disabled={busy || !next}
           >
             {busy ? "Folyamatban…" : "Státusz módosítása"}
@@ -368,17 +420,24 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     hasPermission(session.user, PERMISSIONS.ORDERS_MANAGE) &&
     hasPermission(session.user, PERMISSIONS.FINANCE_MANAGE),
   );
+  // a kiszállítási kapu felülbírálása külön jog (kártya 33a0d3c7): számla és csomag nélkül indít kártyás levonást
+  const canOverrideShipping = Boolean(
+    session &&
+    hasPermission(session.user, PERMISSIONS.ORDERS_SHIPPING_OVERRIDE),
+  );
   const token = session?.token ?? "";
   const [mailNotice, setMailNotice] = useState<string | null>(null);
   const changeStatus = async (
     status: WebshopOrderStatus,
     notifyCustomer: boolean,
+    overrideReason?: string,
   ) => {
     const result = await webshopOrdersApi.changeStatus(
       token,
       id,
       status,
       notifyCustomer,
+      ...(overrideReason ? [overrideReason] : []),
     );
     setOrder(result.order);
     setMailNotice(statusMailText(result.mail));
@@ -579,6 +638,7 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           order={order}
           now={now}
           canManage={canManage}
+          canOverrideShipping={canOverrideShipping}
           canIssue={canIssue}
           canSendProforma={canSendProforma}
           canRecordTransfer={canRecordTransfer}
@@ -1879,6 +1939,7 @@ function OrderBody({
   order,
   now,
   canManage,
+  canOverrideShipping,
   canIssue,
   canSendProforma,
   canRecordTransfer,
@@ -1915,6 +1976,7 @@ function OrderBody({
   order: WebshopOrderDetail;
   now: number;
   canManage: boolean;
+  canOverrideShipping: boolean;
   canIssue: boolean;
   canSendProforma: boolean;
   canRecordTransfer: boolean;
@@ -1925,6 +1987,7 @@ function OrderBody({
   onChangeStatus: (
     status: WebshopOrderStatus,
     notifyCustomer: boolean,
+    overrideReason?: string,
   ) => Promise<void>;
   mailNotice: string | null;
   onResendStatusMail: () => Promise<void>;
@@ -2041,6 +2104,7 @@ function OrderBody({
         <StatusDialog
           order={order}
           open={statusOpen}
+          canOverrideShipping={canOverrideShipping}
           onClose={() => setStatusOpen(false)}
           onSubmit={onChangeStatus}
         />

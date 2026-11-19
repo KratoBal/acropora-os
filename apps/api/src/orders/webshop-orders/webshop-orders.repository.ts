@@ -51,21 +51,46 @@ const CUSTOMER_REFERENCE = {
  */
 @Injectable()
 export class WebshopOrdersRepository {
+  /**
+   * A STÁTUSZVÁLTÁS NAPLÓJA, ÉS HA A KISZÁLLÍTÁSI KAPUT FELÜLBÍRÁLTÁK, A FELÜLBÍRÁLÁSÉ (kártya 33a0d3c7). A felülbírálás KÜLÖN sor (külön
+   * `action`), hogy külön szűrhető legyen ("ki kerülte meg a kaput és miért"), a váltás sora pedig változatlan alakú marad. A két sor
+   * egy tranzakcióban íródik: egy felülbírálás indok nélkül, vagy egy indok váltás nélkül hiányos nyom lenne.
+   */
   async recordStatusChange(input: {
     userId: string;
     orderId: string;
     from: string | null;
     to: string;
+    override?: { reason: string; missing: string[] };
   }): Promise<void> {
-    await prisma.auditLog.create({
-      data: {
-        userId: input.userId,
-        action: "webshop-order.status-changed",
-        entityType: "WebshopOrder",
-        entityId: input.orderId,
-        metadata: { from: input.from, to: input.to },
-      },
-    });
+    const change = {
+      userId: input.userId,
+      action: "webshop-order.status-changed",
+      entityType: "WebshopOrder",
+      entityId: input.orderId,
+      metadata: { from: input.from, to: input.to },
+    };
+    if (!input.override) {
+      await prisma.auditLog.create({ data: change });
+      return;
+    }
+    await prisma.$transaction([
+      prisma.auditLog.create({ data: change }),
+      prisma.auditLog.create({
+        data: {
+          userId: input.userId,
+          action: "webshop-order.shipping-gate-overridden",
+          entityType: "WebshopOrder",
+          entityId: input.orderId,
+          metadata: {
+            from: input.from,
+            to: input.to,
+            reason: input.override.reason,
+            missing: input.override.missing,
+          },
+        },
+      }),
+    ]);
   }
 
   /** Egy tételművelet: ki, melyik tételen, mit (a webshop „admin” névvel rögzíti). */
