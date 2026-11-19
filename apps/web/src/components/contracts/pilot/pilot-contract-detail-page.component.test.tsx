@@ -398,7 +398,7 @@ describe("PilotContractDetailPage -- tétel törlése", () => {
     const items = api.update.mock.calls[0]![2].items as { id: string }[];
     expect(items.map((sent) => sent.id)).toEqual(["item-1"]);
     await waitFor(() => expect(screen.queryByText(/2000 Ft/)).toBeNull());
-    expect(screen.getByText(/1000 Ft/)).toBeTruthy();
+    expect(screen.getByText(/1000 Ft × 1 db/)).toBeTruthy();
   });
 
   it("megrendelőlapban szereplő tétel nem törölhető, és ki van írva, miért", async () => {
@@ -627,7 +627,7 @@ describe("PilotContractDetailPage -- javítási díjak", () => {
     render(<PilotContractDetailPage contractId="contract-1" />);
     expect(
       await screen.findByText(
-        /Javítási díjak: munkaidőben 9000 Ft · munkaidőn kívül 13\s000 Ft · munkaszüneti és ünnepnapon 14\s500 Ft · súlyszám 90 · összesen 10\s125\s000 Ft/,
+        /Javítási díjak \(nettó\): munkaidőben 9000 Ft · munkaidőn kívül 13\s000 Ft · munkaszüneti és ünnepnapon 14\s500 Ft · súlyszám 90 · összesen 10\s125\s000 Ft/,
       ),
     ).toBeTruthy();
   });
@@ -635,10 +635,12 @@ describe("PilotContractDetailPage -- javítási díjak", () => {
   it("a módosított díj elmegy, a kiürített nullként", async () => {
     render(<PilotContractDetailPage contractId="contract-1" />);
     fireEvent.change(
-      await screen.findByLabelText("1. tétel Munkanapon, munkaidőben (Ft)"),
+      await screen.findByLabelText(
+        "1. tétel Munkanapon, munkaidőben (nettó Ft)",
+      ),
       { target: { value: "9500" } },
     );
-    fireEvent.change(screen.getByLabelText("1. tétel Összesen (Ft)"), {
+    fireEvent.change(screen.getByLabelText("1. tétel Összesen (nettó Ft)"), {
       target: { value: "" },
     });
     fireEvent.click(screen.getByText("Módosítások mentése"));
@@ -1482,5 +1484,145 @@ describe("PilotContractDetailPage -- a tétel neve kiemelve", () => {
           node.className.includes("font-semibold") && node.tagName === "SPAN",
       );
     expect(label).toBeTruthy();
+  });
+});
+
+/*
+  A TÉTEL SZÁMOLT ÖSSZEGE ÉS AZ ÖSSZESEN MEZŐ AZ ADATLAPON (kártya 51898ed9, Luca 450 000 Ft-ja). MI PIROSÍT: ha a fejlécsorban
+  nem látszik a számolt nettó és bruttó; ha az Összesen mező súlyszám nélkül szerkeszthető; ha a súlyszám nélküli, meglévő kézi
+  összeg eltűnik a mezőből vagy egy mentés törli; ha súlyszámmal tiltott; ha a magyarázat hiányzik.
+*/
+describe("PilotContractDetailPage -- a tétel összege és az Összesen mező", () => {
+  const lucaItem = (extra: Record<string, unknown> = {}) => ({
+    id: "item-1",
+    position: 1,
+    description: "Cápasuli nagymedence",
+    unitNet: "15000",
+    quantity: "10",
+    occasionsPerYear: 3,
+    vatRatePercent: "27",
+    unitOfMeasureId: null,
+    unitOfMeasure: null,
+    departmentId: null,
+    assets: [],
+    ...extra,
+  });
+  const arrange = (extra: Record<string, unknown> = {}) => {
+    const value = {
+      ...contract(),
+      items: [lucaItem(extra)],
+    } as ContractSummary;
+    api.detail.mockReset().mockResolvedValue(value);
+    api.update.mockReset().mockResolvedValue(value);
+    orderApi.list.mockReset().mockResolvedValue([]);
+    worksheetsApi.departments.mockReset().mockResolvedValue({ items: [] });
+    assetsApi.list.mockReset().mockResolvedValue({ items: [] });
+    auth.session = session("dev-token");
+  };
+  const TOTAL = "1. tétel Összesen (nettó Ft)";
+
+  it("a fejlécsorban a számolt nettó és bruttó áll: 450 000 és 571 500", async () => {
+    arrange();
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    const line = await screen.findByTestId("contract-item-amounts");
+    expect(line.textContent).toMatch(
+      /^Összesen: nettó 450\s000 Ft, bruttó 571\s500 Ft$/,
+    );
+  });
+
+  it("súlyszám nélkül az Összesen mező tiltott, magyarázattal; a meglévő kézi összeg látszik", async () => {
+    arrange({ repairTotal: "450000" });
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    const field = (await screen.findByLabelText(TOTAL)) as HTMLInputElement;
+    expect(field.disabled).toBe(true);
+    expect(field.value).toBe("450000");
+    expect(screen.getByTestId("repair-total-hint").textContent).toMatch(
+      /megmarad/,
+    );
+  });
+
+  it("súlyszám nélkül és érték nélkül is tiltott, a magyarázat a számolt nettóra mutat", async () => {
+    arrange();
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    const field = (await screen.findByLabelText(TOTAL)) as HTMLInputElement;
+    expect(field.disabled).toBe(true);
+    expect(screen.getByTestId("repair-total-hint").textContent).toMatch(
+      /számolt nettó/,
+    );
+  });
+
+  it("súlyszámmal az Összesen szerkeszthető, magyarázat nélkül", async () => {
+    arrange({ repairWeight: "90", repairTotal: "10125000" });
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    const field = (await screen.findByLabelText(TOTAL)) as HTMLInputElement;
+    expect(field.disabled).toBe(false);
+    expect(screen.queryByTestId("repair-total-hint")).toBeNull();
+  });
+
+  it("a súlyszám beírása szerkeszthetővé teszi, a kitörlése újra tiltja, az érték marad", async () => {
+    arrange({ repairTotal: "450000" });
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    const weight = await screen.findByLabelText("1. tétel Súlyszám");
+    fireEvent.change(weight, { target: { value: "90" } });
+    expect((screen.getByLabelText(TOTAL) as HTMLInputElement).disabled).toBe(
+      false,
+    );
+    fireEvent.change(weight, { target: { value: "" } });
+    const field = screen.getByLabelText(TOTAL) as HTMLInputElement;
+    expect(field.disabled).toBe(true);
+    expect(field.value).toBe("450000");
+  });
+
+  it("egy mentés a súlyszám nélküli, meglévő kézi összeget nem törli", async () => {
+    arrange({ repairTotal: "450000" });
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    fireEvent.change(
+      await screen.findByLabelText(
+        "1. tétel Munkanapon, munkaidőben (nettó Ft)",
+      ),
+      { target: { value: "9500" } },
+    );
+    fireEvent.click(screen.getByText("Módosítások mentése"));
+    await waitFor(() => expect(api.update).toHaveBeenCalled());
+    expect(api.update.mock.calls[0]![2].items[0]).toMatchObject({
+      repairFeeWorkdayHours: "9500",
+      repairTotal: "450000",
+    });
+  });
+
+  it("a díjak felirata kimondja, hogy nettó", async () => {
+    arrange();
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    await screen.findByTestId("contract-item-amounts");
+    for (const label of [
+      "1. tétel Munkanapon, munkaidőben (nettó Ft)",
+      "1. tétel Munkanapon, munkaidőn kívül (nettó Ft)",
+      "1. tétel Munkaszüneti és ünnepnapon (nettó Ft)",
+      TOTAL,
+    ])
+      expect(screen.getByLabelText(label)).toBeTruthy();
+  });
+
+  it("beszerzési szerződésnél az alkalom nem szerepel a szorzatban", async () => {
+    const value = {
+      ...contract(),
+      kind: "PURCHASE",
+      items: [
+        lucaItem({
+          occasionsPerYear: null,
+          unitOfMeasureId: "unit-kg",
+          unitOfMeasure: { id: "unit-kg", code: "kg", name: "kilogramm" },
+        }),
+      ],
+    } as unknown as ContractSummary;
+    api.detail.mockReset().mockResolvedValue(value);
+    api.quantityUnits.mockReset().mockResolvedValue({ units: [] });
+    orderApi.list.mockReset().mockResolvedValue([]);
+    worksheetsApi.departments.mockReset().mockResolvedValue({ items: [] });
+    assetsApi.list.mockReset().mockResolvedValue({ items: [] });
+    auth.session = session("dev-token");
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    const line = await screen.findByTestId("contract-item-amounts");
+    expect(line.textContent).toMatch(/nettó 150\s000 Ft, bruttó 190\s500 Ft/);
   });
 });
