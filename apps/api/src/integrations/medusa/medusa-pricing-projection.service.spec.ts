@@ -126,15 +126,23 @@ function fakes(options: FakeOptions = {}) {
        * A MÉRT SZEMANTIKA: az `id` nélküli sor ÚJ azonosítót kap, a meglévő
        * `id` a helyén marad, és ami nincs a listában, az eltűnik.
        */
-      rows = prices.map((price) => {
-        if (price.id) return { ...price, id: price.id } as MedusaPriceRow;
-        created += 1;
-        return {
-          id: `price_uj_${created}`,
-          currency_code: price.currency_code,
-          amount: price.amount,
-        };
-      });
+      /**
+       * A SALE PRICE LIST'S ROWS SURVIVE (card 54bb3779): the whole-list write only touches the `price_list_id = null`
+       * rows (`updatePriceSets_` lists exactly those as existing, @medusajs/pricing 2.22.4, read from the source, not run).
+       */
+      const listRows = (rows ?? []).filter((row) => row.price_list_id);
+      rows = [
+        ...listRows,
+        ...prices.map((price) => {
+          if (price.id) return { ...price, id: price.id } as MedusaPriceRow;
+          created += 1;
+          return {
+            id: `price_uj_${created}`,
+            currency_code: price.currency_code,
+            amount: price.amount,
+          };
+        }),
+      ];
     },
   } as unknown as MedusaAdminClient;
 
@@ -325,15 +333,104 @@ describe("MedusaPricingProjectionService", () => {
     assert.equal(outcome.action, "stopped");
     if (outcome.action !== "stopped") return;
     assert.equal(outcome.reason, "ambiguous-price");
+    // the price list's row is not a conflicting row any more (card 54bb3779): the other two still are
     assert.deepEqual(outcome.conflict, {
-      rows: 3,
-      priceList: 1,
-      rules: 1,
+      rows: 2,
+      priceList: 0,
+      rules: 0,
       quantity: 1,
       plain: 1,
       unknown: 0,
     });
     assert.equal(writes.length, 0);
+  });
+
+  /*
+    A SALE PRICE LIST ON THE VARIANT (card 54bb3779). MI PIROSÍT: a vetítés megáll `ambiguous-price`-szal az első
+    árlistás akciónál (két forint sort lát); az írás után a visszaolvasás két sort talál, és `write-not-visible`-lel
+    áll meg; az alapár cseréje az árlista sorát is viszi vagy új azonosítót ad az alapárnak; az árlista idegen pénznemű
+    sora `foreign-currency-price-present`-et okoz.
+  */
+  const listRow = (over: Partial<MedusaPriceRow> = {}): MedusaPriceRow => ({
+    id: "price_sale",
+    currency_code: "huf",
+    amount: 9990,
+    price_list_id: "plist_sale",
+    rules_count: 0,
+    min_quantity: null,
+    max_quantity: null,
+    ...over,
+  });
+  const baseRow = (over: Partial<MedusaPriceRow> = {}): MedusaPriceRow => ({
+    id: "price_base",
+    currency_code: "huf",
+    amount: 12990,
+    price_list_id: null,
+    rules_count: 0,
+    min_quantity: null,
+    max_quantity: null,
+    ...over,
+  });
+
+  it("projects the base price next to a sale price list row, keeps both ids and counts only the base row", async () => {
+    const { service, writes, currentRows } = fakes({
+      prices: [baseRow(), listRow()],
+    });
+
+    const outcome = await service.project(priced("14990"));
+
+    assert.equal(outcome.action, "projected");
+    if (outcome.action !== "projected") return;
+    assert.equal(outcome.report.result, "updated");
+    assert.equal(outcome.report.priceId, "price_base");
+    // only the base row is sent, with its own id: the price list's row is not in the whole-list write
+    assert.deepEqual(writes, [
+      [{ id: "price_base", currency_code: "huf", amount: 14990 }],
+    ]);
+    const after = currentRows() ?? [];
+    assert.deepEqual(
+      after.map((row) => [row.id, row.amount, row.price_list_id ?? null]),
+      [
+        ["price_sale", 9990, "plist_sale"],
+        ["price_base", 14990, null],
+      ],
+    );
+  });
+
+  it("creates the base price when the variant has only a price list row, and leaves that row", async () => {
+    const { service, writes, currentRows } = fakes({ prices: [listRow()] });
+
+    const outcome = await service.project(priced("12990"));
+
+    assert.equal(outcome.action, "projected");
+    if (outcome.action !== "projected") return;
+    assert.equal(outcome.report.result, "created");
+    assert.equal(writes[0]![0]!.id, undefined);
+    assert.equal(
+      (currentRows() ?? []).filter((r) => r.price_list_id).length,
+      1,
+    );
+  });
+
+  it("does not stop on a price list row in another currency, and still stops on two base rows", async () => {
+    const eur = fakes({
+      prices: [
+        baseRow(),
+        listRow({ id: "price_eur_sale", currency_code: "eur", amount: 30 }),
+      ],
+    });
+    const ok = await eur.service.project(priced("14990"));
+    assert.equal(ok.action, "projected");
+
+    const dup = fakes({
+      prices: [baseRow(), baseRow({ id: "price_base_2" }), listRow()],
+    });
+    const stopped = await dup.service.project(priced("14990"));
+    assert.equal(stopped.action, "stopped");
+    if (stopped.action !== "stopped") return;
+    assert.equal(stopped.reason, "ambiguous-price");
+    assert.equal(stopped.conflict?.rows, 2);
+    assert.equal(dup.writes.length, 0);
   });
 
   it("tells a missing prices field from an empty one", async () => {

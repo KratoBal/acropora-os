@@ -12,6 +12,7 @@ import {
   priceConflictShape,
   type PriceConflictShape,
 } from "./medusa-price-sync.js";
+import { baseRowsOf } from "./medusa-price-rows.js";
 import type { PriceOwner } from "./medusa-price-source.js";
 import type { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
 import {
@@ -283,7 +284,9 @@ export class MedusaPricingProjectionService {
           `nincs ára, holott csak nem kérdeztünk jól.`,
       );
 
-    const foreign = target.prices.filter(
+    // a sale price list's row is not ours to count or to replace: only the base rows (`baseRowsOf`)
+    const baseRows = baseRowsOf(target.prices);
+    const foreign = baseRows.filter(
       (row) => row.currency_code.toLowerCase() !== MEDUSA_CURRENCY_CODE,
     );
     if (foreign.length > 0)
@@ -296,7 +299,7 @@ export class MedusaPricingProjectionService {
           `változás, és döntést igényel.`,
       );
 
-    const ours = target.prices.filter(
+    const ours = baseRows.filter(
       (row) => row.currency_code.toLowerCase() === MEDUSA_CURRENCY_CODE,
     );
     if (ours.length >= 2)
@@ -365,11 +368,13 @@ export class MedusaPricingProjectionService {
       );
     }
 
-    const written = after.rows
-      .find((row) => row.id === target.id)
-      ?.prices?.filter(
-        (row) => row.currency_code.toLowerCase() === MEDUSA_CURRENCY_CODE,
-      );
+    // `undefined` stays "the answer brought no prices" (not an empty list); a price list's row is not counted
+    const writtenRows = after.rows.find((row) => row.id === target.id)?.prices;
+    const written = writtenRows
+      ? baseRowsOf(writtenRows).filter(
+          (row) => row.currency_code.toLowerCase() === MEDUSA_CURRENCY_CODE,
+        )
+      : undefined;
 
     if (
       !written ||

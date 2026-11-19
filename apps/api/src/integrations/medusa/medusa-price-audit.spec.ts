@@ -126,10 +126,7 @@ describe("auditVariantPrices", () => {
 
   it("nem egyszeru vagy ismeretlen alaku sor mellett NEM javasol (barmilyen osszeg mellett sem)", () => {
     const nemEgyszeru = auditVariantPrices({
-      rows: [
-        row("price_A", 100),
-        row("price_B", 100, { price_list_id: "pl_1" }),
-      ],
+      rows: [row("price_A", 100), row("price_B", 100, { min_quantity: 5 })],
       osAmount: 100,
     });
     assert.equal(nemEgyszeru.verdict, "non-plain-row");
@@ -145,6 +142,40 @@ describe("auditVariantPrices", () => {
     });
     assert.equal(ismeretlen.verdict, "unknown-row-shape");
     assert.equal(ismeretlen.keepId, null);
+  });
+
+  /*
+    AZ AKCIÓS ÁRLISTA SORA (kártya 54bb3779). MI PIROSÍT: az árlistás sor második forint sornak számít (az alapár mellett
+    nem `single`), vagy a javítás törlendő listájára kerül, vagy a jelentés nem mondja meg, hogy volt ilyen sor.
+  */
+  it("az árlistás sor nem forint sor a vizsgálatban: az alapár mellett single, két egyenlő alapárnál a törlendő listán nincs rajta, és a számában látszik", () => {
+    const egy = auditVariantPrices({
+      rows: [
+        row("price_A", 100),
+        row("price_S", 80, { price_list_id: "pl_1" }),
+      ],
+      osAmount: 100,
+    });
+    assert.equal(egy.verdict, "single");
+    assert.equal(egy.hufRows.length, 1);
+    assert.equal(egy.priceListRows, 1);
+    assert.equal(egy.foreignRows, 0);
+
+    const ketto = auditVariantPrices({
+      rows: [
+        row("price_B", 100),
+        row("price_A", 100),
+        row("price_S", 80, { price_list_id: "pl_1" }),
+      ],
+      osAmount: 100,
+    });
+    assert.equal(ketto.verdict, "duplicates-equal");
+    assert.deepEqual(ketto.deleteIds, ["price_B"]);
+    assert.ok(!ketto.deleteIds.includes("price_S"));
+    assert.match(
+      formatAuditLine("cms_1", "variant_1", "SKU-1", ketto),
+      / huf=2 lists=1 rows=\[/,
+    );
   });
 
   it("a nem forint sor nem szamit a forint sorok koze (csak a szamaban latszik): egy forint + egy euro sor = single", () => {
