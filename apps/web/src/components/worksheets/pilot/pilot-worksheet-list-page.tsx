@@ -769,9 +769,13 @@ export function PilotWorksheetListPage() {
             </PilotSelect>
           </label>
         ) : null}
-        {/* A MEGNYITÁS NAPJÁNAK TÓL-IG SZŰRŐJE (kártya a785e580): mindkét határnap benne van, bármelyik elhagyható */}
+        {/*
+          A MEGNYITÁS NAPJÁNAK TÓL-IG SZŰRŐJE (kártya a785e580): mindkét határnap benne van, bármelyik elhagyható. A sor TÖRHET:
+          a felirat és a két 160 pixeles mező együtt kb. 430 pixel, 390 pixeles telefonon a második mező 47 pixellel kilógott,
+          és az egész lap oldalra gördült (OS hibakör, 2026-11-19).
+        */}
         <div
-          className="flex items-center gap-2 text-sm text-pilot-grey-700"
+          className="flex flex-wrap items-center gap-2 text-sm text-pilot-grey-700"
           role="group"
           aria-label="Megnyitás napja"
         >
