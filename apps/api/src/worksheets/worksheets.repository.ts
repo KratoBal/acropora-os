@@ -55,6 +55,7 @@ import {
   worksheetSheetDocument,
 } from "./worksheet-sheet-document.js";
 import { worksheetSheetInput } from "./worksheet-sheet-mapping.js";
+import { worksheetCreatedRange } from "./worksheet-created-range.js";
 import { worksheetJobKindWhere } from "./worksheet-job-kind-filter.js";
 import {
   archiveOfIssuedSheet,
@@ -897,6 +898,7 @@ export class WorksheetsRepository extends Repository {
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.departmentId ? { departmentId: query.departmentId } : {}),
       ...worksheetJobKindWhere(query.jobKind),
+      ...worksheetCreatedRange(query.createdFrom, query.createdTo),
       ...(query.assigneeId
         ? { assignees: { some: { userId: query.assigneeId } } }
         : {}),

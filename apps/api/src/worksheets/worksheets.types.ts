@@ -459,6 +459,7 @@ export function toWorksheetListItem(
           kind: row.serviceJob.kind,
         }
       : null,
+    createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     /**
      * A JELOLO AZ IDOBELYEGBOL, NEM MAGA AZ IDOBELYEG. A felulet arra

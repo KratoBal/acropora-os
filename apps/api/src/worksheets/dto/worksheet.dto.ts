@@ -63,6 +63,16 @@ export class WorksheetListQueryDto {
   /** A szerelő saját lapjai: erre a szűrőre épül a "nekem kiosztva" lista. */
   @IsString() @IsOptional() assigneeId?: string;
   /**
+   * A MEGNYITÁS NAPJÁNAK TÓL-IG SZŰRŐJE (kártya a785e580, Luca 2026-11-19): `ÉÉÉÉ-HH-NN`, a budapesti naptári nap, mindkét
+   * határ a napot is magában foglalja. Bármelyik elhagyható. A kezdő nem lehet a záró utáni nap.
+   */
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "A dátum alakja ÉÉÉÉ-HH-NN." })
+  @IsOptional()
+  createdFrom?: string;
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "A dátum alakja ÉÉÉÉ-HH-NN." })
+  @IsOptional()
+  createdTo?: string;
+  /**
    * A KAPCSOLT MUNKA FAJTÁJA (kártya 8219e7d6): `REPAIR` a hibajegyhez, `MAINTENANCE` a karbantartási laphoz kötött lapok. Hiányában minden lap (az önállók is). Lásd `worksheetJobKindWhere`.
    */
   @IsIn(["REPAIR", "MAINTENANCE"])
