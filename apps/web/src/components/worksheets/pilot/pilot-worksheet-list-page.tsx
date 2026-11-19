@@ -197,9 +197,10 @@ type WorksheetRow = WorksheetListResponse["items"][number];
   végi nyíl csak asztali jelzés. A fő sor a munkalap TÁRGYA, alatta a szám (Balázs, 2026-10-26
   12:48 UTC, OS szál, msg 1564259312728150148): mindenhol egyformán.
 */
-export const WORKSHEET_TABLE_MIN_WIDTH = 1180;
 /** A kijelölő pipa oszlopának szélessége (a `WORKSHEET_COLUMNS` mellé kerül, kártya a785e580). */
 export const WORKSHEET_SELECT_COLUMN_WIDTH = 40;
+/** A tábla legkisebb szélessége: a főág oszlopai (1140, a Megnyitva oszloppal, #2745) és a kijelölő oszlop. */
+export const WORKSHEET_TABLE_MIN_WIDTH = 1140 + WORKSHEET_SELECT_COLUMN_WIDTH;
 
 export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
   {

@@ -1191,6 +1191,55 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
     ]);
   });
 
+  it("a lap címe a tétel megnevezése, ha nincs kifejezett cím (kártya 17e6fcf2)", async () => {
+    const h = harness();
+    await h.run();
+    assert.equal(
+      (h.jobInputs[0] as { title: string }).title,
+      "Cápasuli RO karbantartás",
+    );
+  });
+
+  it("több tételnél az első tétel és az „és még N tétel” (egy lapon, közös helyszínen)", async () => {
+    const contract = twoItems();
+    // egy lapra csak közös helyszínű tételek kerülhetnek
+    contract.items[1]!.departmentId = "department-1";
+    const h = harness({ contract });
+    await h.run({
+      itemIds: ["item-1", "item-2"],
+      lines: [
+        { itemId: "item-1", quantity: "1", occasions: 1 },
+        { itemId: "item-2", quantity: "2", occasions: 1 },
+      ],
+    });
+    assert.equal(
+      (h.jobInputs[0] as { title: string }).title,
+      "Cápasuli RO karbantartás és még 1 tétel",
+    );
+  });
+
+  it("tételenként külön lapnál minden lap a saját tételét viseli, cím nélkül is", async () => {
+    const h = harness({ contract: twoItems() });
+    await h.run({
+      itemIds: ["item-1", "item-2"],
+      separate: true,
+      lines: [
+        { itemId: "item-1", quantity: "1", occasions: 1 },
+        { itemId: "item-2", quantity: "2", occasions: 1 },
+      ],
+    });
+    assert.deepEqual(
+      (h.jobInputs as Array<{ title: string }>).map((job) => job.title),
+      ["Cápasuli RO karbantartás", "UV-lámpa csere"],
+    );
+  });
+
+  it("a kifejezetten beírt cím előbb áll, mint a tétel megnevezése", async () => {
+    const h = harness();
+    await h.run({ title: "Saját cím" });
+    assert.equal((h.jobInputs[0] as { title: string }).title, "Saját cím");
+  });
+
   it("a rendes út: előellenőrzés, lap a közös úton, tételsorok a szerződéses áron, a lap évére", async () => {
     const h = harness({ createdAt: new Date("2026-12-31T23:30:00.000Z") });
     const result = await h.run({ title: "  Téli karbantartás  " });
