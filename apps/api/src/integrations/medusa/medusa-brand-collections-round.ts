@@ -1,5 +1,8 @@
 import type { BrandImportPlan } from "./medusa-brand-plan.js";
-import type { BrandImportReport } from "./medusa-brand-import.service.js";
+import type {
+  BrandImportFailure,
+  BrandImportReport,
+} from "./medusa-brand-import.service.js";
 
 /**
  * A MARKA-GYUJTEMENYEK BIZTOSITASA A VETITESI KORBEN (kartya ec82b629, acrobot 2026-11-19 10:11).
@@ -39,6 +42,20 @@ export interface BrandPlanCounts {
   skip: number;
   conflict: number;
   skipArchived: number;
+  /** a handle-t foglalo, a terv altal nem feldolgozhato markak (kartya ec82b629) */
+  handleTaken: number;
+  /**
+   * A JELENTES HAROM SZAMA (acrobot, 2026-11-19 16:24, 57247), plusz a ket maradek ok, hogy a `handleTaken` osszege kiadodjon:
+   *  - `linkedByHandle`: a handle kototte ossze (azonosito nelkuli, ures vagy csak azonos markaju gyujtemeny);
+   *  - `handleCurated`: handle foglalt, mert mas markaju vagy ismeretlen termek is van benne (kezi valogatas lehet);
+   *  - `handleOtherBrand`: utkozes, a gyujtemeny MASIK marka azonositojat viseli (a handle-n vagy a mi sorunk celjan);
+   *  - `handleStaleMapping`, `handleUnchecked`: elavult sor egy szabad handle mellett, illetve a tartalom nem volt merheto.
+   */
+  linkedByHandle: number;
+  handleCurated: number;
+  handleOtherBrand: number;
+  handleStaleMapping: number;
+  handleUnchecked: number;
 }
 
 export const brandPlanCounts = (plan: BrandImportPlan): BrandPlanCounts => ({
@@ -48,6 +65,18 @@ export const brandPlanCounts = (plan: BrandImportPlan): BrandPlanCounts => ({
   skip: plan.skip.length,
   conflict: plan.conflict.length,
   skipArchived: plan.skipArchived.length,
+  handleTaken: plan.handleTaken.length,
+  linkedByHandle: plan.mapByHandle.length,
+  handleCurated: plan.handleTaken.filter((h) => h.reason === "curated").length,
+  handleOtherBrand: plan.handleTaken.filter(
+    (h) => h.reason === "other-brand" || h.reason === "mapped-to-other-brand",
+  ).length,
+  handleStaleMapping: plan.handleTaken.filter(
+    (h) => h.reason === "stale-mapping",
+  ).length,
+  handleUnchecked: plan.handleTaken.filter(
+    (h) => h.reason === "content-unchecked",
+  ).length,
 });
 
 export type BrandCollectionsOutcome =
@@ -62,6 +91,10 @@ export type BrandCollectionsOutcome =
       /** hany marka `updatedAt`-jat erintettuk meg */
       touched: number;
       conflicts: string[];
+      /** a handle-t foglalo markak (azonositok): nem hoztuk letre, nem kotottuk ossze oket */
+      handleTaken: string[];
+      /** markankenti hibak (kartya ec82b629): egy marka hibaja nem allitja le a tobbit */
+      failures: BrandImportFailure[];
     }
   | { status: "refused"; reason: string };
 
@@ -102,8 +135,8 @@ export async function ensureBrandCollections(
   const changing = changedBrandIds(plan);
   const planned = brandPlanCounts(plan);
   if (!changing.length) {
-    // egy ütközés magában nem ír semmit, de látszania kell: minden kör jelezze
-    return plan.conflict.length
+    // egy utkozes vagy foglalt handle magaban nem ir semmit, de latszania kell: minden kor jelezze
+    return plan.conflict.length || plan.handleTaken.length
       ? {
           status: "applied",
           planned,
@@ -112,6 +145,8 @@ export async function ensureBrandCollections(
           relinked: 0,
           touched: 0,
           conflicts: plan.conflict.map((c) => c.ourId),
+          handleTaken: plan.handleTaken.map((h) => h.ourId),
+          failures: [],
         }
       : { status: "unchanged", planned };
   }
@@ -141,6 +176,8 @@ export async function ensureBrandCollections(
     relinked: report.relinked,
     touched,
     conflicts: report.conflicts,
+    handleTaken: report.handleTaken,
+    failures: report.failures,
   };
 }
 
@@ -156,9 +193,20 @@ export const describeBrandCollections = (
     `${outcome.linkedOnly} csak leképezve`,
     `${outcome.relinked} újra leképezve`,
     `${outcome.touched} márka megérintve (a termékeik esedékesek)`,
+    `handle szerint összekötve ${outcome.planned.linkedByHandle}, handle foglalt (válogatás) ${outcome.planned.handleCurated}, ütközés (más márka azonosítója) ${outcome.planned.handleOtherBrand}`,
   ];
   if (outcome.conflicts.length)
     sorok.push(`ÜTKÖZÉS, érintetlen marad: ${outcome.conflicts.join(", ")}`);
+  if (outcome.handleTaken.length)
+    sorok.push(
+      `FOGLALT HANDLE, nem hoztuk létre és nem kötöttük össze: ${outcome.handleTaken.join(", ")}`,
+    );
+  if (outcome.failures.length)
+    sorok.push(
+      `${outcome.failures.length} márkánál a művelet elbukott (${outcome.failures
+        .map((f) => `${f.ourId}: ${f.phase}`)
+        .join(", ")})`,
+    );
   return sorok.join(", ") + ".";
 };
 
@@ -186,10 +234,18 @@ export type BrandCollectionsStep =
       relinked: number;
       touched: number;
       conflicts: number;
+      /** a handle-t foglalo markak szama (kartya ec82b629) */
+      handleTaken: number;
+      /** hany markanal bukott el a muvelet, es az elso nehany hiba (markankent, rovid szoveggel) */
+      brandFailures: number;
+      failureSamples: BrandImportFailure[];
       reason: string | null;
     };
 
 const STEP_ERROR_MAX = 160;
+
+/** A lepes allapotaba legfeljebb ennyi markankenti hiba kerul (a szamuk a `brandFailures`-ben all). */
+const STEP_FAILURE_SAMPLES = 5;
 
 /** A kikapcsolt lepes jele: a nyers ertek nem kerul ki, csak az, hogy van-e, es hogy `true`-nak latszik-e. */
 export function brandCollectionsOffStep(
@@ -228,6 +284,9 @@ export function brandCollectionsStep(
       relinked: 0,
       touched: 0,
       conflicts: 0,
+      handleTaken: 0,
+      brandFailures: 0,
+      failureSamples: [],
       reason: outcome.reason.slice(0, STEP_ERROR_MAX),
     };
   if (outcome.status === "unchanged")
@@ -241,6 +300,9 @@ export function brandCollectionsStep(
       relinked: 0,
       touched: 0,
       conflicts: 0,
+      handleTaken: 0,
+      brandFailures: 0,
+      failureSamples: [],
       reason: null,
     };
   return {
@@ -253,6 +315,9 @@ export function brandCollectionsStep(
     relinked: outcome.relinked,
     touched: outcome.touched,
     conflicts: outcome.conflicts.length,
+    handleTaken: outcome.handleTaken.length,
+    brandFailures: outcome.failures.length,
+    failureSamples: outcome.failures.slice(0, STEP_FAILURE_SAMPLES),
     reason: null,
   };
 }

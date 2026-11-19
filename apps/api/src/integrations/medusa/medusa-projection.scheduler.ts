@@ -23,6 +23,7 @@ import {
   MedusaBrandImportRefusedError,
   MedusaBrandImportService,
 } from "./medusa-brand-import.service.js";
+import { handleContentReader } from "./medusa-brand-handle-content.js";
 import { MedusaBrandLinkRepository } from "./medusa-brand-link.repository.js";
 import { decideProjectionDue } from "./medusa-projection-due.js";
 import {
@@ -660,6 +661,63 @@ export class MedusaProjectionScheduler
         );
         const links = new MedusaBrandLinkRepository();
         const service = new MedusaBrandImportService(links);
+        /*
+          A HANDLE-T FOGLALO GYUJTEMENY TARTALMA (57247): a bolti termek -> a mi termekunk a kotes-sorral, ennek hianyaban az
+          egyertelmu SKU-parral (a szallitasi jellemzok szabalya; a teszt bolt termekeinek nagy reszen nincs kotes-sor), abbol a
+          marka. A SKU-parositas a bolt teljes SKU-listajat olvassa: lusta, egy korben legfeljebb egyszer, es csak ha kell.
+        */
+        const database = prisma as unknown as ShippingAttributesCliDatabase;
+        const shipping = new MedusaShippingAttributesService(
+          new MedusaProductLinkRepository(),
+          client,
+        );
+        let boltiOs: Map<string, string> | null = null;
+        const readContent = handleContentReader(
+          {
+            collectionProductIds: (collectionId) =>
+              client.listCollectionProductIds(collectionId),
+            osProductsOfShop: async (shopIds) => {
+              const out = new Map<string, string>();
+              if (!shopIds.length) return out;
+              const sorok = await prisma.externalReference.findMany({
+                where: {
+                  system: MEDUSA_PRODUCT_REFERENCE.system,
+                  entityType: MEDUSA_PRODUCT_REFERENCE.entityType,
+                  externalId: { in: shopIds },
+                },
+                select: { entityId: true, externalId: true },
+              });
+              for (const sor of sorok) out.set(sor.externalId, sor.entityId);
+              const hianyzo = shopIds.filter((id) => !out.has(id));
+              if (hianyzo.length) {
+                boltiOs ??= new Map(
+                  [...(await skuParositas(shipping, database)).osToShop].map(
+                    ([os, bolti]) => [bolti, os],
+                  ),
+                );
+                for (const id of hianyzo) {
+                  const os = boltiOs.get(id);
+                  if (os) out.set(id, os);
+                }
+              }
+              return out;
+            },
+            brandsOfOsProducts: async (ids) =>
+              new Map(
+                (
+                  await prisma.product.findMany({
+                    where: { id: { in: ids } },
+                    select: { id: true, brandId: true },
+                  })
+                ).map((termek) => [termek.id, termek.brandId]),
+              ),
+          },
+          (collectionId, error) =>
+            this.logNemUres(
+              `Márka-gyűjtemények: a(z) ${collectionId} gyűjtemény tartalma nem mérhető, a márka nem kötődik össze (${error instanceof Error ? error.message : String(error)})`,
+              "warn",
+            ),
+        );
         const brands = await prisma.brand.findMany({
           select: {
             id: true,
@@ -670,8 +728,8 @@ export class MedusaProjectionScheduler
           },
         });
         return ensureBrandCollections({
-          plan: () => service.plan(client, brands),
-          apply: () => service.run(client, brands, this.now()),
+          plan: () => service.plan(client, brands, readContent),
+          apply: () => service.run(client, brands, this.now(), readContent),
           mappedAmong: async (ids) => {
             const wanted = new Set(ids);
             return (await links.all())

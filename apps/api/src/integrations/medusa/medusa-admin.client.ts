@@ -444,7 +444,7 @@ export interface MedusaCollectionInput {
 
 export interface MedusaCollectionListResult {
   rows: MedusaCollectionRow[];
-  /** Igaz, ha a valasz kimeritette a limitet, tehat lehet tobb is. */
+  /** Igaz, ha a lapozas a biztonsagi felso hatarba utkozott, tehat lehet tobb is (nem a 500-as oldalmeret miatt). */
   truncated: boolean;
 }
 
@@ -457,6 +457,9 @@ export interface MedusaCollectionListResult {
  * letrehozni, amik mar leteznek.
  */
 export const COLLECTION_LIST_LIMIT = 500;
+
+/** A lapozas biztonsagi felso hatara: 20 oldal x 500 = 10 000 gyujtemeny. Ennel tobbnel a lista csonkoltnak szamit. */
+export const COLLECTION_LIST_MAX_PAGES = 20;
 
 /**
  * A kategoria-lista felso hatara.
@@ -1278,6 +1281,13 @@ export interface MedusaAdminClient {
    * A reszletek a megvalositas mellett allnak.
    */
   listProductCollections(): Promise<MedusaCollectionListResult>;
+  /**
+   * Egy gyujtemeny termekeinek azonositoi, lapozva (kartya ec82b629: a handle-t foglalo gyujtemeny tartalma). `truncated`: a
+   * lapozas a biztonsagi felso hatarba utkozott.
+   */
+  listCollectionProductIds(
+    collectionId: string,
+  ): Promise<{ ids: string[]; truncated: boolean }>;
   /** Egy gyujtemeny letrehozasa. EZ IR A BOLTI OLDALRA. */
   createProductCollection(
     input: MedusaCollectionInput,
@@ -2571,15 +2581,60 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
    * A valasz kulcsa ugyanebbol a forrasbol: `{ collections, count, offset, limit }`.
    */
   async listProductCollections(): Promise<MedusaCollectionListResult> {
-    const params = new URLSearchParams({
-      fields: "id,title,handle,external_id",
-      limit: String(COLLECTION_LIST_LIMIT),
-    });
-    const body = await this.request<{
-      collections: MedusaCollectionRow[];
-    }>(`/admin/collections?${params.toString()}`);
-    const rows = body.collections ?? [];
-    return { rows, truncated: rows.length >= COLLECTION_LIST_LIMIT };
+    /*
+      LAPOZVA (kartya ec82b629): az elso oldal 500 sornal megallt, es `truncated` megtagadta a lepest, amint a bolt gyujtemenyeinek
+      szama ezt elerte -- pedig a valasz a `count`-ot es az `offset`-et is hozza. Most a `count`-ig (vagy az elso nem teli oldalig)
+      lapozunk, es CSAK a biztonsagi felso hatar (`COLLECTION_LIST_MAX_PAGES` oldal) elerese csonkolt: egy vegtelen ciklus ellen
+      kell, nem a normal eset.
+    */
+    const rows: MedusaCollectionRow[] = [];
+    for (let page = 0; page < COLLECTION_LIST_MAX_PAGES; page += 1) {
+      const params = new URLSearchParams({
+        fields: "id,title,handle,external_id",
+        limit: String(COLLECTION_LIST_LIMIT),
+        offset: String(rows.length),
+      });
+      const body = await this.request<{
+        collections: MedusaCollectionRow[];
+        count?: number;
+      }>(`/admin/collections?${params.toString()}`);
+      const batch = body.collections ?? [];
+      rows.push(...batch);
+      const more =
+        typeof body.count === "number"
+          ? rows.length < body.count
+          : batch.length >= COLLECTION_LIST_LIMIT;
+      // egy ures oldal a `count` ellenere is megall: a visszaadott szam nem tarthat vegtelen ciklusban
+      if (!more || batch.length === 0) return { rows, truncated: false };
+    }
+    return { rows, truncated: true };
+  }
+
+  async listCollectionProductIds(
+    collectionId: string,
+  ): Promise<{ ids: string[]; truncated: boolean }> {
+    // ugyanaz a lapozas, mint a gyujtemeny-listanal: a `count`-ig, a biztonsagi felso hataron belul
+    const ids: string[] = [];
+    for (let page = 0; page < COLLECTION_LIST_MAX_PAGES; page += 1) {
+      const params = new URLSearchParams({
+        fields: "id",
+        limit: String(COLLECTION_LIST_LIMIT),
+        offset: String(ids.length),
+      });
+      params.append("collection_id[]", collectionId);
+      const body = await this.request<{
+        products: { id: string }[];
+        count?: number;
+      }>(`/admin/products?${params.toString()}`);
+      const batch = body.products ?? [];
+      ids.push(...batch.map((product) => product.id));
+      const more =
+        typeof body.count === "number"
+          ? ids.length < body.count
+          : batch.length >= COLLECTION_LIST_LIMIT;
+      if (!more || batch.length === 0) return { ids, truncated: false };
+    }
+    return { ids, truncated: true };
   }
 
   /**
