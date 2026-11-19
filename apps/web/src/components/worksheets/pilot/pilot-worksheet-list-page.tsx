@@ -8,6 +8,7 @@ import {
   Pagination,
   Skeleton,
   PilotDataTable,
+  PilotDateField,
   PilotSelect,
   type PilotTableColumn,
   PAGE_GUTTER_X,
@@ -29,6 +30,7 @@ import { ServiceOfflineNotice } from "@/components/service/service-offline-notic
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { serviceJobRef } from "../service-job-ref";
 import {
+  formatDay,
   formatLaborHours,
   worksheetDisplayLabel,
   worksheetDisplayPilotVariant,
@@ -188,13 +190,13 @@ type WorksheetRow = WorksheetListResponse["items"][number];
   végi nyíl csak asztali jelzés. A fő sor a munkalap TÁRGYA, alatta a szám (Balázs, 2026-10-26
   12:48 UTC, OS szál, msg 1564259312728150148): mindenhol egyformán.
 */
-export const WORKSHEET_TABLE_MIN_WIDTH = 1080;
+export const WORKSHEET_TABLE_MIN_WIDTH = 1140;
 
 export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
   {
     id: "worksheet",
     header: "Munkalap",
-    width: "280px",
+    width: "260px",
     cell: (worksheet) => (
       <>
         <p className="break-words text-sm font-semibold text-pilot-grey-900">
@@ -222,7 +224,7 @@ export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
   {
     id: "customer",
     header: "Partner / helyszín",
-    width: "240px",
+    width: "220px",
     cell: (worksheet) => (
       <>
         <p className="break-words text-pilot-grey-900">
@@ -239,7 +241,7 @@ export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
   {
     id: "assignees",
     header: "Felelős",
-    width: "150px",
+    width: "140px",
     cell: (worksheet) =>
       worksheet.assigneeNames.length > 0 ? (
         <span className="text-pilot-grey-900">
@@ -252,7 +254,7 @@ export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
   {
     id: "status",
     header: "Állapot",
-    width: "140px",
+    width: "130px",
     cell: (worksheet) => (
       <PilotBadge
         variant={worksheetDisplayPilotVariant(
@@ -265,9 +267,21 @@ export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
     ),
   },
   {
+    id: "createdAt",
+    // a megnyitás (létrehozás) napja, budapesti naptári nap (kártya a785e580, Luca 2026-11-19)
+    header: "Megnyitva",
+    width: "110px",
+    nowrap: true,
+    cell: (worksheet) => (
+      <span className="text-pilot-grey-900">
+        {formatDay(worksheet.createdAt)}
+      </span>
+    ),
+  },
+  {
     id: "hours",
     header: "Munkaóra",
-    width: "110px",
+    width: "100px",
     nowrap: true,
     cell: (worksheet) => (
       <span className="text-pilot-grey-900">
@@ -279,7 +293,7 @@ export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
     id: "serviceJob",
     // a sorban hibajegy (HJ-) és karbantartási lap (KT-) száma is áll: a fejléc semleges
     header: "Jegy / lap",
-    width: "120px",
+    width: "110px",
     nowrap: true,
     cell: (worksheet) =>
       worksheet.serviceJob ? (
@@ -436,9 +450,18 @@ export function PilotWorksheetListPage() {
     return counts[key];
   };
 
+  const createdFrom = params.get("createdFrom") ?? "";
+  const createdTo = params.get("createdTo") ?? "";
   const hasFilters = Boolean(
-    search || params.get("customerId") || activeJobKind,
+    search ||
+    params.get("customerId") ||
+    activeJobKind ||
+    createdFrom ||
+    createdTo,
   );
+  // a fordított tartomány a szerveren 400: itt előbb kimondjuk, mi a baj (a lista addig a hibaüzenetet mutatja)
+  const reversedRange =
+    Boolean(createdFrom && createdTo) && createdFrom > createdTo;
 
   return (
     <PilotThemeRoot
@@ -559,6 +582,39 @@ export function PilotWorksheetListPage() {
             </PilotSelect>
           </label>
         ) : null}
+        {/* A MEGNYITÁS NAPJÁNAK TÓL-IG SZŰRŐJE (kártya a785e580): mindkét határnap benne van, bármelyik elhagyható */}
+        <div
+          className="flex items-center gap-2 text-sm text-pilot-grey-700"
+          role="group"
+          aria-label="Megnyitás napja"
+        >
+          <span>Megnyitva</span>
+          <PilotDateField
+            aria-label="Megnyitva ettől a naptól"
+            value={createdFrom}
+            max={createdTo || undefined}
+            onChange={(day) => {
+              // gépelés közben a félig beírt nap üres értéket ad: az nem szűrőváltozás
+              if (day !== createdFrom) filter("createdFrom", day);
+            }}
+            className="w-40"
+          />
+          <span aria-hidden="true">–</span>
+          <PilotDateField
+            aria-label="Megnyitva eddig a napig"
+            value={createdTo}
+            min={createdFrom || undefined}
+            onChange={(day) => {
+              if (day !== createdTo) filter("createdTo", day);
+            }}
+            className="w-40"
+          />
+          {reversedRange ? (
+            <span role="alert" className="text-xs font-medium text-red-600">
+              A kezdő dátum a záró dátum után van.
+            </span>
+          ) : null}
+        </div>
         {/*
           A KAPCSOLT MUNKA FAJTÁJA (kártya 8219e7d6): a szűrést a szerver végzi (`jobKind`), a lista lapozott. A hibajegy nélküli (önálló) lap csak a Mind alatt áll.
         */}
@@ -605,6 +661,8 @@ export function PilotWorksheetListPage() {
               const next = new URLSearchParams(params.toString());
               next.delete("customerId");
               next.delete("jobKind");
+              next.delete("createdFrom");
+              next.delete("createdTo");
               next.set("page", "1");
               router.replace(`${pathname}?${next}`);
             }}

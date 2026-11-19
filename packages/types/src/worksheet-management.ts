@@ -672,6 +672,11 @@ export interface WorksheetListItem {
     /** A jegy fajtája: a karbantartási lap nem hibajegy, a hivatkozás ennek megfelelően megy (Balázs, 2026-11-18). Hiányzik a régi válaszból. */
     kind?: "REPAIR" | "MAINTENANCE";
   } | null;
+  /**
+   * A MUNKALAP MEGNYITÁSÁNAK (LÉTREHOZÁSÁNAK) PILLANATA, ISO (kártya a785e580, Luca 2026-11-19): a lista "Megnyitva"
+   * oszlopa és a tól-ig szűrője. A nap a budapesti naptári nap; a megjelenítés és a szűrő is azt használja.
+   */
+  createdAt: string;
   updatedAt: string;
   /**
    * EL VAN-E REJTVE. Alapból egyetlen listán sem szerepel rejtett sor, tehát
