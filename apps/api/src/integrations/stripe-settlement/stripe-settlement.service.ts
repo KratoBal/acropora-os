@@ -35,7 +35,13 @@ import {
   type StripePayoutToSave,
   type StripeSettlementStore,
 } from "./stripe-settlement.store.js";
-import { resolveStripeLine } from "./stripe-resolution.js";
+import {
+  STRIPE_PAYMENT_TYPES,
+  STRIPE_REFUND_TYPES,
+  resolveStripeLine,
+  resolveStripeRefundIntent,
+  type StripeLineResolution,
+} from "./stripe-resolution.js";
 
 /** The environment the pull reads its switch from (a test hands in its own). */
 export const STRIPE_SETTLEMENT_ENV = Symbol("STRIPE_SETTLEMENT_ENV");
@@ -274,21 +280,28 @@ export class StripeSettlementService {
     const invoices = await this.store.liveInvoicesByOrder(
       transactions.flatMap((txn) => txn.orders.map((order) => order.id)),
     );
+    const refunded = await this.refundedIntentResolutions(
+      payout.id,
+      transactions,
+      ordersTruncated,
+    );
     const lines: StripeLineToSave[] = transactions.map((txn) => {
-      const resolution = resolveStripeLine(
-        {
-          type: txn.type,
-          amount: txn.amount,
-          paymentIntent: txn.payment_intent,
-          orders: txn.orders.map((order) => ({
-            id: order.id,
-            displayId: order.display_id,
-            total: order.total,
-          })),
-          ordersTruncated,
-        },
-        invoices,
-      );
+      const resolution =
+        refunded.get(txn.id) ??
+        resolveStripeLine(
+          {
+            type: txn.type,
+            amount: txn.amount,
+            paymentIntent: txn.payment_intent,
+            orders: txn.orders.map((order) => ({
+              id: order.id,
+              displayId: order.display_id,
+              total: order.total,
+            })),
+            ordersTruncated,
+          },
+          invoices,
+        );
       const common = {
         stripeTransactionId: txn.id,
         type: txn.type,
@@ -330,6 +343,79 @@ export class StripeSettlementService {
       lines,
     };
     await this.store.savePayout(toSave);
+  }
+
+  /**
+   * THE LINES OF A REFUNDED PAYMENTINTENT, DECIDED TOGETHER (A9 refund slice, card 6339b04c). A PaymentIntent that has a refund line,
+   * in this payout or in a payout the OS already holds, is decided by ALL its payment and refund lines (net = payments minus
+   * refunds against the order's invoices, storno and credit notes: `resolveStripeRefundIntent`), the payment line and the refund
+   * line alike: after a full storno the payment line alone would read "no live invoice" and a refund line alone would read "not
+   * the order's total". Only an intent with exactly ONE order: a mixed cart's refund does not say which order it went back to, and
+   * stays for a person (the plain rule gives REFUND_UNCHECKED). Returns transaction id -> resolution, for the lines it decides.
+   */
+  private async refundedIntentResolutions(
+    stripePayoutId: string,
+    transactions: readonly MedusaStripeTransaction[],
+    ordersTruncated: boolean,
+  ): Promise<Map<string, StripeLineResolution>> {
+    const decided = new Map<string, StripeLineResolution>();
+    if (ordersTruncated) return decided;
+    const counted = (type: string) =>
+      STRIPE_PAYMENT_TYPES.includes(type) || STRIPE_REFUND_TYPES.includes(type);
+    const here = new Map<string, MedusaStripeTransaction[]>();
+    for (const txn of transactions) {
+      if (!txn.payment_intent || !counted(txn.type)) continue;
+      here.set(txn.payment_intent, [
+        ...(here.get(txn.payment_intent) ?? []),
+        txn,
+      ]);
+    }
+    if (here.size === 0) return decided;
+    const stored = await this.store.linesByIntent(
+      [...here.keys()],
+      stripePayoutId,
+    );
+
+    const toDecide: {
+      intent: string;
+      txns: MedusaStripeTransaction[];
+      all: { type: string; amount: number }[];
+    }[] = [];
+    for (const [intent, txns] of here) {
+      const all = [
+        ...(stored.get(intent) ?? []),
+        ...txns.map((txn) => ({ type: txn.type, amount: txn.amount })),
+      ];
+      if (!all.some((line) => STRIPE_REFUND_TYPES.includes(line.type)))
+        continue;
+      // the intent's orders are the same on every line of it in this payout (one feed answer per intent); no order, nothing to decide
+      const key = (txn: MedusaStripeTransaction) =>
+        txn.orders
+          .map((order) => order.id)
+          .sort()
+          .join("|");
+      if (txns[0]!.orders.length === 0 || new Set(txns.map(key)).size !== 1)
+        continue;
+      toDecide.push({ intent, txns, all });
+    }
+    if (toDecide.length === 0) return decided;
+
+    const documents = await this.store.orderDocuments(
+      toDecide.flatMap(({ txns }) => txns[0]!.orders.map((order) => order.id)),
+    );
+    for (const { txns, all } of toDecide) {
+      const resolution = resolveStripeRefundIntent(
+        all,
+        txns[0]!.orders.map((order) => ({
+          id: order.id,
+          displayId: order.display_id,
+          total: order.total,
+        })),
+        documents,
+      );
+      for (const txn of txns) decided.set(txn.id, resolution);
+    }
+    return decided;
   }
 
   /** The webshop client, the connection's fault as a 503 (the order list's rule). */

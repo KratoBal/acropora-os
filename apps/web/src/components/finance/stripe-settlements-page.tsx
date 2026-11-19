@@ -90,7 +90,13 @@ const LINE_ERRORS: Record<StripeLineError, string> = {
   AMOUNT_MISMATCH: "A rendelés végösszege más, mint amit a Stripe levont",
   ORDER_NOT_INVOICED: "A rendelésnek még nincs számlája",
   REFUND_UNCHECKED:
-    "Visszatérítés: a rendelés megvan, de a számla sztornóját vagy helyesbítését ember dönti el",
+    "Visszatérítés, de a webshop nem olvasta végig a rendeléseket: a rendelések hiányosak lehetnek, ember dönti el",
+  REFUND_INVOICE_NOT_CANCELLED:
+    "Teljes visszatérítés, de egy rendelés számlája még él: sztornózni kell",
+  REFUND_INVOICE_NOT_CORRECTED:
+    "Részleges visszatérítés, de egy rendelés számlája a helyesbítés után nem a megmaradt összegről szól",
+  REFUND_AMOUNT_UNEXPLAINED:
+    "A befizetések és a visszatérítések különbsége nem nulla és nem a rendelések összege (hiányzó befizetés-sor, vagy a rendelések nincsenek csökkentve)",
   TYPE_UNKNOWN:
     "Nem fizetés és nem díj (vita, korrekció, tartalék): nézd meg a Stripe-ban",
 };
