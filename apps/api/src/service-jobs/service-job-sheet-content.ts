@@ -20,6 +20,15 @@ export interface ServiceJobSheetInput {
   assets: readonly { assetNumber: string; assetName: string }[];
   assignees: readonly string[];
   photos?: readonly { thumbnail: Uint8Array; caption: string | null }[];
+  /**
+   * THE WORKSHEETS LINKED TO THIS MAINTENANCE SHEET (card 5b366f5d), or `undefined` for a sheet that takes no links (a repair
+   * ticket: no empty section). References only: the section carries no hours and no price on purpose, and says so.
+   */
+  linkedWorksheets?: readonly {
+    number: string | null;
+    subject: string;
+    createdAt: Date;
+  }[];
   log: readonly { at: Date; text: string; authorName: string | null }[];
 }
 
@@ -31,6 +40,25 @@ export interface ServiceJobSheetSection {
 const dateTime = new Intl.DateTimeFormat("hu-HU", {
   dateStyle: "long",
   timeStyle: "short",
+  timeZone: "Europe/Budapest",
+});
+
+/**
+ * WHICH LINKED WORKSHEETS THE VIEWER SEES ON THE SHEET: a worksheet hidden since it was linked is listed for an internal user
+ * only, the same rule as the sheet's own worksheets in the package (`worksheetsBlockingPackage`, the zip loop). One function,
+ * so the PDF list, the gate and the zip cannot drift apart.
+ */
+export function visibleLinkedWorksheets<T extends { hiddenAt: Date | null }>(
+  linked: readonly { worksheet: T }[],
+  internal: boolean,
+): { worksheet: T }[] {
+  return linked.filter(
+    ({ worksheet }) => internal || worksheet.hiddenAt === null,
+  );
+}
+
+const day = new Intl.DateTimeFormat("hu-HU", {
+  dateStyle: "long",
   timeZone: "Europe/Budapest",
 });
 
@@ -50,6 +78,19 @@ export function serviceJobSheetSections(
           )
         : ["Nincs eszköz megjelölve."],
     },
+    ...(input.linkedWorksheets === undefined
+      ? []
+      : [
+          {
+            title: "Kapcsolódó munkalapok (munkaóra és ár nélkül)",
+            lines: input.linkedWorksheets.length
+              ? input.linkedWorksheets.map(
+                  ({ number, subject, createdAt }) =>
+                    `${number ?? "számozatlan munkalap"}${subject.trim() ? ` · ${subject.trim()}` : ""} · ${day.format(createdAt)}`,
+                )
+              : ["Nincs kapcsolódó munkalap."],
+          },
+        ]),
     {
       title: "Delegáltak",
       lines: input.assignees.length
