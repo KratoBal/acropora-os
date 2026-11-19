@@ -262,3 +262,108 @@ describe("siteForContractItems", () => {
     );
   });
 });
+
+describe("createJobFromContractItems: egy alkalom egy munkalap (kártya c873bf3a)", () => {
+  /**
+   * MI PIROSÍT: ha az átvitt alkalmak száma nem a munkalapok száma; ha az első alkalom kulcsa megváltozik (az
+   * egyalkalmas tétel újrafuttatása új lapot nyitna); ha a többi alkalom kulcsa nem hordozza a sorszámot (két alkalom
+   * ugyanazt a lapot kapná vissza); ha egy munkalap a régi "alkalmak száma" sort viszi; ha a lapok tárgya nem
+   * különbözteti meg az alkalmat; ha egy alkalom nélküli (0 vagy hiányzó) érték nulla munkalapot ad.
+   */
+  const run = async (items: ContractItemForJob[]) => {
+    const calls = {
+      worksheets: [] as Record<string, unknown>[],
+      warn: [] as string[],
+    } as {
+      job?: Record<string, unknown>;
+      worksheets: Record<string, unknown>[];
+      warn: string[];
+    };
+    await createJobFromContractItems(
+      deps(
+        new Map(
+          items.map((i) => [i.id, { onSite: ["asset-" + i.id], outside: [] }]),
+        ),
+        calls,
+      ),
+      {
+        title: "t",
+        contract: { id: "contract-1", customerId: "customer-1" },
+        departmentId: "capasuli",
+        items,
+        jobOperationId: "lap",
+        worksheetOperationIdPrefix: "mlap-",
+        source: "teszt",
+      },
+      ACTOR,
+    );
+    return calls.worksheets;
+  };
+  const tetel = (occasions?: number, id = "item-1"): ContractItemForJob => ({
+    id,
+    departmentId: "nagymedence",
+    description: "Nagymedence karbantartás",
+    quantity: 1,
+    ...(occasions === undefined ? {} : { occasions }),
+  });
+
+  it("két átvitt alkalomból két munkalap lesz, alkalmanként egy, dátum nélkül", async () => {
+    const lapok = await run([tetel(2)]);
+    assert.equal(lapok.length, 2);
+    assert.deepEqual(
+      lapok.map((w) => w.subject),
+      [
+        "Nagymedence karbantartás (1. alkalom)",
+        "Nagymedence karbantartás (2. alkalom)",
+      ],
+    );
+    for (const lap of lapok) {
+      assert.equal(lap.serviceJobId, "job-1");
+      assert.equal(lap.departmentId, "nagymedence");
+      assert.deepEqual(lap.assetIds, ["asset-item-1"]);
+      for (const mezo of ["issueDate", "fulfillmentDate", "dueDate"])
+        assert.equal(lap[mezo], undefined);
+    }
+  });
+
+  it("az első alkalom kulcsa a régi, a többié viseli a sorszámot: az újrafuttatás ugyanazokat a lapokat kapja", async () => {
+    const lapok = await run([tetel(3)]);
+    assert.deepEqual(
+      lapok.map((w) => w.clientOperationId),
+      ["mlap-item-1", "mlap-item-1-alkalom-2", "mlap-item-1-alkalom-3"],
+    );
+  });
+
+  it("minden munkalap a tétel egy sorát viszi, nem az 'alkalmak száma' sort", async () => {
+    const lapok = await run([tetel(2)]);
+    for (const lap of lapok)
+      assert.deepEqual(lap.lines, [
+        {
+          description: "Nagymedence karbantartás",
+          quantity: 1,
+          unit: "db",
+          kind: "OTHER",
+        },
+      ]);
+  });
+
+  it("az egyalkalmas (vagy alkalom nélküli) tétel ugyanaz az egy lap, a tárgyában sorszám nélkül", async () => {
+    for (const alkalom of [1, undefined, 0]) {
+      const lapok = await run([tetel(alkalom)]);
+      assert.equal(lapok.length, 1);
+      assert.equal(lapok[0]?.subject, "Nagymedence karbantartás");
+      assert.equal(lapok[0]?.clientOperationId, "mlap-item-1");
+    }
+  });
+
+  it("több tétel alkalmai tételenként számolódnak, és a kulcsok nem ütköznek", async () => {
+    const lapok = await run([
+      tetel(2, "item-1"),
+      tetel(1, "item-2"),
+      tetel(2, "item-3"),
+    ]);
+    assert.equal(lapok.length, 5);
+    const kulcsok = lapok.map((w) => w.clientOperationId as string);
+    assert.equal(new Set(kulcsok).size, 5);
+  });
+});
