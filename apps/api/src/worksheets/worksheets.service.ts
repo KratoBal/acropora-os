@@ -26,6 +26,7 @@ import {
   BadRequestException,
   ForbiddenException,
   ConflictException,
+  HttpException,
   Inject,
   Injectable,
   Logger,
@@ -89,6 +90,11 @@ import {
 } from "./worksheet-bulk-sheets.js";
 import { isSheetArchive } from "./worksheet-sheet-regeneration.js";
 import { diffWorksheetVersions } from "./worksheet-diff.js";
+import {
+  copyOperationId,
+  WORKSHEET_COPY_MAX,
+  worksheetCopyInput,
+} from "./worksheet-copy.js";
 import {
   WORKSHEET_NUMBER_ISSUE_MESSAGES,
   type WorksheetNumberIssue,
@@ -803,6 +809,58 @@ export class WorksheetsService {
           : `${missing.length} megadott eszköz nem ezen a helyszínen áll.`,
       );
     return assetIds;
+  }
+
+  /**
+   * A KIJELÖLT MUNKALAPOK MÁSOLÁSA (kártya a785e580, 2. szelet): laponként egy új piszkozat a kézi nyitás útján
+   * (`create`), a forrás adataival (`worksheetCopyInput`: mi jön át, mi nem). Laponként sorban (a sorszám sorban adódik),
+   * és laponként eredménnyel: egy lap, amit a szülője már nem fogad (lezárt hibajegy), nem állítja meg a többit, hanem a
+   * saját sorában mondja meg, miért nem lett belőle másolat. A forrás a hívó hatókörében olvasódik, mint a megnyitásnál.
+   */
+  async copyWorksheets(
+    ids: readonly string[],
+    actor: AuthenticatedUser,
+    requestId?: string,
+  ): Promise<{
+    results: (
+      | { sourceId: string; ok: true; id: string; number: string | null }
+      | { sourceId: string; ok: false; message: string }
+    )[];
+  }> {
+    requireInternalWriter(actor, "Munkalap másolása");
+    const unique = [...new Set(ids)];
+    if (unique.length === 0 || unique.length > WORKSHEET_COPY_MAX)
+      throw new BadRequestException(
+        `Egyszerre 1 és ${WORKSHEET_COPY_MAX} közötti munkalap másolható.`,
+      );
+    const scope = partnerScopeOf(actor);
+    const results: Awaited<
+      ReturnType<WorksheetsService["copyWorksheets"]>
+    >["results"] = [];
+    for (const sourceId of unique) {
+      try {
+        const source = await this.detail(sourceId, scope);
+        const copy = await this.create(
+          worksheetCopyInput(source, copyOperationId(requestId, sourceId)),
+          actor,
+        );
+        results.push({ sourceId, ok: true, id: copy.id, number: copy.number });
+      } catch (error) {
+        results.push({
+          sourceId,
+          ok: false,
+          message:
+            error instanceof HttpException
+              ? error.message
+              : "A munkalap másolása nem sikerült.",
+        });
+        if (!(error instanceof HttpException))
+          this.logger.error(
+            `Munkalap másolása (${sourceId}) váratlan hibával: ${error instanceof Error ? error.message : String(error)}`,
+          );
+      }
+    }
+    return { results };
   }
 
   async create(

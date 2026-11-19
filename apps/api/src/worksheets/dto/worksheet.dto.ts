@@ -663,3 +663,25 @@ export class BulkWorksheetSheetsDto {
   @IsIn(["zip", "merged"])
   format!: "zip" | "merged";
 }
+
+/**
+ * A KIJELÖLT MUNKALAPOK MÁSOLÁSA (kártya a785e580): 1-50 lap, és egy elhagyható kérés-azonosító. Ha van, a másolatok
+ * művelet-azonosítója ebből és a forrás-lapból képződik, tehát egy újraküldött kérés ugyanazokat a lapokat adja vissza.
+ * A lap-azonosító itt is legfeljebb 64 karakter, mint a PDF-kérésnél; a kérés-azonosítóval együtt a kulcs 128-on belül marad.
+ */
+export class CopyWorksheetsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  @MaxLength(54, { each: true })
+  ids!: string[];
+
+  @Matches(/^[A-Za-z0-9_.:-]{8,64}$/, {
+    message:
+      "A kérés-azonosító 8-64 karakter lehet: betű, szám, kötőjel, aláhúzás, pont és kettőspont.",
+  })
+  @IsOptional()
+  requestId?: string;
+}

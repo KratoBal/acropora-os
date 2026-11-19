@@ -33,6 +33,7 @@ import {
   AttachableWorksheetQueryDto,
   BulkWorksheetSheetsDto,
   CreateWorksheetDepartmentDto,
+  CopyWorksheetsDto,
   CreateWorksheetDto,
   CreateWorksheetEntryDto,
   CreateWorksheetLineDto,
@@ -189,6 +190,19 @@ export class WorksheetsController {
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
   assignableUsers(@CurrentUser() user: AuthenticatedUser) {
     return this.service.assignableUsers(partnerScopeOf(user));
+  }
+
+  /**
+   * A KIJELÖLT MUNKALAPOK MÁSOLÁSA (kártya a785e580): laponként egy új piszkozat ugyanazon a szülőn, laponként
+   * eredménnyel (`WorksheetsService.copyWorksheets`). Statikus útvonal, a `:id` alakúak előtt.
+   */
+  @Post("bulk/copy")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  copyWorksheets(
+    @Body() input: CopyWorksheetsDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.copyWorksheets(input.ids, user, input.requestId);
   }
 
   @Get(":id")
