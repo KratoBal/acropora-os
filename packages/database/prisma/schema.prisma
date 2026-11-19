@@ -6167,6 +6167,15 @@ model Worksheet {
    */
   serviceJobId         String?
   /**
+   * A MUNKALAP A KARBANTARTÁSI LAP FELELŐSEIT KÖVETI (kártya d91005e9, Luca 2026-11-19: "amit a karbantartási lapon
+   * beállítanak, az automatikusan kerüljön rá a munkalapokra; ha változik, a munkalapon még mindig felül lehet
+   * bírálni"). IGAZ: a lap keletkezésekor a felelősei pontosan a karbantartási lapéi voltak (vagy a rendszer hozta létre
+   * a lap alá), és azóta senki nem írta át őket a munkalapon: a karbantartási lap felelőseinek változása ilyenkor
+   * átmegy rá. HAMIS (az alap): önálló lap; a már meglévő lapok mind ilyenek, a változás őket nem írja át. Bármilyen kézi
+   * felelős-mentés a munkalapon HAMISRA állítja: ez a "felülbírálás".
+   */
+  followsJobAssignees  Boolean  @default(false)
+  /**
    * AZ ÁTADÁS: A SZERELŐ VÉGZETT, ÉS A LAP A SZOLGÁLTATÓÉ.
    * KÜLÖN MEZŐ, NEM ÚJ ÁLLAPOT A `WorksheetVersionStatus` ENUMBAN, és ez a
    * megkülönböztetés fontosabb, mint amilyennek látszik: az a négy állapot az

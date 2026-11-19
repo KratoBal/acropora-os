@@ -777,6 +777,12 @@ export class WorksheetsService {
       input.departmentId,
     );
 
+    // A munkalap a karbantartási lap felelőseit követi, ha a nyitáskor pontosan azok a felelősei (kártya d91005e9):
+    // az előtöltött és érintetlenül hagyott lista, és a rendszer által a lap alá nyitott (még kiosztatlan) munkalap is
+    // ilyen. Egy másképp kiosztott lap önálló.
+    const followsJobAssignees =
+      serviceJobId !== null &&
+      (await this.followsJobAssignees(serviceJobId, assigneeIds));
     const id = await this.repository.createDraft({
       customerId: input.customerId,
       departmentId: input.departmentId,
@@ -785,6 +791,7 @@ export class WorksheetsService {
       assigneeIds,
       assetIds,
       serviceJobId,
+      followsJobAssignees,
       clientOperationId: input.clientOperationId,
     });
     const detail = await this.detailAfterWrite(id);
@@ -1853,6 +1860,21 @@ export class WorksheetsService {
    * MONDAT viszont ezé az uté: itt a lap MOST keletkezne, tehat a felhasznalo
    * nem masik lapot valaszt, hanem vagy a jegyet, vagy a partnert javitja.
    */
+  /**
+   * KÖVETI-E A MUNKALAP A LAP FELELŐSEIT (kártya d91005e9): csak karbantartási lap alatt, és csak ha a megadott lista
+   * a lap felelőseinek pontosan az egyezése (sorrendtől függetlenül). Hibajegy alatt a munkalap önálló marad.
+   */
+  private async followsJobAssignees(
+    serviceJobId: string,
+    assigneeIds: readonly string[],
+  ): Promise<boolean> {
+    const ticket = await this.repository.ticketPartner(serviceJobId);
+    if (!ticket || ticket.kind !== "MAINTENANCE") return false;
+    const job = new Set((ticket.assignees ?? []).map((row) => row.userId));
+    const mine = new Set(assigneeIds);
+    return job.size === mine.size && [...job].every((id) => mine.has(id));
+  }
+
   private async requireTicketFor(serviceJobId: string, customerId: string) {
     const ticket = await this.repository.ticketPartner(serviceJobId);
     if (!ticket)

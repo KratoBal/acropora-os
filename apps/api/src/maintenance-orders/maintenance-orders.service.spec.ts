@@ -1033,9 +1033,9 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
   }
 
   /*
-    A MUNKALAP A TÉTEL TELJES KÉRT DARAB- ÉS ALKALOMSZÁMÁVAL, TÉTELENKÉNT KÜLÖN (Luca, 2026-11-13; acrobot: egy
-    munkalap az egészet fedi). MI PIROSÍT: ha a kért darab- és alkalomszám nem a tételsorba, a munkalapba és a
-    foglalásba kerül; ha a tételenkénti mód egy lapra teszi az összes tételt, vagy az egyik keretét nem előre
+    ANNYI MUNKALAP, AHÁNY ALKALMAT ÁTVITTEK, TÉTELENKÉNT KÜLÖN (Luca, 2026-11-19; 2026-11-13-ig egy munkalap fedte az
+    egészet). MI PIROSÍT: ha a kért darab- és alkalomszám nem a tételsorba és a foglalásba kerül, vagy az alkalmak száma
+    nem a munkalapok száma; ha a tételenkénti mód egy lapra teszi az összes tételt, vagy az egyik keretét nem előre
     ellenőrzi (az első lap létrejönne, a második elbukna); ha az egyalkalmas tételnél alkalom-sor kerül a munkalapra.
   */
   const twoItems = () =>
@@ -1064,7 +1064,7 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
       ],
     });
 
-  it("a kért darab- és alkalomszám a tételsorba, a munkalapra és a foglalásba megy", async () => {
+  it("a kért darab- és alkalomszám a tételsorba és a foglalásba megy, a munkalapokra alkalmanként egy lap (kártya c873bf3a)", async () => {
     const h = harness();
     await h.run({
       lines: [{ itemId: "item-1", quantity: "2,5", occasions: 3 }],
@@ -1078,16 +1078,15 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
         .requested,
       3,
     );
-    const lines = (
-      h.worksheetInputs[0] as { lines: Array<Record<string, unknown>> }
-    ).lines;
-    assert.deepEqual(
-      lines.map((line) => [line.unit, line.quantity]),
-      [
-        ["db", 2.5],
-        ["alkalom", 3],
-      ],
-    );
+    // HÁROM ALKALOM, HÁROM MUNKALAP (Luca, 2026-11-19), mindegyik a tétel darabszámával, "alkalmak száma" sor nélkül
+    assert.equal(h.worksheetInputs.length, 3);
+    for (const input of h.worksheetInputs) {
+      const lines = (input as { lines: Array<Record<string, unknown>> }).lines;
+      assert.deepEqual(
+        lines.map((line) => [line.unit, line.quantity]),
+        [["db", 2.5]],
+      );
+    }
   });
 
   it("egy alkalomnál nincs alkalom-sor a munkalapon", async () => {
