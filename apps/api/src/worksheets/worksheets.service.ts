@@ -780,11 +780,11 @@ export class WorksheetsService {
     const results: Awaited<
       ReturnType<WorksheetsService["copyWorksheets"]>
     >["results"] = [];
-    for (const [index, sourceId] of unique.entries()) {
+    for (const sourceId of unique) {
       try {
         const source = await this.detail(sourceId, scope);
         const copy = await this.create(
-          worksheetCopyInput(source, copyOperationId(requestId, index)),
+          worksheetCopyInput(source, copyOperationId(requestId, sourceId)),
           actor,
         );
         results.push({ sourceId, ok: true, id: copy.id, number: copy.number });

@@ -136,13 +136,19 @@ describe("worksheetCopyInput", () => {
     );
   });
 
-  it("the copy's operation id comes from the request and the sheet's place in it", () => {
-    assert.equal(copyOperationId(undefined, 0), undefined);
-    assert.equal(copyOperationId("req-abcdef12", 3), "req-abcdef12:masolat:3");
+  it("the copy's operation id comes from the request and the SOURCE sheet, not its place", () => {
+    assert.equal(copyOperationId(undefined, "ws-1"), undefined);
     assert.equal(
-      worksheetCopyInput(source(), "req-abcdef12:masolat:0").clientOperationId,
-      "req-abcdef12:masolat:0",
+      copyOperationId("req-abcdef12", "ws-3"),
+      "req-abcdef12:masolat:ws-3",
     );
+    assert.equal(
+      worksheetCopyInput(source(), "req-abcdef12:masolat:ws-1")
+        .clientOperationId,
+      "req-abcdef12:masolat:ws-1",
+    );
+    // the longest request id and a cuid stay inside the 128-character operation id
+    assert.ok(copyOperationId("r".repeat(64), "c".repeat(25))!.length <= 128);
     assert.equal("clientOperationId" in worksheetCopyInput(source()), false);
   });
 });
@@ -156,12 +162,21 @@ describe("WorksheetsService.copyWorksheets", () => {
       if (fail[id]) throw fail[id];
       return source({ id });
     };
+    // like `createDraft`: a known operation id answers the sheet it made before
+    const byOperation = new Map<string, WorksheetDetail>();
     svc.create = async (input: CreateWorksheetDto) => {
+      const known = input.clientOperationId
+        ? byOperation.get(input.clientOperationId)
+        : undefined;
+      if (known) return known;
       created.push(input);
-      return {
+      const made = {
         id: `copy-${created.length}`,
         number: `ACR-2026/0010${created.length}`,
       } as WorksheetDetail;
+      if (input.clientOperationId)
+        byOperation.set(input.clientOperationId, made);
+      return made;
     };
     return { svc, created };
   };
@@ -179,8 +194,29 @@ describe("WorksheetsService.copyWorksheets", () => {
     ]);
     assert.deepEqual(
       created.map((c) => c.clientOperationId),
-      ["req-abcdef12:masolat:0", "req-abcdef12:masolat:1"],
+      ["req-abcdef12:masolat:ws-1", "req-abcdef12:masolat:ws-2"],
     );
+  });
+
+  it("a resent request with the list reordered gives each source its own copy back (barracuda, #2746)", async () => {
+    const { svc, created } = service();
+    const first = await svc.copyWorksheets(
+      ["ws-1", "ws-2"],
+      BELSOS,
+      "req-abcdef12",
+    );
+    const again = await svc.copyWorksheets(
+      ["ws-2", "ws-1"],
+      BELSOS,
+      "req-abcdef12",
+    );
+    const pairs = (r: typeof first) =>
+      Object.fromEntries(
+        r.results.map((row) => [row.sourceId, row.ok ? row.id : null]),
+      );
+    assert.deepEqual(pairs(again), pairs(first));
+    assert.deepEqual(pairs(first), { "ws-1": "copy-1", "ws-2": "copy-2" });
+    assert.equal(created.length, 2);
   });
 
   it("a sheet that fails says why in its own row, the others are still copied", async () => {

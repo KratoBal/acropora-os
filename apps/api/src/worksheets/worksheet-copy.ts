@@ -53,14 +53,17 @@ export function worksheetCopyInput(
 }
 
 /**
- * A másolat művelet-azonosítója a kérésé és a lap sorszáma a kérésben: egy újraküldött kérés ugyanazokat a lapokat adja
- * vissza, nem újakat (a `createDraft` a `clientOperationId` ütközésén a meglévőt adja).
+ * A másolat művelet-azonosítója a kérésé és a FORRÁS-lapé: egy újraküldött kérés ugyanazokat a lapokat adja vissza, nem
+ * újakat (a `createDraft` a `clientOperationId` ütközésén a meglévőt adja). A forrás azonosítója, nem a helye a listában
+ * (barracuda, #2746): egy újrapróbálás közben módosított vagy más sorrendű kijelöléssel a hely egy MÁSIK forrás korábbi
+ * másolatát adná vissza, sikerként. A kérés-azonosító legfeljebb 64, a munkalap-azonosító (cuid) 25 karakter, így a kulcs a
+ * 128-as határon belül marad.
  */
 export function copyOperationId(
   requestId: string | undefined,
-  index: number,
+  sourceId: string,
 ): string | undefined {
-  return requestId ? `${requestId}:masolat:${index}` : undefined;
+  return requestId ? `${requestId}:masolat:${sourceId}` : undefined;
 }
 
 export const WORKSHEET_COPY_MAX = 50;

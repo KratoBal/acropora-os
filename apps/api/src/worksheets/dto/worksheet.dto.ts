@@ -649,9 +649,9 @@ export class CopyWorksheetsDto {
   @MinLength(1, { each: true })
   ids!: string[];
 
-  @Matches(/^[A-Za-z0-9_.:-]{8,100}$/, {
+  @Matches(/^[A-Za-z0-9_.:-]{8,64}$/, {
     message:
-      "A kérés-azonosító 8-100 karakter lehet: betű, szám, kötőjel, aláhúzás, pont és kettőspont.",
+      "A kérés-azonosító 8-64 karakter lehet: betű, szám, kötőjel, aláhúzás, pont és kettőspont.",
   })
   @IsOptional()
   requestId?: string;
