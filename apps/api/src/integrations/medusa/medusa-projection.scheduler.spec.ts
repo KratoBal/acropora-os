@@ -3616,12 +3616,15 @@ describe("a hiányzó márka-gyűjtemények köre (kártya ec82b629)", () => {
       skip: 5,
       conflict: 0,
       skipArchived: 0,
+      handleTaken: 0,
     },
     created: 2,
     linkedOnly: 0,
     relinked: 0,
     touched: 2,
     conflicts: [] as string[],
+    handleTaken: [] as string[],
+    failures: [],
   };
 
   it("kikapcsolva (alapból) nem fut", async () => {

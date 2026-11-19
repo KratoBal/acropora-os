@@ -27,6 +27,7 @@ const plan = (over: Partial<BrandImportPlan> = {}): BrandImportPlan => ({
   staleMapping: [],
   conflict: [],
   skipArchived: [],
+  handleTaken: [],
   ...over,
 });
 const report = (over: Partial<BrandImportReport> = {}): BrandImportReport => ({
@@ -36,6 +37,8 @@ const report = (over: Partial<BrandImportReport> = {}): BrandImportReport => ({
   skipped: 0,
   skippedArchived: [],
   conflicts: [],
+  handleTaken: [] as string[],
+  failures: [],
   verification: { carryingOurId: 0, mappingRowsHere: 0, expected: 0 },
   ...over,
 });
@@ -106,6 +109,7 @@ describe("ensureBrandCollections", () => {
         skip: 2,
         conflict: 0,
         skipArchived: 1,
+        handleTaken: 0,
       },
     });
     assert.deepEqual(calls, ["plan"]);
@@ -132,12 +136,15 @@ describe("ensureBrandCollections", () => {
         skip: 0,
         conflict: 0,
         skipArchived: 0,
+        handleTaken: 0,
       },
       created: 2,
       linkedOnly: 1,
       relinked: 1,
       touched: 4,
       conflicts: [],
+      handleTaken: [] as string[],
+      failures: [],
     });
   });
 
@@ -195,12 +202,15 @@ describe("ensureBrandCollections", () => {
         skip: 0,
         conflict: 1,
         skipArchived: 0,
+        handleTaken: 0,
       },
       created: 0,
       linkedOnly: 0,
       relinked: 0,
       touched: 0,
       conflicts: ["k"],
+      handleTaken: [] as string[],
+      failures: [],
     });
     assert.deepEqual(calls, ["plan"]);
   });
@@ -250,12 +260,15 @@ describe("describeBrandCollections", () => {
         skip: 0,
         conflict: 2,
         skipArchived: 0,
+        handleTaken: 0,
       },
       created: 3,
       linkedOnly: 1,
       relinked: 0,
       touched: 4,
       conflicts: ["k1", "k2"],
+      handleTaken: [] as string[],
+      failures: [],
     });
     assert.match(sor, /3 létrehozva/);
     assert.match(sor, /4 márka megérintve/);
@@ -302,6 +315,7 @@ describe("a lépés a kör állapotában (kártya ec82b629, mérhetővé tétel)
       skip: 60,
       conflict: 0,
       skipArchived: 0,
+      handleTaken: 0,
     };
     const valtozatlan = brandCollectionsStep({ status: "unchanged", planned });
     assert.equal(
@@ -326,6 +340,9 @@ describe("a lépés a kör állapotában (kártya ec82b629, mérhetővé tétel)
       relinked: 0,
       touched: 0,
       conflicts: 0,
+      handleTaken: 0,
+      brandFailures: 0,
+      failureSamples: [],
       reason: "csonkolt",
     });
     assert.deepEqual(
@@ -337,6 +354,8 @@ describe("a lépés a kör állapotában (kártya ec82b629, mérhetővé tétel)
         relinked: 0,
         touched: 45,
         conflicts: ["k"],
+        handleTaken: [] as string[],
+        failures: [],
       }),
       {
         enabled: true,
@@ -348,6 +367,9 @@ describe("a lépés a kör állapotában (kártya ec82b629, mérhetővé tétel)
         relinked: 0,
         touched: 45,
         conflicts: 1,
+        handleTaken: 0,
+        brandFailures: 0,
+        failureSamples: [],
         reason: null,
       },
     );
@@ -370,5 +392,106 @@ describe("a lépés a kör állapotában (kártya ec82b629, mérhetővé tétel)
         (brandCollectionsFailedStep("sima szöveg") as { error: string }).error,
       "sima szöveg",
     );
+  });
+});
+
+/*
+  A FOGLALT HANDLE ES A MARKANKENTI HIBA A LEPES JELENTESEBEN (kartya ec82b629). MI PIROSIT: ha egy foglalt handle ("fauna-marin"
+  esete: a Medusan mar letezik) eltunik a jelentesbol, vagy ha onmagaban `unchanged`-nek latszik; ha egy marka hibaja nem latszik
+  a lepes allapotaban (szam es az elso nehany hiba, fazissal); ha a hibak szama nem a valodi szam, hanem a mintae.
+*/
+describe("a foglalt handle és a márkánkénti hiba a jelentésben", () => {
+  const foglalt = {
+    ourId: "brand-fm",
+    handle: "fauna-marin",
+    medusaId: "pcol_fm",
+    reason: "other-brand" as const,
+  };
+
+  it("a foglalt handle magaban nem ir, de a kor jelenti (nem unchanged)", async () => {
+    const { d, calls, touched } = deps({
+      p: plan({ handleTaken: [foglalt] }),
+    });
+    const out = await ensureBrandCollections(d);
+    assert.equal(out.status, "applied");
+    assert.deepEqual(out.status === "applied" && out.handleTaken, ["brand-fm"]);
+    assert.deepEqual(calls, ["plan"]);
+    assert.deepEqual(touched, []);
+  });
+
+  it("a betoltes jelentesenek hibai és foglalt handle-jei a kimenetben vannak", async () => {
+    const { d } = deps({
+      p: plan({ create: [{ ourId: "a", title: "A", handle: "a" }] }),
+      r: report({
+        created: 1,
+        handleTaken: ["brand-fm"],
+        failures: [{ ourId: "b", phase: "create", message: "HTTP 400" }],
+      }),
+    });
+    const out = await ensureBrandCollections(d);
+    assert.ok(out.status === "applied");
+    assert.deepEqual(out.handleTaken, ["brand-fm"]);
+    assert.deepEqual(out.failures, [
+      { ourId: "b", phase: "create", message: "HTTP 400" },
+    ]);
+  });
+
+  it("a napló-sor megnevezi a foglalt handle-t és a hibás márkát fázissal", () => {
+    const sor = describeBrandCollections({
+      status: "applied",
+      planned: {
+        create: 1,
+        mapOnly: 0,
+        staleMapping: 0,
+        skip: 0,
+        conflict: 0,
+        skipArchived: 0,
+        handleTaken: 1,
+      },
+      created: 1,
+      linkedOnly: 0,
+      relinked: 0,
+      touched: 1,
+      conflicts: [],
+      handleTaken: ["brand-fm"],
+      failures: [{ ourId: "brand-x", phase: "link", message: "m" }],
+    });
+    assert.match(sor, /FOGLALT HANDLE.*brand-fm/);
+    assert.match(sor, /1 márkánál a művelet elbukott \(brand-x: link\)/);
+  });
+
+  it("a lépés állapota a hibák valódi számát és csak az első ötöt adja", () => {
+    const failures = Array.from({ length: 8 }, (_, i) => ({
+      ourId: `brand-${i}`,
+      phase: "create" as const,
+      message: "HTTP 400",
+    }));
+    const planned = {
+      create: 8,
+      mapOnly: 0,
+      staleMapping: 0,
+      skip: 0,
+      conflict: 0,
+      skipArchived: 0,
+      handleTaken: 2,
+    };
+    const lep = brandCollectionsStep({
+      status: "applied",
+      planned,
+      created: 0,
+      linkedOnly: 0,
+      relinked: 0,
+      touched: 0,
+      conflicts: [],
+      handleTaken: ["x", "y"],
+      failures,
+    });
+    assert.ok(lep.enabled && !lep.failed);
+    if (lep.enabled && !lep.failed) {
+      assert.equal(lep.brandFailures, 8);
+      assert.equal(lep.failureSamples.length, 5);
+      assert.deepEqual(lep.failureSamples[0], failures[0]);
+      assert.equal(lep.handleTaken, 2);
+    }
   });
 });

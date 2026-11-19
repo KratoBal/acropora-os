@@ -34,7 +34,22 @@ export interface BrandImportReport {
   skipped: number;
   skippedArchived: string[];
   conflicts: string[];
+  /** A handle-t foglalo, a terv altal nem feldolgozhato markak (azonositok): nem hoztuk letre, nem kotottuk ossze oket. */
+  handleTaken: string[];
+  /**
+   * AMELYIK MARKANAL A MUVELET ELBUKOTT, MARKANKENT (kartya ec82b629): egy marka hibaja nem allitja le a tobbit. Korabban az
+   * elso hiba (egy mar letezo handle) kivetelkent kiszallt a ciklusbol, es a hatralevo markak sem kaptak gyujtemenyt, a lepes
+   * eredmenye pedig egyetlen hibasor volt -- azt nem lehetett latni, MELYIK marka es MI bukott.
+   */
+  failures: BrandImportFailure[];
   verification: BrandImportVerification;
+}
+
+export interface BrandImportFailure {
+  ourId: string;
+  phase: "link" | "create" | "relink";
+  /** A hiba rovid szovege (azonosito es titok nelkul, a hosszat korlatozza a hivo). */
+  message: string;
 }
 
 /**
@@ -105,6 +120,8 @@ export class MedusaBrandImportService {
       skipped: terv.skip.length,
       skippedArchived: terv.skipArchived,
       conflicts: terv.conflict.map((c) => c.ourId),
+      handleTaken: terv.handleTaken.map((h) => h.ourId),
+      failures: [],
       verification: {
         carryingOurId: 0,
         mappingRowsHere: 0,
@@ -113,30 +130,53 @@ export class MedusaBrandImportService {
     };
 
     for (const par of terv.mapOnly) {
-      await this.links.link(par.ourId, par.medusaId, now);
-      report.linkedOnly += 1;
+      try {
+        await this.links.link(par.ourId, par.medusaId, now);
+        report.linkedOnly += 1;
+      } catch (error) {
+        report.failures.push(hiba(par.ourId, "link", error));
+      }
     }
 
     const elavult = new Set(terv.staleMapping);
     for (const teendo of terv.create) {
-      const created: MedusaCollectionRow = await client.createProductCollection(
-        {
+      /**
+       * A LETREHOZAS ES A LEKEPEZES KET KULON LEPES, ES MARKANKENT KULON IS BUKHAT. Ha a letrehozas bukik, a marka nem kap sort
+       * (nincs mit lekepezni). Ha a letrehozas sikerult, a lekepezes viszont nem, a gyujtemeny mar all a Medusan a mi kulso
+       * azonositonkkal: a KOVETKEZO kor ezt `mapOnly`-kent latja, es osszekoti -- nem hoz letre masodikat.
+       */
+      let created: MedusaCollectionRow;
+      try {
+        created = await client.createProductCollection({
           title: teendo.title,
           handle: teendo.handle,
           external_id: teendo.ourId,
-        },
-      );
+        });
+      } catch (error) {
+        report.failures.push(hiba(teendo.ourId, "create", error));
+        continue;
+      }
       /**
        * ELAVULT SORNAL `relink`, EGYEBKENT `link`. A kulonbseg nem kenyelmi: a
        * `link` szandekosan megtagadja a felulirast, es itt a terv MERTE, hogy a
        * regi azonosito nincs a Medusa gyujtemenyei kozott.
        */
-      if (elavult.has(teendo.ourId)) {
-        await this.links.relink(teendo.ourId, created.id, now);
-        report.relinked += 1;
-      } else {
-        await this.links.link(teendo.ourId, created.id, now);
-        report.created += 1;
+      try {
+        if (elavult.has(teendo.ourId)) {
+          await this.links.relink(teendo.ourId, created.id, now);
+          report.relinked += 1;
+        } else {
+          await this.links.link(teendo.ourId, created.id, now);
+          report.created += 1;
+        }
+      } catch (error) {
+        report.failures.push(
+          hiba(
+            teendo.ourId,
+            elavult.has(teendo.ourId) ? "relink" : "link",
+            error,
+          ),
+        );
       }
     }
 
@@ -160,6 +200,21 @@ export class MedusaBrandImportService {
 
     return report;
   }
+}
+
+const FAILURE_MESSAGE_MAX = 160;
+
+function hiba(
+  ourId: string,
+  phase: BrandImportFailure["phase"],
+  error: unknown,
+): BrandImportFailure {
+  const text = error instanceof Error ? error.message : String(error);
+  return {
+    ourId,
+    phase,
+    message: text.replace(/\s+/g, " ").trim().slice(0, FAILURE_MESSAGE_MAX),
+  };
 }
 
 function tervAlak(sor: MedusaCollectionRow) {
