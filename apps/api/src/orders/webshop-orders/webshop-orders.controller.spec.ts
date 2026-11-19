@@ -41,3 +41,15 @@ describe("webshop order billing rights", () => {
       );
   });
 });
+
+/**
+ * The loyalty points on the order page (card dfb79916): reading asks for orders.view, a manual credit or debit for
+ * orders.manage. Whether a manual credit should ask for more (it can later pay for goods) is a business decision, not
+ * made here: this pins what is decided so that a change is a visible edit.
+ */
+describe("webshop order loyalty rights", () => {
+  it("reads with orders.view and moves points with orders.manage", () => {
+    assert.deepEqual(required("loyalty"), [PERMISSIONS.ORDERS_VIEW]);
+    assert.deepEqual(required("adjustLoyalty"), [PERMISSIONS.ORDERS_MANAGE]);
+  });
+});

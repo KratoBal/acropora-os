@@ -26,12 +26,14 @@ import { WebshopOrderNotifyDto } from "./dto/webshop-order-notify.dto.js";
 import {
   WebshopOrderAddressDto,
   WebshopOrderNoteDto,
+  WebshopLoyaltyAdjustmentDto,
   WebshopOrderNotesDto,
   WebshopOrderMethodDto,
   WebshopOrderPointDto,
   WebshopOrderSplitDto,
 } from "./dto/webshop-order-edits.dto.js";
 import { WebshopOrderEditsService } from "./webshop-order-edits.service.js";
+import { WebshopOrderLoyaltyService } from "./webshop-order-loyalty.service.js";
 import { WebshopOrderSplitService } from "./webshop-order-split.service.js";
 import { WebshopOrderShippingMethodService } from "./webshop-order-shipping-method.service.js";
 import { WebshopStaleThresholdsDto } from "./dto/webshop-order-stale-thresholds.dto.js";
@@ -59,6 +61,7 @@ export class WebshopOrdersController {
     private readonly lines: WebshopOrderLinesService,
     private readonly payments: WebshopOrderPaymentService,
     private readonly edits: WebshopOrderEditsService,
+    private readonly loyaltyPoints: WebshopOrderLoyaltyService,
     private readonly splits: WebshopOrderSplitService,
     private readonly methods: WebshopOrderShippingMethodService,
     private readonly transfers: WebshopOrderTransferService,
@@ -172,6 +175,25 @@ export class WebshopOrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.edits.saveNotes(id, body, user);
+  }
+
+  /** A rendelés vevőjének hűségpontjai: egyenleg és a legújabb sorok (commerce #808). Vendég rendelésnél `available: false`. */
+  @Get(":id/loyalty")
+  @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
+  loyalty(@Param("id") id: string) {
+    return this.loyaltyPoints.read(id);
+  }
+
+  /** Kézi hűségpont-jóírás vagy -levonás; a `requestId` az újraküldés kulcsa. */
+  @Post(":id/loyalty/adjustments")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  adjustLoyalty(
+    @Param("id") id: string,
+    @Body() body: WebshopLoyaltyAdjustmentDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.loyaltyPoints.adjust(id, body, user);
   }
 
   /** „Csúszik a szállítás”: a kártyás zárolás feloldása, levél a vevőnek. */

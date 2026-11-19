@@ -12,6 +12,7 @@ import { WebshopOrderTaxCheckService } from "./webshop-order-tax-check.service.j
 import { WebshopOrderLinesService } from "./webshop-order-lines.service.js";
 import { WebshopOrderPaymentService } from "./webshop-order-payment.service.js";
 import { WebshopOrderEditsService } from "./webshop-order-edits.service.js";
+import { WebshopOrderLoyaltyService } from "./webshop-order-loyalty.service.js";
 import { WebshopOrderParcelService } from "./webshop-order-parcel.service.js";
 import { WebshopOrderSplitService } from "./webshop-order-split.service.js";
 import { WebshopOrderShortagesController } from "./webshop-order-shortages.controller.js";
@@ -64,6 +65,7 @@ import { WebshopMailOutboxService } from "./webshop-mail-outbox.service.js";
     WebshopOrderPaymentService,
     WebshopMailOutboxService,
     WebshopOrderEditsService,
+    WebshopOrderLoyaltyService,
     WebshopOrderSplitService,
     WebshopOrderShortagesService,
     {
