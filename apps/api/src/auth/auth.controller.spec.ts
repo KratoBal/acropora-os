@@ -400,6 +400,7 @@ describe("AuthController", () => {
         REEFCLUB_LINKING_ENABLED: "true",
         MEDUSA_WEBSHOP_COUPONS: "true",
         MEDUSA_WEBSHOP_SHIPPING_SETTINGS: "true",
+        MEDUSA_WEBSHOP_GIFT_CARDS: "true",
       },
     ]) {
       const controller = new AuthController(

@@ -3,6 +3,7 @@ import type { NavigationFeature } from "@acropora/types";
 import { homepageProjectionAllowed } from "../homepage-content/homepage-content.service.js";
 import { couponsAllowed } from "../webshop-coupons/webshop-coupons.service.js";
 import { shippingSettingsAllowed } from "../webshop-shipping-settings/webshop-shipping-settings.service.js";
+import { giftCardsAllowed } from "../webshop-gift-cards/webshop-gift-cards.service.js";
 import {
   enrichmentAvailabilityFor,
   pilotUserIds,
@@ -36,6 +37,9 @@ export const NAVIGATION_ENV = Symbol("NAVIGATION_ENV");
  *                            methods per shipping method: the environment may
  *                            write the test shop (`MEDUSA_WEBSHOP_SHIPPING_SETTINGS=true`).
  *                            The endpoints follow the same switch (404 off).
+ *   webshop-gift-cards       the web shop's gift cards: issuing, the list, the
+ *                            ledger, disabling (`MEDUSA_WEBSHOP_GIFT_CARDS=true`).
+ *                            The endpoints follow the same switch (404 off).
  */
 export function navigationFeatures(
   env: NodeJS.ProcessEnv,
@@ -49,6 +53,7 @@ export function navigationFeatures(
   if (reefClubLinkingOn(env)) features.add("reefclub-linking");
   if (couponsAllowed(env)) features.add("webshop-coupons");
   if (shippingSettingsAllowed(env)) features.add("webshop-shipping-settings");
+  if (giftCardsAllowed(env)) features.add("webshop-gift-cards");
   return features;
 }
 
