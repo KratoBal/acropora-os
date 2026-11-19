@@ -64,6 +64,10 @@ import {
   TransferReceivedDialog,
 } from "./webshop-order-edits";
 import {
+  WebshopOrderLoyalty,
+  type LoyaltyCardApi,
+} from "./webshop-order-loyalty";
+import {
   OrderLinesTable,
   ScissorsIcon,
   SplitDialog,
@@ -506,6 +510,10 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setOrder(await webshopOrdersApi.saveNotes(token, id, input));
     setNow(Date.now());
   };
+  const loyaltyApi: LoyaltyCardApi = {
+    load: () => webshopOrdersApi.loyalty(token, id),
+    adjust: (input) => webshopOrdersApi.adjustLoyalty(token, id, input),
+  };
   const searchPoints = (query: string) =>
     webshopOrdersApi.pickupPoints(token, id, query);
   // állandó azonosság: a követés mezője erre indít lekérést
@@ -670,6 +678,7 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           onSearchMethodPoints={searchMethodPoints}
           onChangeMethod={changeMethod}
           onSaveNotes={saveNotes}
+          loyaltyApi={loyaltyApi}
           onSearchPoints={searchPoints}
         />
       ) : null}
@@ -1971,6 +1980,7 @@ function OrderBody({
   onSearchMethodPoints,
   onChangeMethod,
   onSaveNotes,
+  loyaltyApi,
   onSearchPoints,
 }: {
   order: WebshopOrderDetail;
@@ -2019,6 +2029,7 @@ function OrderBody({
   ) => Promise<WebshopPickupPointSearch>;
   onChangeMethod: (input: WebshopOrderMethodInput) => Promise<void>;
   onSaveNotes: (input: WebshopOrderNotesInput) => Promise<void>;
+  loyaltyApi: LoyaltyCardApi;
   onSearchPoints: (query: string) => Promise<WebshopPickupPointSearch>;
 }) {
   const [statusOpen, setStatusOpen] = useState(false);
@@ -2732,9 +2743,7 @@ function OrderBody({
           ) : null}
 
           <Card title="Hűségpontok">
-            <p className="text-sm text-pilot-grey-500">
-              Hűségpont-adat még nincs a webshopban.
-            </p>
+            <WebshopOrderLoyalty api={loyaltyApi} canManage={canManage} />
           </Card>
         </div>
       </div>

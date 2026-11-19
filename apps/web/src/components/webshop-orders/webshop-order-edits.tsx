@@ -44,7 +44,7 @@ export function EditPencil({
   );
 }
 
-function Shell({
+export function Shell({
   title,
   busy,
   error,
@@ -102,7 +102,7 @@ function Shell({
   );
 }
 
-function useSave(onClose: () => void) {
+export function useSave(onClose: () => void) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const save = (work: () => Promise<void>) => {

@@ -725,6 +725,36 @@ export interface MedusaOrderMethodChange {
   payment_state: string | null;
 }
 
+/**
+ * A vevő hűségpont-főkönyve (`GET /admin/loyalty/:customer_id`, commerce #808): az egyenleg és a legújabb sorok. Az
+ * egyenleg a sorok összege, nincs külön oszlopa; az OS semmit nem tart belőle saját példányban.
+ */
+export interface MedusaLoyaltyEntry {
+  id: string;
+  kind: string;
+  points: number;
+  order_id: string | null;
+  reference: string | null;
+  reason: string;
+  actor: string;
+  created_at: string;
+}
+
+export interface MedusaLoyalty {
+  customer_id: string;
+  balance: number;
+  entries: MedusaLoyaltyEntry[];
+}
+
+/**
+ * `POST /admin/loyalty/adjustments`: 201 az új sor, 200 az ugyanazon `reference` újraküldése (a már tárolt sor). A 404
+ * (nincs ilyen vevő) és a 409 (`reference_conflict`, `overdraw`) hibaként érkezik, nem ebben az alakban.
+ */
+export interface MedusaLoyaltyAdjustment {
+  balance: number;
+  entry: MedusaLoyaltyEntry;
+}
+
 /** `POST /admin/order-notes/:id` (commerce #493): a mentés utáni állapot. */
 export interface MedusaOrderNotes {
   customer_note: string | null;
@@ -1214,6 +1244,18 @@ export interface MedusaAdminClient {
     orderId: string,
     input: { point_id: string; source?: "finder" | "fallback"; actor?: string },
   ): Promise<MedusaOrderPointChange>;
+  /** A vevő hűségpont-egyenlege és legújabb sorai (commerce #808). */
+  customerLoyalty(customerId: string, limit?: number): Promise<MedusaLoyalty>;
+  /**
+   * Kézi jóírás (pozitív) vagy levonás (negatív). A `reference` az újraküldés kulcsa: ugyanaz a mozgás egyszer
+   * tárolódik. `created`: az új sor (201) kontra a már tárolt (200).
+   */
+  adjustCustomerLoyalty(input: {
+    customer_id: string;
+    points: number;
+    reason: string;
+    reference?: string;
+  }): Promise<{ created: boolean; adjustment: MedusaLoyaltyAdjustment }>;
   /** A vevő és a szállító megjegyzése (commerce #493); a hiányzó kulcs nem változik. */
   updateOrderNotes(
     orderId: string,
@@ -2111,6 +2153,26 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     return (await response.json()) as T;
   }
 
+  /**
+   * UGYANAZ, MINT A `request`, DE A STÁTUSZT IS ADJA: egy 201 és egy 200 ugyanazzal a törzzsel jön, és a hívónak tudnia
+   * kell, melyik volt (a kézi hűségpont-mozgás újraküldése 200, az új sor 201). A hibás státusz ugyanúgy
+   * `MedusaAdminHttpError`.
+   */
+  private async requestWithStatus<T>(
+    path: string,
+    init?: RequestInit,
+  ): Promise<{ status: number; body: T }> {
+    const response = await this.fetchImpl(`${this.config.baseUrl}${path}`, {
+      ...init,
+      headers: this.requestHeaders(init?.headers),
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      throw new MedusaAdminHttpError(response.status, body.slice(0, 500));
+    }
+    return { status: response.status, body: (await response.json()) as T };
+  }
+
   async findByExternalId(externalId: string): Promise<MedusaLookupResult> {
     const params = new URLSearchParams({
       external_id: externalId,
@@ -2475,6 +2537,30 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       `/admin/order-split/${encodeURIComponent(orderId)}`,
       { method: "POST", body: JSON.stringify(input) },
     );
+  }
+
+  async customerLoyalty(
+    customerId: string,
+    limit = 20,
+  ): Promise<MedusaLoyalty> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    return this.request<MedusaLoyalty>(
+      `/admin/loyalty/${encodeURIComponent(customerId)}?${params.toString()}`,
+    );
+  }
+
+  async adjustCustomerLoyalty(input: {
+    customer_id: string;
+    points: number;
+    reason: string;
+    reference?: string;
+  }): Promise<{ created: boolean; adjustment: MedusaLoyaltyAdjustment }> {
+    const { status, body } =
+      await this.requestWithStatus<MedusaLoyaltyAdjustment>(
+        `/admin/loyalty/adjustments`,
+        { method: "POST", body: JSON.stringify(input) },
+      );
+    return { created: status === 201, adjustment: body };
   }
 
   async updateOrderNotes(
