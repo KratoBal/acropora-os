@@ -27,8 +27,14 @@ export type StripePayoutError =
  *   AMOUNT_MISMATCH      the order(s) are found, but their total is not the amount Stripe took (a mixed cart's two orders
  *                        are summed)
  *   ORDER_NOT_INVOICED   the order(s) are found and the amount fits, but there is no live outgoing invoice
- *   REFUND_UNCHECKED     a refund: its order is found, but whether the invoice was cancelled or corrected is not checked
- *                        yet, so a person decides
+ *   REFUND_UNCHECKED     a refund the OS could not decide: the webshop stopped reading orders (`orders_truncated`), so the intent's
+ *                        orders may be incomplete, and a person decides
+ *   REFUND_INVOICE_NOT_CANCELLED   (A9 refund slice) the payment is refunded in full, but an order's invoice is still live: no storno
+ *                        and no full credit note
+ *   REFUND_INVOICE_NOT_CORRECTED   the payment is refunded in part, and an order's live invoices, after their credit notes, do not
+ *                        bill that order's (reduced) total
+ *   REFUND_AMOUNT_UNEXPLAINED      payments minus refunds is neither zero nor the orders' totals (a refund with no payment line in
+ *                        the OS yet, a refund over the payment, a part refunded and the orders not reduced)
  *   TYPE_UNKNOWN         a line that is neither a payment, a refund nor a Stripe fee (a dispute, an adjustment, a reserve):
  *                        never hidden as "not applicable", a person looks at it
  */
@@ -39,6 +45,9 @@ export type StripeLineError =
   | "AMOUNT_MISMATCH"
   | "ORDER_NOT_INVOICED"
   | "REFUND_UNCHECKED"
+  | "REFUND_INVOICE_NOT_CANCELLED"
+  | "REFUND_INVOICE_NOT_CORRECTED"
+  | "REFUND_AMOUNT_UNEXPLAINED"
   | "TYPE_UNKNOWN";
 
 export interface StripeTransactionLine {

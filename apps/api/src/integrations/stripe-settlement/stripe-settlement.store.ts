@@ -12,6 +12,7 @@ import type {
   StripeTransactionLine,
 } from "@acropora/types";
 
+import type { SimplePayOrderDocument } from "../simplepay/simplepay-resolution.js";
 import { stripeLineChanged } from "./stripe-line-change.js";
 import { payoutTotals } from "./stripe-payout-totals.js";
 
@@ -64,6 +65,23 @@ export interface StripeSettlementStore {
   ): Promise<Map<string, string[]>>;
   /** Whether this number is a LIVE outgoing invoice (a manual approval names one): the same reading as `liveInvoicesByOrder`. */
   liveInvoiceExists(invoiceNumber: string): Promise<boolean>;
+  /**
+   * Every payment and refund line of these PaymentIntents the OS HOLDS, outside the payout being read (that payout brings its own,
+   * fresh). A refund is decided with ALL the lines of its intent, and the payment is often in an earlier payout (A9 refund slice).
+   */
+  linesByIntent(
+    paymentIntentIds: readonly string[],
+    exceptStripePayoutId: string,
+  ): Promise<
+    Map<string, { stripeTransactionId: string; type: string; amount: number }[]>
+  >;
+  /**
+   * orderId -> the order's outgoing documents the refund rule reads: the issued INVOICES (cancelled when an issued storno points at
+   * them), and the issued credit notes (storno, correction) of their chain, with the gross; a cancelled credit note credits nothing.
+   */
+  orderDocuments(
+    orderIds: readonly string[],
+  ): Promise<Map<string, SimplePayOrderDocument[]>>;
   /**
    * When the oldest payout that can still resolve was created, so the pull's window reaches back to it. A manual payout is left
    * out: it cannot resolve by reading again, and would hold the window open for ever.
@@ -228,6 +246,110 @@ export class PrismaStripeSettlementStore implements StripeSettlementStore {
         ...(out.get(invoice.sourceId) ?? []),
         invoice.invoiceNumber,
       ]);
+    }
+    return out;
+  }
+
+  async linesByIntent(
+    paymentIntentIds: readonly string[],
+    exceptStripePayoutId: string,
+  ) {
+    const out = new Map<
+      string,
+      { stripeTransactionId: string; type: string; amount: number }[]
+    >();
+    const intents = [...new Set(paymentIntentIds)];
+    if (intents.length === 0) return out;
+    const rows = await prisma.stripeTransactionLine.findMany({
+      where: {
+        paymentIntentId: { in: intents },
+        payout: { stripePayoutId: { not: exceptStripePayoutId } },
+        type: { in: ["charge", "payment", "refund", "payment_refund"] },
+      },
+      select: {
+        paymentIntentId: true,
+        stripeTransactionId: true,
+        type: true,
+        amount: true,
+      },
+      orderBy: [{ stripeCreatedAt: "asc" }, { id: "asc" }],
+    });
+    for (const row of rows) {
+      if (!row.paymentIntentId) continue;
+      out.set(row.paymentIntentId, [
+        ...(out.get(row.paymentIntentId) ?? []),
+        {
+          stripeTransactionId: row.stripeTransactionId,
+          type: row.type,
+          amount: Number(row.amount),
+        },
+      ]);
+    }
+    return out;
+  }
+
+  async orderDocuments(orderIds: readonly string[]) {
+    const out = new Map<string, SimplePayOrderDocument[]>();
+    const ids = [...new Set(orderIds)];
+    if (ids.length === 0) return out;
+    const stornoIssued = {
+      where: { documentType: "STORNO" as const, status: "ISSUED" as const },
+      select: { id: true },
+    };
+    const invoices = await prisma.invoice.findMany({
+      where: {
+        sourceType: "WEBSHOP_ORDER",
+        sourceId: { in: ids },
+        direction: "OUTBOUND",
+        documentType: "INVOICE",
+        status: "ISSUED",
+        invoiceNumber: { not: null },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        sourceId: true,
+        invoiceNumber: true,
+        grossAmount: true,
+        correctionInvoices: {
+          where: {
+            documentType: { in: ["STORNO", "CORRECTION"] },
+            status: "ISSUED",
+            invoiceNumber: { not: null },
+          },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          select: {
+            invoiceNumber: true,
+            documentType: true,
+            grossAmount: true,
+            correctionInvoices: stornoIssued,
+          },
+        },
+      },
+    });
+    for (const invoice of invoices) {
+      if (!invoice.sourceId || !invoice.invoiceNumber) continue;
+      const documents = out.get(invoice.sourceId) ?? [];
+      documents.push({
+        number: invoice.invoiceNumber,
+        kind: "INVOICE",
+        gross:
+          invoice.grossAmount === null ? null : Number(invoice.grossAmount),
+        // cancelled when an issued storno of the chain points at it (the rule of `liveInvoicesByOrder`, minus the in-flight one)
+        cancelled: invoice.correctionInvoices.some(
+          (child) => child.documentType === "STORNO",
+        ),
+      });
+      for (const child of invoice.correctionInvoices) {
+        if (!child.invoiceNumber) continue;
+        documents.push({
+          number: child.invoiceNumber,
+          kind: child.documentType === "STORNO" ? "STORNO" : "CORRECTION",
+          gross: child.grossAmount === null ? null : Number(child.grossAmount),
+          // a credit note that a storno cancelled credits nothing
+          cancelled: child.correctionInvoices.length > 0,
+        });
+      }
+      out.set(invoice.sourceId, documents);
     }
     return out;
   }

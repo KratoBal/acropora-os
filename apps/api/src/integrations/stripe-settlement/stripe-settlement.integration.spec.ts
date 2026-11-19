@@ -398,6 +398,146 @@ describe(
       ); // the storno itself is no invoice
     });
 
+    // THE REFUND SLICE (A9, card 6339b04c): what the refund rule reads from the database.
+    it("the order's documents for the refund rule: an invoice is cancelled by an ISSUED storno only, a credit note keeps its gross, a cancelled credit note credits nothing", async () => {
+      const base = {
+        direction: "OUTBOUND" as const,
+        source: "MANUAL" as const,
+        partnerName: "Kitalalt Vevo",
+        sourceType: "WEBSHOP_ORDER" as const,
+      };
+      const issue = (n: number, extra: Record<string, unknown> = {}) =>
+        prisma.invoice.create({
+          data: {
+            ...base,
+            invoiceNumber: invoiceNumber(n),
+            sourceId: orderId(n),
+            status: "ISSUED",
+            grossAmount: 4700,
+            ...extra,
+          },
+        });
+      const chain = (
+        n: number,
+        suffix: string,
+        original: { id: string },
+        documentType: "STORNO" | "CORRECTION",
+        status: "ISSUED" | "ISSUING",
+        gross: number,
+      ) =>
+        prisma.invoice.create({
+          data: {
+            ...base,
+            invoiceNumber: `${invoiceNumber(n)}${suffix}`,
+            sourceId: orderId(n),
+            documentType,
+            status,
+            grossAmount: gross,
+            referencedInvoiceId: original.id,
+          },
+        });
+      // 11: an invoice with an issued storno; 12: an invoice with a credit note, and a storno of that credit note;
+      // 13: an invoice with a storno still being issued; 14: a draft only
+      const full = await issue(11);
+      await chain(11, "S", full, "STORNO", "ISSUED", -4700);
+      const part = await issue(12);
+      const credit = await chain(12, "C", part, "CORRECTION", "ISSUED", -1000);
+      await chain(12, "CS", credit, "STORNO", "ISSUED", 1000);
+      const inFlight = await issue(13);
+      await chain(13, "S", inFlight, "STORNO", "ISSUING", -4700);
+      await prisma.invoice.create({
+        data: {
+          ...base,
+          invoiceNumber: invoiceNumber(14),
+          sourceId: orderId(14),
+          status: "DRAFT",
+        },
+      });
+
+      const documents = await store.orderDocuments([
+        orderId(11),
+        orderId(12),
+        orderId(13),
+        orderId(14),
+        orderId(15),
+      ]);
+      assert.deepEqual(documents.get(orderId(11)), [
+        {
+          number: invoiceNumber(11),
+          kind: "INVOICE",
+          gross: 4700,
+          cancelled: true,
+        },
+        {
+          number: `${invoiceNumber(11)}S`,
+          kind: "STORNO",
+          gross: -4700,
+          cancelled: false,
+        },
+      ]);
+      assert.deepEqual(documents.get(orderId(12)), [
+        {
+          number: invoiceNumber(12),
+          kind: "INVOICE",
+          gross: 4700,
+          cancelled: false,
+        },
+        {
+          number: `${invoiceNumber(12)}C`,
+          kind: "CORRECTION",
+          gross: -1000,
+          cancelled: true,
+        },
+      ]);
+      // a storno still being issued has not cancelled anything yet: the refund waits for a person
+      assert.equal(documents.get(orderId(13))![0]!.cancelled, false);
+      assert.equal(documents.has(orderId(14)), false); // a draft is no document
+      assert.equal(documents.has(orderId(15)), false);
+      assert.equal((await store.orderDocuments([])).size, 0);
+    });
+
+    it("the lines of a PaymentIntent held in OTHER payouts: payments and refunds only, never the payout being read", async () => {
+      const intent = `pi_${ID_PREFIX}${s5}R`;
+      const withIntent = (n: number, extra: Partial<StripeLineToSave>) =>
+        line(n, { paymentIntentId: intent, ...extra });
+      await store.savePayout(
+        payout(
+          [
+            withIntent(21, { type: "charge", amount: 4700 }),
+            withIntent(22, { type: "refund", amount: -1000, refundId: "re_1" }),
+            withIntent(23, {
+              type: "stripe_fee",
+              amount: -100,
+              fee: 0,
+              net: -100,
+            }),
+          ],
+          { stripePayoutId: `${payoutId}R` },
+        ),
+      );
+      const held = await store.linesByIntent(
+        [intent, "pi_unknown"],
+        `${payoutId}X`,
+      );
+      assert.deepEqual(
+        held
+          .get(intent)!
+          .map((l) => [l.type, l.amount])
+          .sort(),
+        [
+          ["charge", 4700],
+          ["refund", -1000],
+        ],
+      );
+      assert.equal(held.has("pi_unknown"), false);
+      // the payout being read brings its own lines: it is left out
+      assert.equal(
+        (await store.linesByIntent([intent], `${payoutId}R`)).size,
+        0,
+      );
+      assert.equal((await store.linesByIntent([], `${payoutId}X`)).size, 0);
+    });
+
     it("the oldest open payout is read for the window; a manual payout never holds it open", async () => {
       await prisma.stripePayout.deleteMany({
         where: { stripePayoutId: { startsWith: `po_${ID_PREFIX}` } },

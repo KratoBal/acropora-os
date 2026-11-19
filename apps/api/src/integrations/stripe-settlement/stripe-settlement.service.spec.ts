@@ -10,6 +10,7 @@ import {
   type MedusaStripeTransaction,
 } from "../medusa/medusa-admin.client.js";
 import { MedusaConnectionError } from "../medusa/medusa-connection.types.js";
+import type { SimplePayOrderDocument } from "../simplepay/simplepay-resolution.js";
 import type { MedusaCredentialProvider } from "../medusa/medusa-credential.provider.js";
 import {
   FIRST_RUN_LOOKBACK_DAYS,
@@ -89,6 +90,19 @@ class FakeStore implements StripeSettlementStore {
   liveInvoicesByOrder = async (orderIds: readonly string[]) =>
     new Map([...this.invoices].filter(([id]) => orderIds.includes(id)));
   liveInvoiceExists = async (number: string) => this.invoiceNumbers.has(number);
+  /** The payment and refund lines of an intent the OS already holds in OTHER payouts (the refund slice). */
+  storedLines = new Map<
+    string,
+    { stripeTransactionId: string; type: string; amount: number }[]
+  >();
+  documents = new Map<string, SimplePayOrderDocument[]>();
+  documentCalls: string[][] = [];
+  linesByIntent = async (intents: readonly string[]) =>
+    new Map([...this.storedLines].filter(([id]) => intents.includes(id)));
+  orderDocuments = async (orderIds: readonly string[]) => {
+    this.documentCalls.push([...orderIds]);
+    return new Map([...this.documents].filter(([id]) => orderIds.includes(id)));
+  };
   oldestOpen: Date | null = null;
   oldestOpenPayoutCreatedAt = async () => this.oldestOpen;
   savePayout = async (p: StripePayoutToSave) => {
@@ -616,5 +630,234 @@ describe("StripeSettlementService.approveLine", () => {
       /STRIPE_LINE_VERSION_INVALID/,
     );
     assert.equal(store.approved.length, 0);
+  });
+});
+
+/*
+  A VISSZATERITETT PAYMENTINTENT EGYBEN DONTVE (A9 visszateritesi szelet, kartya 6339b04c). MI PIROSIT: ha a visszateritest tovabbra is
+  csak kezi dontesre hagyja (REFUND_UNCHECKED), holott a rendelese egyertelmu; ha a befizetes-sort a sztornozott szamla miatt
+  "nincs szamla"-nak latja; ha a mar a rendszerben levo (korabbi kifizetesbeli) befizetes-sort nem veszi figyelembe; ha a vegyes kosar
+  visszateritesenek rendelest talalgat; ha egy el nem sztornozott szamla melletti teljes visszaterites eltunik a "nezd meg" listarol.
+*/
+describe("StripeSettlementService: a visszatéritett PaymentIntent", () => {
+  const refundTxn = (
+    id: string,
+    extra: Partial<MedusaStripeTransaction> = {},
+  ) =>
+    txn(id, {
+      type: "refund",
+      reporting_category: "refund",
+      amount: -4700,
+      amount_minor: -470000,
+      refund: "re_1",
+      ...extra,
+    });
+  const invoice = (
+    over: Partial<SimplePayOrderDocument> = {},
+  ): SimplePayOrderDocument => ({
+    number: "ACRW-2026/00600",
+    kind: "INVOICE",
+    gross: 4700,
+    cancelled: false,
+    ...over,
+  });
+  const storno = (): SimplePayOrderDocument => ({
+    number: "STORNO-2026/00001",
+    kind: "STORNO",
+    gross: -4700,
+    cancelled: false,
+  });
+  const lineOf = (store: FakeStore, id: string) =>
+    store.saved[0]!.lines.find((line) => line.stripeTransactionId === id)!;
+
+  it("teljes visszatérítés sztornózott számlával: a visszatérítés-sor megoldott, a korábbi kifizetés befizetése beleszámít", async () => {
+    const store = new FakeStore();
+    store.storedLines.set("pi_1", [
+      { stripeTransactionId: "txn_pay", type: "charge", amount: 4700 },
+    ]);
+    store.documents.set("order_72", [invoice({ cancelled: true }), storno()]);
+    const { svc } = service(store, {
+      payouts: [[payout("po_refund", 10)]],
+      transactions: { po_refund: [{ transactions: [refundTxn("txn_ref")] }] },
+    });
+    await svc.sync("MANUAL");
+    const line = lineOf(store, "txn_ref");
+    assert.equal(line.status, "RESOLVED");
+    assert.equal(line.errorCode, null);
+    assert.deepEqual(line.invoiceNumbers, [
+      "ACRW-2026/00600",
+      "STORNO-2026/00001",
+    ]);
+  });
+
+  it("ugyanabban a kifizetésben a befizetés és a visszatérítés: mindkettő megoldott, a befizetés nem 'nincs számla'", async () => {
+    const store = new FakeStore();
+    store.invoices = new Map(); // the stornoed invoice is not live any more
+    store.documents.set("order_72", [invoice({ cancelled: true }), storno()]);
+    const { svc } = service(store, {
+      payouts: [[payout("po_both", 10)]],
+      transactions: {
+        po_both: [{ transactions: [txn("txn_pay"), refundTxn("txn_ref")] }],
+      },
+    });
+    await svc.sync("MANUAL");
+    assert.equal(lineOf(store, "txn_pay").status, "RESOLVED");
+    assert.equal(lineOf(store, "txn_ref").status, "RESOLVED");
+  });
+
+  it("teljes visszatérítés, de a számla él: nézd meg (REFUND_INVOICE_NOT_CANCELLED)", async () => {
+    const store = new FakeStore();
+    store.storedLines.set("pi_1", [
+      { stripeTransactionId: "txn_pay", type: "charge", amount: 4700 },
+    ]);
+    store.documents.set("order_72", [invoice()]);
+    const { svc } = service(store, {
+      payouts: [[payout("po_live", 10)]],
+      transactions: { po_live: [{ transactions: [refundTxn("txn_ref")] }] },
+    });
+    await svc.sync("MANUAL");
+    const line = lineOf(store, "txn_ref");
+    assert.equal(line.status, "NEEDS_REVIEW");
+    assert.equal(line.errorCode, "REFUND_INVOICE_NOT_CANCELLED");
+  });
+
+  it("visszatérítés befizetés-sor nélkül (a befizetés még nincs az OS-ben): nézd meg, nem találgat", async () => {
+    const store = new FakeStore();
+    store.documents.set("order_72", [invoice({ cancelled: true }), storno()]);
+    const { svc } = service(store, {
+      payouts: [[payout("po_orphan", 10)]],
+      transactions: { po_orphan: [{ transactions: [refundTxn("txn_ref")] }] },
+    });
+    await svc.sync("MANUAL");
+    const line = lineOf(store, "txn_ref");
+    assert.equal(line.status, "NEEDS_REVIEW");
+    assert.equal(line.errorCode, "REFUND_AMOUNT_UNEXPLAINED");
+  });
+
+  it("részleges visszatérítés, a rendelés nincs csökkentve: nézd meg (REFUND_AMOUNT_UNEXPLAINED)", async () => {
+    const store = new FakeStore();
+    store.storedLines.set("pi_1", [
+      { stripeTransactionId: "txn_pay", type: "charge", amount: 4700 },
+    ]);
+    store.documents.set("order_72", [invoice()]);
+    const { svc } = service(store, {
+      payouts: [[payout("po_part", 10)]],
+      transactions: {
+        po_part: [
+          {
+            transactions: [
+              refundTxn("txn_ref", { amount: -1000, amount_minor: -100000 }),
+            ],
+          },
+        ],
+      },
+    });
+    await svc.sync("MANUAL");
+    assert.equal(
+      lineOf(store, "txn_ref").errorCode,
+      "REFUND_AMOUNT_UNEXPLAINED",
+    );
+  });
+
+  it("vegyes kosár (két rendelés, egy fizetés): a visszatérítés és a befizetés is megoldott, ha mindkét rendelés számlája a saját végösszegére szól", async () => {
+    const store = new FakeStore();
+    store.invoices = new Map();
+    const two = [
+      { id: "order_72", display_id: 72, total: 2000, currency_code: "huf" },
+      { id: "order_73", display_id: 73, total: 2700, currency_code: "huf" },
+    ];
+    store.documents.set("order_72", [invoice({ number: "A-1", gross: 2000 })]);
+    store.documents.set("order_73", [invoice({ number: "B-1", gross: 2700 })]);
+    store.storedLines.set("pi_1", [
+      { stripeTransactionId: "txn_pay", type: "charge", amount: 5700 },
+    ]);
+    const { svc } = service(store, {
+      payouts: [[payout("po_mixed", 10)]],
+      transactions: {
+        po_mixed: [
+          {
+            transactions: [
+              refundTxn("txn_ref", {
+                orders: two,
+                amount: -1000,
+                amount_minor: -100000,
+              }),
+            ],
+          },
+        ],
+      },
+    });
+    await svc.sync("MANUAL");
+    const line = lineOf(store, "txn_ref");
+    assert.equal(line.status, "RESOLVED");
+    assert.deepEqual(line.orderNumbers, ["72", "73"]);
+    assert.deepEqual(store.documentCalls, [["order_72", "order_73"]]);
+  });
+
+  it("ugyanazon intent két sorának különböző rendelés-halmaza nem dől el együtt (a megszokott út)", async () => {
+    const store = new FakeStore();
+    store.storedLines.set("pi_1", [
+      { stripeTransactionId: "txn_pay", type: "charge", amount: 4700 },
+    ]);
+    const { svc } = service(store, {
+      payouts: [[payout("po_diff", 10)]],
+      transactions: {
+        po_diff: [
+          {
+            transactions: [
+              refundTxn("txn_ref1"),
+              refundTxn("txn_ref2", {
+                orders: [
+                  {
+                    id: "order_99",
+                    display_id: 99,
+                    total: 4700,
+                    currency_code: "huf",
+                  },
+                ],
+              }),
+            ],
+          },
+        ],
+      },
+    });
+    await svc.sync("MANUAL");
+    assert.equal(lineOf(store, "txn_ref1").errorCode, "REFUND_UNCHECKED");
+    assert.deepEqual(store.documentCalls, []);
+  });
+
+  it("visszatérítés nélküli intentnél a dokumentumokat nem kérdezi (a megszokott út)", async () => {
+    const store = new FakeStore();
+    const { svc } = service(store, {
+      payouts: [[payout("po_plain", 10)]],
+      transactions: { po_plain: [{ transactions: [txn("txn_pay")] }] },
+    });
+    await svc.sync("MANUAL");
+    assert.equal(lineOf(store, "txn_pay").status, "RESOLVED");
+    assert.deepEqual(store.documentCalls, []);
+  });
+
+  it("ha a webshop nem olvasta végig a rendeléseket, a visszatérítés nem dől el (a vegyes kosár másik rendelése hiányozhat), a számlákat sem kérdezi", async () => {
+    const store = new FakeStore();
+    store.storedLines.set("pi_1", [
+      { stripeTransactionId: "txn_pay", type: "charge", amount: 4700 },
+    ]);
+    store.documents.set("order_72", [invoice({ cancelled: true }), storno()]);
+    const { svc } = service(store, {
+      payouts: [[payout("po_trunc", 10)]],
+      transactions: {
+        po_trunc: [
+          {
+            // one order IS found, but the backend stopped reading: a second order of a mixed cart may be missing
+            transactions: [refundTxn("txn_ref")],
+            orders_truncated: true,
+          },
+        ],
+      },
+    });
+    await svc.sync("MANUAL");
+    assert.equal(lineOf(store, "txn_ref").status, "NEEDS_REVIEW");
+    assert.equal(lineOf(store, "txn_ref").errorCode, "REFUND_UNCHECKED");
+    assert.deepEqual(store.documentCalls, []);
   });
 });
