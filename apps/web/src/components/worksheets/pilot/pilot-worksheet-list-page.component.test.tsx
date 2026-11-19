@@ -38,6 +38,7 @@ const api = vi.hoisted(() => ({
   list: vi.fn(),
   selectablePartners: vi.fn(),
   bulkSheets: vi.fn(),
+  copy: vi.fn(),
 }));
 vi.mock("@/lib/api/worksheets", () => ({ worksheetsApi: api }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
@@ -102,6 +103,7 @@ beforeEach(() => {
   api.list.mockReset();
   api.selectablePartners.mockReset().mockResolvedValue({ items: [] });
   api.bulkSheets.mockReset();
+  api.copy.mockReset();
 });
 
 describe("worksheetHoursCell", () => {
@@ -617,5 +619,115 @@ describe("PilotWorksheetListPage -- selection and bulk sheets", () => {
     );
     expect(tab.close).toHaveBeenCalled();
     open.mockRestore();
+  });
+});
+
+/*
+  A KIJELÖLT LAPOK MÁSOLÁSA (kártya a785e580; az API a #2746). MI PIROSÍT: a gomb nem a kijelölt lapokat küldi, vagy
+  kérés-azonosító nélkül; egy elakadt kérés újrapróbálása ÚJ azonosítót kap (a szerver akkor második másolatot készít); a
+  válasz után új másolás a régi azonosítóval megy (a szerver a régi másolatokat adná vissza, sikerként); a laponkénti
+  eredményből hiányzik az új lap, a hiba mondata vagy a forrás neve; a kijelölés megmarad (egy második kattintás újra
+  másolna); a lista nem frissül; partnerfióknak is megjelenik a gomb, pedig a szerver elutasítja.
+*/
+describe("PilotWorksheetListPage -- copy the selected sheets", () => {
+  const twoRows = () =>
+    response([
+      row(),
+      row({ id: "ws-2", number: "ML-2026-00815", subject: "Szűrőcsere" }),
+    ]);
+
+  const select = async () => {
+    api.list.mockResolvedValue(twoRows());
+    render(<PilotWorksheetListPage />);
+    await screen.findAllByTestId("worksheet-row");
+    fireEvent.click(
+      screen.getByLabelText("Kijelölés: Tömítéscsere és ellenőrzés"),
+    );
+    fireEvent.click(screen.getByLabelText("Kijelölés: Szűrőcsere"));
+  };
+
+  it("copies the selected sheets and lists each: the new sheet, or why not", async () => {
+    api.copy.mockResolvedValue({
+      results: [
+        { sourceId: "ws-1", ok: true, id: "ws-9", number: null },
+        {
+          sourceId: "ws-2",
+          ok: false,
+          message: "Lezárt hibajegyhez nem nyitható új munkalap.",
+        },
+      ],
+    });
+    await select();
+    const listCalls = api.list.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Másolás" }));
+    const results = await screen.findByRole("list", {
+      name: "A másolás eredménye",
+    });
+    const [ids, requestId] = api.copy.mock.calls[0]!.slice(1) as [
+      string[],
+      string,
+    ];
+    expect(api.copy.mock.calls[0]![0]).toBe("token-1");
+    expect(ids).toEqual(["ws-1", "ws-2"]);
+    expect(requestId).toMatch(/^[A-Za-z0-9_.:-]{8,64}$/);
+    expect(results.textContent).toContain(
+      "Tömítéscsere és ellenőrzés: új piszkozat (még nincs száma)",
+    );
+    expect(
+      screen
+        .getByRole("link", { name: "új piszkozat (még nincs száma)" })
+        .getAttribute("href"),
+    ).toBe("/szerviz/munkalapok/ws-9");
+    expect(results.textContent).toContain(
+      "Szűrőcsere: Lezárt hibajegyhez nem nyitható új munkalap.",
+    );
+    expect(screen.getByRole("status").textContent).toBe(
+      "1 munkalap másolata elkészült piszkozatként. 1 lapról nem készült másolat.",
+    );
+    expect(
+      screen.queryByRole("region", { name: "Kijelölt munkalapok" }),
+    ).toBeNull();
+    await waitFor(() =>
+      expect(api.list.mock.calls.length).toBeGreaterThan(listCalls),
+    );
+  });
+
+  it("a retry after a lost answer reuses the request id; the next copy gets a new one", async () => {
+    api.copy
+      .mockRejectedValueOnce(new Error("A szerver nem válaszolt."))
+      .mockResolvedValue({
+        results: [
+          { sourceId: "ws-1", ok: true, id: "ws-9", number: "ML-2026-00900" },
+          { sourceId: "ws-2", ok: true, id: "ws-10", number: null },
+        ],
+      });
+    await select();
+    fireEvent.click(screen.getByRole("button", { name: "Másolás" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "A szerver nem válaszolt.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Másolás" }));
+    await screen.findByRole("list", { name: "A másolás eredménye" });
+    expect(
+      screen.getByRole("link", { name: "új lap: ML-2026-00900" }),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByLabelText("Kijelölés: Tömítéscsere és ellenőrzés"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Másolás" }));
+    await waitFor(() => expect(api.copy).toHaveBeenCalledTimes(3));
+    const requestIds = api.copy.mock.calls.map((call) => call[2]);
+    expect(requestIds[1]).toBe(requestIds[0]);
+    expect(requestIds[2]).not.toBe(requestIds[1]);
+  });
+
+  it("a partner account does not get the button (the server refuses it)", async () => {
+    auth.session = {
+      ...sessionAs("ADMIN"),
+      user: { ...sessionAs("ADMIN").user, customerId: "customer-1" },
+    };
+    await select();
+    expect(screen.getByRole("button", { name: "Letöltés (zip)" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Másolás" })).toBeNull();
   });
 });

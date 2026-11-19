@@ -3,6 +3,8 @@
  * a művelet után kimondott összefoglaló. A kijelölés azonosítók halmaza, ezért a lapozás és a szűrés között
  * is megmarad; a kimondott szöveg a kihagyott lapokat sorszámmal nevezi meg.
  */
+import type { WorksheetCopyResult } from "@acropora/types";
+
 export const BULK_SELECTION_MAX = 50;
 
 /** Egy lap ki-be kapcsolása; az 50. fölé nem megy. A másodikként visszaadott `full` jelzi, ha a határ megállított. */
@@ -71,4 +73,29 @@ export function bulkSummary(input: {
     .filter(Boolean)
     .join(" és ");
   return `${head} ${input.skipped} lapnak még nincs kiadott PDF-je, kimaradt: ${who}.`;
+}
+
+/**
+ * A másolás után kimondott mondat (kártya a785e580): hány lapból lett új piszkozat, és hányból nem. A laponkénti
+ * részlet (az új sorszám, vagy hogy miért nem) a sáv alatti listában áll, a mondat csak összegez.
+ */
+export function copySummary(results: WorksheetCopyResult["results"]): string {
+  const made = results.filter((row) => row.ok).length;
+  const failed = results.length - made;
+  if (made === 0)
+    return failed === 1
+      ? "A kijelölt lapról nem készült másolat."
+      : "A kijelölt lapok egyikéről sem készült másolat.";
+  const head = `${made} munkalap másolata elkészült piszkozatként.`;
+  return failed === 0 ? head : `${head} ${failed} lapról nem készült másolat.`;
+}
+
+/**
+ * A másolás kérés-azonosítója (a szerver 8-64 jelet fogad el). Egy elakadt kérés után ugyanezzel újraküldve a már
+ * elkészült másolatok jönnek vissza, nem újak; ezért a hívó csak válasz után dob el egyet.
+ */
+export function newCopyRequestId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }

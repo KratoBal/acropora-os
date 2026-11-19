@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   BULK_SELECTION_MAX,
   bulkSummary,
+  copySummary,
   pageSelection,
   toggleSelected,
   togglePage,
@@ -113,5 +114,37 @@ describe("bulkSummary", () => {
         skippedNumbers: [],
       }),
     ).toContain("kimaradt: 2 sorszám nélküli.");
+  });
+});
+
+describe("copySummary", () => {
+  const ok = (n: number) => ({
+    sourceId: `s${n}`,
+    ok: true as const,
+    id: `c${n}`,
+    number: null,
+  });
+  const bad = (n: number) => ({
+    sourceId: `f${n}`,
+    ok: false as const,
+    message: "A hibajegy már lezárult.",
+  });
+
+  it("az elkészült másolatokat számolja, és a sikerteleneket külön kimondja", () => {
+    expect(copySummary([ok(1), ok(2)])).toBe(
+      "2 munkalap másolata elkészült piszkozatként.",
+    );
+    expect(copySummary([ok(1), bad(1), bad(2)])).toBe(
+      "1 munkalap másolata elkészült piszkozatként. 2 lapról nem készült másolat.",
+    );
+  });
+
+  it("ha egy sem készült el, nem mond sikert", () => {
+    expect(copySummary([bad(1)])).toBe(
+      "A kijelölt lapról nem készült másolat.",
+    );
+    expect(copySummary([bad(1), bad(2)])).toBe(
+      "A kijelölt lapok egyikéről sem készült másolat.",
+    );
   });
 });

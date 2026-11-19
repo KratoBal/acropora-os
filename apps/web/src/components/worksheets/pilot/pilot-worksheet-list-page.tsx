@@ -16,6 +16,7 @@ import {
 import {
   hasPermission,
   PERMISSIONS,
+  type WorksheetCopyResult,
   type WorksheetListResponse,
   type WorksheetSelectablePartner,
   type WorksheetVersionStatus,
@@ -23,7 +24,7 @@ import {
 } from "@acropora/types";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
@@ -31,6 +32,8 @@ import { worksheetsApi } from "@/lib/api/worksheets";
 import {
   BULK_SELECTION_MAX,
   bulkSummary,
+  copySummary,
+  newCopyRequestId,
   pageSelection,
   toggleSelected,
   togglePage,
@@ -353,15 +356,28 @@ export function PilotWorksheetListPage() {
   const [partners, setPartners] = useState<WorksheetSelectablePartner[]>([]);
   // a bepipált lapok azonosítói: a lapozás és a szűrés között is megmaradnak (kártya a785e580, 2. szelet)
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const [bulkBusy, setBulkBusy] = useState<"download" | "print" | null>(null);
+  const [bulkBusy, setBulkBusy] = useState<
+    "download" | "print" | "copy" | null
+  >(null);
   const [bulkNote, setBulkNote] = useState<string | null>(null);
   const [bulkError, setBulkError] = useState<string | null>(null);
+  // a legutóbbi másolás laponkénti eredménye, a forrás lap nevével (kártya a785e580)
+  const [copyRows, setCopyRows] = useState<
+    { label: string; row: WorksheetCopyResult["results"][number] }[] | null
+  >(null);
+  // a betöltött oldalak lapjainak neve: a kijelölés más oldalról is megmarad, az eredmény-lista ebből nevezi meg őket
+  const rowLabels = useRef(new Map<string, string>());
+  // egy válasz nélkül maradt másolás azonosítója: az újrapróbálás ugyanezzel megy, és nem ad második másolatot
+  const copyRequestId = useRef<string | null>(null);
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_VIEW),
   );
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_MANAGE),
   );
+  // a másolás belsős lépés: a szerver partnernek (vevőhöz vagy szállítóhoz kötött fióknak) nem engedi
+  const canCopy =
+    canManage && !session?.user.customerId && !session?.user.supplierId;
   const canHide = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_HIDE),
   );
@@ -444,6 +460,10 @@ export function PilotWorksheetListPage() {
     () => (data?.items ?? []).map((worksheet) => worksheet.id),
     [data],
   );
+  useEffect(() => {
+    for (const worksheet of data?.items ?? [])
+      rowLabels.current.set(worksheet.id, worksheetListLines(worksheet).main);
+  }, [data]);
   const pageState = pageSelection(selected, pageIds);
   const limitNote = `Legfeljebb ${BULK_SELECTION_MAX} munkalap jelölhető ki egyszerre.`;
 
@@ -508,6 +528,7 @@ export function PilotWorksheetListPage() {
     setBulkBusy(action);
     setBulkNote(null);
     setBulkError(null);
+    setCopyRows(null);
     // a nyomtatáshoz az új lapot a kattintás pillanatában nyitjuk (a várakozás utáni megnyitást a böngésző tiltja)
     const printWindow = action === "print" ? window.open("", "_blank") : null;
     try {
@@ -546,6 +567,45 @@ export function PilotWorksheetListPage() {
         cause instanceof Error
           ? cause.message
           : "A kijelölt munkalapok PDF-je nem készült el.",
+      );
+    } finally {
+      setBulkBusy(null);
+    }
+  };
+
+  /**
+   * A kijelölt lapok másolata: laponként egy új piszkozat ugyanazon a szülőn. A válasz után a kijelölés törlődik (egy
+   * második kattintás ne másoljon újra), a lista frissül, és a sáv alatt laponként látszik az új lap vagy az, hogy miért
+   * nem készült el.
+   */
+  const runCopy = async () => {
+    if (selected.size === 0 || bulkBusy) return;
+    setBulkBusy("copy");
+    setBulkNote(null);
+    setBulkError(null);
+    setCopyRows(null);
+    copyRequestId.current ??= newCopyRequestId();
+    try {
+      const response = await worksheetsApi.copy(
+        token,
+        [...selected],
+        copyRequestId.current,
+      );
+      copyRequestId.current = null;
+      setCopyRows(
+        response.results.map((row) => ({
+          row,
+          label: rowLabels.current.get(row.sourceId) ?? "Munkalap",
+        })),
+      );
+      setBulkNote(copySummary(response.results));
+      setSelected(new Set());
+      void load();
+    } catch (cause) {
+      setBulkError(
+        cause instanceof Error
+          ? cause.message
+          : "A kijelölt munkalapok másolása nem sikerült.",
       );
     } finally {
       setBulkBusy(null);
@@ -825,6 +885,16 @@ export function PilotWorksheetListPage() {
           >
             {bulkBusy === "print" ? "Készül…" : "Nyomtatás"}
           </PilotButton>
+          {canCopy ? (
+            <PilotButton
+              variant="secondary"
+              size="regular"
+              disabled={bulkBusy !== null}
+              onClick={() => void runCopy()}
+            >
+              {bulkBusy === "copy" ? "Másolás…" : "Másolás"}
+            </PilotButton>
+          ) : null}
           <button
             type="button"
             className="cursor-pointer text-xs text-pilot-grey-500 transition hover:text-pilot-grey-800"
@@ -832,6 +902,8 @@ export function PilotWorksheetListPage() {
               setSelected(new Set());
               setBulkNote(null);
               setBulkError(null);
+              copyRequestId.current = null;
+              setCopyRows(null);
             }}
           >
             Kijelölés törlése
@@ -847,6 +919,31 @@ export function PilotWorksheetListPage() {
         <p role="alert" className="text-sm font-medium text-red-600">
           {bulkError}
         </p>
+      ) : null}
+      {copyRows ? (
+        <ul
+          aria-label="A másolás eredménye"
+          className="space-y-1 text-sm text-pilot-grey-700"
+        >
+          {copyRows.map(({ label, row }) => (
+            <li key={row.sourceId}>
+              <span className="font-medium text-pilot-grey-900">{label}</span>
+              {": "}
+              {row.ok ? (
+                <Link
+                  href={`/szerviz/munkalapok/${row.id}`}
+                  className="text-pilot-aqua-700 hover:text-pilot-aqua-800"
+                >
+                  {row.number
+                    ? `új lap: ${row.number}`
+                    : "új piszkozat (még nincs száma)"}
+                </Link>
+              ) : (
+                <span className="text-red-600">{row.message}</span>
+              )}
+            </li>
+          ))}
+        </ul>
       ) : null}
 
       {loading && !data ? (
