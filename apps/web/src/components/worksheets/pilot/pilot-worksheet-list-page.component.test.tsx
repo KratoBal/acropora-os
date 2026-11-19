@@ -387,6 +387,18 @@ describe("PilotWorksheetListPage -- a Megnyitva oszlop és a tól-ig szűrő (k�
     expect(urlOfLast().searchParams.get("createdTo")).toBe("2026-11-19");
   });
 
+  it("a félig beírt nap nem szűrőváltozás: nem megy kérés, amíg a nap nincs készen", async () => {
+    navigation.search = "";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    navigation.replace.mockClear();
+    fireEvent.change(screen.getByLabelText("Megnyitva ettől a naptól"), {
+      target: { value: "20261" },
+    });
+    expect(navigation.replace).not.toHaveBeenCalled();
+  });
+
   it("egy mező kiürítése törli a paramétert (nem üres szöveget küld)", async () => {
     navigation.search = "createdFrom=2026-11-18";
     api.list.mockResolvedValue(response([row()]));
@@ -406,14 +418,15 @@ describe("PilotWorksheetListPage -- a Megnyitva oszlop és a tól-ig szűrő (k�
     const query = api.list.mock.calls.at(-1)![1] as URLSearchParams;
     expect(query.get("createdFrom")).toBe("2026-11-18");
     expect(query.get("createdTo")).toBe("2026-11-19");
+    // a mező magyarul mutatja a napot (a közös PilotDateField), nem a böngésző nyelvén
     expect(
       (screen.getByLabelText("Megnyitva ettől a naptól") as HTMLInputElement)
         .value,
-    ).toBe("2026-11-18");
+    ).toBe("2026. 11. 18.");
     expect(
       (screen.getByLabelText("Megnyitva eddig a napig") as HTMLInputElement)
         .value,
-    ).toBe("2026-11-19");
+    ).toBe("2026. 11. 19.");
   });
 
   it("a Szűrők törlése a dátumot is törli, egy lépésben", async () => {

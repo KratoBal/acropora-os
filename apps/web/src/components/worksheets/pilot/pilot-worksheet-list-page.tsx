@@ -8,6 +8,7 @@ import {
   Pagination,
   Skeleton,
   PilotDataTable,
+  PilotDateField,
   PilotSelect,
   type PilotTableColumn,
   PAGE_GUTTER_X,
@@ -588,22 +589,25 @@ export function PilotWorksheetListPage() {
           aria-label="Megnyitás napja"
         >
           <span>Megnyitva</span>
-          <input
-            type="date"
+          <PilotDateField
             aria-label="Megnyitva ettől a naptól"
             value={createdFrom}
             max={createdTo || undefined}
-            onChange={(event) => filter("createdFrom", event.target.value)}
-            className="rounded-md bg-white px-2 py-2 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200"
+            onChange={(day) => {
+              // gépelés közben a félig beírt nap üres értéket ad: az nem szűrőváltozás
+              if (day !== createdFrom) filter("createdFrom", day);
+            }}
+            className="w-40"
           />
           <span aria-hidden="true">–</span>
-          <input
-            type="date"
+          <PilotDateField
             aria-label="Megnyitva eddig a napig"
             value={createdTo}
             min={createdFrom || undefined}
-            onChange={(event) => filter("createdTo", event.target.value)}
-            className="rounded-md bg-white px-2 py-2 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200"
+            onChange={(day) => {
+              if (day !== createdTo) filter("createdTo", day);
+            }}
+            className="w-40"
           />
           {reversedRange ? (
             <span role="alert" className="text-xs font-medium text-red-600">
