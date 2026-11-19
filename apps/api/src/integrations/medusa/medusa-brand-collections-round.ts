@@ -44,6 +44,18 @@ export interface BrandPlanCounts {
   skipArchived: number;
   /** a handle-t foglalo, a terv altal nem feldolgozhato markak (kartya ec82b629) */
   handleTaken: number;
+  /**
+   * A JELENTES HAROM SZAMA (acrobot, 2026-11-19 16:24, 57247), plusz a ket maradek ok, hogy a `handleTaken` osszege kiadodjon:
+   *  - `linkedByHandle`: a handle kototte ossze (azonosito nelkuli, ures vagy csak azonos markaju gyujtemeny);
+   *  - `handleCurated`: handle foglalt, mert mas markaju vagy ismeretlen termek is van benne (kezi valogatas lehet);
+   *  - `handleOtherBrand`: utkozes, a gyujtemeny MASIK marka azonositojat viseli (a handle-n vagy a mi sorunk celjan);
+   *  - `handleStaleMapping`, `handleUnchecked`: elavult sor egy szabad handle mellett, illetve a tartalom nem volt merheto.
+   */
+  linkedByHandle: number;
+  handleCurated: number;
+  handleOtherBrand: number;
+  handleStaleMapping: number;
+  handleUnchecked: number;
 }
 
 export const brandPlanCounts = (plan: BrandImportPlan): BrandPlanCounts => ({
@@ -54,6 +66,17 @@ export const brandPlanCounts = (plan: BrandImportPlan): BrandPlanCounts => ({
   conflict: plan.conflict.length,
   skipArchived: plan.skipArchived.length,
   handleTaken: plan.handleTaken.length,
+  linkedByHandle: plan.mapByHandle.length,
+  handleCurated: plan.handleTaken.filter((h) => h.reason === "curated").length,
+  handleOtherBrand: plan.handleTaken.filter(
+    (h) => h.reason === "other-brand" || h.reason === "mapped-to-other-brand",
+  ).length,
+  handleStaleMapping: plan.handleTaken.filter(
+    (h) => h.reason === "stale-mapping",
+  ).length,
+  handleUnchecked: plan.handleTaken.filter(
+    (h) => h.reason === "content-unchecked",
+  ).length,
 });
 
 export type BrandCollectionsOutcome =
@@ -170,6 +193,7 @@ export const describeBrandCollections = (
     `${outcome.linkedOnly} csak leképezve`,
     `${outcome.relinked} újra leképezve`,
     `${outcome.touched} márka megérintve (a termékeik esedékesek)`,
+    `handle szerint összekötve ${outcome.planned.linkedByHandle}, handle foglalt (válogatás) ${outcome.planned.handleCurated}, ütközés (más márka azonosítója) ${outcome.planned.handleOtherBrand}`,
   ];
   if (outcome.conflicts.length)
     sorok.push(`ÜTKÖZÉS, érintetlen marad: ${outcome.conflicts.join(", ")}`);

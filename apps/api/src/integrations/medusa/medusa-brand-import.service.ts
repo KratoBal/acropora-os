@@ -5,7 +5,9 @@ import type {
   MedusaCollectionRow,
 } from "./medusa-admin.client.js";
 import { MedusaBrandLinkRepository } from "./medusa-brand-link.repository.js";
+import type { HandleContentReader } from "./medusa-brand-handle-content.js";
 import {
+  handleContentCandidates,
   planBrandImport,
   type BrandImportPlan,
   type OurBrand,
@@ -72,10 +74,17 @@ export interface BrandImportVerification {
 export class MedusaBrandImportService {
   constructor(private readonly links: MedusaBrandLinkRepository) {}
 
-  /** A terv onmagaban, iras nelkul. Ugyanaz a menet, csak megall a dontesnel. */
+  /**
+   * A terv onmagaban, iras nelkul. Ugyanaz a menet, csak megall a dontesnel.
+   *
+   * KET LEPESBEN, ha van `readContent` (57247): az elso, tartalom nelkuli terv `content-unchecked` sorai a jeloltek, azok
+   * tartalmat olvassuk be, es a vegleges terv azzal kesz. `readContent` nelkul (a kezi parancs) a jeloltek "nem ellenorzott"-kent
+   * maradnak: tartalom nelkul nem kotunk ossze.
+   */
   async plan(
     client: MedusaAdminClient,
     brands: readonly OurBrand[],
+    readContent?: HandleContentReader,
   ): Promise<BrandImportPlan> {
     const lista = await client.listProductCollections();
     /**
@@ -89,13 +98,19 @@ export class MedusaBrandImportService {
       throw new MedusaBrandImportRefusedError(
         "a Medusa gyűjtemény-listája kimerítette a limitet, a terv csonkolt halmazon döntene",
       );
+    const gyujtemenyek = lista.rows.map(tervAlak);
+    const sorok = (await this.links.all()).map((sor) => ({
+      ourId: sor.brandId,
+      medusaId: sor.medusaCollectionId,
+    }));
+    const elso = planBrandImport(brands, gyujtemenyek, sorok);
+    const jeloltek = handleContentCandidates(elso);
+    if (!readContent || !jeloltek.length) return elso;
     return planBrandImport(
       brands,
-      lista.rows.map(tervAlak),
-      (await this.links.all()).map((sor) => ({
-        ourId: sor.brandId,
-        medusaId: sor.medusaCollectionId,
-      })),
+      gyujtemenyek,
+      sorok,
+      await readContent(jeloltek),
     );
   }
 
@@ -110,8 +125,9 @@ export class MedusaBrandImportService {
     client: MedusaAdminClient,
     brands: readonly OurBrand[],
     now: Date,
+    readContent?: HandleContentReader,
   ): Promise<BrandImportReport> {
-    const terv = await this.plan(client, brands);
+    const terv = await this.plan(client, brands, readContent);
 
     const report: BrandImportReport = {
       created: 0,

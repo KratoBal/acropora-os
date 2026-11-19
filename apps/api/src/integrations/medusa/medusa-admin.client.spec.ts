@@ -816,3 +816,55 @@ describe("HttpMedusaAdminClient.listProductCollections (lapozva)", () => {
     assert.equal(calls.length, 2);
   });
 });
+
+/*
+  EGY GYUJTEMENY TERMEKEI (kartya ec82b629, a handle-t foglalo gyujtemeny tartalma, 57247). MI PIROSIT: ha a kérés nem a
+  gyujtemenyre szur (`collection_id[]`); ha csak az elso oldalt hozza le; ha az offset nem a mar megkapott termekek szama; ha a
+  felso hatar elerese nem jelzi a csonkolast (egy csonkolt tartalom osszekotest engedne meg nem mert termekekre).
+*/
+describe("HttpMedusaAdminClient.listCollectionProductIds", () => {
+  function server(total: number, opts: { count?: number } = {}) {
+    const calls: { collection: string | null; offset: number }[] = [];
+    const fetchImpl = (async (url: string) => {
+      const q = new URL(String(url)).searchParams;
+      const limit = Number(q.get("limit"));
+      const offset = Number(q.get("offset"));
+      calls.push({ collection: q.get("collection_id[]"), offset });
+      const ids = Array.from({ length: total }, (_, i) => ({
+        id: `prod_${i}`,
+      }));
+      return {
+        ok: true,
+        json: async () => ({
+          products: ids.slice(offset, offset + limit),
+          count: opts.count ?? total,
+        }),
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+    return {
+      calls,
+      client: new HttpMedusaAdminClient(
+        { baseUrl: "https://példa.invalid", apiKey: "sk_teszt" },
+        fetchImpl,
+      ),
+    };
+  }
+
+  it("a gyujtemenyre szur, es minden oldalt lehoz", async () => {
+    const { client, calls } = server(COLLECTION_LIST_LIMIT + 10);
+    const out = await client.listCollectionProductIds("pcol_fm");
+    assert.equal(out.ids.length, COLLECTION_LIST_LIMIT + 10);
+    assert.equal(out.truncated, false);
+    assert.deepEqual(calls, [
+      { collection: "pcol_fm", offset: 0 },
+      { collection: "pcol_fm", offset: COLLECTION_LIST_LIMIT },
+    ]);
+  });
+
+  it("a felso hatar elerese csonkolt", async () => {
+    const tobb = COLLECTION_LIST_LIMIT * COLLECTION_LIST_MAX_PAGES + 1;
+    const { client } = server(tobb);
+    const out = await client.listCollectionProductIds("pcol_fm");
+    assert.equal(out.truncated, true);
+  });
+});

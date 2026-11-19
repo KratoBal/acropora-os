@@ -23,8 +23,9 @@
  *   skipArchived  a marka nalunk archivalt vagy inaktiv -- nem visszuk ki
  *   handleTaken   (kartya ec82b629) a Medusan MAR ALL egy gyujtemeny a marka handle-jevel, de nem a mi azonositonkkal, es a
  *                 helyzet nem dolgozhato fel automatikusan: vagy MASIK marka azonositojat viseli (ket marka egy handle-n), vagy
- *                 a marka lekepezes-sora elavult, es a handle-t egy nem lekepezett gyujtemeny foglalja. Letrehozni NEM lehet
- *                 (a Medusa elutasitja), osszekotni NEM szabad (nem tudjuk, ugyanaz-e): jelentjuk, ember donti el
+ *                 a marka lekepezes-sora elavult, es a handle-t egy nem lekepezett gyujtemeny foglalja, vagy a foglalo
+ *                 gyujtemenyben mas markaju vagy ismeretlen termek is all (kezi valogatas lehet). Letrehozni NEM lehet (a Medusa
+ *                 elutasitja), osszekotni NEM szabad (nem tudjuk, ugyanaz-e): jelentjuk, ember donti el
  *
  * A `conflict` azert kulon eset, es azert nem "majd felulirjuk": ha a
  * lekepezes-sorunk egy MASIK gyujtemenyre mutat, mint amelyik a mi kulso
@@ -106,7 +107,29 @@ export interface BrandHandleTaken {
    * es a handle-t egy szabad gyujtemeny foglalja) vagy `mapped-to-other-brand` (a lekepezes-sorunk cel gyujtemenye masik
    * marka azonositojat viseli).
    */
-  reason: "other-brand" | "stale-mapping" | "mapped-to-other-brand";
+  reason:
+    | "other-brand"
+    | "stale-mapping"
+    | "mapped-to-other-brand"
+    | "curated"
+    | "content-unchecked";
+}
+
+/**
+ * EGY HANDLE-T FOGLALO, AZONOSITO NELKULI GYUJTEMENY TARTALMA, A MARKA SZEMEVEL (acrobot dontese, 2026-11-19 16:24, 57247): az
+ * osszekotes feltetele, hogy a gyujtemeny URES, vagy MINDEN termeke ehhez a markahoz tartozik. Ha mas markaju vagy ismeretlen
+ * markaju termek is van benne, az kezi valogatas lehet (a regi szabaly oka): `handleTaken`, `curated`. Az ismeretlen (nem
+ * parosithato) termek nem bizonyitja, hogy a marka sajat gyujtemenye, ezert ugyanugy tart, mint a mas markaju.
+ */
+export interface HandleContent {
+  /** a gyujtemeny termekei a Medusan */
+  total: number;
+  /** ebbol a mi termekunk, ennek a markanak */
+  sameBrand: number;
+  /** ebbol a mi termekunk, MASIK markaval (vagy marka nelkul) */
+  otherBrand: number;
+  /** ebbol nem tudjuk, melyik OS-termek (nincs kotes-sor, nincs egyertelmu SKU-par) */
+  unknown: number;
 }
 
 export interface BrandImportPlan {
@@ -117,6 +140,8 @@ export interface BrandImportPlan {
   conflict: BrandMappingConflict[];
   skipArchived: string[];
   handleTaken: BrandHandleTaken[];
+  /** a `mapOnly` azon markai, amelyeket a HANDLE (nem az azonosito) kotott ossze: a jelentes kulon szama */
+  mapByHandle: string[];
 }
 
 /**
@@ -127,7 +152,10 @@ export interface BrandImportPlan {
  * egyedi, a Medusan viszont a handle-t BARKI foglalhatta: a kezi gyujtemeny, egy korabbi futas, amit nem mi azonositottunk. A
  * terv ezert a letrehozas ELOTT megnezi a handle-t is:
  *
- *   a handle-t viselo gyujtemeny kulso azonositoja NINCS   -> ugyanaz a marka, csak nem mi jeloltuk meg: osszekotes (`mapOnly`)
+ *   a handle-t viselo gyujtemeny kulso azonositoja NINCS, es URES vagy csak ennek a markanak a termekei allnak benne
+ *                                                          -> ugyanaz a marka, csak nem mi jeloltuk meg: osszekotes (`mapOnly`)
+ *   azonosito nincs, de mas markaju vagy ismeretlen termek is van benne -> `handleTaken` (`curated`): kezi valogatas lehet
+ *                                                          (acrobot dontese, 2026-11-19 16:24, 57247: a regi szabaly oka)
  *   MASIK marka azonositojat viseli, vagy a marka sora elavult -> `handleTaken`: nem hozunk letre, nem kotunk ossze, jelentjuk
  *
  * AZ OSSZEKOTES NEM IR A MEDUSARA: csak a mi lekepezes-sorunk keletkezik. A gyujtemeny `external_id`-ja ures marad, ezert a
@@ -139,6 +167,12 @@ export function planBrandImport(
   brands: readonly OurBrand[],
   existing: readonly ExistingCollection[],
   mappings: readonly BrandMapping[] = [],
+  /**
+   * A handle-t foglalo, azonosito nelkuli gyujtemenyek tartalma, gyujtemeny-azonosito szerint. Ahol nincs megadva, a marka
+   * `handleTaken` (`content-unchecked`): tartalom nelkul az osszekotes nem dontheto el, es a hivo egy elso, tartalom nelkuli
+   * tervbol tudja meg, mely gyujtemenyeket kell megneznie.
+   */
+  handleContents: ReadonlyMap<string, HandleContent> = new Map(),
 ): BrandImportPlan {
   const medusaIdMiAzonositonkra = new Map<string, string>();
   for (const collection of existing)
@@ -160,6 +194,7 @@ export function planBrandImport(
   const conflict: BrandMappingConflict[] = [];
   const skipArchived: string[] = [];
   const handleTaken: BrandHandleTaken[] = [];
+  const mapByHandle: string[] = [];
 
   for (const brand of brands) {
     /**
@@ -230,7 +265,25 @@ export function planBrandImport(
           reason: "stale-mapping",
         });
       } else {
-        mapOnly.push({ ourId: brand.id, medusaId: foglalo.id });
+        // a tartalmi feltetel (57247): ures, vagy csak ennek a markanak a termekei -> osszekotes; kulonben kezi valogatas
+        const tartalom = handleContents.get(foglalo.id);
+        if (!tartalom)
+          handleTaken.push({
+            ourId: brand.id,
+            handle: brand.slug,
+            medusaId: foglalo.id,
+            reason: "content-unchecked",
+          });
+        else if (tartalom.sameBrand === tartalom.total) {
+          mapOnly.push({ ourId: brand.id, medusaId: foglalo.id });
+          mapByHandle.push(brand.id);
+        } else
+          handleTaken.push({
+            ourId: brand.id,
+            handle: brand.slug,
+            medusaId: foglalo.id,
+            reason: "curated",
+          });
       }
       continue;
     }
@@ -247,5 +300,14 @@ export function planBrandImport(
     conflict,
     skipArchived,
     handleTaken,
+    mapByHandle,
   };
 }
+
+/** A tartalom-ellenorzes jeloltjei: a tartalom nelkuli terv `content-unchecked` sorai (gyujtemeny es marka). */
+export const handleContentCandidates = (
+  plan: BrandImportPlan,
+): { collectionId: string; brandId: string }[] =>
+  plan.handleTaken
+    .filter((h) => h.reason === "content-unchecked")
+    .map((h) => ({ collectionId: h.medusaId, brandId: h.ourId }));

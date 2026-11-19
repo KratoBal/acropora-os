@@ -1281,6 +1281,13 @@ export interface MedusaAdminClient {
    * A reszletek a megvalositas mellett allnak.
    */
   listProductCollections(): Promise<MedusaCollectionListResult>;
+  /**
+   * Egy gyujtemeny termekeinek azonositoi, lapozva (kartya ec82b629: a handle-t foglalo gyujtemeny tartalma). `truncated`: a
+   * lapozas a biztonsagi felso hatarba utkozott.
+   */
+  listCollectionProductIds(
+    collectionId: string,
+  ): Promise<{ ids: string[]; truncated: boolean }>;
   /** Egy gyujtemeny letrehozasa. EZ IR A BOLTI OLDALRA. */
   createProductCollection(
     input: MedusaCollectionInput,
@@ -2601,6 +2608,33 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       if (!more || batch.length === 0) return { rows, truncated: false };
     }
     return { rows, truncated: true };
+  }
+
+  async listCollectionProductIds(
+    collectionId: string,
+  ): Promise<{ ids: string[]; truncated: boolean }> {
+    // ugyanaz a lapozas, mint a gyujtemeny-listanal: a `count`-ig, a biztonsagi felso hataron belul
+    const ids: string[] = [];
+    for (let page = 0; page < COLLECTION_LIST_MAX_PAGES; page += 1) {
+      const params = new URLSearchParams({
+        fields: "id",
+        limit: String(COLLECTION_LIST_LIMIT),
+        offset: String(ids.length),
+      });
+      params.append("collection_id[]", collectionId);
+      const body = await this.request<{
+        products: { id: string }[];
+        count?: number;
+      }>(`/admin/products?${params.toString()}`);
+      const batch = body.products ?? [];
+      ids.push(...batch.map((product) => product.id));
+      const more =
+        typeof body.count === "number"
+          ? ids.length < body.count
+          : batch.length >= COLLECTION_LIST_LIMIT;
+      if (!more || batch.length === 0) return { ids, truncated: false };
+    }
+    return { ids, truncated: true };
   }
 
   /**

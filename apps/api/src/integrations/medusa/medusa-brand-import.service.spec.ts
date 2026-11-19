@@ -326,7 +326,22 @@ describe("MedusaBrandImportService", () => {
       ],
     });
 
-    const report = await f.service.run(f.client, harom, now);
+    // a gyujtemenyben csak ennek a markanak a termekei allnak (57247): osszekotheto
+    const kerdezett: { collectionId: string; brandId: string }[][] = [];
+    const report = await f.service.run(
+      f.client,
+      harom,
+      now,
+      async (jeloltek) => {
+        kerdezett.push([...jeloltek]);
+        return new Map([
+          [
+            "pcol_fm",
+            { total: 110, sameBrand: 110, otherBrand: 0, unknown: 0 },
+          ],
+        ]);
+      },
+    );
 
     assert.deepEqual(
       f.created.map((c) => c.handle),
@@ -338,6 +353,70 @@ describe("MedusaBrandImportService", () => {
     );
     assert.equal(report.linkedOnly, 1);
     assert.deepEqual(report.failures, []);
+    // a tartalmat CSAK a jeloltre kerdezi, es egyszer
+    assert.deepEqual(kerdezett, [[{ collectionId: "pcol_fm", brandId: "b2" }]]);
+  });
+
+  /*
+    A TARTALMI FELTETEL A SZOLGALTATASBAN (57247). MI PIROSIT: ha a vegyes tartalmu gyujtemeny osszekotodik; ha tartalom-olvaso
+    nelkul (a kezi parancs) osszekotodik; ha barmelyik esetben a tobbi marka nem jon letre.
+  */
+  it("a vegyes tartalmu, azonos handle-u gyujtemenyt nem koti ossze: foglalt handle, a tobbi letrejon", async () => {
+    const f = fakes({
+      existing: [
+        {
+          id: "pcol_fm",
+          title: "Fauna Marin",
+          handle: "fauna-marin",
+          external_id: null,
+        },
+      ],
+    });
+
+    const report = await f.service.run(
+      f.client,
+      harom,
+      now,
+      async () =>
+        new Map([
+          ["pcol_fm", { total: 12, sameBrand: 10, otherBrand: 2, unknown: 0 }],
+        ]),
+    );
+
+    assert.deepEqual(report.handleTaken, ["b2"]);
+    assert.deepEqual(
+      f.linked.filter((l) => l.brandId === "b2"),
+      [],
+    );
+    assert.deepEqual(
+      f.created.map((c) => c.handle),
+      ["egy", "harom"],
+    );
+  });
+
+  it("tartalom-olvaso nelkul (a kezi parancs) nem kot ossze: a marka nem ellenorzott, a tobbi letrejon", async () => {
+    const f = fakes({
+      existing: [
+        {
+          id: "pcol_fm",
+          title: "Fauna Marin",
+          handle: "fauna-marin",
+          external_id: null,
+        },
+      ],
+    });
+
+    const report = await f.service.run(f.client, harom, now);
+
+    assert.deepEqual(report.handleTaken, ["b2"]);
+    assert.deepEqual(
+      f.linked.filter((l) => l.brandId === "b2"),
+      [],
+    );
+    assert.deepEqual(
+      f.created.map((c) => c.handle),
+      ["egy", "harom"],
+    );
   });
 
   it("a masik marka azonositojat viselo handle-t nem veszi at, es nem is bukik: foglalt handle a jelentesben", async () => {

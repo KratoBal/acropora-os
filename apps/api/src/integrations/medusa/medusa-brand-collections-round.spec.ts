@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import type { BrandImportReport } from "./medusa-brand-import.service.js";
 import type { BrandImportPlan } from "./medusa-brand-plan.js";
 import {
+  brandPlanCounts,
   brandCollectionsFailedStep,
   brandCollectionsOffStep,
   brandCollectionsStep,
@@ -28,6 +29,7 @@ const plan = (over: Partial<BrandImportPlan> = {}): BrandImportPlan => ({
   conflict: [],
   skipArchived: [],
   handleTaken: [],
+  mapByHandle: [],
   ...over,
 });
 const report = (over: Partial<BrandImportReport> = {}): BrandImportReport => ({
@@ -110,6 +112,11 @@ describe("ensureBrandCollections", () => {
         conflict: 0,
         skipArchived: 1,
         handleTaken: 0,
+        linkedByHandle: 0,
+        handleCurated: 0,
+        handleOtherBrand: 0,
+        handleStaleMapping: 0,
+        handleUnchecked: 0,
       },
     });
     assert.deepEqual(calls, ["plan"]);
@@ -137,6 +144,11 @@ describe("ensureBrandCollections", () => {
         conflict: 0,
         skipArchived: 0,
         handleTaken: 0,
+        linkedByHandle: 0,
+        handleCurated: 0,
+        handleOtherBrand: 0,
+        handleStaleMapping: 0,
+        handleUnchecked: 0,
       },
       created: 2,
       linkedOnly: 1,
@@ -203,6 +215,11 @@ describe("ensureBrandCollections", () => {
         conflict: 1,
         skipArchived: 0,
         handleTaken: 0,
+        linkedByHandle: 0,
+        handleCurated: 0,
+        handleOtherBrand: 0,
+        handleStaleMapping: 0,
+        handleUnchecked: 0,
       },
       created: 0,
       linkedOnly: 0,
@@ -261,6 +278,11 @@ describe("describeBrandCollections", () => {
         conflict: 2,
         skipArchived: 0,
         handleTaken: 0,
+        linkedByHandle: 0,
+        handleCurated: 0,
+        handleOtherBrand: 0,
+        handleStaleMapping: 0,
+        handleUnchecked: 0,
       },
       created: 3,
       linkedOnly: 1,
@@ -316,6 +338,11 @@ describe("a lépés a kör állapotában (kártya ec82b629, mérhetővé tétel)
       conflict: 0,
       skipArchived: 0,
       handleTaken: 0,
+      linkedByHandle: 0,
+      handleCurated: 0,
+      handleOtherBrand: 0,
+      handleStaleMapping: 0,
+      handleUnchecked: 0,
     };
     const valtozatlan = brandCollectionsStep({ status: "unchanged", planned });
     assert.equal(
@@ -447,6 +474,11 @@ describe("a foglalt handle és a márkánkénti hiba a jelentésben", () => {
         conflict: 0,
         skipArchived: 0,
         handleTaken: 1,
+        linkedByHandle: 0,
+        handleCurated: 0,
+        handleOtherBrand: 0,
+        handleStaleMapping: 0,
+        handleUnchecked: 0,
       },
       created: 1,
       linkedOnly: 0,
@@ -474,6 +506,11 @@ describe("a foglalt handle és a márkánkénti hiba a jelentésben", () => {
       conflict: 0,
       skipArchived: 0,
       handleTaken: 2,
+      linkedByHandle: 0,
+      handleCurated: 0,
+      handleOtherBrand: 0,
+      handleStaleMapping: 0,
+      handleUnchecked: 0,
     };
     const lep = brandCollectionsStep({
       status: "applied",
@@ -493,5 +530,48 @@ describe("a foglalt handle és a márkánkénti hiba a jelentésben", () => {
       assert.deepEqual(lep.failureSamples[0], failures[0]);
       assert.equal(lep.handleTaken, 2);
     }
+  });
+});
+
+/*
+  A JELENTES HAROM SZAMA (acrobot, 57247): handle szerint osszekotve / handle foglalt (valogatas) / utkozes (mas marka
+  azonositoja), es a ket maradek ok. MI PIROSIT: ha egy ok rossz rovatba szamolodik; ha a mapped-to-other-brand nem utkozes.
+*/
+describe("brandPlanCounts: a handle-esetek szamai", () => {
+  it("okonkent kulon szamolja a foglalt handle-t, es kulon a handle szerint osszekotottet", () => {
+    const h = (
+      ourId: string,
+      reason: BrandImportPlan["handleTaken"][number]["reason"],
+    ) => ({
+      ourId,
+      handle: ourId,
+      medusaId: `pcol_${ourId}`,
+      reason,
+    });
+    const counts = brandPlanCounts(
+      plan({
+        mapOnly: [{ ourId: "a", medusaId: "pcol_a" }],
+        mapByHandle: ["a"],
+        handleTaken: [
+          h("b", "curated"),
+          h("c", "curated"),
+          h("d", "other-brand"),
+          h("e", "mapped-to-other-brand"),
+          h("f", "stale-mapping"),
+          h("g", "content-unchecked"),
+        ],
+      }),
+    );
+    assert.deepEqual(
+      [
+        counts.linkedByHandle,
+        counts.handleCurated,
+        counts.handleOtherBrand,
+        counts.handleStaleMapping,
+        counts.handleUnchecked,
+        counts.handleTaken,
+      ],
+      [1, 2, 2, 1, 1, 6],
+    );
   });
 });
