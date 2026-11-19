@@ -1,4 +1,8 @@
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
+import {
+  worksheetUnitAllowed,
+  worksheetUnitWhere,
+} from "./worksheet-unit-scope.js";
 import { advanceTicketOnFirstLine } from "./first-line-ticket-step.js";
 import {
   rowBelongsToScope,
@@ -319,10 +323,8 @@ export function worksheetListWheres(
     eszkoz nem, ugyanaz a felhasznalo ket felulet kozott mast latna, es a
     kulonbsegre semmilyen szabaly nem mutatna ra.
   */
-  const egysegTengely: Prisma.WorksheetWhereInput =
-    scope.kind === "customer"
-      ? { departmentId: { in: [...assignedUnitIds] } }
-      : {};
+  // a szabály egy helyen áll, a részletes nézet is ezt olvassa (`worksheet-unit-scope.ts`, kártya 5f4af2aa)
+  const egysegTengely = worksheetUnitWhere(scope, assignedUnitIds);
 
   return {
     list: {
@@ -1078,7 +1080,19 @@ export class WorksheetsRepository extends Repository {
   ): Promise<WorksheetDetailRow | null> {
     const row = await this.detailRow(id);
     if (!row) return null;
-    return rowBelongsToScope(row, scope) ? row : null;
+    if (!rowBelongsToScope(row, scope)) return null;
+    /*
+      A VEVŐN BELÜL AZ EGYSÉG IS (kártya 5f4af2aa): ugyanaz a szabály, mint a listán. Minden partner-oldali olvasás
+      (részletes nézet, csatolmány és PDF, többes letöltés) ezen a ponton megy át. Egy kézzel épített, felhasználó nélküli
+      vevő-hatókör itt ZÁR: nem tudjuk, kinek az egységeit kellene nézni.
+    */
+    if (scope.kind === "customer") {
+      const unitIds = scope.userId
+        ? await this.assignedUnitIds(scope.userId)
+        : [];
+      if (!worksheetUnitAllowed(row.department.id, scope, unitIds)) return null;
+    }
+    return row;
   }
 
   /**
