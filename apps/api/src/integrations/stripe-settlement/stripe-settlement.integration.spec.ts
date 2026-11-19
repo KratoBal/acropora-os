@@ -306,11 +306,15 @@ describe(
         ConflictException,
       );
 
+      // the re-save above rewrote the second (still open) line, so its version moved: read it again, as a person's screen would
+      const secondNow = await prisma.stripeTransactionLine.findUniqueOrThrow({
+        where: { id: second!.id },
+      });
       await store.approveLine({
         payoutId: stored.id,
         lineId: second!.id,
         invoiceNumber: invoiceNumber(1),
-        expectedUpdatedAt: second!.updatedAt,
+        expectedUpdatedAt: secondNow.updatedAt,
         actorUserId: userId,
       });
       row = await prisma.stripePayout.findUniqueOrThrow({
