@@ -27,10 +27,35 @@ export const ensureBrandCollectionsInRound = (
   env: NodeJS.ProcessEnv,
 ): boolean => env.MEDUSA_ENSURE_BRAND_COLLECTIONS === "true";
 
+/**
+ * A TERV SZAMAI (a kor allapotaba, kartya ec82b629 merhetove tetele): a terv hat halmazanak merete. A stage naploja a flottanak
+ * nem olvashato, a lepes eredmenye pedig CSAK naplo-sor volt, tehat az, hogy a terv a hianyzo gyujtemenyeket egyaltalan latja-e
+ * (`create`), nem volt merheto. Csak szamok, marka-azonosito nelkul.
+ */
+export interface BrandPlanCounts {
+  create: number;
+  mapOnly: number;
+  staleMapping: number;
+  skip: number;
+  conflict: number;
+  skipArchived: number;
+}
+
+export const brandPlanCounts = (plan: BrandImportPlan): BrandPlanCounts => ({
+  create: plan.create.length,
+  mapOnly: plan.mapOnly.length,
+  staleMapping: plan.staleMapping.length,
+  skip: plan.skip.length,
+  conflict: plan.conflict.length,
+  skipArchived: plan.skipArchived.length,
+});
+
 export type BrandCollectionsOutcome =
-  | { status: "unchanged" }
+  | { status: "unchanged"; planned: BrandPlanCounts }
   | {
       status: "applied";
+      /** a terv szamai a FUTAS ELOTT: mit akart letrehozni, mit csak leképezni */
+      planned: BrandPlanCounts;
       created: number;
       linkedOnly: number;
       relinked: number;
@@ -75,18 +100,20 @@ export async function ensureBrandCollections(
     throw error;
   }
   const changing = changedBrandIds(plan);
+  const planned = brandPlanCounts(plan);
   if (!changing.length) {
     // egy ütközés magában nem ír semmit, de látszania kell: minden kör jelezze
     return plan.conflict.length
       ? {
           status: "applied",
+          planned,
           created: 0,
           linkedOnly: 0,
           relinked: 0,
           touched: 0,
           conflicts: plan.conflict.map((c) => c.ourId),
         }
-      : { status: "unchanged" };
+      : { status: "unchanged", planned };
   }
   // A MEGERINTES A LEKEPEZES UTAN, ES CSAK AZOKAT, AMIKNEK MAR VAN: egy felig lefutott betoltes (a 20. gyujtemeny HTTP-hibaja)
   // a mar leképezett markakat a kovetkezo korben "mar all"-nak latna, es a termekeik sosem lennenek esedekesek. Ezert a
@@ -108,6 +135,7 @@ export async function ensureBrandCollections(
   );
   return {
     status: "applied",
+    planned,
     created: report.created,
     linkedOnly: report.linkedOnly,
     relinked: report.relinked,
@@ -133,3 +161,98 @@ export const describeBrandCollections = (
     sorok.push(`ÜTKÖZÉS, érintetlen marad: ${outcome.conflicts.join(", ")}`);
   return sorok.join(", ") + ".";
 };
+
+/**
+ * A LEPES A KOR ALLAPOTABAN (`lastRound.steps.brandCollections`, kartya ec82b629, acrobot 13:10): a lepes eredmenye eddig csak
+ * naplo-sor volt, a teszt gep naplojat a flotta nem olvassa, ezert harom dolog nem kulonbozott: a kapcsolo nem all (vagy rossz
+ * alakban all), a lepes lefutott es nem talalt teendot, vagy lefutott es megallt. Most mind a harom mas ertek:
+ *  - `enabled: false`: a kapcsolo NEM pontosan `true`. `switchPresent` mondja meg, hogy az env-ben egyaltalan van-e, a
+ *    `switchLooksTrue`, hogy rossz alakban all-e (`True`, `"true"` idezojellel, szokozzel): a nyers ertek nem kerul ki, csak
+ *    ez a ket jel;
+ *  - `enabled: true, failed: true`: a lepes dobott (a hiba rovid szovege, azonosito nelkul);
+ *  - `enabled: true, failed: false`: lefutott, a `status` es a szamok (terv, letrehozott, leképezett, megerintett).
+ */
+export type BrandCollectionsStep =
+  | { enabled: false; switchPresent: boolean; switchLooksTrue: boolean }
+  | { enabled: true; failed: true; error: string }
+  | {
+      enabled: true;
+      failed: false;
+      status: BrandCollectionsOutcome["status"];
+      /** null: a terv nem allt elo (megtagadas) */
+      planned: BrandPlanCounts | null;
+      created: number;
+      linkedOnly: number;
+      relinked: number;
+      touched: number;
+      conflicts: number;
+      reason: string | null;
+    };
+
+const STEP_ERROR_MAX = 160;
+
+/** A kikapcsolt lepes jele: a nyers ertek nem kerul ki, csak az, hogy van-e, es hogy `true`-nak latszik-e. */
+export function brandCollectionsOffStep(
+  env: NodeJS.ProcessEnv,
+): BrandCollectionsStep {
+  const raw = env.MEDUSA_ENSURE_BRAND_COLLECTIONS;
+  return {
+    enabled: false,
+    switchPresent: raw !== undefined,
+    switchLooksTrue: raw !== undefined && /^\W*true\W*$/i.test(raw),
+  };
+}
+
+export function brandCollectionsFailedStep(
+  error: unknown,
+): BrandCollectionsStep {
+  const text = error instanceof Error ? error.message : String(error);
+  return {
+    enabled: true,
+    failed: true,
+    error: text.replace(/\s+/g, " ").trim().slice(0, STEP_ERROR_MAX),
+  };
+}
+
+export function brandCollectionsStep(
+  outcome: BrandCollectionsOutcome,
+): BrandCollectionsStep {
+  if (outcome.status === "refused")
+    return {
+      enabled: true,
+      failed: false,
+      status: "refused",
+      planned: null,
+      created: 0,
+      linkedOnly: 0,
+      relinked: 0,
+      touched: 0,
+      conflicts: 0,
+      reason: outcome.reason.slice(0, STEP_ERROR_MAX),
+    };
+  if (outcome.status === "unchanged")
+    return {
+      enabled: true,
+      failed: false,
+      status: "unchanged",
+      planned: outcome.planned,
+      created: 0,
+      linkedOnly: 0,
+      relinked: 0,
+      touched: 0,
+      conflicts: 0,
+      reason: null,
+    };
+  return {
+    enabled: true,
+    failed: false,
+    status: "applied",
+    planned: outcome.planned,
+    created: outcome.created,
+    linkedOnly: outcome.linkedOnly,
+    relinked: outcome.relinked,
+    touched: outcome.touched,
+    conflicts: outcome.conflicts.length,
+    reason: null,
+  };
+}
