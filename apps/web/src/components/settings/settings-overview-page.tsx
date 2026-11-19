@@ -368,6 +368,13 @@ export const WEBSHOP_SETTINGS_AREAS: SettingsArea[] = [
         href: "/webshop/egyedi-kedvezmenyek",
         entryId: "webshop-coupons",
       },
+      {
+        label: "Ajándékkártyák",
+        description:
+          "Ajándékkártya kiadása (a kód csak a kiadáskor látszik), a kártyák egyenlege és naplója, kikapcsolás.",
+        href: "/webshop/ajandekkartyak",
+        entryId: "webshop-gift-cards",
+      },
     ],
   },
   {

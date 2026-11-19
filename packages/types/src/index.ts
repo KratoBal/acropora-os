@@ -2391,3 +2391,18 @@ export type {
   WebshopShippingRole,
   WebshopShippingSettings,
 } from "./webshop-shipping-settings.js";
+export {
+  parseWebshopGiftCardIssueInput,
+  WEBSHOP_GIFT_CARD_LIMITS,
+  WEBSHOP_GIFT_CARD_TRANSACTION_LABELS,
+} from "./webshop-gift-cards.js";
+export type {
+  WebshopGiftCard,
+  WebshopGiftCardDetail,
+  WebshopGiftCardIssued,
+  WebshopGiftCardIssueInput,
+  WebshopGiftCardIssueParse,
+  WebshopGiftCardStatus,
+  WebshopGiftCardTransaction,
+  WebshopGiftCardTransactionKind,
+} from "./webshop-gift-cards.js";
