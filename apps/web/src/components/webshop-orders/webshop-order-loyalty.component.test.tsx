@@ -213,4 +213,46 @@ describe("the dialog", () => {
       adjust.mock.calls[0]![0].requestId,
     );
   });
+
+  /*
+    A SIKERES JOVAIRAS UTAN AZ URLAP LEZAR, A KOVETKEZO UJ AZONOSITOT KAP (nautilus, 57033). A requestId a shop idempotencia-kulcsa
+    (`reference`): ugyanaz a kulcs ugyanazzal a ponttal es indokkal "replayed", semmi nem tarolodik; mas ponttal 409. Ezert a masodik,
+    KULON jovairas nem kuldhet az elso azonositojat. MI PIROSIT: ha a sikeres mentes utan a parbeszed nyitva marad (ugyanaz az
+    azonosito), vagy az azonosito a megnyitasoktol fuggetlen (modul-szintu).
+  */
+  it("closes after a saved movement, and the next movement gets a new request id (the shop would otherwise replay the first)", async () => {
+    const adjust = vi.fn().mockResolvedValue({
+      balance: 1200,
+      created: true,
+      loyalty: {
+        available: true,
+        balance: 1200,
+        entries: [{ ...ENTRY, id: "loyent_2", points: 100 }],
+      },
+    });
+    const first = await open(ready({ adjust }));
+    fireEvent.change(first.points, { target: { value: "100" } });
+    fireEvent.change(first.reason, { target: { value: "Első jóírás" } });
+    fireEvent.click(first.save);
+    await waitFor(() => expect(adjust).toHaveBeenCalledTimes(1));
+    // the dialog is gone after the save: no second movement can be sent from it
+    await waitFor(() => expect(screen.queryByLabelText("Pont")).toBeNull());
+
+    fireEvent.click(screen.getByRole("button", { name: /Pont jóváírása/ }));
+    fireEvent.change(screen.getByLabelText("Pont"), {
+      target: { value: "200" },
+    });
+    fireEvent.change(screen.getByLabelText("Indok"), {
+      target: { value: "Második jóírás" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+    await waitFor(() => expect(adjust).toHaveBeenCalledTimes(2));
+    expect(adjust.mock.calls[1]![0].requestId).not.toBe(
+      adjust.mock.calls[0]![0].requestId,
+    );
+    expect(adjust.mock.calls[1]![0]).toMatchObject({
+      points: 200,
+      reason: "Második jóírás",
+    });
+  });
 });
