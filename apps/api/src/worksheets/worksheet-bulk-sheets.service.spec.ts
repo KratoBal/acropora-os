@@ -126,7 +126,9 @@ describe("a kijelölt lapok kiadott PDF-jei egyben", () => {
     for (const ids of [many, []])
       await assert.rejects(
         () => service.bulkIssuedSheets(ids, "zip", SCOPE),
-        (error: unknown) => error instanceof BadRequestException,
+        (error: unknown) =>
+          error instanceof BadRequestException &&
+          /legfeljebb 50/.test((error as BadRequestException).message),
       );
     // 50 még átmegy (a lezáratlan/nem létező miatt 400, de nem a számkorlát miatt)
     await assert.rejects(
