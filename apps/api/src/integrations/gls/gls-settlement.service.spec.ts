@@ -35,7 +35,10 @@ function invoiceAttachment() {
 
 function fakeRepository(open: UnresolvedLine[]) {
   const saved: Array<{ lineId: string; resolution: GlsLineResolution }> = [];
-  const asked: { parcels?: readonly string[] } = {};
+  const asked: {
+    parcels?: readonly string[];
+    webshopParcels?: readonly string[];
+  } = {};
   const refreshed: string[] = [];
   const repository = {
     createInvoice: async () => ({ id: "gls-invoice-1", duplicate: false }),
@@ -46,6 +49,13 @@ function fakeRepository(open: UnresolvedLine[]) {
     },
     clientReferences: async () => new Map([["1000000001", "11111-000001"]]),
     existingInvoiceNumbers: async () => new Set<string>(),
+    webshopParcels: async (parcelNumbers: readonly string[]) => {
+      asked.webshopParcels = parcelNumbers;
+      return new Map<
+        string,
+        { orderIds: string[]; invoiceNumbers: string[] }
+      >();
+    },
     orderInvoiceNumbers: async (keys: readonly string[]) =>
       new Map(
         keys.includes("11111-000001")
@@ -100,6 +110,50 @@ describe("GlsSettlementService.upload", () => {
       },
     ]);
     assert.deepEqual(fake.refreshed, ["report-1"]);
+  });
+
+  it("resolves a webshop parcel's open line through the parcel number, which the client reference (a display id) cannot do", async () => {
+    const fake = fakeRepository([
+      {
+        id: "line-1",
+        reportId: "report-1",
+        parcelNumber: "1000000001",
+        codReference: null,
+      },
+    ]);
+    // the client reference of a webshop parcel is the order's display id: no order key, so the UNAS path finds nothing
+    fake.repository.clientReferences = async () =>
+      new Map([["1000000001", "72"]]);
+    fake.repository.webshopParcels = async (
+      parcelNumbers: readonly string[],
+    ) => {
+      fake.asked.webshopParcels = parcelNumbers;
+      return new Map([
+        [
+          "1000000001",
+          { orderIds: ["order_72"], invoiceNumbers: ["ACRW-2026/00600"] },
+        ],
+      ]);
+    };
+    await new GlsSettlementService(
+      fake.repository,
+      new GlsMonthlyReportXlsx(),
+    ).upload(
+      invoiceAttachment(),
+      "SettlementDocument_HU00000001_20260918011215.xlsx",
+      "user-1",
+    );
+    assert.deepEqual(fake.asked.webshopParcels, ["1000000001"]);
+    assert.deepEqual(fake.saved, [
+      {
+        lineId: "line-1",
+        resolution: {
+          status: "RESOLVED",
+          source: "WEBSHOP_PARCEL",
+          invoiceNumbers: ["ACRW-2026/00600"],
+        },
+      },
+    ]);
   });
 
   it("does not touch anything for a report that is already in", async () => {

@@ -4,6 +4,7 @@ import {
   type PriceAuditDeps,
 } from "./medusa-price-audit.js";
 import { MEDUSA_CURRENCY_CODE } from "./medusa-pricing.policy.js";
+import { baseRowsOf } from "./medusa-price-rows.js";
 
 /**
  * THE TWO-HUF-PRICE REPAIR, THE NARROW CASE ONLY (task t-20261116-ket-forint-ar, acrobot 53861 and 53863).
@@ -215,7 +216,11 @@ export async function dedupeProducts(
         );
         continue;
       }
-      const rows = after.rows.find((row) => row.id === variantId)?.prices;
+      // a sale price list's row stays and is not counted: the repair keeps one BASE row
+      const afterPrices = after.rows.find(
+        (row) => row.id === variantId,
+      )?.prices;
+      const rows = afterPrices ? baseRowsOf(afterPrices) : undefined;
       const ok =
         !after.truncated &&
         rows !== undefined &&

@@ -952,6 +952,10 @@ export type {
   UnasConnectionView,
 } from "./integrations/unas-connection.js";
 export type {
+  WebshopOrderTaxCheck,
+  WebshopOrderTaxCheckState,
+} from "./webshop-order-tax-check.js";
+export type {
   NavTaxpayerAddress,
   NavTaxpayerLookupResult,
 } from "./integrations/nav-taxpayer.js";
@@ -2361,3 +2365,59 @@ export type {
   WorksheetDeletePreview,
   WorksheetDeleteResult,
 } from "./service-job-delete.js";
+export {
+  parseWebshopCouponInput,
+  WEBSHOP_COUPON_LIMITS,
+} from "./webshop-coupons.js";
+export type {
+  WebshopCoupon,
+  WebshopCouponInput,
+  WebshopCouponKind,
+  WebshopCouponParse,
+  WebshopCouponState,
+} from "./webshop-coupons.js";
+export {
+  parseWebshopCustomerDiscountInput,
+  WEBSHOP_CUSTOMER_DISCOUNT_LIMITS,
+} from "./webshop-customer-discounts.js";
+export type {
+  WebshopCustomerDiscount,
+  WebshopCustomerDiscountInput,
+  WebshopCustomerDiscountParse,
+  WebshopCustomerHit,
+} from "./webshop-customer-discounts.js";
+export {
+  impossiblePaymentReason,
+  parseWebshopPaymentMatrixInput,
+  parseWebshopShippingFeesInput,
+  WEBSHOP_PAYMENT_ROLE_LABELS,
+  WEBSHOP_PAYMENT_ROLES,
+  WEBSHOP_SHIPPING_FEE_MAX,
+  WEBSHOP_SHIPPING_FEES,
+  WEBSHOP_SHIPPING_ROLE_LABELS,
+  WEBSHOP_SHIPPING_ROLES,
+} from "./webshop-shipping-settings.js";
+export type {
+  WebshopPaymentMatrix,
+  WebshopPaymentMatrixParse,
+  WebshopShippingFeeField,
+  WebshopShippingFees,
+  WebshopShippingFeesParse,
+  WebshopShippingRole,
+  WebshopShippingSettings,
+} from "./webshop-shipping-settings.js";
+export {
+  parseWebshopGiftCardIssueInput,
+  WEBSHOP_GIFT_CARD_LIMITS,
+  WEBSHOP_GIFT_CARD_TRANSACTION_LABELS,
+} from "./webshop-gift-cards.js";
+export type {
+  WebshopGiftCard,
+  WebshopGiftCardDetail,
+  WebshopGiftCardIssued,
+  WebshopGiftCardIssueInput,
+  WebshopGiftCardIssueParse,
+  WebshopGiftCardStatus,
+  WebshopGiftCardTransaction,
+  WebshopGiftCardTransactionKind,
+} from "./webshop-gift-cards.js";

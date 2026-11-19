@@ -14,6 +14,12 @@ export interface NavTaxpayerAddress {
 export interface NavTaxpayerLookupResult {
   /** false: az adószám nem érvényes/nem létezik NAV szerint - nincs data. */
   valid: boolean;
+  /**
+   * A NAV válasza nem mondta ki egyértelműen, hogy az adószám érvényes vagy sem (a `taxpayerValidity` elem hiányzott vagy más
+   * értéket hordozott). `valid` ilyenkor false, de ez NEM "nincs ilyen adószám": aki a létezésre épít (a rendelés számla-kapuja),
+   * ezt "nem tudjuk"-nak veszi.
+   */
+  validityUnknown?: boolean;
   data: {
     name: string;
     /** Teljes formátumú adószám, pl. "12345678-1-42", ha a NAV visszaadta a vatCode/countyCode részleteket is. */

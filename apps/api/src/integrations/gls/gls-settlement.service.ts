@@ -30,6 +30,8 @@ const REVIEW_REASONS: Record<GlsCodLineError, string> = {
   ORDER_NOT_INVOICED: "A rendelésnek még nincs számlája",
   PREFIX_MISSING: "Előtag nélküli számlaszám",
   REFERENCE_UNKNOWN: "Ismeretlen hivatkozás",
+  WEBSHOP_ORDER_AMBIGUOUS: "A csomagszámhoz több webshop-rendelés tartozik",
+  WEBSHOP_INVOICE_AMBIGUOUS: "A webshop-rendelésnek több élő számlája van",
 };
 
 /** What the person sees when a file is refused, per reader error. */
@@ -168,18 +170,21 @@ export class GlsSettlementService {
       const clientKey = orderKeyOf(clientReferences.get(line.parcelNumber));
       if (clientKey) orderKeys.push(clientKey);
     }
-    const [existingInvoiceNumbers, orderInvoiceNumbers] = await Promise.all([
-      this.repository.existingInvoiceNumbers(invoiceNumbers),
-      this.repository.orderInvoiceNumbers(orderKeys),
-    ]);
+    const [existingInvoiceNumbers, orderInvoiceNumbers, webshopByParcel] =
+      await Promise.all([
+        this.repository.existingInvoiceNumbers(invoiceNumbers),
+        this.repository.orderInvoiceNumbers(orderKeys),
+        this.repository.webshopParcels(lines.map((line) => line.parcelNumber)),
+      ]);
     const resolutions = lines.map((line) => ({
       lineId: line.id,
       resolution: resolveGlsCodLine(
         {
+          parcelNumber: line.parcelNumber,
           codReference: line.codReference,
           clientReference: clientReferences.get(line.parcelNumber) ?? null,
         },
-        { existingInvoiceNumbers, orderInvoiceNumbers },
+        { existingInvoiceNumbers, orderInvoiceNumbers, webshopByParcel },
       ),
     }));
     await this.repository.saveResolutions(resolutions);
