@@ -40,6 +40,7 @@ import {
   blockMeta,
   blocksForSave,
   effectiveBlocks,
+  HOMEPAGE_STANDALONE_GROUPS,
 } from "./homepage-blocks";
 import {
   Kapcsolo,
@@ -343,10 +344,11 @@ export function HomepageContentEditorPage() {
       </div>
     </div>
   );
-  const selectedBlock =
-    selected === "footer" || selected === "newsletter"
-      ? null
-      : (draft.blocks.find((block) => block.key === selected) ?? null);
+  const fixedPanel =
+    selected === "footer" || selected === "newsletter" || selected === "header";
+  const selectedBlock = fixedPanel
+    ? null
+    : (draft.blocks.find((block) => block.key === selected) ?? null);
   const setVisible = (key: HomepageBlockKey, visible: boolean) =>
     setDraft((d) => ({
       ...d,
@@ -455,7 +457,9 @@ export function HomepageContentEditorPage() {
                 ? "Lábléc"
                 : selected === "newsletter"
                   ? "Hírlevél"
-                  : blockMeta(selected).label}
+                  : selected === "header"
+                    ? "Fejléc info-sáv"
+                    : blockMeta(selected).label}
             </h2>
             {selectedBlock ? (
               <span className="flex items-center gap-2 text-xs text-pilot-grey-600">
@@ -468,7 +472,16 @@ export function HomepageContentEditorPage() {
               </span>
             ) : null}
           </div>
-          {selected === "footer" ? (
+          {selected === "header" ? (
+            <>
+              <p className="text-xs text-pilot-grey-600">
+                A fejléc fölötti sáv négy rövid szövege, minden oldalon. Üres
+                szöveggel a sor nem jelenik meg a kirakaton, és ha mind a négy
+                üres, a sáv sem.
+              </p>
+              {HOMEPAGE_STANDALONE_GROUPS.map(fieldsOf)}
+            </>
+          ) : selected === "footer" ? (
             <HomepageFooterEditor
               footer={draft.footer}
               onChange={(footer) => setDraft((d) => ({ ...d, footer }))}
@@ -519,9 +532,7 @@ export function HomepageContentEditorPage() {
         <HomepagePreview
           storefrontUrl={storefrontUrl}
           record={record}
-          selected={
-            selected === "footer" || selected === "newsletter" ? null : selected
-          }
+          selected={fixedPanel ? null : selected}
           onSelect={setSelected}
         />
       </div>

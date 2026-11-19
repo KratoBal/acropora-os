@@ -493,3 +493,34 @@ describe("parseHomepageContentInput: brandIds", () => {
       );
   });
 });
+
+/*
+  THE HEADER INFO BAR KEYS (card 409ba396). What turns this red: a key missing (the bar could not be edited), a starting value
+  tagged as a sample (the shop would put the "Minta adat" label on a bar of real facts), an invented phone number back in the
+  defaults, or the keys leaving their own group.
+*/
+describe("the header info bar fields", () => {
+  const sav = HOMEPAGE_TEXT_FIELDS.filter((f) =>
+    f.key.startsWith("fejlec.sav."),
+  );
+
+  it("has the four keys the storefront reads, in one group, as plain text, none a sample", () => {
+    assert.deepEqual(
+      sav.map((f) => f.key),
+      ["fejlec.sav.1", "fejlec.sav.2", "fejlec.sav.3", "fejlec.sav.4"],
+    );
+    for (const field of sav) {
+      assert.equal(field.group, "Fejléc: info-sáv");
+      assert.equal(field.type, "text");
+      assert.equal(field.sample, undefined);
+      assert.notEqual(field.default.trim(), "");
+    }
+  });
+
+  it("the starting values are the shop's own facts, not the invented ones", () => {
+    const text = sav.map((f) => f.default).join(" | ");
+    assert.ok(text.includes("+36-20/267-6801"));
+    assert.ok(text.includes("Kedd-Péntek 10-18"));
+    assert.doesNotMatch(text, /1 234 5678|10[–-]19/);
+  });
+});

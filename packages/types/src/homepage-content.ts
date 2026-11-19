@@ -45,6 +45,41 @@ export interface HomepageTextField {
 }
 
 export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
+  /*
+    THE HEADER'S INFO BAR (card 409ba396, 2026-11-19): four short lines above the header on every page. Not a block of the page
+    (no place in the order, no switch): the editor shows them in their own panel ("Fejléc info-sáv"), see
+    `HOMEPAGE_STANDALONE_GROUPS` in the web app. The starting values are the shop's own facts (the footer's opening
+    hours and phone, the delivery services the shop really has), not samples; an EMPTY saved text hides its line (the shop skips
+    an empty line, and the whole bar when all four are empty).
+  */
+  {
+    key: "fejlec.sav.1",
+    group: "Fejléc: info-sáv",
+    label: "Bal oldal, első",
+    type: "text",
+    default: "Élőállat kizárólag személyes átvétellel, a budapesti boltban",
+  },
+  {
+    key: "fejlec.sav.2",
+    group: "Fejléc: info-sáv",
+    label: "Bal oldal, második",
+    type: "text",
+    default: "Technika és vegyszer: Foxpost csomagpont és GLS házhozszállítás",
+  },
+  {
+    key: "fejlec.sav.3",
+    group: "Fejléc: info-sáv",
+    label: "Jobb oldal, első",
+    type: "text",
+    default: "Nyitva: Kedd-Péntek 10-18, Szombat 10-14",
+  },
+  {
+    key: "fejlec.sav.4",
+    group: "Fejléc: info-sáv",
+    label: "Jobb oldal, második",
+    type: "text",
+    default: "Tanácsadás: +36-20/267-6801",
+  },
   {
     key: "hero.tenyek.1.cim",
     group: "Hero",

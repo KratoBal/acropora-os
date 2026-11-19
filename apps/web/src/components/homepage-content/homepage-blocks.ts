@@ -76,6 +76,15 @@ export const HOMEPAGE_BLOCKS: readonly HomepageBlockMeta[] = [
   },
 ];
 
+/**
+ * FIELD GROUPS THAT BELONG TO NO BLOCK (card 409ba396): the header's info bar is on every page, has no place in the page order and
+ * no switch, so it is not one of the storefront's blocks; the editor shows it in its own panel ("Fejléc info-sáv"). The test
+ * that every group is shown counts these together with the blocks' groups.
+ */
+export const HOMEPAGE_STANDALONE_GROUPS: readonly string[] = [
+  "Fejléc: info-sáv",
+];
+
 const META = new Map(HOMEPAGE_BLOCKS.map((block) => [block.key, block]));
 
 export function blockMeta(key: HomepageBlockKey): HomepageBlockMeta {
