@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post } from "@nestjs/common";
-import { PERMISSIONS } from "@acropora/types";
+import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
+import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { WebshopGiftCardsService } from "./webshop-gift-cards.service.js";
 
@@ -26,13 +27,13 @@ export class WebshopGiftCardsController {
 
   @Post()
   @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
-  issue(@Body() body: unknown) {
-    return this.giftCards.issue(body);
+  issue(@Body() body: unknown, @CurrentUser() user: AuthenticatedUser) {
+    return this.giftCards.issue(body, user.id);
   }
 
   @Post(":id/disable")
   @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
-  disable(@Param("id") id: string) {
-    return this.giftCards.disable(id);
+  disable(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.giftCards.disable(id, user.id);
   }
 }
