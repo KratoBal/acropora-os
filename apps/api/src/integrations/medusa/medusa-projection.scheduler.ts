@@ -10,10 +10,14 @@ import {
 import { prisma } from "@acropora/database";
 
 import {
+  brandCollectionsFailedStep,
+  brandCollectionsOffStep,
+  brandCollectionsStep,
   describeBrandCollections,
   ensureBrandCollections,
   ensureBrandCollectionsInRound,
   type BrandCollectionsOutcome,
+  type BrandCollectionsStep,
 } from "./medusa-brand-collections-round.js";
 import {
   MedusaBrandImportRefusedError,
@@ -390,6 +394,11 @@ export type RoundStepCounts = {
         unpaired: number;
       }
     | null;
+  /**
+   * a marka-gyujtemenyek lepese (kartya ec82b629): a kapcsolo ALLAPOTA is itt latszik (`enabled: false`, nem null), mert a stage
+   * naploja a flottanak nem olvashato, es a lepes eredmenye eddig csak naplo-sor volt. Lasd `BrandCollectionsStep`.
+   */
+  brandCollections: BrandCollectionsStep | null;
   arrivals:
     | { failed: true }
     | {
@@ -415,6 +424,13 @@ function korMasolat(kor: KorAllapot): ProjectionRoundSnapshot {
     priceConflictRows: kor.priceConflictRows && { ...kor.priceConflictRows },
     steps: {
       leftoverKind: kor.steps.leftoverKind && { ...kor.steps.leftoverKind },
+      brandCollections: kor.steps.brandCollections && {
+        ...kor.steps.brandCollections,
+        ...("planned" in kor.steps.brandCollections &&
+        kor.steps.brandCollections.planned
+          ? { planned: { ...kor.steps.brandCollections.planned } }
+          : {}),
+      },
       arrivals: kor.steps.arrivals && { ...kor.steps.arrivals },
     },
   };
@@ -770,7 +786,7 @@ export class MedusaProjectionScheduler
       pricingExit: null,
       productFailures: null,
       priceConflictRows: null,
-      steps: { leftoverKind: null, arrivals: null },
+      steps: { leftoverKind: null, brandCollections: null, arrivals: null },
     };
     this.utolsoKor = kor;
     try {
@@ -798,7 +814,7 @@ export class MedusaProjectionScheduler
       állnak elöl, hogy egy teli kör ne szorítsa ki őket.
     */
     // A MÁRKA-GYŰJTEMÉNYEK ELŐBB, a termékek előtt: ami itt leképeződik, azt a termék-vetítés ugyanebben a körben viszi
-    await this.markaGyujtemenyKor();
+    await this.markaGyujtemenyKor(allapot);
     await this.atiranyitasKor();
     await this.landingKor();
     await this.kezdolapKor();
@@ -1060,10 +1076,16 @@ export class MedusaProjectionScheduler
    * meg. Kapcsolóval, alapból KI (a lépés a boltba ír). Az ütközés és a megállás figyelmeztetés minden körben, a változás
    * egy napló-sor.
    */
-  private async markaGyujtemenyKor(): Promise<void> {
-    if (!ensureBrandCollectionsInRound(this.environment)) return;
+  private async markaGyujtemenyKor(allapot: KorAllapot): Promise<void> {
+    if (!ensureBrandCollectionsInRound(this.environment)) {
+      allapot.steps.brandCollections = brandCollectionsOffStep(
+        this.environment,
+      );
+      return;
+    }
     try {
       const eredmeny = await this.runBrandCollections();
+      allapot.steps.brandCollections = brandCollectionsStep(eredmeny);
       if (
         eredmeny.status === "refused" ||
         (eredmeny.status === "applied" && eredmeny.conflicts.length)
@@ -1072,6 +1094,7 @@ export class MedusaProjectionScheduler
       else if (eredmeny.status !== "unchanged")
         this.naplo.log(describeBrandCollections(eredmeny));
     } catch (error) {
+      allapot.steps.brandCollections = brandCollectionsFailedStep(error);
       this.naplo.warn(
         `Márka-gyűjtemények: a kör nem futott le (${
           error instanceof Error ? error.message : String(error)

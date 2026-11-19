@@ -1756,6 +1756,11 @@ describe("a lista-lépések számai a kör állapotában (acrobot 45814)", () =>
         cleared: 1,
         unpaired: 1,
       },
+      brandCollections: {
+        enabled: false,
+        switchPresent: false,
+        switchLooksTrue: false,
+      },
       arrivals: { failed: false, status: "unchanged", count: 7, leftOut: 3 },
     });
   });
@@ -1765,6 +1770,11 @@ describe("a lista-lépések számai a kör állapotában (acrobot 45814)", () =>
     await kikapcsolt.runOnce();
     assert.deepEqual(kikapcsolt.allapot().lastRound!.steps, {
       leftoverKind: null,
+      brandCollections: {
+        enabled: false,
+        switchPresent: false,
+        switchLooksTrue: false,
+      },
       arrivals: null,
     });
     const dobo = indit(
@@ -1785,6 +1795,11 @@ describe("a lista-lépések számai a kör állapotában (acrobot 45814)", () =>
     await dobo.runOnce();
     assert.deepEqual(dobo.allapot().lastRound!.steps, {
       leftoverKind: { failed: true },
+      brandCollections: {
+        enabled: false,
+        switchPresent: false,
+        switchLooksTrue: false,
+      },
       arrivals: { failed: false, status: "sent", count: 2, leftOut: 0 },
     });
   });
@@ -3594,6 +3609,14 @@ describe("a hiányzó márka-gyűjtemények köre (kártya ec82b629)", () => {
   const BEKAPCS = { ...BEKAPCSOLVA, MEDUSA_ENSURE_BRAND_COLLECTIONS: "true" };
   const kesz = {
     status: "applied" as const,
+    planned: {
+      create: 2,
+      mapOnly: 0,
+      staleMapping: 0,
+      skip: 5,
+      conflict: 0,
+      skipArchived: 0,
+    },
     created: 2,
     linkedOnly: 0,
     relinked: 0,
@@ -3656,7 +3679,7 @@ describe("a hiányzó márka-gyűjtemények köre (kártya ec82b629)", () => {
       logger: naplo().logger,
       runBrandCollections: async () => {
         hivas += 1;
-        return { status: "unchanged" as const };
+        return { status: "unchanged" as const, planned: kesz.planned };
       },
     });
     assert.equal(await scheduler.runOnce(), "SKIPPED");
@@ -3673,14 +3696,14 @@ describe("a hiányzó márka-gyűjtemények köre (kártya ec82b629)", () => {
               >["runBrandCollections" & keyof object]
             >
           >
-        | { status: "unchanged" }
+        | { status: "unchanged"; planned: typeof kesz.planned }
         | { status: "refused"; reason: string }
         | typeof kesz
       ),
       string | null,
       "warn" | "log" | null,
     ][] = [
-      [{ status: "unchanged" }, null, null],
+      [{ status: "unchanged", planned: kesz.planned }, null, null],
       [
         { ...kesz, created: 0, touched: 0, conflicts: ["brand-9"] },
         "ÜTKÖZÉS, érintetlen marad: brand-9",
@@ -3722,6 +3745,105 @@ describe("a hiányzó márka-gyűjtemények köre (kártya ec82b629)", () => {
         );
       }
     }
+  });
+
+  /**
+   * A LEPES A KOR ALLAPOTABAN (acrobot 13:10, a stage-en a lepes eredmenye meretlen volt). MI PIROSIT: ha a kikapcsolt lepes
+   * `null` maradna (a hianyzo es a rossz alakban allo kapcsolo megkulonboztethetetlen); ha a nyers kapcsolo-ertek a pillanatkepbe
+   * kerulne; ha egy lefutott, egy megallt es egy dobo lepes ugyanazt mutatna; ha a kovetkezo kor az elozo szamait vinne tovabb;
+   * ha a health olvaso elo hivatkozast kapna.
+   */
+  const lepes = (env: NodeJS.ProcessEnv, run?: () => Promise<unknown>) =>
+    new MedusaProjectionScheduler({
+      db: ures(),
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: env,
+      logger: naplo().logger,
+      ...(run ? { runBrandCollections: run as never } : {}),
+    });
+  const allapotuk = (scheduler: MedusaProjectionScheduler) =>
+    scheduler.allapot().lastRound!.steps.brandCollections as Record<
+      string,
+      unknown
+    > & { planned?: { create: number } };
+
+  it("a kapcsoló állapota a pillanatképben: hiányzik, rossz alakban áll", async () => {
+    const hianyzik = lepes(BEKAPCSOLVA);
+    await hianyzik.runOnce();
+    assert.deepEqual(allapotuk(hianyzik), {
+      enabled: false,
+      switchPresent: false,
+      switchLooksTrue: false,
+    });
+    const rossz = lepes({
+      ...BEKAPCSOLVA,
+      MEDUSA_ENSURE_BRAND_COLLECTIONS: '"titkos-true"',
+    });
+    await rossz.runOnce();
+    assert.deepEqual(allapotuk(rossz), {
+      enabled: false,
+      switchPresent: true,
+      switchLooksTrue: false,
+    });
+    const idezojeles = lepes({
+      ...BEKAPCSOLVA,
+      MEDUSA_ENSURE_BRAND_COLLECTIONS: '"true"',
+    });
+    await idezojeles.runOnce();
+    assert.deepEqual(allapotuk(idezojeles), {
+      enabled: false,
+      switchPresent: true,
+      switchLooksTrue: true,
+    });
+    assert.ok(!JSON.stringify(rossz.allapot()).includes("titkos"));
+  });
+
+  it("a lefutott, a megállt és a dobó lépés három különböző érték", async () => {
+    const valtozatlan = lepes(BEKAPCS, async () => ({
+      status: "unchanged",
+      planned: { ...kesz.planned, create: 45 },
+    }));
+    await valtozatlan.runOnce();
+    assert.equal(allapotuk(valtozatlan).status, "unchanged");
+    assert.equal(allapotuk(valtozatlan).planned!.create, 45);
+
+    const megallt = lepes(BEKAPCS, async () => ({
+      status: "refused",
+      reason: "a lista csonkolt",
+    }));
+    await megallt.runOnce();
+    assert.equal(allapotuk(megallt).status, "refused");
+    assert.equal(allapotuk(megallt).reason, "a lista csonkolt");
+
+    const dobo = lepes(BEKAPCS, async () => {
+      throw new Error("HTTP 400 handle exists");
+    });
+    await dobo.runOnce();
+    assert.deepEqual(allapotuk(dobo), {
+      enabled: true,
+      failed: true,
+      error: "HTTP 400 handle exists",
+    });
+  });
+
+  it("a következő kör nem viszi tovább az előző számait, és az állapot másolat", async () => {
+    let kor = 0;
+    const scheduler = lepes(BEKAPCS, async () => {
+      kor += 1;
+      return kor === 1 ? kesz : { status: "unchanged", planned: kesz.planned };
+    });
+    await scheduler.runOnce();
+    const elso = allapotuk(scheduler);
+    assert.equal(elso.status, "applied");
+    assert.equal(elso.created, 2);
+    elso.planned!.create = 999;
+    elso.created = 999;
+    assert.equal(allapotuk(scheduler).planned!.create, 2);
+    assert.equal(allapotuk(scheduler).created, 2);
+    await scheduler.runOnce();
+    assert.equal(allapotuk(scheduler).status, "unchanged");
+    assert.equal(allapotuk(scheduler).created, 0);
   });
 
   it("egy hiba a naplóba megy, és a termékek köre fut tovább", async () => {

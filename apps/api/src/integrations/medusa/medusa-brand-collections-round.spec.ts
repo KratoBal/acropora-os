@@ -4,6 +4,9 @@ import { describe, it } from "node:test";
 import type { BrandImportReport } from "./medusa-brand-import.service.js";
 import type { BrandImportPlan } from "./medusa-brand-plan.js";
 import {
+  brandCollectionsFailedStep,
+  brandCollectionsOffStep,
+  brandCollectionsStep,
   describeBrandCollections,
   ensureBrandCollections,
   ensureBrandCollectionsInRound,
@@ -94,7 +97,17 @@ describe("ensureBrandCollections", () => {
     const { d, calls } = deps({
       p: plan({ skip: ["a", "b"], skipArchived: ["x"] }),
     });
-    assert.deepEqual(await ensureBrandCollections(d), { status: "unchanged" });
+    assert.deepEqual(await ensureBrandCollections(d), {
+      status: "unchanged",
+      planned: {
+        create: 0,
+        mapOnly: 0,
+        staleMapping: 0,
+        skip: 2,
+        conflict: 0,
+        skipArchived: 1,
+      },
+    });
     assert.deepEqual(calls, ["plan"]);
   });
 
@@ -112,6 +125,14 @@ describe("ensureBrandCollections", () => {
     assert.deepEqual(touched, [{ ids: ["a", "b", "c", "d"], now: NOW }]);
     assert.deepEqual(out, {
       status: "applied",
+      planned: {
+        create: 2,
+        mapOnly: 1,
+        staleMapping: 1,
+        skip: 0,
+        conflict: 0,
+        skipArchived: 0,
+      },
       created: 2,
       linkedOnly: 1,
       relinked: 1,
@@ -167,6 +188,14 @@ describe("ensureBrandCollections", () => {
     const out = await ensureBrandCollections(d);
     assert.deepEqual(out, {
       status: "applied",
+      planned: {
+        create: 0,
+        mapOnly: 0,
+        staleMapping: 0,
+        skip: 0,
+        conflict: 1,
+        skipArchived: 0,
+      },
       created: 0,
       linkedOnly: 0,
       relinked: 0,
@@ -214,6 +243,14 @@ describe("describeBrandCollections", () => {
   it("megnevezi a számokat és az ütközést", () => {
     const sor = describeBrandCollections({
       status: "applied",
+      planned: {
+        create: 3,
+        mapOnly: 1,
+        staleMapping: 0,
+        skip: 0,
+        conflict: 2,
+        skipArchived: 0,
+      },
       created: 3,
       linkedOnly: 1,
       relinked: 0,
@@ -223,5 +260,115 @@ describe("describeBrandCollections", () => {
     assert.match(sor, /3 létrehozva/);
     assert.match(sor, /4 márka megérintve/);
     assert.match(sor, /ÜTKÖZÉS, érintetlen marad: k1, k2/);
+  });
+});
+
+describe("a lépés a kör állapotában (kártya ec82b629, mérhetővé tétel)", () => {
+  /**
+   * MI PIROSÍT: ha a rossz alakban álló kapcsoló (`True`, idézőjeles, szóközös) ugyanolyan `enabled: false` lenne, mint a hiányzó
+   * (a mért eset: a lépés nem írt, és semmi nem mondta meg, miért); ha a nyers érték kikerülne; ha egy megtagadás, egy változatlan
+   * és egy végrehajtott kör ugyanazt mutatná; ha a hiba szövege a határon túl hosszú vagy többsoros; ha a terv száma elveszne.
+   */
+  it("a kikapcsolt lépés megmondja, van-e kapcsoló, és rossz alakban áll-e (a nyers érték nem megy ki)", () => {
+    assert.deepEqual(brandCollectionsOffStep({}), {
+      enabled: false,
+      switchPresent: false,
+      switchLooksTrue: false,
+    });
+    for (const rossz of ["True", "TRUE", '"true"', " true ", "'true'"])
+      assert.deepEqual(
+        brandCollectionsOffStep({ MEDUSA_ENSURE_BRAND_COLLECTIONS: rossz }),
+        { enabled: false, switchPresent: true, switchLooksTrue: true },
+        rossz,
+      );
+    for (const mas of ["", "false", "1", "yes"])
+      assert.deepEqual(
+        brandCollectionsOffStep({ MEDUSA_ENSURE_BRAND_COLLECTIONS: mas }),
+        { enabled: false, switchPresent: true, switchLooksTrue: false },
+        mas,
+      );
+    assert.ok(
+      !JSON.stringify(
+        brandCollectionsOffStep({ MEDUSA_ENSURE_BRAND_COLLECTIONS: "titok" }),
+      ).includes("titok"),
+    );
+  });
+
+  it("a három eredmény három különböző érték, a tervvel együtt", () => {
+    const planned = {
+      create: 45,
+      mapOnly: 0,
+      staleMapping: 0,
+      skip: 60,
+      conflict: 0,
+      skipArchived: 0,
+    };
+    const valtozatlan = brandCollectionsStep({ status: "unchanged", planned });
+    assert.equal(
+      valtozatlan.enabled && !valtozatlan.failed && valtozatlan.status,
+      "unchanged",
+    );
+    assert.deepEqual(
+      valtozatlan.enabled && !valtozatlan.failed && valtozatlan.planned,
+      planned,
+    );
+    const megtagadott = brandCollectionsStep({
+      status: "refused",
+      reason: "csonkolt",
+    });
+    assert.deepEqual(megtagadott, {
+      enabled: true,
+      failed: false,
+      status: "refused",
+      planned: null,
+      created: 0,
+      linkedOnly: 0,
+      relinked: 0,
+      touched: 0,
+      conflicts: 0,
+      reason: "csonkolt",
+    });
+    assert.deepEqual(
+      brandCollectionsStep({
+        status: "applied",
+        planned,
+        created: 45,
+        linkedOnly: 0,
+        relinked: 0,
+        touched: 45,
+        conflicts: ["k"],
+      }),
+      {
+        enabled: true,
+        failed: false,
+        status: "applied",
+        planned,
+        created: 45,
+        linkedOnly: 0,
+        relinked: 0,
+        touched: 45,
+        conflicts: 1,
+        reason: null,
+      },
+    );
+  });
+
+  it("a hiba szövege egy sorba esik és határolt", () => {
+    const lep = brandCollectionsFailedStep(
+      new Error(
+        "HTTP 400\n  Collection with handle x already exists " +
+          "y".repeat(400),
+      ),
+    );
+    assert.equal(lep.enabled && lep.failed, true);
+    const szoveg = lep.enabled && lep.failed ? lep.error : "";
+    assert.ok(szoveg.length <= 160);
+    assert.ok(!szoveg.includes("\n"));
+    assert.match(szoveg, /^HTTP 400 Collection with handle x/);
+    assert.equal(
+      brandCollectionsFailedStep("sima szöveg").enabled &&
+        (brandCollectionsFailedStep("sima szöveg") as { error: string }).error,
+      "sima szöveg",
+    );
   });
 });
