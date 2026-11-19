@@ -91,16 +91,36 @@ describe(
       await prisma.auditLog.deleteMany({ where: { entityId: ORDER } });
     });
 
-    it("an overridden shipping gate adds its own row with the reason and what was missing, and leaves the status row's shape unchanged", async () => {
+    it("an overridden shipping gate has its own row: requested before the webshop call, applied after it, and the status row keeps its shape", async () => {
+      const trace = {
+        userId,
+        orderId: ORDER,
+        from: "stocking",
+        to: "out_for_delivery",
+        reason: "A csomagot a GLS portálján adtuk fel kézzel",
+        missing: ["kiállított számla", "feladott csomag"],
+      };
+      const rowId = await repository.requestShippingOverride(trace);
+      // an attempt the webshop refused: only the requested row exists
+      const attempt = await rows();
+      assert.equal(attempt.length, 1);
+      assert.equal(
+        attempt[0]!.action,
+        "webshop-order.shipping-gate-overridden",
+      );
+      assert.deepEqual(attempt[0]!.metadata, {
+        status: "requested",
+        from: "stocking",
+        to: "out_for_delivery",
+        reason: "A csomagot a GLS portálján adtuk fel kézzel",
+        missing: ["kiállított számla", "feladott csomag"],
+      });
+      await repository.markShippingOverrideApplied(rowId, trace);
       await repository.recordStatusChange({
         userId,
         orderId: ORDER,
         from: "stocking",
         to: "out_for_delivery",
-        override: {
-          reason: "A csomagot a GLS portálján adtuk fel kézzel",
-          missing: ["kiállított számla", "feladott csomag"],
-        },
       });
       const written = await rows();
       assert.equal(written.length, 2);
@@ -114,6 +134,7 @@ describe(
       assert.deepEqual(
         byAction["webshop-order.shipping-gate-overridden"]!.metadata,
         {
+          status: "applied",
           from: "stocking",
           to: "out_for_delivery",
           reason: "A csomagot a GLS portálján adtuk fel kézzel",

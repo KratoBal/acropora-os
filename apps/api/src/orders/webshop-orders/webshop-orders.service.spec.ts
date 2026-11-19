@@ -604,6 +604,9 @@ describe("WebshopOrdersService.changeStatus", () => {
       invoice?: boolean;
       parcel?: boolean;
       storePickup?: boolean;
+      /** The override trace: the `requested` row cannot be written / cannot be marked applied. */
+      requestError?: boolean;
+      markError?: boolean;
     } = {},
   ) {
     const sent: Record<string, unknown>[] = [];
@@ -670,6 +673,15 @@ describe("WebshopOrdersService.changeStatus", () => {
     } as unknown as MedusaCredentialProvider;
     const repository = {
       recordStatusChange: async (input: unknown) => void audited.push(input),
+      requestShippingOverride: async (input: unknown) => {
+        if (options.requestError) throw new Error("audit write failed");
+        audited.push({ requested: input });
+        return "audit_row_1";
+      },
+      markShippingOverrideApplied: async (rowId: string, input: unknown) => {
+        if (options.markError) throw new Error("audit update failed");
+        audited.push({ applied: rowId, trace: input });
+      },
       recordStatusMailResent: async (input: unknown) =>
         void audited.push(input),
       invoices: async () =>
@@ -855,18 +867,91 @@ describe("WebshopOrdersService.changeStatus", () => {
     );
     assert.equal(sent.length, 1);
     assert.equal(result.shippingGateOverridden, true);
+    const trace = {
+      userId: "user_1",
+      orderId: "order_38",
+      from: "stocking",
+      to: "out_for_delivery",
+      reason: "A csomagot a GLS portálján adtuk fel kézzel",
+      missing: ["kiállított számla", "feladott csomag"],
+    };
     assert.deepEqual(audited, [
+      { requested: trace },
+      { applied: "audit_row_1", trace },
       {
         userId: "user_1",
         orderId: "order_38",
         from: "stocking",
         to: "out_for_delivery",
-        override: {
-          reason: "A csomagot a GLS portálján adtuk fel kézzel",
-          missing: ["kiállított számla", "feladott csomag"],
-        },
       },
     ]);
+  });
+
+  /*
+    A NAPLÓSOR SORRENDJE (barracuda #2724). MI PIROSÍT: ha a `requested` sor a webshop-hívás UTÁN íródik (egy lefutott levonás nyom nélkül maradhat);
+    ha a sor hibája mellett a lépés mégis elindul; ha a webshop elutasítása után a sor eltűnik vagy `applied` lesz; ha az `applied`-re állítás
+    hibája visszafordítja vagy elbuktatja a már megtörtént váltást.
+  */
+  it("the requested row is written BEFORE the webshop call: if it cannot be written, nothing is sent", async () => {
+    const { orders, sent, audited } = statusService({
+      invoice: false,
+      requestError: true,
+    });
+    await assert.rejects(
+      orders.changeStatus("order_38", "out_for_delivery", "user_1", true, NOW, {
+        overrideReason: "A csomagot a GLS portálján adtuk fel kézzel",
+        canOverride: true,
+      }),
+      /audit write failed/,
+    );
+    assert.deepEqual([sent, audited], [[], []]);
+  });
+
+  it("a webshop refusal leaves the requested row as it is (an attempt's trace), never applied, and no status row", async () => {
+    const { orders, sent, audited } = statusService({
+      invoice: false,
+      transitionError: new MedusaAdminHttpError(
+        422,
+        JSON.stringify({ message: "A levonás nem sikerült" }),
+      ),
+    });
+    await assert.rejects(
+      orders.changeStatus("order_38", "out_for_delivery", "user_1", true, NOW, {
+        overrideReason: "A csomagot a GLS portálján adtuk fel kézzel",
+        canOverride: true,
+      }),
+      (error: unknown) =>
+        (error as Error).constructor.name === "UnprocessableEntityException",
+    );
+    assert.equal(sent.length, 0);
+    assert.equal(audited.length, 1);
+    assert.ok("requested" in (audited[0] as object));
+  });
+
+  it("if marking the row applied fails after the webshop accepted, the shipping still stands and the status row is still written", async () => {
+    const { orders, sent, audited } = statusService({
+      invoice: false,
+      markError: true,
+    });
+    const result = await orders.changeStatus(
+      "order_38",
+      "out_for_delivery",
+      "user_1",
+      true,
+      NOW,
+      {
+        overrideReason: "A csomagot a GLS portálján adtuk fel kézzel",
+        canOverride: true,
+      },
+    );
+    assert.equal(sent.length, 1);
+    assert.equal(result.shippingGateOverridden, true);
+    assert.equal(audited.length, 2);
+    assert.ok("requested" in (audited[0] as object));
+    assert.equal(
+      (audited[1] as { action?: unknown; to?: string }).to,
+      "out_for_delivery",
+    );
   });
 
   it("a reason without the right is a 403: nothing reaches the webshop and nothing is audited", async () => {
@@ -958,7 +1043,7 @@ describe("WebshopOrdersService.changeStatus", () => {
       },
     );
     assert.deepEqual(
-      (audited[0] as { override: { missing: string[] } }).override.missing,
+      (audited[0] as { requested: { missing: string[] } }).requested.missing,
       ["feladott csomag"],
     );
   });

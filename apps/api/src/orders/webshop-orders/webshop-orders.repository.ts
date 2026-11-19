@@ -44,6 +44,30 @@ const CUSTOMER_REFERENCE = {
   entityType: "Customer",
 } as const;
 
+/** A kapu felülbírálásának naplósora: külön `action`, hogy külön szűrhető legyen. */
+export const SHIPPING_OVERRIDE_ACTION =
+  "webshop-order.shipping-gate-overridden";
+
+export type ShippingOverrideTrace = {
+  userId: string;
+  orderId: string;
+  from: string | null;
+  to: string;
+  reason: string;
+  missing: string[];
+};
+
+const shippingOverrideMetadata = (
+  input: ShippingOverrideTrace,
+  status: "requested" | "applied",
+) => ({
+  status,
+  from: input.from,
+  to: input.to,
+  reason: input.reason,
+  missing: input.missing,
+});
+
 /**
  * AZ OS SAJÁT NYOMA A WEBSHOP RENDELÉSEKEN. A státuszváltást a webshop
  * `admin` szereplőként rögzíti, név nélkül; KI nyomta meg, azt csak az OS
@@ -51,46 +75,53 @@ const CUSTOMER_REFERENCE = {
  */
 @Injectable()
 export class WebshopOrdersRepository {
-  /**
-   * A STÁTUSZVÁLTÁS NAPLÓJA, ÉS HA A KISZÁLLÍTÁSI KAPUT FELÜLBÍRÁLTÁK, A FELÜLBÍRÁLÁSÉ (kártya 33a0d3c7). A felülbírálás KÜLÖN sor (külön
-   * `action`), hogy külön szűrhető legyen ("ki kerülte meg a kaput és miért"), a váltás sora pedig változatlan alakú marad. A két sor
-   * egy tranzakcióban íródik: egy felülbírálás indok nélkül, vagy egy indok váltás nélkül hiányos nyom lenne.
-   */
+  /** A STÁTUSZVÁLTÁS NAPLÓJA: egy sor, `webshop-order.status-changed`, a váltás UTÁN. */
   async recordStatusChange(input: {
     userId: string;
     orderId: string;
     from: string | null;
     to: string;
-    override?: { reason: string; missing: string[] };
   }): Promise<void> {
-    const change = {
-      userId: input.userId,
-      action: "webshop-order.status-changed",
-      entityType: "WebshopOrder",
-      entityId: input.orderId,
-      metadata: { from: input.from, to: input.to },
-    };
-    if (!input.override) {
-      await prisma.auditLog.create({ data: change });
-      return;
-    }
-    await prisma.$transaction([
-      prisma.auditLog.create({ data: change }),
-      prisma.auditLog.create({
-        data: {
-          userId: input.userId,
-          action: "webshop-order.shipping-gate-overridden",
-          entityType: "WebshopOrder",
-          entityId: input.orderId,
-          metadata: {
-            from: input.from,
-            to: input.to,
-            reason: input.override.reason,
-            missing: input.override.missing,
-          },
-        },
-      }),
-    ]);
+    await prisma.auditLog.create({
+      data: {
+        userId: input.userId,
+        action: "webshop-order.status-changed",
+        entityType: "WebshopOrder",
+        entityId: input.orderId,
+        metadata: { from: input.from, to: input.to },
+      },
+    });
+  }
+
+  /**
+   * A KISZÁLLÍTÁSI KAPU FELÜLBÍRÁLÁSÁNAK NYOMA (kártya 33a0d3c7, barracuda #2724; a minta az ajándékkártya-kiadás, #2739). A sor a
+   * webshop-hívás ELŐTT íródik `requested` állapottal (ki, honnan hová, az indok, mi hiányzott), és ha nem íródik meg, a lépés nem
+   * indul: egy megkerült kapu nem maradhat név és indok nélkül (a levonás lefuthat, és az újrapróbálás már más ágra futna). Külön
+   * `action`, hogy szűrhető legyen ("ki kerülte meg a kaput és miért"). Visszaadja a sor azonosítóját az `applied`-re állításhoz.
+   */
+  async requestShippingOverride(input: ShippingOverrideTrace): Promise<string> {
+    const row = await prisma.auditLog.create({
+      data: {
+        userId: input.userId,
+        action: SHIPPING_OVERRIDE_ACTION,
+        entityType: "WebshopOrder",
+        entityId: input.orderId,
+        metadata: shippingOverrideMetadata(input, "requested"),
+      },
+      select: { id: true },
+    });
+    return row.id;
+  }
+
+  /** A webshop elfogadta a váltást: a `requested` sor `applied` lesz (a tartalma ugyanaz). Ha ez bukik, a hívó csak naplózza. */
+  async markShippingOverrideApplied(
+    rowId: string,
+    input: ShippingOverrideTrace,
+  ): Promise<void> {
+    await prisma.auditLog.update({
+      where: { id: rowId },
+      data: { metadata: shippingOverrideMetadata(input, "applied") },
+    });
   }
 
   /** Egy tételművelet: ki, melyik tételen, mit (a webshop „admin” névvel rögzíti). */

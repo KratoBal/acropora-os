@@ -68,7 +68,10 @@ import {
   shippingGateDecision,
   type ShippingGateFacts,
 } from "./webshop-order-shipping-gate.rules.js";
-import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
+import {
+  WebshopOrdersRepository,
+  type ShippingOverrideTrace,
+} from "./webshop-orders.repository.js";
 
 /** A webshop hibaüzenete a törzsből (`{type, message}`); ha nem olvasható, `null`. */
 export function webshopErrorMessage(body: string): string | null {
@@ -426,7 +429,7 @@ export class WebshopOrdersService {
       táblázat-ellenőrzés UTÁN áll, hogy egy elavult lapról küldött kérés előbb a „frissítsd az oldalt” mondatot kapja. Csak a
       Kiszállításnál olvas (nem bolti átvételnél): a többi lépés költsége nem változik.
     */
-    let override: { reason: string; missing: string[] } | null = null;
+    let override: ShippingOverrideTrace | null = null;
     if (to === "out_for_delivery") {
       const decision = shippingGateDecision({
         to,
@@ -436,8 +439,9 @@ export class WebshopOrdersService {
       });
       /*
         A FELÜLBÍRÁLÁS (kártya 33a0d3c7, acrobot döntése: naplózott): külön jog és kötelező indok; a jog előbb, mint az indok formája.
-        A naplósor a sikeres váltás UTÁN íródik (az állapot-váltás naplójával együtt), így egy elbukott levonás után nem marad hamis
-        "felülbírálva" nyom.
+        A naplósor a webshop-hívás ELŐTT íródik `requested` állapottal (barracuda #2724): ha nem íródik meg, a lépés nem indul, mert a
+        megkerült kapu nyoma nem maradhat el egy már lefutott levonás mellől. Egy elutasított váltás után a sor `requested` marad, ami
+        igaz: egy kísérlet nyoma. Sikeres váltás után `applied` lesz.
       */
       if (decision.kind === "refuse")
         throw new ConflictException(decision.sentence);
@@ -450,8 +454,18 @@ export class WebshopOrdersService {
           `A felülbíráláshoz indoklás kell (${SHIPPING_OVERRIDE_REASON_MIN}-${SHIPPING_OVERRIDE_REASON_MAX} karakter): a napló az indokért van.`,
         );
       if (decision.kind === "override")
-        override = { reason: decision.reason, missing: decision.missing };
+        override = {
+          userId,
+          orderId: id,
+          from: current.status,
+          to,
+          reason: decision.reason,
+          missing: decision.missing,
+        };
     }
+    const overrideRowId = override
+      ? await this.repository.requestShippingOverride(override)
+      : null;
     let mail: WebshopStatusMailOutcome;
     try {
       mail = await client.transitionBusinessStatus(id, to, notifyCustomer);
@@ -470,12 +484,23 @@ export class WebshopOrdersService {
         );
       throw error;
     }
+    if (override && overrideRowId)
+      try {
+        await this.repository.markShippingOverrideApplied(
+          overrideRowId,
+          override,
+        );
+      } catch (error) {
+        // the shipping already happened: the `requested` row (who, why, what was missing) stays as the trace, and the failure is only logged
+        this.logger.error(
+          `Order ${id} shipped by user ${userId} with the gate overridden, but audit row ${overrideRowId} was not marked applied: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     await this.repository.recordStatusChange({
       userId,
       orderId: id,
       from: current.status,
       to,
-      ...(override ? { override } : {}),
     });
     return {
       order: await this.detail(id, now),
