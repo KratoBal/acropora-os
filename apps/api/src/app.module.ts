@@ -25,6 +25,7 @@ import { HomepageContentModule } from "./homepage-content/homepage-content.modul
 import { WebshopCouponsModule } from "./webshop-coupons/webshop-coupons.module.js";
 import { WebshopCustomerDiscountsModule } from "./webshop-customer-discounts/webshop-customer-discounts.module.js";
 import { WebshopShippingSettingsModule } from "./webshop-shipping-settings/webshop-shipping-settings.module.js";
+import { WebshopGiftCardsModule } from "./webshop-gift-cards/webshop-gift-cards.module.js";
 import { SeoLandingModule } from "./seo-landing/seo-landing.module.js";
 import { AuthGuard } from "./auth/guards/auth.guard.js";
 import { PermissionGuard } from "./auth/guards/permission.guard.js";
@@ -117,6 +118,7 @@ import { OperationsLogModule } from "./operations-log/operations-log.module.js";
     WebshopCouponsModule,
     WebshopCustomerDiscountsModule,
     WebshopShippingSettingsModule,
+    WebshopGiftCardsModule,
     ProductModule,
     UnasImportModule,
     InventoryModule,

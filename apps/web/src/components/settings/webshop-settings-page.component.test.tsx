@@ -88,6 +88,8 @@ describe("Webshop beállítások", () => {
       "/webshop/kuponok",
       // the customer discount (card 20713f62): the same switch and right as the coupons
       "/webshop/egyedi-kedvezmenyek",
+      // the gift cards (card 495c0007): behind their own served switch
+      "/webshop/ajandekkartyak",
       // the shipping fees and payment methods (card e0e2378b): behind their own served switch
       "/webshop/szallitas-fizetes",
       "/admin/kezdolap",
@@ -108,6 +110,7 @@ describe("Webshop beállítások", () => {
     expect(without).not.toContain("/webshop/kuponok");
     expect(without).not.toContain("/webshop/egyedi-kedvezmenyek");
     expect(without).not.toContain("/webshop/szallitas-fizetes");
+    expect(without).not.toContain("/webshop/ajandekkartyak");
     expect(without).toContain("/admin/integrations/medusa/connection");
   });
 
@@ -116,6 +119,7 @@ describe("Webshop beállítások", () => {
       { id: "homepage-content" },
       { id: "webshop-coupons" },
       { id: "webshop-shipping-settings" },
+      { id: "webshop-gift-cards" },
     ];
     render(<WebshopSettingsPage />);
     expect(hrefsOnScreen().sort()).toEqual(
@@ -128,6 +132,7 @@ describe("Webshop beállítások", () => {
       { id: "homepage-content" },
       { id: "webshop-coupons" },
       { id: "webshop-shipping-settings" },
+      { id: "webshop-gift-cards" },
     ];
     for (const role of USER_ROLES) {
       auth.role = role;
