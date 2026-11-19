@@ -45,6 +45,26 @@ export interface HomepageTextField {
 }
 
 export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
+  /*
+    THE HEADER'S INFO BAR (card 409ba396, 2026-11-19): the two marketing lines of the bar above the header (`fejlec.sav.1-2`; the third and fourth, the opening hours and the phone, are NOT editable here: they come from the shop's company record, the one source the footer uses too, acrobot 2026-11-19, Balázs 2026-10-27). Not a block of the page
+    (no place in the order, no switch): the editor shows them in their own panel ("Fejléc info-sáv"), see
+    `HOMEPAGE_STANDALONE_GROUPS` in the web app. The starting values are the shop's own facts (the delivery services the shop really has),
+    not samples; an EMPTY saved text hides its line (the shop skips an empty line).
+  */
+  {
+    key: "fejlec.sav.1",
+    group: "Fejléc: info-sáv",
+    label: "Bal oldal, első",
+    type: "text",
+    default: "Élőállat kizárólag személyes átvétellel, a budapesti boltban",
+  },
+  {
+    key: "fejlec.sav.2",
+    group: "Fejléc: info-sáv",
+    label: "Bal oldal, második",
+    type: "text",
+    default: "Technika és vegyszer: Foxpost csomagpont és GLS házhozszállítás",
+  },
   {
     key: "hero.tenyek.1.cim",
     group: "Hero",
