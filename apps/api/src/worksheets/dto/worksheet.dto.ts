@@ -2,6 +2,7 @@ import type { WorksheetLineKind } from "@acropora/database";
 import { Transform, Type } from "class-transformer";
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsIn,
@@ -634,4 +635,24 @@ export class SendWorksheetForSignatureDto {
   @IsString({ message: "Válassz aláírót a listáról." })
   @MinLength(1, { message: "Válassz aláírót a listáról." })
   signerUserId!: string;
+}
+
+/**
+ * A KIJELÖLT MUNKALAPOK MÁSOLÁSA (kártya a785e580): 1-50 lap, és egy elhagyható kérés-azonosító. Ha van, a másolatok
+ * művelet-azonosítója ebből képződik, tehát egy újraküldött kérés ugyanazokat a lapokat adja vissza, nem újakat.
+ */
+export class CopyWorksheetsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  ids!: string[];
+
+  @Matches(/^[A-Za-z0-9_.:-]{8,100}$/, {
+    message:
+      "A kérés-azonosító 8-100 karakter lehet: betű, szám, kötőjel, aláhúzás, pont és kettőspont.",
+  })
+  @IsOptional()
+  requestId?: string;
 }
