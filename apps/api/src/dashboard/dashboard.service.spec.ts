@@ -157,10 +157,12 @@ describe("DashboardService", () => {
     assert.deepEqual((ticketInput as { scope: unknown }).scope, {
       kind: "customer",
       customerId: "customer-own",
+      userId: "partner_service-user",
     });
     assert.deepEqual((maintenanceInput as { scope: unknown }).scope, {
       kind: "customer",
       customerId: "customer-own",
+      userId: "partner_service-user",
     });
   });
 

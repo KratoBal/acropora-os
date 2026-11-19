@@ -30,9 +30,11 @@ describe("partnerScopeOf", () => {
   });
 
   it("vevő-kötésből customer hatókör lesz", () => {
+    // the requesting user goes with it: the worksheets narrow by the user's assigned units (card 5f4af2aa)
     assert.deepEqual(partnerScopeOf(user({ customerId: "c1" })), {
       kind: "customer",
       customerId: "c1",
+      userId: user({ customerId: "c1" }).id,
     });
   });
 
