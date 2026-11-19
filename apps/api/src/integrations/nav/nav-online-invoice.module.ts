@@ -24,6 +24,7 @@ import { NavTaxpayerService } from "./nav-taxpayer.service.js";
   // A NavOnlineInvoiceClient és a NavCredentialsService a queryInvoiceDigest/
   // queryInvoiceData NAV bejövő számla szinkronhoz is kell (lásd
   // purchasing/nav-incoming-invoices), ezért export-áltak.
-  exports: [NavOnlineInvoiceClient, NavCredentialsService],
+  // a NavTaxpayerService a rendelés számlája előtti adószám-ellenőrzéshez is kell (webshop-orders, c977aed2)
+  exports: [NavOnlineInvoiceClient, NavCredentialsService, NavTaxpayerService],
 })
 export class NavOnlineInvoiceModule {}

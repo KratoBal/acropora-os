@@ -952,6 +952,10 @@ export type {
   UnasConnectionView,
 } from "./integrations/unas-connection.js";
 export type {
+  WebshopOrderTaxCheck,
+  WebshopOrderTaxCheckState,
+} from "./webshop-order-tax-check.js";
+export type {
   NavTaxpayerAddress,
   NavTaxpayerLookupResult,
 } from "./integrations/nav-taxpayer.js";
