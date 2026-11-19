@@ -6,6 +6,7 @@ import { Prisma } from "@acropora/database";
 import type {
   MedusaAdminClient,
   MedusaPriceInput,
+  MedusaPriceListRow,
   MedusaPriceRow,
   MedusaVariantPriceRow,
 } from "./medusa-admin.client.js";
@@ -65,6 +66,11 @@ interface FakeOptions {
   deletedAt?: string | null;
   /** Igazra állítva az írás LEFUT, de nem változtat semmit (üres price set). */
   writeSilentlyDoesNothing?: boolean;
+  /** a boltban már álló akciós árlisták (kártya 54bb3779) */
+  lists?: MedusaPriceListRow[];
+  /** az árlista-hívások hibái */
+  listReadFails?: boolean;
+  listWriteFails?: boolean;
 }
 
 function fakes(options: FakeOptions = {}) {
@@ -80,6 +86,13 @@ function fakes(options: FakeOptions = {}) {
     "prices" in options ? options.prices : [];
   const writes: MedusaPriceInput[][] = [];
   let created = 0;
+  // the shop's sale price lists, and the order of EVERY write (base price and list calls) as it happened
+  const lists: MedusaPriceListRow[] = (options.lists ?? []).map((row) => ({
+    ...row,
+    prices: (row.prices ?? []).map((price) => ({ ...price })),
+  }));
+  const order: string[] = [];
+  let listsCreated = 0;
 
   const links = {
     findByProductId: async () =>
@@ -115,11 +128,105 @@ function fakes(options: FakeOptions = {}) {
       },
     ],
     listVariantPrices: async () => ({ rows: [variantRow()], truncated: false }),
+    // THE SHOP'S SALE PRICE LISTS. The variant's own prices do NOT show a list's row (measured on the test Medusa,
+    // exchange/a4-arlista-proba/futas-3.log), so these live apart from `rows`.
+    findSaleLists: async (key: string) => {
+      order.push("list-find");
+      if (options.listReadFails) throw new Error("price list read failed");
+      return lists
+        .filter((row) => row.description === key)
+        .map((row) => ({ ...row, prices: row.prices?.map((p) => ({ ...p })) }));
+    },
+    createSaleList: async (input: {
+      key: string;
+      title: string;
+      variantId: string;
+      amount: number;
+      currencyCode: string;
+      startsAt: Date | null;
+      endsAt: Date | null;
+    }) => {
+      order.push("list-create");
+      if (options.listWriteFails) throw new Error("price list write failed");
+      listsCreated += 1;
+      const row: MedusaPriceListRow = {
+        id: `plist_${listsCreated}`,
+        title: input.title,
+        description: input.key,
+        status: "active",
+        starts_at: input.startsAt?.toISOString() ?? null,
+        ends_at: input.endsAt?.toISOString() ?? null,
+        prices: [
+          {
+            id: `lprice_${listsCreated}`,
+            variant_id: input.variantId,
+            currency_code: input.currencyCode,
+            amount: input.amount,
+          },
+        ],
+      };
+      lists.push(row);
+      return row;
+    },
+    updateSaleList: async (
+      listId: string,
+      patch: {
+        startsAt?: Date | null;
+        endsAt?: Date | null;
+        status?: "active";
+      },
+    ) => {
+      order.push("list-update");
+      if (options.listWriteFails) throw new Error("price list write failed");
+      const row = lists.find((l) => l.id === listId)!;
+      if (patch.startsAt !== undefined)
+        row.starts_at = patch.startsAt?.toISOString() ?? null;
+      if (patch.endsAt !== undefined)
+        row.ends_at = patch.endsAt?.toISOString() ?? null;
+      if (patch.status) row.status = patch.status;
+    },
+    batchSaleListPrices: async (
+      listId: string,
+      ops: {
+        variantId: string;
+        currencyCode: string;
+        create: { amount: number }[];
+        update: { id: string; amount: number }[];
+        delete: string[];
+      },
+    ) => {
+      order.push("list-prices");
+      if (options.listWriteFails) throw new Error("price list write failed");
+      const row = lists.find((l) => l.id === listId)!;
+      row.prices = (row.prices ?? []).filter((p) => !ops.delete.includes(p.id));
+      for (const u of ops.update) {
+        const price = row.prices.find((p) => p.id === u.id)!;
+        price.amount = u.amount;
+      }
+      for (const c of ops.create) {
+        listsCreated += 1;
+        row.prices.push({
+          id: `lprice_${listsCreated}`,
+          variant_id: ops.variantId,
+          currency_code: ops.currencyCode,
+          amount: c.amount,
+        });
+      }
+    },
+    deleteSaleList: async (listId: string) => {
+      order.push("list-delete");
+      if (options.listWriteFails) throw new Error("price list write failed");
+      lists.splice(
+        lists.findIndex((l) => l.id === listId),
+        1,
+      );
+    },
     setVariantPrices: async (
       _productId: string,
       _variantId: string,
       prices: MedusaPriceInput[],
     ) => {
+      order.push("base-write");
       writes.push(prices);
       if (writeSilentlyDoesNothing) return;
       /**
@@ -148,6 +255,8 @@ function fakes(options: FakeOptions = {}) {
 
   return {
     writes,
+    lists,
+    order,
     currentRows: () => rows,
     service: new MedusaPricingProjectionService(links, medusa),
   };
@@ -295,6 +404,274 @@ describe("MedusaPricingProjectionService", () => {
     AZ ÜTKÖZŐ SOROK ALAKJA (550b80d1): csak mérés. MI PIROSIT: az árlistás vagy a szabályos sor máshová számít, vagy
     a mérés miatt megváltozik, melyik sor a miénk (itt: a vetítés ír, ahelyett hogy megállna).
   */
+  /*
+    A FUTÓ AKCIÓ ÁRLISTÁKÉNT (kártya 54bb3779). MI PIROSÍT: az akció az alapárba megy (a bolt nem tud áthúzni); az alapár
+    az akciós ár marad egy régi vetítés után; az árlista az alapár UTÁN kerül fel (egy pillanatra a rendes ár látszana);
+    a második futás újra ír; egy módosult akció új árlistát kap a meglévő helyett; a megszűnt akció listája megmarad
+    (a nem-akciós ág nem takarít), vagy a takarítás a változatlan alapár miatt kimarad; két lista egy kulcs alatt
+    találgatás; egy író hiba után az alapár már megváltozott; az akciós ár nem egész forint és mégis megy.
+  */
+  const START = new Date("2026-11-19T00:00:00.000Z");
+  const END = new Date("2026-11-22T22:59:00.000Z");
+  const withSale = (
+    base: ReturnType<typeof priced>,
+    regular: string,
+    amount: string,
+    over: { startsAt?: Date | null; endsAt?: Date | null } = {},
+  ) => ({
+    ...base,
+    sale: {
+      regular: {
+        sellingGrossPrice: new Prisma.Decimal(regular),
+        sellingPriceCurrency: "HUF",
+      },
+      amount: new Prisma.Decimal(amount),
+      startsAt: over.startsAt === undefined ? START : over.startsAt,
+      endsAt: over.endsAt === undefined ? END : over.endsAt,
+    },
+  });
+
+  it("a futó akciót árlistaként küldi: az alapár a rendes ár, az akciós ár a listán, és a lista kerül fel ELŐSZÖR", async () => {
+    const { service, writes, lists, order } = fakes({ prices: [] });
+
+    const outcome = await service.project(
+      withSale(priced("69600"), "87000", "69600"),
+    );
+
+    assert.equal(outcome.action, "projected");
+    if (outcome.action !== "projected") return;
+    assert.equal(outcome.report.saleList, "created");
+    assert.equal(outcome.report.saleAmount, 69600);
+    assert.equal(outcome.report.medusaAmount, 87000);
+    assert.deepEqual(writes, [[{ currency_code: "huf", amount: 87000 }]]);
+    assert.equal(lists.length, 1);
+    assert.equal(lists[0]!.description, `os-sale:${VARIANT}`);
+    assert.equal(lists[0]!.prices![0]!.amount, 69600);
+    assert.equal(lists[0]!.starts_at, START.toISOString());
+    assert.equal(lists[0]!.ends_at, END.toISOString());
+    // the list before the base price: raising an old sale-as-base price over the list would show the regular price
+    assert.deepEqual(order, ["list-find", "list-create", "base-write"]);
+  });
+
+  it("egy régi, akciós alapárat (a korábbi vetítés) a rendes árra állít, és a lista már áll előtte", async () => {
+    const { service, lists, order, currentRows } = fakes({
+      prices: [{ id: "price_old", currency_code: "huf", amount: 69600 }],
+    });
+
+    const outcome = await service.project(
+      withSale(priced("69600"), "87000", "69600"),
+    );
+
+    assert.equal(outcome.action, "projected");
+    assert.deepEqual(order, ["list-find", "list-create", "base-write"]);
+    assert.equal(lists.length, 1);
+    assert.deepEqual(
+      currentRows()!.map((row) => [row.id, row.amount]),
+      [["price_old", 87000]],
+    );
+  });
+
+  it("a második futás változatlanul hagyja az árlistát és az alapárat", async () => {
+    const { service, order } = fakes({ prices: [] });
+    const variant = withSale(priced("69600"), "87000", "69600");
+    await service.project(variant);
+    order.length = 0;
+
+    const second = await service.project(variant);
+
+    assert.equal(second.action, "projected");
+    if (second.action !== "projected") return;
+    assert.equal(second.report.result, "no-change");
+    assert.equal(second.report.saleList, "unchanged");
+    assert.deepEqual(order, ["list-find"]);
+  });
+
+  it("egy módosult akciót a meglévő árlistán javít (azonos azonosító): az ár a köteggel, a határ a listával", async () => {
+    const { service, lists, order } = fakes({ prices: [] });
+    await service.project(withSale(priced("69600"), "87000", "69600"));
+    const listId = lists[0]!.id;
+    const priceId = lists[0]!.prices![0]!.id;
+    order.length = 0;
+
+    const outcome = await service.project(
+      withSale(priced("59990"), "87000", "59990", {
+        endsAt: new Date("2026-11-30T22:59:00.000Z"),
+      }),
+    );
+
+    assert.equal(outcome.action, "projected");
+    if (outcome.action !== "projected") return;
+    assert.equal(outcome.report.saleList, "updated");
+    assert.equal(lists.length, 1);
+    assert.equal(lists[0]!.id, listId);
+    assert.equal(lists[0]!.prices![0]!.id, priceId);
+    assert.equal(lists[0]!.prices![0]!.amount, 59990);
+    assert.equal(lists[0]!.ends_at, "2026-11-30T22:59:00.000Z");
+    assert.deepEqual(order, ["list-find", "list-update", "list-prices"]);
+  });
+
+  it("nyitott határú akciót (nincs kezdet, nincs vég) null határral küld", async () => {
+    const { service, lists } = fakes({ prices: [] });
+
+    await service.project(
+      withSale(priced("69600"), "87000", "69600", {
+        startsAt: null,
+        endsAt: null,
+      }),
+    );
+
+    assert.equal(lists[0]!.starts_at, null);
+    assert.equal(lists[0]!.ends_at, null);
+  });
+
+  it("ha az akció megszűnt, az alapár megy előre, és a megmaradt lista törlődik UTÁNA", async () => {
+    const { service, lists, order } = fakes({ prices: [] });
+    await service.project(withSale(priced("69600"), "87000", "69600"));
+    order.length = 0;
+
+    const outcome = await service.project(priced("87000"));
+
+    assert.equal(outcome.action, "projected");
+    if (outcome.action !== "projected") return;
+    assert.equal(outcome.report.saleList, "removed");
+    assert.equal(lists.length, 0);
+    // the base is already the regular price: no write, and the list is still removed
+    assert.deepEqual(order, ["list-find", "list-delete"]);
+  });
+
+  it("akció nélkül, lista nélkül egyetlen árlista-írás sincs, és a jelentés none", async () => {
+    const { service, order } = fakes({ prices: [] });
+
+    const outcome = await service.project(priced("87000"));
+
+    assert.equal(outcome.action, "projected");
+    if (outcome.action !== "projected") return;
+    assert.equal(outcome.report.saleList, "none");
+    assert.deepEqual(order, ["base-write", "list-find"]);
+  });
+
+  it("két lista egy kulcs alatt: megáll, és az alapárat sem írja, ha akció van", async () => {
+    const twin = (id: string): MedusaPriceListRow => ({
+      id,
+      description: `os-sale:${VARIANT}`,
+      status: "active",
+      starts_at: null,
+      ends_at: null,
+      prices: [
+        { id: `${id}_p`, variant_id: VARIANT, currency_code: "huf", amount: 1 },
+      ],
+    });
+    const { service, writes } = fakes({
+      prices: [],
+      lists: [twin("plist_a"), twin("plist_b")],
+    });
+
+    const outcome = await service.project(
+      withSale(priced("69600"), "87000", "69600"),
+    );
+
+    assert.equal(outcome.action, "stopped");
+    if (outcome.action !== "stopped") return;
+    assert.equal(outcome.reason, "sale-list-ambiguous");
+    assert.equal(writes.length, 0);
+  });
+
+  it("az árlista olvasása vagy írása elhasal: megáll, az alapárhoz nem nyúl (akciónál), és a hiba nevét viszi", async () => {
+    const read = fakes({ prices: [], listReadFails: true });
+    const readOutcome = await read.service.project(
+      withSale(priced("69600"), "87000", "69600"),
+    );
+    assert.equal(readOutcome.action, "stopped");
+    if (readOutcome.action !== "stopped") return;
+    assert.equal(readOutcome.reason, "medusa-read-failed");
+    assert.equal(read.writes.length, 0);
+
+    const write = fakes({ prices: [], listWriteFails: true });
+    const writeOutcome = await write.service.project(
+      withSale(priced("69600"), "87000", "69600"),
+    );
+    assert.equal(writeOutcome.action, "stopped");
+    if (writeOutcome.action !== "stopped") return;
+    assert.equal(writeOutcome.reason, "medusa-write-failed");
+    assert.equal(write.writes.length, 0);
+    assert.equal(write.lists.length, 0);
+  });
+
+  it("az akciós árra is az egész-forint szabály áll: tört akciós ár megáll, semmit nem ír", async () => {
+    const { service, writes, order } = fakes({ prices: [] });
+
+    const outcome = await service.project(
+      withSale(priced("69600"), "87000", "69599.5"),
+    );
+
+    assert.equal(outcome.action, "stopped");
+    if (outcome.action !== "stopped") return;
+    assert.equal(outcome.reason, "price-not-whole-forint");
+    assert.equal(writes.length, 0);
+    assert.deepEqual(order, []);
+  });
+
+  it("egy másik változat sora a mi kulcsú listánkon nem a miénk: törlődik, és a mi változatunk sora jön létre (barracuda, #2733)", async () => {
+    const { service, lists } = fakes({
+      prices: [],
+      lists: [
+        {
+          id: "plist_ours",
+          description: `os-sale:${VARIANT}`,
+          status: "active",
+          starts_at: START.toISOString(),
+          ends_at: END.toISOString(),
+          prices: [
+            {
+              id: "lp_stranger",
+              variant_id: "variant_other",
+              currency_code: "huf",
+              amount: 123,
+            },
+          ],
+        },
+      ],
+    });
+
+    const outcome = await service.project(
+      withSale(priced("69600"), "87000", "69600"),
+    );
+
+    assert.equal(outcome.action, "projected");
+    if (outcome.action !== "projected") return;
+    assert.equal(outcome.report.saleList, "updated");
+    assert.equal(lists.length, 1);
+    const rows = lists[0]!.prices!;
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.variant_id, VARIANT);
+    assert.equal(rows[0]!.amount, 69600);
+    assert.ok(!rows.some((row) => row.id === "lp_stranger"));
+  });
+
+  it("egy kézzel létrehozott, hasonló nevű lista nem a miénk: a kulcs pontos egyezést kér", async () => {
+    const { service, lists } = fakes({
+      prices: [],
+      lists: [
+        {
+          id: "plist_manual",
+          description: `os-sale:${VARIANT} (kezi)`,
+          status: "active",
+          starts_at: null,
+          ends_at: null,
+          prices: [],
+        },
+      ],
+    });
+
+    const outcome = await service.project(
+      withSale(priced("69600"), "87000", "69600"),
+    );
+
+    assert.equal(outcome.action, "projected");
+    assert.equal(lists.length, 2);
+    assert.ok(lists.some((row) => row.id === "plist_manual"));
+  });
+
   it("a kétértelmű ár megállása az ütköző sorok alakját is viszi, és nem ír", async () => {
     const { service, writes } = fakes({
       prices: [

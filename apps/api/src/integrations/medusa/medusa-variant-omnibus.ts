@@ -36,8 +36,9 @@ import {
  * A TAKEN-OVER VARIANT (it has OWN rows) gets a value while its OWN sale runs (T4.1-D3, sale slice
  * 2): the reduction's start is the sale's start, and the history before it holds the shop's earlier
  * prices, earlier own sales included. Without a running own sale its value is "". OPEN BOUNDARY,
- * still named: a Medusa PRICE-LIST reduction on such a variant would show WITHOUT an Omnibus line;
- * the OS creates no price lists today.
+ * still named: a Medusa PRICE-LIST reduction made BY HAND on such a variant would show WITHOUT an Omnibus line.
+ * The OS's own sale is a price list since ADR-020 (card 54bb3779): it starts when the product projection has
+ * already written this key in the same round (the product projection runs before the price projection).
  *
  * OFF BY DEFAULT: `MEDUSA_PROJECT_OMNIBUS=true`, EXACTLY that (the knowledge switch's pattern).
  * Nothing in this file writes; the projection service does, and only with the switch.
