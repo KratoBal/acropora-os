@@ -78,6 +78,7 @@ function row(overrides: Partial<WorksheetListItem> = {}): WorksheetListItem {
     assigneeNames: ["Ádám", "Péter"],
     laborHours: "2.5",
     serviceJob: { id: "job-1", jobNumber: "HJ-2026-0142" },
+    createdAt: "2026-10-01T08:00:00.000Z",
     updatedAt: "2026-10-04T08:00:00.000Z",
     hidden: false,
     ...overrides,
@@ -135,6 +136,7 @@ describe("PilotWorksheetListPage -- redesign", () => {
       "Partner / helyszín",
       "Felelős",
       "Állapot",
+      "Megnyitva",
       "Munkaóra",
       // a oszlopban hibajegy (HJ-) és karbantartási lap (KT-) száma is áll, ezért a fejléc semleges (hibajegy-maradek lista, 2026-11-18)
       "Jegy / lap",
@@ -344,5 +346,105 @@ describe("PilotWorksheetListPage -- a kapcsolt munka fajtája", () => {
     );
     expect(url.searchParams.has("jobKind")).toBe(false);
     expect(url.searchParams.has("customerId")).toBe(false);
+  });
+});
+
+describe("PilotWorksheetListPage -- a Megnyitva oszlop és a tól-ig szűrő (kártya a785e580)", () => {
+  /**
+   * MI PIROSÍT: ha a Megnyitva oszlop az UTC szerinti napot írja (a budapesti 00:30-kor megnyitott lap előző napra
+   * esne, a szűrővel ellentétben); ha a tól-ig mező nem a createdFrom/createdTo paramétert állítja, vagy az első oldalra
+   * lapozás elmarad; ha az URL-ben álló dátum nem megy át a szerverhez, vagy nem látszik a mezőben; ha a Szűrők törlése
+   * nem törli a dátumot (egy lépésben a többivel); ha a fordított tartomány nem mondja ki, mi a baj.
+   */
+  const urlOfLast = () =>
+    new URL(navigation.replace.mock.calls.at(-1)![0] as string, "http://x");
+
+  it("a Megnyitva a budapesti naptári napot írja: az UTC szerint előző napon, budapesti 00:30-kor megnyitott lap a jó napra esik", async () => {
+    navigation.search = "";
+    api.list.mockResolvedValue(
+      response([row({ createdAt: "2026-11-18T23:30:00.000Z" })]),
+    );
+    render(<PilotWorksheetListPage />);
+    const cella = (
+      await screen.findAllByTestId("worksheet-row")
+    )[0]!.querySelector('td[data-label="Megnyitva"]')!;
+    expect(cella.textContent).toMatch(/2026\.\s*11\.\s*19\./);
+  });
+
+  it("a tól-ig mezők a createdFrom és a createdTo paramétert állítják, az első oldalra lapozva", async () => {
+    navigation.search = "page=3";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    fireEvent.change(screen.getByLabelText("Megnyitva ettől a naptól"), {
+      target: { value: "2026-11-18" },
+    });
+    expect(urlOfLast().searchParams.get("createdFrom")).toBe("2026-11-18");
+    expect(urlOfLast().searchParams.get("page")).toBe("1");
+    fireEvent.change(screen.getByLabelText("Megnyitva eddig a napig"), {
+      target: { value: "2026-11-19" },
+    });
+    expect(urlOfLast().searchParams.get("createdTo")).toBe("2026-11-19");
+  });
+
+  it("egy mező kiürítése törli a paramétert (nem üres szöveget küld)", async () => {
+    navigation.search = "createdFrom=2026-11-18";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    fireEvent.change(screen.getByLabelText("Megnyitva ettől a naptól"), {
+      target: { value: "" },
+    });
+    expect(urlOfLast().searchParams.has("createdFrom")).toBe(false);
+  });
+
+  it("az URL-ben álló dátum átmegy a szerverhez, és látszik a mezőben", async () => {
+    navigation.search = "createdFrom=2026-11-18&createdTo=2026-11-19";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    const query = api.list.mock.calls.at(-1)![1] as URLSearchParams;
+    expect(query.get("createdFrom")).toBe("2026-11-18");
+    expect(query.get("createdTo")).toBe("2026-11-19");
+    expect(
+      (screen.getByLabelText("Megnyitva ettől a naptól") as HTMLInputElement)
+        .value,
+    ).toBe("2026-11-18");
+    expect(
+      (screen.getByLabelText("Megnyitva eddig a napig") as HTMLInputElement)
+        .value,
+    ).toBe("2026-11-19");
+  });
+
+  it("a Szűrők törlése a dátumot is törli, egy lépésben", async () => {
+    navigation.search =
+      "createdFrom=2026-11-18&createdTo=2026-11-19&jobKind=MAINTENANCE";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    navigation.replace.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Szűrők törlése" }));
+    expect(navigation.replace).toHaveBeenCalledTimes(1);
+    const url = urlOfLast();
+    for (const kulcs of ["createdFrom", "createdTo", "jobKind"])
+      expect(url.searchParams.has(kulcs)).toBe(false);
+  });
+
+  it("a fordított tartomány kimondja, mi a baj", async () => {
+    navigation.search = "createdFrom=2026-11-20&createdTo=2026-11-19";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    expect((await screen.findByRole("alert")).textContent).toMatch(
+      /kezdő dátum a záró dátum után/,
+    );
+  });
+
+  it("rendes tartománynál nincs figyelmeztetés", async () => {
+    navigation.search = "createdFrom=2026-11-19&createdTo=2026-11-19";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
