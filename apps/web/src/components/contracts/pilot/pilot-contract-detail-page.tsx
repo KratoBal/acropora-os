@@ -49,6 +49,7 @@ import {
   QuantityUnitSelect,
   useQuantityUnits,
 } from "./contract-kind";
+import { ContractItemAmounts } from "./contract-item-amounts";
 import { ContractRepairFees } from "./contract-repair-fees";
 import {
   CONTRACT_INVOICE_HANDOFF_PARAM,
@@ -1011,6 +1012,7 @@ export function PilotContractDetailPage({
                         {purchase
                           ? `: ${item.unitNet} Ft × ${item.quantity} ${item.unitOfMeasure?.code ?? ""}, ${item.vatRatePercent}% ÁFA`
                           : `: ${item.unitNet} Ft × ${item.quantity} db × ${item.occasionsPerYear ?? "?"} alkalom / év, ${item.vatRatePercent}% ÁFA`}
+                        <ContractItemAmounts item={item} kind={contract.kind} />
                       </p>
                       {contract.items.length > 1 ? (
                         <PilotButton
