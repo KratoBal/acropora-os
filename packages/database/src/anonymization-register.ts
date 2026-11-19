@@ -941,6 +941,9 @@ export const ANONYMIZATION_REGISTER: Readonly<
   ServiceJobAsset: {
     notes: "freeText",
   },
+  ServiceJobLinkedWorksheet: {
+    linkedById: "identifier",
+  },
   WorksheetDepartment: {
     code: "business",
     name: "business",
