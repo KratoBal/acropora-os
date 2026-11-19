@@ -431,7 +431,20 @@ describe("MedusaBrandImportService", () => {
       ],
     });
 
-    const report = await f.service.run(f.client, harom, now);
+    // a "valaki-mas" egy MAI markank (archivalt), tehat nem halott azonosito
+    const report = await f.service.run(
+      f.client,
+      [
+        ...harom,
+        brand({
+          id: "valaki-mas",
+          name: "Masik",
+          slug: "masik",
+          isActive: false,
+        }),
+      ],
+      now,
+    );
 
     assert.deepEqual(report.handleTaken, ["b2"]);
     assert.deepEqual(
@@ -440,5 +453,32 @@ describe("MedusaBrandImportService", () => {
     );
     assert.deepEqual(report.failures, []);
     assert.equal(f.linked.filter((l) => l.brandId === "b2").length, 0);
+  });
+
+  /*
+    A MERT ESET (2026-11-19 15:51 UTC): a sajat, lekepezett gyujtemenyunk a 09-25-i OS-ujratoltes elotti, halott azonositot
+    viseli. MI PIROSIT: ha a jelentes foglalt handle-kent (utkozeskent) szamolja; ha letrehozas indul ra.
+  */
+  it("a halott azonositoju, lekepezett sajat gyujtemeny nem foglalt es nem jon letre ujra", async () => {
+    const f = fakes({
+      existing: [
+        {
+          id: "pcol_fm",
+          title: "Fauna Marin",
+          handle: "fauna-marin",
+          external_id: "cmtr15b7w0000nu8huvfrkcx2",
+        },
+      ],
+      mappings: [{ brandId: "b2", medusaCollectionId: "pcol_fm" }],
+    });
+
+    const report = await f.service.run(f.client, harom, now);
+
+    assert.deepEqual(report.handleTaken, []);
+    assert.equal(report.skipped, 1);
+    assert.deepEqual(
+      f.created.map((c) => c.handle),
+      ["egy", "harom"],
+    );
   });
 });
