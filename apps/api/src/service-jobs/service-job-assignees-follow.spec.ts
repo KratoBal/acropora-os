@@ -35,12 +35,10 @@ function fakeRepository(
         { count: 1 }
       ),
     },
-    worksheet: {
-      findMany: async (q: unknown) => (
-        calls.push(["worksheet.find", q]),
-        following.map((id) => ({ id }))
-      ),
-    },
+    $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => (
+      calls.push(["worksheet.find", { sql: strings.join("?"), values }]),
+      following.map((id) => ({ id }))
+    ),
     worksheetAssignee: {
       deleteMany: async (q: unknown) => (
         calls.push(["wsAssignee.delete", q]),
@@ -75,12 +73,16 @@ describe("ServiceJobsRepository.setAssignees: a követő munkalapok", () => {
     ]);
     const result = await repository.setAssignees(input(["anna", "bela"]));
     assert.deepEqual(result, { ok: true, added: ["anna", "bela"] });
-    assert.deepEqual(named(calls, "worksheet.find"), [
-      {
-        where: { serviceJobId: "job-1", followsJobAssignees: true },
-        select: { id: true },
-      },
-    ]);
+    // a követők kiválasztása SORZÁRRAL (FOR UPDATE), a követő és a lap szerinti feltétellel (barracuda, #2743 B)
+    const finds = named(calls, "worksheet.find") as {
+      sql: string;
+      values: unknown[];
+    }[];
+    assert.equal(finds.length, 1);
+    assert.match(finds[0]!.sql, /FROM "Worksheet"/);
+    assert.match(finds[0]!.sql, /"followsJobAssignees" = true/);
+    assert.match(finds[0]!.sql, /FOR UPDATE/);
+    assert.deepEqual(finds[0]!.values, ["job-1"]);
     assert.deepEqual(named(calls, "wsAssignee.delete"), [
       { where: { worksheetId: "ws-1", userId: { notIn: ["anna", "bela"] } } },
       { where: { worksheetId: "ws-2", userId: { notIn: ["anna", "bela"] } } },
