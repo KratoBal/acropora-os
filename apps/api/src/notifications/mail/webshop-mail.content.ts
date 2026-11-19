@@ -112,6 +112,8 @@ const RAW: Readonly<
     bodyHtml: [
       `<p>Köszönjük a rendelésedet! ${v("vegyes_kosar_mondat")}</p>`,
       own("rendeles_tetelek"),
+      // a company purchase: the company and its tax number; empty (and no paragraph) for a private one (A15)
+      own("ceg_mondat"),
       own("kovetkezo_lepes"),
       // V2.6: empty (and no paragraph) until the kind's guide is in `webshop-acclimation.ts`
       own("akklimatizacio"),
@@ -282,6 +284,8 @@ const RAW_EN: typeof RAW = {
     bodyHtml: [
       `<p>Thank you for your order! ${v("vegyes_kosar_mondat")}</p>`,
       own("rendeles_tetelek"),
+      // a company purchase: the company and its tax number; empty (and no paragraph) for a private one (A15)
+      own("ceg_mondat"),
       own("kovetkezo_lepes"),
       // V2.6: empty (and no paragraph) until the kind's guide is in `webshop-acclimation.ts`
       own("akklimatizacio"),
