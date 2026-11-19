@@ -548,6 +548,7 @@ export class MedusaPricingProjectionService {
     const plan: SaleListPlan = planSaleList(
       existingList,
       wanted,
+      medusaVariantId,
       MEDUSA_CURRENCY_CODE,
     );
 

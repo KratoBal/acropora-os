@@ -82,6 +82,8 @@ const sameInstant = (existing: string | null, wanted: Date | null): boolean =>
 export function planSaleList(
   existing: ExistingSaleList | null,
   wanted: WantedSale | null,
+  /** the Medusa variant the key names: a row for ANOTHER variant is not ours to keep (barracuda, #2733) */
+  variantId: string,
   currencyCode = "huf",
 ): SaleListPlan {
   if (wanted === null)
@@ -90,9 +92,18 @@ export function planSaleList(
       : { kind: "none" };
   if (existing === null) return { kind: "create", wanted };
 
-  const ours = existing.prices.filter(
-    (price) => price.currencyCode.toLowerCase() === currencyCode,
-  );
+  /*
+    OUR ROW: this currency AND this variant, WHEN THE ROW SAYS ITS VARIANT. MEASURED on the test Medusa (acrobot, 2026-11-19
+    02:13): the price list query's rows carry a `price_set_id` and NO `variant_id`, so on the real shop `variantId` is
+    `null` here and a row is ours by the currency alone: a row for another variant put on our list by hand in the admin is
+    NOT recognised today (it would be kept or rewritten as "the" price). The check below only works for an answer that does
+    bring the variant; keying on the variant's price set instead (known from the variant read) is the way to make it
+    effective, and is left out as not worth it for a rare manual intervention (barracuda, #2733: not a condition).
+  */
+  const isOurs = (price: ExistingSaleList["prices"][number]) =>
+    price.currencyCode.toLowerCase() === currencyCode &&
+    (price.variantId === null || price.variantId === variantId);
+  const ours = existing.prices.filter(isOurs);
   const list: Extract<SaleListPlan, { kind: "update" }>["list"] = {};
   if (!sameInstant(existing.startsAt, wanted.startsAt))
     list.startsAt = wanted.startsAt;
@@ -109,10 +120,10 @@ export function planSaleList(
   else if (keep.amount !== wanted.amount)
     prices.update.push({ id: keep.id, amount: wanted.amount });
   prices.delete.push(...extra.map((price) => price.id));
-  // rows in another currency are not ours to keep on a list that holds one price
+  // a row in another currency, or for another variant, is not ours to keep on a list that holds one price
   prices.delete.push(
     ...existing.prices
-      .filter((price) => price.currencyCode.toLowerCase() !== currencyCode)
+      .filter((price) => !isOurs(price))
       .map((price) => price.id),
   );
 

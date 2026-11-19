@@ -611,6 +611,43 @@ describe("MedusaPricingProjectionService", () => {
     assert.deepEqual(order, []);
   });
 
+  it("egy másik változat sora a mi kulcsú listánkon nem a miénk: törlődik, és a mi változatunk sora jön létre (barracuda, #2733)", async () => {
+    const { service, lists } = fakes({
+      prices: [],
+      lists: [
+        {
+          id: "plist_ours",
+          description: `os-sale:${VARIANT}`,
+          status: "active",
+          starts_at: START.toISOString(),
+          ends_at: END.toISOString(),
+          prices: [
+            {
+              id: "lp_stranger",
+              variant_id: "variant_other",
+              currency_code: "huf",
+              amount: 123,
+            },
+          ],
+        },
+      ],
+    });
+
+    const outcome = await service.project(
+      withSale(priced("69600"), "87000", "69600"),
+    );
+
+    assert.equal(outcome.action, "projected");
+    if (outcome.action !== "projected") return;
+    assert.equal(outcome.report.saleList, "updated");
+    assert.equal(lists.length, 1);
+    const rows = lists[0]!.prices!;
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.variant_id, VARIANT);
+    assert.equal(rows[0]!.amount, 69600);
+    assert.ok(!rows.some((row) => row.id === "lp_stranger"));
+  });
+
   it("egy kézzel létrehozott, hasonló nevű lista nem a miénk: a kulcs pontos egyezést kér", async () => {
     const { service, lists } = fakes({
       prices: [],
