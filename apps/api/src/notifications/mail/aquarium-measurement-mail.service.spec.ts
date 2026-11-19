@@ -3,10 +3,14 @@ import assert from "node:assert/strict";
 import { mailTemplateEventVariables } from "@acropora/types";
 import { describe, it } from "node:test";
 
-import { BadRequestException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { prisma } from "@acropora/database";
 import type { AquariumMeasurementOccasion } from "@acropora/types";
 
+import { TicketMailError } from "./gmail-mail.sender.js";
 import type { MailSender, OutgoingMail } from "./mail.port.js";
 import type { TicketMailRepository } from "./ticket-mail.repository.js";
 import {
@@ -27,6 +31,8 @@ function szolgaltatas(be: {
   sender?: MailSender | null;
   from?: string;
   fromName?: string;
+  /** Hiányában "off": a meglévő esetek a küldőt mérik, nem az átirányítást. */
+  redirect?: string;
 }) {
   const kuldott: OutgoingMail[] = [];
   /*
@@ -55,6 +61,7 @@ function szolgaltatas(be: {
       {
         AQUARIUM_MEASUREMENT_MAIL_FROM: be.from,
         AQUARIUM_MEASUREMENT_MAIL_FROM_NAME: be.fromName,
+        TICKET_MAIL_REDIRECT_TO: "redirect" in be ? be.redirect : "off",
       } as NodeJS.ProcessEnv,
     ),
     kuldott,
@@ -300,11 +307,77 @@ describe("AquariumMeasurementMailService.send", () => {
       const service = new AquariumMeasurementMailService(
         { send: async () => undefined },
         repository as TicketMailRepository,
-        {} as NodeJS.ProcessEnv,
+        // the redirect switch stated: a missing one stops the send (the gate above)
+        { TICKET_MAIL_REDIRECT_TO: "off" } as NodeJS.ProcessEnv,
       );
 
       await service.send(kuldesInput());
 
       assert.equal(kertAzonosito, AQUARIUM_MEASUREMENT_RESULT);
+    }));
+
+  /*
+    A KÖRNYEZETI HIBA A GOMBNÁL OLVASHATÓ (2b3983e1, A7 mérés): a teszt OS-en a Gmail-kulcsok hiányoztak, és a gomb
+    nyers 500-at adott. MI PIROSÍT: a hiányzó átirányítás a küldőig jut; a küldő hibája nyers kivételként megy tovább,
+    vagy nem nevezi meg a kódját; a bizonytalan kimenetel újraküldésre biztat; egy nem levelező hiba elnyelődik; egy
+    el nem ment levélről esemény íródik.
+  */
+  it("a hiányzó átirányításnál 503, és a küldőig sem jut", () =>
+    domainEventStub(async () => {
+      const { service, kuldott } = szolgaltatas({ redirect: undefined });
+      await assert.rejects(
+        service.send(kuldesInput()),
+        (hiba: unknown) =>
+          hiba instanceof ServiceUnavailableException &&
+          /TICKET_MAIL_REDIRECT_TO/.test(hiba.message),
+      );
+      assert.equal(kuldott.length, 0);
+    }));
+
+  it("a küldő hibája 503 a kód nevével, és esemény nem íródik", async () => {
+    const eredeti = prisma.domainEvent.create;
+    let esemeny = 0;
+    prisma.domainEvent.create = (async () => {
+      esemeny += 1;
+      return {};
+    }) as unknown as typeof eredeti;
+    try {
+      for (const [kod, minta] of [
+        ["TICKET_MAIL_NOT_CONFIGURED", /nincs beállítva a Gmail-küldő/],
+        ["TICKET_MAIL_TOKEN_FAILED", /TICKET_MAIL_TOKEN_FAILED/],
+        ["TICKET_MAIL_SEND_INDETERMINATE", /bizonytalan/],
+      ] as const) {
+        const { service } = szolgaltatas({
+          sender: {
+            send: async () => {
+              throw new TicketMailError(kod);
+            },
+          },
+        });
+        await assert.rejects(
+          service.send(kuldesInput()),
+          (hiba: unknown) =>
+            hiba instanceof ServiceUnavailableException &&
+            minta.test(hiba.message),
+          kod,
+        );
+      }
+      assert.equal(esemeny, 0);
+    } finally {
+      prisma.domainEvent.create = eredeti;
+    }
+  });
+
+  it("egy nem levelező hiba változatlanul megy tovább", () =>
+    domainEventStub(async () => {
+      const hiba = new Error("valami más");
+      const { service } = szolgaltatas({
+        sender: {
+          send: async () => {
+            throw hiba;
+          },
+        },
+      });
+      await assert.rejects(service.send(kuldesInput()), (h) => h === hiba);
     }));
 });
