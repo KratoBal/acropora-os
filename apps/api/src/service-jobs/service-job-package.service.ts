@@ -10,9 +10,11 @@ import {
   personLegalName,
   preferSignedSheet,
   type AuthenticatedUser,
+  type WorksheetDocumentType,
 } from "@acropora/types";
 
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
+import { worksheetUnitWhere } from "../worksheets/worksheet-unit-scope.js";
 import {
   worksheetsBlockingPackage,
   type BlockingPackageWorksheet,
@@ -26,6 +28,7 @@ import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.
 import { jegyNaploSora } from "./service-job-package-log.js";
 import { serviceJobVisibilityFor } from "./service-job-visibility-scope.js";
 import { serviceJobSheetDocument } from "./service-job-sheet-document.js";
+import { visibleLinkedWorksheets } from "./service-job-sheet-content.js";
 import {
   serviceJobPackageFileName,
   serviceJobPackageZip,
@@ -77,6 +80,37 @@ export class ServiceJobPackageService {
     return Buffer.from(bytes);
   }
 
+  /**
+   * THE ISSUED SHEET OF A WORKSHEET'S CURRENT VERSION, or `null` (hidden for a partner, or none issued). One place for the
+   * own and the linked worksheets: a rule that read the two sets differently would let a draft-marked sheet into one of them.
+   *
+   * ONE VERSION CAN HAVE TWO SHEETS (since 2026-09-21), and the FINAL one goes in: no draft label on it, and the signature
+   * stands on it. `preferSignedSheet` chooses by TYPE, not by creation time.
+   */
+  private issuedSheetOf(
+    worksheet: {
+      hiddenAt: Date | null;
+      versions: { id: string }[];
+      documents: {
+        id: string;
+        worksheetVersionId: string | null;
+        type: WorksheetDocumentType;
+        fileName: string;
+        content: Uint8Array | null;
+        storageKey: string | null;
+      }[];
+    },
+    internal: boolean,
+  ) {
+    if (!internal && worksheet.hiddenAt !== null) return null;
+    const currentVersionId = worksheet.versions[0]?.id;
+    return preferSignedSheet(
+      worksheet.documents.filter(
+        (candidate) => candidate.worksheetVersionId === currentVersionId,
+      ),
+    );
+  }
+
   async download(
     id: string,
     user: AuthenticatedUser,
@@ -85,7 +119,17 @@ export class ServiceJobPackageService {
     const visibility = await serviceJobVisibilityFor(user, (userId) =>
       this.repository.assignedUnitIds(userId),
     );
-    const job = await this.repository.packageData(id, visibility);
+    // The linked worksheets follow the same unit rule as the worksheet list and PDF (#2749): a restricted partner's package
+    // never carries a worksheet of another unit. Internal users are not narrowed.
+    const unitIds =
+      scope.kind === "customer"
+        ? await this.repository.assignedUnitIds(user.id)
+        : [];
+    const job = await this.repository.packageData(
+      id,
+      visibility,
+      worksheetUnitWhere(scope, unitIds),
+    );
     if (!job) throw new NotFoundException("A hibajegy nem található.");
     if (job.status !== "COMPLETED")
       throw new BadRequestException(
@@ -99,6 +143,15 @@ export class ServiceJobPackageService {
       throw new ServiceUnavailableException(
         "A hibajegy elkészülési időpontja nem érhető el, ezért a dokumentumcsomag nem állítható elő.",
       );
+
+    // A linked worksheet the viewer may not see (hidden, for a partner) is neither listed nor counted
+    const linked =
+      job.kind === "MAINTENANCE"
+        ? visibleLinkedWorksheets(
+            job.linkedWorksheets ?? [],
+            scope.kind === "internal",
+          )
+        : undefined;
 
     const jobPdf = await serviceJobSheetDocument({
       jobNumber: job.jobNumber,
@@ -114,6 +167,14 @@ export class ServiceJobPackageService {
         assetName: asset.name,
       })),
       assignees: job.assignees.map(({ user }) => personLegalName(user)),
+      // `undefined` for a repair ticket (no section); for a maintenance sheet the list, possibly empty
+      linkedWorksheets: linked
+        ? linked.map(({ worksheet }) => ({
+            number: worksheet.number,
+            subject: worksheet.versions[0]?.subject ?? "",
+            createdAt: worksheet.createdAt,
+          }))
+        : undefined,
       photos: (job.documents ?? []).flatMap((document) =>
         document.thumbnail
           ? [{ thumbnail: document.thumbnail, caption: document.caption }]
@@ -161,32 +222,50 @@ export class ServiceJobPackageService {
     });
     if (visszatarto.length)
       throw new BadRequestException(csomagHiba(visszatarto));
+    /*
+      A HIVATKOZOTT MUNKALAPOKRA UGYANAZ A KAPU ALL (card 5b366f5d, acrobot): a csomagba a kiadott PDF-jük kerul, tehat egy
+      lezaratlan vagy kiadott peldany nelkuli hivatkozott lap ugyanugy visszatartja, mint a sajat munkalap. A MONDAT MAS, mert a
+      teendo mas: a hivatkozott lap nem ide tartozik, tehat nem "vedd le a hibajegyrol", hanem "zard le, vagy vedd le a
+      kapcsolatot".
+    */
+    const linkedBlocking = worksheetsBlockingPackage({
+      worksheets: (linked ?? []).map(({ worksheet }) => ({
+        id: worksheet.id,
+        number: worksheet.number,
+        hidden: worksheet.hiddenAt !== null,
+        closed: worksheet.versions[0]?.closedAt != null,
+        hasIssuedSheet: worksheet.documents.some(
+          (document) =>
+            document.worksheetVersionId === worksheet.versions[0]?.id,
+        ),
+      })),
+      scope: scope.kind === "internal" ? "internal" : "partner",
+    });
+    if (linkedBlocking.length)
+      throw new BadRequestException(csomagHiba(linkedBlocking, true));
 
     const entries: { name: string; bytes: Uint8Array }[] = [
       { name: `hibajegy-${job.jobNumber}.pdf`, bytes: jobPdf },
     ];
 
     for (const worksheet of job.worksheets) {
-      if (scope.kind !== "internal" && worksheet.hiddenAt !== null) continue;
-      const currentVersionId = worksheet.versions[0]?.id;
-      /*
-        EGY VERZIOHOZ KET LAP TARTOZHAT (2026-09-21 ota), es a VEGLEGES megy a
-        csomagba: azon nincs piszkozat-felirat, es rajta all az alairas.
-
-        A `preferSignedSheet` TIPUSRA valaszt, nem keletkezesi idore. A ketto ma
-        ugyanazt adna -- a vegleges kesobb keszul --, de az EGYBEESES: egy
-        visszamenoleges potlas, ami a LEZARASKORIT gyartja utolag egy mar alairt
-        verziora, a ket szabalyt szetvalasztana, es akkor a piszkozat-feliratos
-        lap menne a vevonek.
-      */
-      const document = preferSignedSheet(
-        worksheet.documents.filter(
-          (candidate) => candidate.worksheetVersionId === currentVersionId,
-        ),
-      );
+      const document = this.issuedSheetOf(worksheet, scope.kind === "internal");
       if (!document) continue;
       entries.push({
         name: document.fileName,
+        bytes: await this.worksheetBytes(worksheet.id, document),
+      });
+    }
+    /*
+      A HIVATKOZOTT MUNKALAPOK KIADOTT PDF-JE (a bejegyzesekkel es a fotokkal egyutt, mert a kiadott lap azokat mar
+      tartalmazza), `kapcsolodo-` elotaggal: a csomagban latszik, hogy hivatkozas, es egy hivatkozott lap fajlneve nem utkozhet
+      a sajat munkalapok nevevel. Munkaora es ar sehol: a PDF a munkalap sajat lapja, a lap osszegeibe nem szamit bele.
+    */
+    for (const { worksheet } of linked ?? []) {
+      const document = this.issuedSheetOf(worksheet, scope.kind === "internal");
+      if (!document) continue;
+      entries.push({
+        name: `kapcsolodo-${document.fileName}`,
         bytes: await this.worksheetBytes(worksheet.id, document),
       });
     }
@@ -210,7 +289,10 @@ export class ServiceJobPackageService {
  * tehat ott nincs mit tennie, es a mondat ezt ki is mondja. Egy kozos „nem
  * adhato at" mondat a masodik esetben olyan teendore kuldene, ami nem letezik.
  */
-function csomagHiba(visszatarto: readonly BlockingPackageWorksheet[]): string {
+function csomagHiba(
+  visszatarto: readonly BlockingPackageWorksheet[],
+  kapcsolodo = false,
+): string {
   const nev = (sheet: PackageWorksheetState): string => {
     const alap = sheet.number ?? "szám nélküli munkalap";
     return sheet.hidden ? `${alap} (rejtett)` : alap;
@@ -225,7 +307,9 @@ function csomagHiba(visszatarto: readonly BlockingPackageWorksheet[]): string {
   const lezaratlan = nevekAhol("not-closed");
   if (lezaratlan)
     reszek.push(
-      `Nincs lezárva: ${lezaratlan}. Zárd le a lapot, vagy ha nem ide tartozik, vedd le a hibajegyről.`,
+      kapcsolodo
+        ? `Nincs lezárva: ${lezaratlan}. Zárd le a munkalapot, vagy vedd le a kapcsolatot a karbantartási lapról.`
+        : `Nincs lezárva: ${lezaratlan}. Zárd le a lapot, vagy ha nem ide tartozik, vedd le a hibajegyről.`,
     );
   const peldanytalan = nevekAhol("no-issued-sheet");
   if (peldanytalan)
@@ -235,7 +319,9 @@ function csomagHiba(visszatarto: readonly BlockingPackageWorksheet[]): string {
     );
 
   return [
-    "A hibajegy dokumentumcsomagja nem adható át, amíg a munkalapjai nincsenek rendben.",
+    kapcsolodo
+      ? "A karbantartási lap dokumentumcsomagja nem adható át, amíg a hozzákapcsolt munkalapjai nincsenek rendben."
+      : "A hibajegy dokumentumcsomagja nem adható át, amíg a munkalapjai nincsenek rendben.",
     ...reszek,
   ].join(" ");
 }
