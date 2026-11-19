@@ -6,6 +6,7 @@ import {
   describePriceSource,
   resolvePriceSource,
   type PriceOwner,
+  type ResolvedSale,
 } from "./medusa-price-source.js";
 import {
   recordOwnPrice,
@@ -124,6 +125,8 @@ export interface PricingTarget {
     sellingGrossPrice: PrismaTypes.Decimal | null;
     sellingPriceCurrency: string | null;
   };
+  /** a futó akció árlistának (kártya 54bb3779), vagy `null`: nincs; lásd `ResolvedSale` */
+  sale?: ResolvedSale | null;
 }
 
 /**
@@ -165,6 +168,12 @@ export function describePricing(report: PricingProjectionReport): string {
       ? []
       : [`felar: ${report.surcharge} ${report.sourceCurrency} (a valtozate)`]),
     `medusa amount: ${report.medusaAmount} ${report.medusaCurrencyCode}`,
+    // az akciós árlista sora csak akkor áll itt, ha van mit mondani róla (ugyanaz az elv, mint a felárnál)
+    ...(report.saleList === undefined || report.saleList === "none"
+      ? []
+      : [
+          `akcios arlista: ${report.saleList}${report.saleAmount == null ? "" : ` (${report.saleAmount} ${report.medusaCurrencyCode})`}`,
+        ]),
     `ar-azonosito: ${report.priceId}`,
     `valtozat: ${report.variantId}`,
     `eredmeny: ${report.result}`,
@@ -299,6 +308,7 @@ export async function resolvePricingTargets(
       source: decision.source,
       surcharge: decision.surcharge,
       price: decision.price,
+      sale: decision.sale ?? null,
     });
   }
 
