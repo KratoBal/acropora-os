@@ -13,7 +13,16 @@ import { classifyCodReference, orderKeyOf } from "./gls-cod-reference.js";
  *   2. an order key, from the COD reference or else from the client
  *      reference of the GLS invoice attachment, through the local mirror
  *      (webshop order -> its invoices);
- *   3. otherwise review. The error names what the reference itself was, so a
+ *   3. a webshop (Medusa) parcel, by the PARCEL NUMBER: the parcel the OS
+ *      created for a webshop order is stored with GLS's parcel number
+ *      (WebshopParcel), which leads to the order and its live outgoing invoice
+ *      (the Foxpost settlement's webshop lookup, #1996, on the GLS side). Two
+ *      orders for one parcel, or two live invoices for one order, are NOT
+ *      picked from. It is tried only when the COD reference itself did not
+ *      name an invoice that is missing (INVOICE_NOT_FOUND, PREFIX_MISSING):
+ *      that reference and the webshop would disagree, and a disagreement is for
+ *      a person;
+ *   4. otherwise review. The error names what the reference itself was, so a
  *      missing invoice is not reported as a missing order.
  */
 
@@ -22,6 +31,17 @@ export interface GlsResolutionLookups {
   readonly existingInvoiceNumbers: ReadonlySet<string>;
   /** Order key -> its invoice numbers; a key missing here has no order. */
   readonly orderInvoiceNumbers: ReadonlyMap<string, readonly string[]>;
+  /**
+   * GLS parcel number -> the webshop orders the OS created that parcel for, and their LIVE outgoing invoice numbers. A parcel
+   * that is not a webshop parcel is missing here.
+   */
+  readonly webshopByParcel: ReadonlyMap<
+    string,
+    {
+      readonly orderIds: readonly string[];
+      readonly invoiceNumbers: readonly string[];
+    }
+  >;
 }
 
 export type GlsLineResolution =
@@ -37,7 +57,11 @@ export type GlsLineResolution =
     };
 
 export function resolveGlsCodLine(
-  line: { codReference: string | null; clientReference: string | null },
+  line: {
+    parcelNumber: string;
+    codReference: string | null;
+    clientReference: string | null;
+  },
   lookups: GlsResolutionLookups,
 ): GlsLineResolution {
   const reference = classifyCodReference(line.codReference);
@@ -76,6 +100,33 @@ export function resolveGlsCodLine(
         invoiceNumbers: [...invoices],
       };
     orderError = invoices ? "ORDER_NOT_INVOICED" : "ORDER_NOT_FOUND";
+  }
+
+  const webshop =
+    referenceError === null
+      ? lookups.webshopByParcel.get(line.parcelNumber)
+      : undefined;
+  if (webshop) {
+    if (webshop.orderIds.length !== 1)
+      return {
+        status: "NEEDS_REVIEW",
+        errorCode: "WEBSHOP_ORDER_AMBIGUOUS",
+        suggestedInvoiceNumber: null,
+      };
+    if (webshop.invoiceNumbers.length === 1)
+      return {
+        status: "RESOLVED",
+        source: "WEBSHOP_PARCEL",
+        invoiceNumbers: [...webshop.invoiceNumbers],
+      };
+    return {
+      status: "NEEDS_REVIEW",
+      errorCode:
+        webshop.invoiceNumbers.length === 0
+          ? "ORDER_NOT_INVOICED"
+          : "WEBSHOP_INVOICE_AMBIGUOUS",
+      suggestedInvoiceNumber: null,
+    };
   }
 
   return {

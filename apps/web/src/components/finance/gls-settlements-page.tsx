@@ -68,6 +68,8 @@ const LINE_ERRORS: Record<GlsCodLineError, string> = {
   ORDER_NOT_INVOICED: "A rendelésnek még nincs számlája",
   PREFIX_MISSING: "Előtag nélküli számlaszám",
   REFERENCE_UNKNOWN: "Ismeretlen hivatkozás",
+  WEBSHOP_ORDER_AMBIGUOUS: "A csomagszámhoz több webshop-rendelés tartozik",
+  WEBSHOP_INVOICE_AMBIGUOUS: "A webshop-rendelésnek több élő számlája van",
 };
 
 function lineResolution(line: GlsCodReportLine) {
@@ -78,7 +80,9 @@ function lineResolution(line: GlsCodReportLine) {
       <PilotBadge variant="success">
         {line.resolutionSource === "ORDER_KEY"
           ? "Párosítva rendelésből"
-          : "Párosítva"}
+          : line.resolutionSource === "WEBSHOP_PARCEL"
+            ? "Párosítva webshop-csomagból"
+            : "Párosítva"}
       </PilotBadge>
     );
   return (

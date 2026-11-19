@@ -179,6 +179,8 @@ enum GlsCodResolutionSource {
   INVOICE_NUMBER
   ORDER_KEY
   MANUAL
+  /// A webshop (Medusa) csomag: csomagszám -> WebshopParcel -> rendelés -> élő számla.
+  WEBSHOP_PARCEL
 }
 
 /// Egy kimenő számla kifizetett-jelölésének állapota a Számlázz.hu felé
