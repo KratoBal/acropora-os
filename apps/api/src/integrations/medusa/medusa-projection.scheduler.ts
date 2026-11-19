@@ -514,6 +514,16 @@ export class MedusaProjectionScheduler
   private frissitesProbalt = new Map<string, number>();
   /** Az utolso `frissitesAzonositok` valasztasa (id -> `lastSyncedAt` ms): a kor a ténylegesen vitt tagokat jegyzi fel. */
   private frissitesValasztott = new Map<string, number>();
+  /**
+   * A FUTO AKCIÓ EGYSZERI ÚJRA-VETÍTÉSE (card 54bb3779, a #2733 éles kiadása): a termékek, amelyeknek a futó akciója EBBEN a
+   * folyamatban már sorra került (id-k). A #2733 az akció vetítésének ALAKJÁT változtatta (alapár az alapár, az akció `sale`
+   * árlista), de egy már vetített termék csak akkor esedékes, ha a forrása újabb a kötésénél: a futó akciók a régi alakban
+   * maradtak volna a következő módosításukig. Memóriában él, tehát minden újraindítás (egy kiadás is) egyszer újra végigviszi
+   * őket; az újra-vetítés idempotens, egy listát, ami már jó, nem ír át.
+   */
+  private readonly futoAkcioVetitve = new Set<string>();
+  /** Az utolsó `akcioHatarAzonositok` azon tagjai, amelyek CSAK a futó akció szabálya miatt esedékesek: a kör a vitteket jegyzi fel. */
+  private futoAkcioJeloltek = new Set<string>();
 
   /**
    * EGY OPCIONALIS FUGGOSEG-OBJEKTUM, ES EZ A REPO MINTAJA, NEM ROGTONZES: a
@@ -761,6 +771,9 @@ export class MedusaProjectionScheduler
         ...frissites,
       ]),
     ].slice(0, limit);
+    // a futó akció szabálya CSAK a ténylegesen vitt terméket jegyzi fel (a keret által levágott a következő körben jön)
+    for (const id of esedekes)
+      if (this.futoAkcioJeloltek.has(id)) this.futoAkcioVetitve.add(id);
     // a forgásból CSAK a ténylegesen vitt termék számít kipróbáltnak (a keret által levágott nem)
     for (const id of esedekes) {
       const mikor = this.frissitesValasztott.get(id);
@@ -1096,10 +1109,20 @@ export class MedusaProjectionScheduler
    */
   private async akcioHatarAzonositok(): Promise<string[]> {
     const most = this.now();
+    const jeloltek = new Set<string>();
+    this.futoAkcioJeloltek = jeloltek;
     const ablak = { gt: new Date(most.getTime() - AKCIO_ABLAK_MS), lte: most };
     const tukor = await this.db.unasProductSnapshot.findMany({
       where: {
-        OR: [{ saleStartsAt: ablak }, { saleEndsAt: ablak }],
+        OR: [
+          { saleStartsAt: ablak },
+          { saleEndsAt: ablak },
+          // a futó akció, a határ korától függetlenül: a #2733 utáni egyszeri újra-vetítés (`futoAkcioVetitve`)
+          {
+            saleStartsAt: { lte: most },
+            OR: [{ saleEndsAt: null }, { saleEndsAt: { gt: most } }],
+          },
+        ],
         product: { isActive: true, webshopExcluded: false },
       },
       select: { productId: true, saleStartsAt: true, saleEndsAt: true },
@@ -1113,7 +1136,17 @@ export class MedusaProjectionScheduler
     const sajat = await this.db.productVariant.findMany({
       where: {
         isActive: true,
-        OR: [{ sellingSaleStartsAt: ablak }, { sellingSaleEndsAt: ablak }],
+        OR: [
+          { sellingSaleStartsAt: ablak },
+          { sellingSaleEndsAt: ablak },
+          {
+            sellingSaleStartsAt: { lte: most },
+            OR: [
+              { sellingSaleEndsAt: null },
+              { sellingSaleEndsAt: { gt: most } },
+            ],
+          },
+        ],
         product: {
           isActive: true,
           webshopExcluded: false,
@@ -1151,6 +1184,16 @@ export class MedusaProjectionScheduler
       sorok
         .filter((sor) => {
           if (!utoljara.has(sor.productId)) return false;
+          // a futó akció, ha ebben a folyamatban még nem vetítettük: akkor is esedékes, ha a határa a legutóbbi vetítés előtt volt
+          if (
+            sor.saleStartsAt !== null &&
+            sor.saleStartsAt <= most &&
+            (sor.saleEndsAt === null || sor.saleEndsAt > most) &&
+            !this.futoAkcioVetitve.has(sor.productId)
+          ) {
+            jeloltek.add(sor.productId);
+            return true;
+          }
           const vetitve = utoljara.get(sor.productId) ?? null;
           const hatarok = [sor.saleStartsAt, sor.saleEndsAt].filter(
             (hatar): hatar is Date => hatar !== null && hatar <= most,
