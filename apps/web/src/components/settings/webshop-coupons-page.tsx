@@ -280,47 +280,49 @@ export function WebshopCouponsPage() {
           {coupons.length === 0 ? (
             <p className="text-sm text-pilot-grey-600">Még nincs kupon.</p>
           ) : (
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="text-xs text-pilot-grey-500">
-                  <th className="py-2 pr-3 font-medium">Kód</th>
-                  <th className="py-2 pr-3 font-medium">Kedvezmény</th>
-                  <th className="py-2 pr-3 font-medium">Érvényesség</th>
-                  <th className="py-2 pr-3 font-medium">Felhasználva</th>
-                  <th className="py-2 pr-3 font-medium">Állapot</th>
-                  <th className="py-2 font-medium" />
-                </tr>
-              </thead>
-              <tbody>
-                {coupons.map((coupon) => (
-                  <tr key={coupon.id}>
-                    <td className="py-2 pr-3 font-mono text-pilot-grey-900">
-                      {coupon.code}
-                    </td>
-                    <td className="py-2 pr-3">{discountLabel(coupon)}</td>
-                    <td className="py-2 pr-3">{validityLabel(coupon)}</td>
-                    <td className="py-2 pr-3">
-                      {coupon.used} / {coupon.usageLimit ?? "korlátlan"}
-                    </td>
-                    <td className="py-2 pr-3">
-                      {COUPON_STATE_LABELS[coupon.state]}
-                    </td>
-                    <td className="py-2">
-                      <PilotButton
-                        variant="secondary"
-                        disabled={busy}
-                        aria-label={`${coupon.code}: ${coupon.state === "INACTIVE" ? "bekapcsolás" : "kikapcsolás"}`}
-                        onClick={() => void toggle(coupon)}
-                      >
-                        {coupon.state === "INACTIVE"
-                          ? "Bekapcsolás"
-                          : "Kikapcsolás"}
-                      </PilotButton>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="text-xs text-pilot-grey-500">
+                    <th className="py-2 pr-3 font-medium">Kód</th>
+                    <th className="py-2 pr-3 font-medium">Kedvezmény</th>
+                    <th className="py-2 pr-3 font-medium">Érvényesség</th>
+                    <th className="py-2 pr-3 font-medium">Felhasználva</th>
+                    <th className="py-2 pr-3 font-medium">Állapot</th>
+                    <th className="py-2 font-medium" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {coupons.map((coupon) => (
+                    <tr key={coupon.id}>
+                      <td className="py-2 pr-3 font-mono text-pilot-grey-900">
+                        {coupon.code}
+                      </td>
+                      <td className="py-2 pr-3">{discountLabel(coupon)}</td>
+                      <td className="py-2 pr-3">{validityLabel(coupon)}</td>
+                      <td className="py-2 pr-3">
+                        {coupon.used} / {coupon.usageLimit ?? "korlátlan"}
+                      </td>
+                      <td className="py-2 pr-3">
+                        {COUPON_STATE_LABELS[coupon.state]}
+                      </td>
+                      <td className="py-2">
+                        <PilotButton
+                          variant="secondary"
+                          disabled={busy}
+                          aria-label={`${coupon.code}: ${coupon.state === "INACTIVE" ? "bekapcsolás" : "kikapcsolás"}`}
+                          onClick={() => void toggle(coupon)}
+                        >
+                          {coupon.state === "INACTIVE"
+                            ? "Bekapcsolás"
+                            : "Kikapcsolás"}
+                        </PilotButton>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
           {truncated ? (
             <p className="text-xs text-pilot-grey-500">

@@ -188,46 +188,48 @@ export function PartnerOrderCertificatesPanel({
           <>
             {open.length ? (
               <div className="space-y-3">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-xs text-pilot-grey-500">
-                      <th className="py-1 font-medium">Tétel</th>
-                      <th className="py-1 font-medium">Hátralévő</th>
-                      <th className="py-1 font-medium">Most igazolt</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {open.map((item) => (
-                      <tr
-                        key={item.quoteItemId}
-                        className="border-t border-pilot-grey-100"
-                      >
-                        <td className="py-2 pr-3">{item.name}</td>
-                        <td className="py-2 pr-3 whitespace-nowrap">
-                          {remaining.get(item.quoteItemId)} {item.unit}
-                        </td>
-                        <td className="py-2">
-                          <div className="flex items-center gap-2">
-                            <PilotInput
-                              value={quantities[item.quoteItemId] ?? ""}
-                              onChange={(value) =>
-                                setQuantities((current) => ({
-                                  ...current,
-                                  [item.quoteItemId]: value,
-                                }))
-                              }
-                              inputMode="decimal"
-                              aria-label={`${item.name}: most igazolt mennyiség`}
-                            />
-                            <span className="text-pilot-grey-500">
-                              {item.unit}
-                            </span>
-                          </div>
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-pilot-grey-500">
+                        <th className="py-1 font-medium">Tétel</th>
+                        <th className="py-1 font-medium">Hátralévő</th>
+                        <th className="py-1 font-medium">Most igazolt</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {open.map((item) => (
+                        <tr
+                          key={item.quoteItemId}
+                          className="border-t border-pilot-grey-100"
+                        >
+                          <td className="py-2 pr-3">{item.name}</td>
+                          <td className="py-2 pr-3 whitespace-nowrap">
+                            {remaining.get(item.quoteItemId)} {item.unit}
+                          </td>
+                          <td className="py-2">
+                            <div className="flex items-center gap-2">
+                              <PilotInput
+                                value={quantities[item.quoteItemId] ?? ""}
+                                onChange={(value) =>
+                                  setQuantities((current) => ({
+                                    ...current,
+                                    [item.quoteItemId]: value,
+                                  }))
+                                }
+                                inputMode="decimal"
+                                aria-label={`${item.name}: most igazolt mennyiség`}
+                              />
+                              <span className="text-pilot-grey-500">
+                                {item.unit}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
                 <PilotButton
                   disabled={busy || lines.length === 0}
                   onClick={() => void issue()}

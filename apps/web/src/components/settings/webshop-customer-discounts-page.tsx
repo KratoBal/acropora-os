@@ -263,39 +263,41 @@ export function WebshopCustomerDiscountsPage() {
               Még nincs egyedi kedvezmény.
             </p>
           ) : (
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="text-xs text-pilot-grey-500">
-                  <th className="py-2 pr-3 font-medium">Vevő</th>
-                  <th className="py-2 pr-3 font-medium">Kedvezmény</th>
-                  <th className="py-2 pr-3 font-medium">Állapot</th>
-                  <th className="py-2 font-medium" />
-                </tr>
-              </thead>
-              <tbody>
-                {discounts.map((discount) => (
-                  <tr key={discount.id}>
-                    <td className="py-2 pr-3 text-pilot-grey-900">
-                      {who(discount)}
-                    </td>
-                    <td className="py-2 pr-3">{discount.percent}%</td>
-                    <td className="py-2 pr-3">
-                      {discount.active ? "Aktív" : "Kikapcsolva"}
-                    </td>
-                    <td className="py-2">
-                      <PilotButton
-                        variant="secondary"
-                        disabled={busy}
-                        aria-label={`${who(discount)}: ${discount.active ? "kikapcsolás" : "bekapcsolás"}`}
-                        onClick={() => void toggle(discount)}
-                      >
-                        {discount.active ? "Kikapcsolás" : "Bekapcsolás"}
-                      </PilotButton>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="text-xs text-pilot-grey-500">
+                    <th className="py-2 pr-3 font-medium">Vevő</th>
+                    <th className="py-2 pr-3 font-medium">Kedvezmény</th>
+                    <th className="py-2 pr-3 font-medium">Állapot</th>
+                    <th className="py-2 font-medium" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {discounts.map((discount) => (
+                    <tr key={discount.id}>
+                      <td className="py-2 pr-3 text-pilot-grey-900">
+                        {who(discount)}
+                      </td>
+                      <td className="py-2 pr-3">{discount.percent}%</td>
+                      <td className="py-2 pr-3">
+                        {discount.active ? "Aktív" : "Kikapcsolva"}
+                      </td>
+                      <td className="py-2">
+                        <PilotButton
+                          variant="secondary"
+                          disabled={busy}
+                          aria-label={`${who(discount)}: ${discount.active ? "kikapcsolás" : "bekapcsolás"}`}
+                          onClick={() => void toggle(discount)}
+                        >
+                          {discount.active ? "Kikapcsolás" : "Bekapcsolás"}
+                        </PilotButton>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </PilotCard>
       ) : null}

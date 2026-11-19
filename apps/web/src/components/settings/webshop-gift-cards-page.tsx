@@ -245,73 +245,77 @@ export function WebshopGiftCardsPage() {
               Még nincs ajándékkártya.
             </p>
           ) : (
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="text-xs text-pilot-grey-500">
-                  <th className="py-2 pr-3 font-medium">Kód vége</th>
-                  <th className="py-2 pr-3 font-medium">Kiadva</th>
-                  <th className="py-2 pr-3 font-medium">Egyenleg</th>
-                  <th className="py-2 pr-3 font-medium">Állapot</th>
-                  <th className="py-2 pr-3 font-medium">Címzett</th>
-                  <th className="py-2 font-medium" />
-                </tr>
-              </thead>
-              <tbody>
-                {cards.map((card) => (
-                  <tr key={card.id} className="align-top">
-                    <td className="py-2 pr-3 font-mono">…{card.codeLast4}</td>
-                    <td className="py-2 pr-3">{forint(card.initialAmount)}</td>
-                    <td className="py-2 pr-3">{forint(card.balance)}</td>
-                    <td className="py-2 pr-3">
-                      {card.status === "active" ? "Aktív" : "Kikapcsolva"}
-                    </td>
-                    <td className="py-2 pr-3">
-                      {card.recipientEmail ?? "–"}
-                      {card.note ? (
-                        <div className="text-xs text-pilot-grey-500">
-                          {card.note}
-                        </div>
-                      ) : null}
-                      {open?.id === card.id ? (
-                        <ul
-                          className="mt-2 space-y-1 text-xs text-pilot-grey-600"
-                          data-testid="gift-card-ledger"
-                        >
-                          {open.transactions.map((t) => (
-                            <li key={t.id}>
-                              {WEBSHOP_GIFT_CARD_TRANSACTION_LABELS[t.kind]}:{" "}
-                              {t.amount > 0 ? "+" : ""}
-                              {forint(t.amount)} → {forint(t.balanceAfter)}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </td>
-                    <td className="py-2">
-                      <div className="flex flex-wrap gap-2">
-                        <PilotButton
-                          variant="ghost"
-                          aria-label={`…${card.codeLast4}: napló`}
-                          onClick={() => void toggleLedger(card)}
-                        >
-                          Napló
-                        </PilotButton>
-                        {card.status === "active" ? (
-                          <PilotButton
-                            variant="secondary"
-                            disabled={busy}
-                            aria-label={`…${card.codeLast4}: kikapcsolás`}
-                            onClick={() => setDisabling(card)}
-                          >
-                            Kikapcsolás
-                          </PilotButton>
-                        ) : null}
-                      </div>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="text-xs text-pilot-grey-500">
+                    <th className="py-2 pr-3 font-medium">Kód vége</th>
+                    <th className="py-2 pr-3 font-medium">Kiadva</th>
+                    <th className="py-2 pr-3 font-medium">Egyenleg</th>
+                    <th className="py-2 pr-3 font-medium">Állapot</th>
+                    <th className="py-2 pr-3 font-medium">Címzett</th>
+                    <th className="py-2 font-medium" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {cards.map((card) => (
+                    <tr key={card.id} className="align-top">
+                      <td className="py-2 pr-3 font-mono">…{card.codeLast4}</td>
+                      <td className="py-2 pr-3">
+                        {forint(card.initialAmount)}
+                      </td>
+                      <td className="py-2 pr-3">{forint(card.balance)}</td>
+                      <td className="py-2 pr-3">
+                        {card.status === "active" ? "Aktív" : "Kikapcsolva"}
+                      </td>
+                      <td className="py-2 pr-3">
+                        {card.recipientEmail ?? "–"}
+                        {card.note ? (
+                          <div className="text-xs text-pilot-grey-500">
+                            {card.note}
+                          </div>
+                        ) : null}
+                        {open?.id === card.id ? (
+                          <ul
+                            className="mt-2 space-y-1 text-xs text-pilot-grey-600"
+                            data-testid="gift-card-ledger"
+                          >
+                            {open.transactions.map((t) => (
+                              <li key={t.id}>
+                                {WEBSHOP_GIFT_CARD_TRANSACTION_LABELS[t.kind]}:{" "}
+                                {t.amount > 0 ? "+" : ""}
+                                {forint(t.amount)} → {forint(t.balanceAfter)}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </td>
+                      <td className="py-2">
+                        <div className="flex flex-wrap gap-2">
+                          <PilotButton
+                            variant="ghost"
+                            aria-label={`…${card.codeLast4}: napló`}
+                            onClick={() => void toggleLedger(card)}
+                          >
+                            Napló
+                          </PilotButton>
+                          {card.status === "active" ? (
+                            <PilotButton
+                              variant="secondary"
+                              disabled={busy}
+                              aria-label={`…${card.codeLast4}: kikapcsolás`}
+                              onClick={() => setDisabling(card)}
+                            >
+                              Kikapcsolás
+                            </PilotButton>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </PilotCard>
       ) : null}
