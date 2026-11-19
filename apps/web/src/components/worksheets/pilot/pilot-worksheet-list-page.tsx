@@ -28,6 +28,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { worksheetsApi } from "@/lib/api/worksheets";
+import {
+  BULK_SELECTION_MAX,
+  bulkSummary,
+  pageSelection,
+  toggleSelected,
+  togglePage,
+} from "../worksheet-bulk";
 import { serviceJobRef } from "../service-job-ref";
 import {
   formatDay,
@@ -190,7 +197,10 @@ type WorksheetRow = WorksheetListResponse["items"][number];
   végi nyíl csak asztali jelzés. A fő sor a munkalap TÁRGYA, alatta a szám (Balázs, 2026-10-26
   12:48 UTC, OS szál, msg 1564259312728150148): mindenhol egyformán.
 */
-export const WORKSHEET_TABLE_MIN_WIDTH = 1140;
+/** A kijelölő pipa oszlopának szélessége (a `WORKSHEET_COLUMNS` mellé kerül, kártya a785e580). */
+export const WORKSHEET_SELECT_COLUMN_WIDTH = 40;
+/** A tábla legkisebb szélessége: a főág oszlopai (1140, a Megnyitva oszloppal, #2745) és a kijelölő oszlop. */
+export const WORKSHEET_TABLE_MIN_WIDTH = 1140 + WORKSHEET_SELECT_COLUMN_WIDTH;
 
 export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
   {
@@ -341,6 +351,11 @@ export function PilotWorksheetListPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState(params.get("search") ?? "");
   const [partners, setPartners] = useState<WorksheetSelectablePartner[]>([]);
+  // a bepipált lapok azonosítói: a lapozás és a szűrés között is megmaradnak (kártya a785e580, 2. szelet)
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState<"download" | "print" | null>(null);
+  const [bulkNote, setBulkNote] = useState<string | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_VIEW),
   );
@@ -423,6 +438,118 @@ export function PilotWorksheetListPage() {
 
   const selectStatus = (key: string) => {
     filter("status", key === activeStatus ? "" : key);
+  };
+
+  const pageIds = useMemo(
+    () => (data?.items ?? []).map((worksheet) => worksheet.id),
+    [data],
+  );
+  const pageState = pageSelection(selected, pageIds);
+  const limitNote = `Legfeljebb ${BULK_SELECTION_MAX} munkalap jelölhető ki egyszerre.`;
+
+  const toggleOne = (id: string) => {
+    setBulkError(null);
+    const result = toggleSelected(selected, id);
+    setBulkNote(result.full ? limitNote : null);
+    setSelected(result.selected);
+  };
+
+  const togglePageAll = () => {
+    setBulkError(null);
+    const result = togglePage(selected, pageIds);
+    setBulkNote(result.full ? limitNote : null);
+    setSelected(result.selected);
+  };
+
+  const columns = useMemo<PilotTableColumn<WorksheetRow>[]>(
+    () => [
+      {
+        id: "select",
+        header: (
+          <span onClick={(event) => event.stopPropagation()}>
+            <input
+              type="checkbox"
+              aria-label="Az oldal összes munkalapjának kijelölése"
+              className="h-4 w-4 cursor-pointer"
+              checked={pageState === "all"}
+              ref={(input) => {
+                if (input) input.indeterminate = pageState === "some";
+              }}
+              onChange={togglePageAll}
+            />
+          </span>
+        ),
+        width: `${WORKSHEET_SELECT_COLUMN_WIDTH}px`,
+        phone: "hide",
+        cell: (worksheet) => (
+          <span
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              aria-label={`Kijelölés: ${worksheetListLines(worksheet).main}`}
+              className="h-4 w-4 cursor-pointer"
+              checked={selected.has(worksheet.id)}
+              onChange={() => toggleOne(worksheet.id)}
+            />
+          </span>
+        ),
+      },
+      ...WORKSHEET_COLUMNS,
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pageState, selected, pageIds],
+  );
+
+  /** A kijelölt lapok kiadott PDF-jei: letöltés zipben, vagy egy összefűzött PDF új lapon (nyomtatáshoz). */
+  const runBulk = async (action: "download" | "print") => {
+    if (selected.size === 0 || bulkBusy) return;
+    setBulkBusy(action);
+    setBulkNote(null);
+    setBulkError(null);
+    // a nyomtatáshoz az új lapot a kattintás pillanatában nyitjuk (a várakozás utáni megnyitást a böngésző tiltja)
+    const printWindow = action === "print" ? window.open("", "_blank") : null;
+    try {
+      const result = await worksheetsApi.bulkSheets(
+        token,
+        [...selected],
+        action === "download" ? "zip" : "merged",
+      );
+      const url = URL.createObjectURL(result.blob);
+      if (action === "print" && printWindow) {
+        printWindow.location.href = url;
+      } else {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = result.fileName;
+        document.body.appendChild(link);
+        link.click();
+        // removeChild: the confirm guard reads the element's own remove call as the api clients' delete method
+        document.body.removeChild(link);
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setBulkNote(
+        bulkSummary({
+          action,
+          included: result.included,
+          skipped: result.skipped,
+          skippedNumbers: result.skippedNumbers,
+        }) +
+          (action === "print" && !printWindow
+            ? " Az új lap nem nyílt meg (a böngésző letiltotta), ezért a PDF letöltődött."
+            : ""),
+      );
+    } catch (cause) {
+      printWindow?.close();
+      setBulkError(
+        cause instanceof Error
+          ? cause.message
+          : "A kijelölt munkalapok PDF-je nem készült el.",
+      );
+    } finally {
+      setBulkBusy(null);
+    }
   };
 
   const goToPage = (page: number) => {
@@ -673,6 +800,55 @@ export function PilotWorksheetListPage() {
         ) : null}
       </div>
 
+      {selected.size > 0 ? (
+        <div
+          role="region"
+          aria-label="Kijelölt munkalapok"
+          className="flex flex-wrap items-center gap-3 rounded-xl bg-white px-4 py-3 ring-1 ring-pilot-aqua-500"
+        >
+          <span className="text-sm font-medium text-pilot-grey-900">
+            {selected.size} munkalap kijelölve
+          </span>
+          <PilotButton
+            variant="secondary"
+            size="regular"
+            disabled={bulkBusy !== null}
+            onClick={() => void runBulk("download")}
+          >
+            {bulkBusy === "download" ? "Készül…" : "Letöltés (zip)"}
+          </PilotButton>
+          <PilotButton
+            variant="secondary"
+            size="regular"
+            disabled={bulkBusy !== null}
+            onClick={() => void runBulk("print")}
+          >
+            {bulkBusy === "print" ? "Készül…" : "Nyomtatás"}
+          </PilotButton>
+          <button
+            type="button"
+            className="cursor-pointer text-xs text-pilot-grey-500 transition hover:text-pilot-grey-800"
+            onClick={() => {
+              setSelected(new Set());
+              setBulkNote(null);
+              setBulkError(null);
+            }}
+          >
+            Kijelölés törlése
+          </button>
+        </div>
+      ) : null}
+      {bulkNote ? (
+        <p role="status" className="text-sm text-pilot-grey-700">
+          {bulkNote}
+        </p>
+      ) : null}
+      {bulkError ? (
+        <p role="alert" className="text-sm font-medium text-red-600">
+          {bulkError}
+        </p>
+      ) : null}
+
       {loading && !data ? (
         <div className="space-y-3">
           <Skeleton className="h-16" />
@@ -681,7 +857,7 @@ export function PilotWorksheetListPage() {
       ) : data?.items.length ? (
         <PilotCard className="overflow-hidden">
           <PilotDataTable
-            columns={WORKSHEET_COLUMNS}
+            columns={columns}
             rows={data.items}
             rowKey={(worksheet) => worksheet.id}
             rowTestId="worksheet-row"

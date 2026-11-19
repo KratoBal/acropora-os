@@ -2,6 +2,7 @@ import type { WorksheetLineKind } from "@acropora/database";
 import { Transform, Type } from "class-transformer";
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsIn,
@@ -644,4 +645,21 @@ export class SendWorksheetForSignatureDto {
   @IsString({ message: "Válassz aláírót a listáról." })
   @MinLength(1, { message: "Válassz aláírót a listáról." })
   signerUserId!: string;
+}
+
+/**
+ * A KIJELÖLT LAPOK KIADOTT PDF-JEI EGYBEN (kártya a785e580). `zip`: lapok szerint egy PDF egy zipben;
+ * `merged`: egy összefűzött PDF a nyomtatáshoz. A felső határ a kérés mérete és a válasz ideje miatt van.
+ */
+export class BulkWorksheetSheetsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  @MaxLength(64, { each: true })
+  ids!: string[];
+
+  @IsIn(["zip", "merged"])
+  format!: "zip" | "merged";
 }
