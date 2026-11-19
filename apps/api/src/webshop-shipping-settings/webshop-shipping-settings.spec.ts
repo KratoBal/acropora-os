@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   BadRequestException,
+  ConflictException,
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
@@ -43,9 +44,10 @@ function fakeClient(state: {
   settings: Record<string, MedusaCommerceSetting>;
   failPut?: MedusaAdminHttpError;
   failRules?: MedusaAdminHttpError;
+  matrix?: Record<string, string[]>;
 }) {
   const calls: string[] = [];
-  let matrix: Record<string, string[]> = MATRIX;
+  let matrix: Record<string, string[]> = state.matrix ?? MATRIX;
   const client: MedusaShippingSettingsClient = {
     getSetting: async (key) => {
       calls.push(`get:${key}`);
@@ -199,7 +201,10 @@ describe("the service", () => {
       FOXPOST: ["COD", "BANK_TRANSFER", "ONLINE_CARD"],
     };
     const settings = await service(client).savePayments(next);
-    assert.equal(calls[0], `put:${JSON.stringify(next)}`);
+    assert.deepEqual(calls.slice(0, 2), [
+      "rules",
+      `put:${JSON.stringify(next)}`,
+    ]);
     assert.deepEqual(settings.matrix.FOXPOST, [
       "COD",
       "BANK_TRANSFER",
@@ -234,6 +239,32 @@ describe("the service", () => {
         error instanceof ServiceUnavailableException &&
         /régebbi változaton/.test(error.message),
     );
+  });
+
+  it("a payment method the shop has and the OS does not know is named, and stops the save instead of being dropped", async () => {
+    const newer = {
+      ...MATRIX,
+      GLS_NORMAL: ["ONLINE_CARD", "CRYPTO", "COD"],
+      FOXPOST: ["CRYPTO", "COD"],
+    };
+    const { client, calls } = fakeClient({
+      settings: stageSettings(),
+      matrix: newer,
+    });
+    const settings = await service(client).get();
+    assert.deepEqual(settings.unknownPayments, ["CRYPTO"]);
+    assert.deepEqual(settings.matrix.GLS_NORMAL, ["ONLINE_CARD", "COD"]);
+    await assert.rejects(
+      service(client).savePayments(MATRIX),
+      (error: unknown) =>
+        error instanceof ConflictException && /CRYPTO/.test(error.message),
+    );
+    assert.equal(
+      calls.some((c) => c.startsWith("put:")),
+      false,
+    );
+    const known = fakeClient({ settings: stageSettings() });
+    assert.deepEqual((await service(known.client).get()).unknownPayments, []);
   });
 
   it("the six keys are the web shop's keys", () => {

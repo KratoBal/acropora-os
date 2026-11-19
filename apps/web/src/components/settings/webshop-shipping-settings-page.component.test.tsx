@@ -48,6 +48,7 @@ const settings = (
     cashOnDeliveryFee: 450,
   },
   defaultFees: ["cashOnDeliveryFee"],
+  unknownPayments: [],
   matrix: {
     PICKUP: ["ONLINE_CARD", "PAY_AT_STORE", "BANK_TRANSFER"],
     GLS_NORMAL: ["ONLINE_CARD", "COD", "BANK_TRANSFER"],
@@ -182,6 +183,19 @@ describe("WebshopShippingSettingsPage", () => {
       await screen.findByText(/Legalább egy fizetési mód kell/),
     ).toBeTruthy();
     expect(api.savePayments).not.toHaveBeenCalled();
+  });
+
+  it("a payment method the OS does not know is named, and the payments cannot be saved", async () => {
+    api.get.mockResolvedValue(settings({ unknownPayments: ["CRYPTO"] }));
+    render(createElement(WebshopShippingSettingsPage));
+    expect(await screen.findByText(/CRYPTO/)).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Fizetési módok mentése",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
   });
 
   it("without the settings permission there is nothing to read or save", async () => {

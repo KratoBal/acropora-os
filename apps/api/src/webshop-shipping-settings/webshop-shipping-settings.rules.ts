@@ -22,9 +22,24 @@ export function settingAmount(setting: MedusaCommerceSetting): number | null {
   return typeof value === "number" && Number.isInteger(value) ? value : null;
 }
 
+/** The payment roles the web shop returned that the OS does not know, in their first order (a new shop payment method). */
+export function unknownPaymentRoles(
+  matrix: Record<string, string[]> | undefined,
+): string[] {
+  const known = WEBSHOP_PAYMENT_ROLES as readonly string[];
+  return [
+    ...new Set(
+      Object.values(matrix ?? {})
+        .flat()
+        .filter((p) => !known.includes(p)),
+    ),
+  ];
+}
+
 /**
  * The web shop's matrix as the screen's: the known shipping methods in the screen's order, each with its known payment
  * methods in the shop's order. A shipping method the shop does not list gets an empty list (the screen then asks for one).
+ * An unknown payment method is left out here, and named by `unknownPaymentRoles`, which stops the save.
  */
 export function toPaymentMatrix(
   matrix: Record<string, string[]> | undefined,
@@ -52,5 +67,10 @@ export function toShippingSettings(
     if (setting.is_configured === false && fees[field] !== null)
       defaultFees.push(field);
   });
-  return { fees, defaultFees, matrix: toPaymentMatrix(matrix) };
+  return {
+    fees,
+    defaultFees,
+    matrix: toPaymentMatrix(matrix),
+    unknownPayments: unknownPaymentRoles(matrix),
+  };
 }

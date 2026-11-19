@@ -93,6 +93,11 @@ export type WebshopShippingSettings = {
   /** A mezők, amelyeknél a webshop a saját alapértékét használja (nincs tárolt sor). */
   defaultFees: WebshopShippingFeeField[];
   matrix: WebshopPaymentMatrix;
+  /**
+   * Fizetési módok, amelyeket a webshop visszaadott, de ez az OS még nem ismer (a webshop új módot kapott). A mátrix nélkülük
+   * látszik, és a mentése áll: a teljes mátrix visszaírása ezeket csendben törölné (barracuda, #2729).
+   */
+  unknownPayments: string[];
 };
 
 /** Ésszerű felső határ egy díjra vagy küszöbre: egy elgépelt nulla ne zárja ki az ingyenes szállítást. */
