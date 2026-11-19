@@ -4,7 +4,9 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  Logger,
   Optional,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 import {
@@ -12,12 +14,13 @@ import {
   type AquariumMeasurementOccasion,
 } from "@acropora/types";
 
-import { TICKET_MAIL_ENV } from "./gmail-mail.sender.js";
+import { TICKET_MAIL_ENV, TicketMailError } from "./gmail-mail.sender.js";
 import { headerSafe } from "./mail-header.js";
 import { mailBodyFields, renderMailBody } from "./mail-body.js";
 import { MAIL_SENDER, type MailSender } from "./mail.port.js";
 import { formatMailFrom } from "./mime.js";
 import { TicketMailRepository } from "./ticket-mail.repository.js";
+import { mailRedirect } from "./ticket-mail.rules.js";
 
 /** Üres/hiányzó AQUARIUM_MEASUREMENT_MAIL_FROM_NAME esetén ez a feladó neve. */
 const DEFAULT_AQUARIUM_MEASUREMENT_MAIL_FROM_NAME = "Acropora Kft.";
@@ -108,6 +111,8 @@ export class AquariumMeasurementMailService {
     private readonly environment: NodeJS.ProcessEnv = process.env,
   ) {}
 
+  private readonly logger = new Logger(AquariumMeasurementMailService.name);
+
   async send(input: {
     aquariumId: string;
     aquariumName: string;
@@ -168,19 +173,50 @@ export class AquariumMeasurementMailService {
         )
       : undefined;
 
-    await this.sender.send({
-      to: [input.customerEmail],
-      from,
-      subject: headerSafe(targy.text),
-      ...mailBodyFields(torzs),
-      attachments: [
-        {
-          filename: "meresi-eredmenyek.pdf",
-          contentType: "application/pdf",
-          bytes: pdf,
-        },
-      ],
-    });
+    /*
+      A KÖRNYEZETI HIBA A GOMBNÁL OLVASHATÓ, NEM NYERS 500 (kártya 2b3983e1, A7 mérés, 2026-11-19). Ez az út gombra
+      fut, és a hibajegy-levelekkel ellentétben nem a kapu-kapcsolókon át: a teszten egy hiányzó átirányítás vagy
+      Gmail-kulcs eddig "Internal server error"-ként ért a kezelőhöz, és a naplót nem látta senki. Az átirányítás
+      hiányát a küldő is megfogja (dob), de itt előbb mondjuk ki, hogy a kezelő a kulcs nevét lássa.
+    */
+    if (mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO).kind === "block")
+      throw new ServiceUnavailableException(
+        "A levél nem ment ki: a próbacím-átirányítás (TICKET_MAIL_REDIRECT_TO) nincs beállítva ebben a környezetben.",
+      );
+
+    try {
+      await this.sender.send({
+        to: [input.customerEmail],
+        from,
+        subject: headerSafe(targy.text),
+        ...mailBodyFields(torzs),
+        attachments: [
+          {
+            filename: "meresi-eredmenyek.pdf",
+            contentType: "application/pdf",
+            bytes: pdf,
+          },
+        ],
+      });
+    } catch (cause) {
+      if (!(cause instanceof TicketMailError)) throw cause;
+      this.logger.error(
+        `Measurement mail for aquarium ${input.aquariumId} was not sent: ${cause.code}`,
+      );
+      // the outcome is unknown: a resend could deliver two mails (the handover mail's rule)
+      if (cause.code === "TICKET_MAIL_SEND_INDETERMINATE")
+        throw new ServiceUnavailableException(
+          "A levél kiküldésének kimenetele bizonytalan: nem kaptunk választ. Előbb nézd meg a címzettnél, megkapta-e, és csak utána küldd újra.",
+        );
+      // the test OS has no Gmail credentials (measured 2026-11-19): this is the case the button met there
+      if (cause.code === "TICKET_MAIL_NOT_CONFIGURED")
+        throw new ServiceUnavailableException(
+          "A levél nem ment ki: ebben a környezetben nincs beállítva a Gmail-küldő (TICKET_MAIL_NOT_CONFIGURED).",
+        );
+      throw new ServiceUnavailableException(
+        `A levél nem ment ki (${cause.code}). A levelező beállítását kell megnézni.`,
+      );
+    }
 
     await prisma.domainEvent.create({
       data: {
