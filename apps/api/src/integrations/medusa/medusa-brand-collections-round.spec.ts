@@ -38,7 +38,12 @@ const report = (over: Partial<BrandImportReport> = {}): BrandImportReport => ({
 });
 const NOW = new Date("2026-11-19T10:00:00.000Z");
 
-function deps(over: Partial<BrandCollectionsDeps> & { p?: BrandImportPlan; r?: BrandImportReport } = {}) {
+function deps(
+  over: Partial<BrandCollectionsDeps> & {
+    p?: BrandImportPlan;
+    r?: BrandImportReport;
+  } = {},
+) {
   const calls: string[] = [];
   const touched: { ids: string[]; now: Date }[] = [];
   const d: BrandCollectionsDeps = {
@@ -71,27 +76,48 @@ describe("ensureBrandCollectionsInRound", () => {
   it("csak a pontos true kapcsolja be, alapból KI", () => {
     assert.equal(ensureBrandCollectionsInRound({}), false);
     for (const v of ["1", "yes", "TRUE", "on", ""])
-      assert.equal(ensureBrandCollectionsInRound({ MEDUSA_ENSURE_BRAND_COLLECTIONS: v }), false);
-    assert.equal(ensureBrandCollectionsInRound({ MEDUSA_ENSURE_BRAND_COLLECTIONS: "true" }), true);
+      assert.equal(
+        ensureBrandCollectionsInRound({ MEDUSA_ENSURE_BRAND_COLLECTIONS: v }),
+        false,
+      );
+    assert.equal(
+      ensureBrandCollectionsInRound({
+        MEDUSA_ENSURE_BRAND_COLLECTIONS: "true",
+      }),
+      true,
+    );
   });
 });
 
 describe("ensureBrandCollections", () => {
   it("ha nincs mit létrehozni vagy leképezni, nem ír és nem érint meg semmit", async () => {
-    const { d, calls } = deps({ p: plan({ skip: ["a", "b"], skipArchived: ["x"] }) });
+    const { d, calls } = deps({
+      p: plan({ skip: ["a", "b"], skipArchived: ["x"] }),
+    });
     assert.deepEqual(await ensureBrandCollections(d), { status: "unchanged" });
     assert.deepEqual(calls, ["plan"]);
   });
 
   it("létrehoz, majd megérinti a létrejött és leképezett márkákat, a betöltés UTÁN", async () => {
     const { d, calls, touched } = deps({
-      p: plan({ create: [create("a"), create("b")], mapOnly: [{ ourId: "c", medusaId: "col_c" }], staleMapping: ["d"] }),
+      p: plan({
+        create: [create("a"), create("b")],
+        mapOnly: [{ ourId: "c", medusaId: "col_c" }],
+        staleMapping: ["d"],
+      }),
       r: report({ created: 2, linkedOnly: 1, relinked: 1 }),
     });
     const out = await ensureBrandCollections(d);
     assert.deepEqual(calls, ["plan", "apply", "mapped", "touch"]);
     assert.deepEqual(touched, [{ ids: ["a", "b", "c", "d"], now: NOW }]);
-    assert.deepEqual(out, { status: "applied", created: 2, linkedOnly: 1, relinked: 1, touched: 4, conflicts: [] });
+    assert.deepEqual(out, {
+      status: "applied",
+      created: 2,
+      linkedOnly: 1,
+      relinked: 1,
+      touched: 4,
+      conflicts: [],
+    });
   });
 
   it("a megérintés csak azokra megy, amiknek a leképezése MOST megvan", async () => {
@@ -132,15 +158,29 @@ describe("ensureBrandCollections", () => {
 
   it("egy ütközés önmagában nem ír, de minden körben megjelenik a jelentésben", async () => {
     const { d, calls } = deps({
-      p: plan({ conflict: [{ ourId: "k", mappedMedusaId: "x", medusaIdCarryingOurId: "y" }] as never }),
+      p: plan({
+        conflict: [
+          { ourId: "k", mappedMedusaId: "x", medusaIdCarryingOurId: "y" },
+        ] as never,
+      }),
     });
     const out = await ensureBrandCollections(d);
-    assert.deepEqual(out, { status: "applied", created: 0, linkedOnly: 0, relinked: 0, touched: 0, conflicts: ["k"] });
+    assert.deepEqual(out, {
+      status: "applied",
+      created: 0,
+      linkedOnly: 0,
+      relinked: 0,
+      touched: 0,
+      conflicts: ["k"],
+    });
     assert.deepEqual(calls, ["plan"]);
   });
 
   it("a betöltés jelentésének ütközései is átjönnek", async () => {
-    const { d } = deps({ p: plan({ create: [create("a")] }), r: report({ created: 1, conflicts: ["k"] }) });
+    const { d } = deps({
+      p: plan({ create: [create("a")] }),
+      r: report({ created: 1, conflicts: ["k"] }),
+    });
     const out = await ensureBrandCollections(d);
     assert.equal(out.status === "applied" && out.conflicts[0], "k");
   });
@@ -150,9 +190,13 @@ describe("ensureBrandCollections", () => {
       plan: async () => {
         throw new Error("MEDUSA_BRAND_IMPORT_REFUSED: csonkolt");
       },
-      refusedReason: (e) => (e instanceof Error && /REFUSED/.test(e.message) ? "csonkolt" : null),
+      refusedReason: (e) =>
+        e instanceof Error && /REFUSED/.test(e.message) ? "csonkolt" : null,
     });
-    assert.deepEqual(await ensureBrandCollections(d), { status: "refused", reason: "csonkolt" });
+    assert.deepEqual(await ensureBrandCollections(d), {
+      status: "refused",
+      reason: "csonkolt",
+    });
     assert.deepEqual(calls, []);
   });
 
@@ -168,7 +212,14 @@ describe("ensureBrandCollections", () => {
 
 describe("describeBrandCollections", () => {
   it("megnevezi a számokat és az ütközést", () => {
-    const sor = describeBrandCollections({ status: "applied", created: 3, linkedOnly: 1, relinked: 0, touched: 4, conflicts: ["k1", "k2"] });
+    const sor = describeBrandCollections({
+      status: "applied",
+      created: 3,
+      linkedOnly: 1,
+      relinked: 0,
+      touched: 4,
+      conflicts: ["k1", "k2"],
+    });
     assert.match(sor, /3 létrehozva/);
     assert.match(sor, /4 márka megérintve/);
     assert.match(sor, /ÜTKÖZÉS, érintetlen marad: k1, k2/);

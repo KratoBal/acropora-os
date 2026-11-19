@@ -23,8 +23,9 @@ import type { BrandImportReport } from "./medusa-brand-import.service.js";
  *
  * KAPCSOLOVAL, ALAPBOL KI, ugyanugy, mint a tobbi lista-lepes: a lepes a boltba IR, es az iras joga nem engedely.
  */
-export const ensureBrandCollectionsInRound = (env: NodeJS.ProcessEnv): boolean =>
-  env.MEDUSA_ENSURE_BRAND_COLLECTIONS === "true";
+export const ensureBrandCollectionsInRound = (
+  env: NodeJS.ProcessEnv,
+): boolean => env.MEDUSA_ENSURE_BRAND_COLLECTIONS === "true";
 
 export type BrandCollectionsOutcome =
   | { status: "unchanged" }
@@ -101,7 +102,10 @@ export async function ensureBrandCollections(
     }
     throw error;
   }
-  const touched = await deps.touchBrands(await deps.mappedAmong(changing), deps.now());
+  const touched = await deps.touchBrands(
+    await deps.mappedAmong(changing),
+    deps.now(),
+  );
   return {
     status: "applied",
     created: report.created,
@@ -112,9 +116,13 @@ export async function ensureBrandCollections(
   };
 }
 
-export const describeBrandCollections = (outcome: BrandCollectionsOutcome): string => {
-  if (outcome.status === "unchanged") return "Márka-gyűjtemények: nincs teendő.";
-  if (outcome.status === "refused") return `Márka-gyűjtemények: a lépés megállt (${outcome.reason}).`;
+export const describeBrandCollections = (
+  outcome: BrandCollectionsOutcome,
+): string => {
+  if (outcome.status === "unchanged")
+    return "Márka-gyűjtemények: nincs teendő.";
+  if (outcome.status === "refused")
+    return `Márka-gyűjtemények: a lépés megállt (${outcome.reason}).`;
   const sorok = [
     `Márka-gyűjtemények: ${outcome.created} létrehozva`,
     `${outcome.linkedOnly} csak leképezve`,

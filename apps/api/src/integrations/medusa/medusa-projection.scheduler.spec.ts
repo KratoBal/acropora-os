@@ -3639,7 +3639,9 @@ describe("a hiányzó márka-gyűjtemények köre (kártya ec82b629)", () => {
     await scheduler.runOnce();
     assert.deepEqual(sorrend, ["markak", "termekek"]);
     assert.ok(
-      n.sorok.some((s) => s.includes("2 létrehozva") && s.includes("2 márka megérintve")),
+      n.sorok.some(
+        (s) => s.includes("2 létrehozva") && s.includes("2 márka megérintve"),
+      ),
       n.sorok.join("\n"),
     );
   });
@@ -3662,10 +3664,33 @@ describe("a hiányzó márka-gyűjtemények köre (kártya ec82b629)", () => {
   });
 
   it("a változatlan kör nem ír a naplóba, az ütközés és a megállás figyelmeztetés", async () => {
-    const esetek: [Awaited<ReturnType<NonNullable<ConstructorParameters<typeof MedusaProjectionScheduler>[0]>["runBrandCollections" & keyof object]>> | { status: "unchanged" } | { status: "refused"; reason: string } | typeof kesz, string | null, "warn" | "log" | null][] = [
+    const esetek: [
+      (
+        | Awaited<
+            ReturnType<
+              NonNullable<
+                ConstructorParameters<typeof MedusaProjectionScheduler>[0]
+              >["runBrandCollections" & keyof object]
+            >
+          >
+        | { status: "unchanged" }
+        | { status: "refused"; reason: string }
+        | typeof kesz
+      ),
+      string | null,
+      "warn" | "log" | null,
+    ][] = [
       [{ status: "unchanged" }, null, null],
-      [{ ...kesz, created: 0, touched: 0, conflicts: ["brand-9"] }, "ÜTKÖZÉS, érintetlen marad: brand-9", "warn"],
-      [{ status: "refused", reason: "a lista csonkolt" }, "a lépés megállt (a lista csonkolt)", "warn"],
+      [
+        { ...kesz, created: 0, touched: 0, conflicts: ["brand-9"] },
+        "ÜTKÖZÉS, érintetlen marad: brand-9",
+        "warn",
+      ],
+      [
+        { status: "refused", reason: "a lista csonkolt" },
+        "a lépés megállt (a lista csonkolt)",
+        "warn",
+      ],
     ];
     for (const [eredmeny, szoveg, szint] of esetek) {
       const figyelmeztetesek: string[] = [];
@@ -3684,10 +3709,17 @@ describe("a hiányzó márka-gyűjtemények köre (kártya ec82b629)", () => {
       });
       await scheduler.runOnce();
       if (szoveg === null) {
-        assert.ok(!sorok.concat(figyelmeztetesek).some((s) => s.startsWith("Márka-gyűjtemények")));
+        assert.ok(
+          !sorok
+            .concat(figyelmeztetesek)
+            .some((s) => s.startsWith("Márka-gyűjtemények")),
+        );
       } else {
         const hova = szint === "warn" ? figyelmeztetesek : sorok;
-        assert.ok(hova.some((s) => s.includes(szoveg)), `${szint}: ${[...sorok, ...figyelmeztetesek].join("\n")}`);
+        assert.ok(
+          hova.some((s) => s.includes(szoveg)),
+          `${szint}: ${[...sorok, ...figyelmeztetesek].join("\n")}`,
+        );
       }
     }
   });
@@ -3708,7 +3740,9 @@ describe("a hiányzó márka-gyűjtemények köre (kártya ec82b629)", () => {
     assert.equal(await scheduler.runOnce(), "APPLIED");
     assert.deepEqual(kapott, [["prod-1"]]);
     assert.ok(
-      n.sorok.some((s) => s.startsWith("Márka-gyűjtemények: a kör nem futott le")),
+      n.sorok.some((s) =>
+        s.startsWith("Márka-gyűjtemények: a kör nem futott le"),
+      ),
       n.sorok.join("\n"),
     );
   });

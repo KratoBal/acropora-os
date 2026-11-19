@@ -635,14 +635,23 @@ export class MedusaProjectionScheduler
     this.runBrandCollections =
       deps?.runBrandCollections ??
       (async () => {
-        const client = await medusaClientForProjection(storedCredentialProvider(), {
-          stdout: (value) => this.logNemUres(value, "log"),
-          stderr: (value) => this.logNemUres(value, "warn"),
-        });
+        const client = await medusaClientForProjection(
+          storedCredentialProvider(),
+          {
+            stdout: (value) => this.logNemUres(value, "log"),
+            stderr: (value) => this.logNemUres(value, "warn"),
+          },
+        );
         const links = new MedusaBrandLinkRepository();
         const service = new MedusaBrandImportService(links);
         const brands = await prisma.brand.findMany({
-          select: { id: true, name: true, slug: true, isActive: true, archivedAt: true },
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            isActive: true,
+            archivedAt: true,
+          },
         });
         return ensureBrandCollections({
           plan: () => service.plan(client, brands),
@@ -664,7 +673,9 @@ export class MedusaProjectionScheduler
               : 0,
           now: () => this.now(),
           refusedReason: (error) =>
-            error instanceof MedusaBrandImportRefusedError ? error.reason : null,
+            error instanceof MedusaBrandImportRefusedError
+              ? error.reason
+              : null,
         });
       });
     this.homepageOn =
