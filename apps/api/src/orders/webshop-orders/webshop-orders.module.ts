@@ -4,9 +4,11 @@ import { BillingModule } from "../../billing/billing.module.js";
 import { CustomersModule } from "../../customers/customers.module.js";
 import { CarriersModule } from "../../integrations/carriers/carriers.module.js";
 import { MedusaModule } from "../../integrations/medusa/medusa.module.js";
+import { NavOnlineInvoiceModule } from "../../integrations/nav/nav-online-invoice.module.js";
 import { NotificationsModule } from "../../notifications/notifications.module.js";
 import { WebshopOrderTransferService } from "./webshop-order-transfer.service.js";
 import { WebshopOrderInvoiceService } from "./webshop-order-invoice.service.js";
+import { WebshopOrderTaxCheckService } from "./webshop-order-tax-check.service.js";
 import { WebshopOrderLinesService } from "./webshop-order-lines.service.js";
 import { WebshopOrderPaymentService } from "./webshop-order-payment.service.js";
 import { WebshopOrderEditsService } from "./webshop-order-edits.service.js";
@@ -36,6 +38,7 @@ import { WebshopMailOutboxService } from "./webshop-mail-outbox.service.js";
 @Module({
   imports: [
     MedusaModule,
+    NavOnlineInvoiceModule,
     BillingModule,
     CustomersModule,
     CarriersModule,
@@ -56,6 +59,7 @@ import { WebshopMailOutboxService } from "./webshop-mail-outbox.service.js";
     WebshopWithdrawalPullScheduler,
     WebshopOrdersRepository,
     WebshopOrderInvoiceService,
+    WebshopOrderTaxCheckService,
     WebshopOrderParcelService,
     WebshopOrderLinesService,
     WebshopOrderPaymentService,

@@ -240,6 +240,7 @@ describe("partneri munkalap-aláírás", () => {
     assert.deepEqual(hatokorok[0], {
       kind: "customer",
       customerId: "customer-a",
+      userId: "partner-a-user",
     });
   });
 });

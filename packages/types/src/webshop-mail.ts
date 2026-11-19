@@ -186,6 +186,12 @@ export interface WebshopLegalUrls {
   readonly adatkezeles: string;
 }
 
+/** The company of a company purchase (commerce `buyer_company`): the billing address's company name and its tax number. */
+export interface WebshopBuyerCompany {
+  readonly name: string;
+  readonly tax_number: string | null;
+}
+
 /** The facts of one mail, by the webshop's own template name. */
 export type WebshopMailFacts = WebshopMailCommonFacts & WebshopTemplateFacts;
 
@@ -207,6 +213,12 @@ type WebshopTemplateFacts =
        * no sentence, never a refused mail (`facts_version` stays 1).
        */
       readonly legal_urls?: WebshopLegalUrls | null;
+      /**
+       * The company and the tax number of a COMPANY purchase (commerce `buyer_company`, card aba7120c, A15), or absent/null for a
+       * private one. The confirmation carries a billing sentence with them. OPTIONAL and tolerant, like `legal_urls`: anything
+       * that is not a company name (text) means no sentence, never a refused mail (`facts_version` stays 1).
+       */
+      readonly buyer_company?: WebshopBuyerCompany | null;
     }
   | {
       readonly template: (typeof WEBSHOP_STATUS_TEMPLATES)[number];
@@ -577,11 +589,17 @@ export interface WebshopMailText {
   readonly mixedOrders: string;
   readonly mixedOneCardPayment: string;
   readonly nextShipped: string;
+  /** Every shipped order is paid by advance bank transfer: it is packed only after the money has arrived (A15). */
+  readonly nextShippedTransfer: string;
+  /** Added to `nextShipped` when only SOME of the shipped orders are paid by advance bank transfer. */
+  readonly nextShippedTransferNote: string;
   readonly nextPickup: string;
   /** The sentence that carries the guest order page's address (`order_view_url`). */
   readonly orderViewLine: (url: string) => string;
   /** The sentence that carries the ASZF and privacy-notice pages' addresses (`legal_urls`). */
   readonly legalLinksLine: (aszf: string, adatkezeles: string) => string;
+  /** The billing sentence of a company purchase (`buyer_company`): the company, and its tax number when there is one. */
+  readonly buyerCompanyLine: (name: string, taxNumber: string | null) => string;
   readonly glsPoint: string;
   readonly glsHome: string;
   readonly glsLogoLocker: string;
@@ -641,11 +659,20 @@ const HU_TEXT: WebshopMailText = {
     "A kártyás fizetés a kettőre együtt, egy lépésben történt.",
   nextShipped:
     "Összekészítjük a rendelésedet. Követési szám csak a csomag feladása után lesz.",
+  nextShippedTransfer:
+    "A rendelésedet a befizetés beérkezése után állítjuk össze. Követési szám csak a csomag feladása után lesz.",
+  nextShippedTransferNote:
+    "Az előre utalással fizetett rendelést a befizetés beérkezése után állítjuk össze.",
   nextPickup: "Az élő állatos rendelést a boltban veszed át.",
   orderViewLine: (url) =>
     `A rendelésed állapotát bármikor megnézheted a rendelésszámmal és az e-mail-címeddel: ${url}`,
   legalLinksLine: (aszf, adatkezeles) =>
     `Az általános szerződési feltételeket (${aszf}) és az adatkezelési tájékoztatót (${adatkezeles}) a webshopunkban olvashatod.`,
+  buyerCompanyLine: (name, taxNumber) =>
+    taxNumber
+      ? `Számlázási adatok: ${name}, adószám: ${taxNumber}.`
+      : // a name that ends in a full stop ("Teszt Kft.") needs no second one
+        `Számlázási adatok: ${name}${name.endsWith(".") ? "" : "."}`,
   glsPoint: "GLS csomagpont",
   glsHome: "GLS házhozszállítás",
   glsLogoLocker: "GLS Automata",
@@ -707,11 +734,19 @@ const EN_TEXT: WebshopMailText = {
   mixedOneCardPayment: "The card payment covered both in one step.",
   nextShipped:
     "We are getting your order ready. You will get a tracking number only once the parcel has been shipped.",
+  nextShippedTransfer:
+    "We will get your order ready once the payment has arrived. You will get a tracking number only once the parcel has been shipped.",
+  nextShippedTransferNote:
+    "The order paid by bank transfer is made ready once the payment has arrived.",
   nextPickup: "You pick up the live-animal order at the store.",
   orderViewLine: (url) =>
     `You can check your order at any time with your order number and e-mail address: ${url}`,
   legalLinksLine: (aszf, adatkezeles) =>
     `You can read our terms and conditions (${aszf}) and our privacy notice (${adatkezeles}) in our webshop.`,
+  buyerCompanyLine: (name, taxNumber) =>
+    taxNumber
+      ? `Billing details: ${name}, tax number: ${taxNumber}.`
+      : `Billing details: ${name}${name.endsWith(".") ? "" : "."}`,
   glsPoint: "GLS parcel point",
   glsHome: "GLS home delivery",
   glsLogoLocker: "GLS Parcel Locker",
@@ -834,8 +869,22 @@ function templateContent(
       }));
       const items = listBlock(sections, false);
       const total = orders.reduce((sum, o) => sum + o.total, 0);
+      // an advance bank transfer is packed only after the money has arrived: "we are getting it ready" would promise it too early
+      const shipped = orders.filter((o) => !o.pickup);
+      const transferShipped = shipped.filter(
+        (o) => o.payment === "BANK_TRANSFER",
+      );
+      const nextShipped = !shipped.length
+        ? []
+        : transferShipped.length === shipped.length
+          ? [t.nextShippedTransfer]
+          : [
+              transferShipped.length
+                ? `${t.nextShipped} ${t.nextShippedTransferNote}`
+                : t.nextShipped,
+            ];
       const next = [
-        ...(orders.some((o) => !o.pickup) ? [t.nextShipped] : []),
+        ...nextShipped,
         ...(orders.some((o) => o.pickup) ? [t.nextPickup] : []),
       ].join("\n");
       return {
@@ -847,6 +896,14 @@ function templateContent(
           vegyes_kosar_mondat: mixedLine,
           osszesen: mailForint(total),
           kovetkezo_lepes: next,
+          // a company purchase names its company and tax number; empty (and no paragraph) for a private one
+          ceg_mondat: (() => {
+            // sanitised here too (like `legal_urls`): the content may be asked for facts that did not come through the parser
+            const company = safeBuyerCompany(facts.buyer_company);
+            return company
+              ? t.buyerCompanyLine(company.name, company.tax_number)
+              : "";
+          })(),
           akklimatizacio: webshopAcclimationValue(
             orders.flatMap((o) => o.livestock_kinds ?? []),
             locale === "en" ? "en" : "hu",
@@ -1208,6 +1265,7 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
       aszf: "https://shop.example/hu/jogi/aszf",
       adatkezeles: "https://shop.example/hu/jogi/adatkezeles",
     },
+    buyer_company: { name: "Minta Kft.", tax_number: "12345678-2-13" },
   },
   "order-status-confirmed": {
     ...SAMPLE_COMMON,
@@ -1508,6 +1566,20 @@ export function safeLegalUrls(v: unknown): WebshopLegalUrls | null {
   return a && b ? { aszf: a, adatkezeles: b } : null;
 }
 
+/**
+ * THE COMPANY OF A COMPANY PURCHASE, if the shop sent one a mail may carry: a name that is text (trimmed, not empty, at most 200
+ * characters) and a tax number that is text (trimmed, at most 40) or nothing. Anything else is null: the billing sentence is a
+ * courtesy, never a reason to refuse the confirmation.
+ */
+export function safeBuyerCompany(v: unknown): WebshopBuyerCompany | null {
+  if (typeof v !== "object" || v === null) return null;
+  const { name, tax_number: tax } = v as Record<string, unknown>;
+  const n = typeof name === "string" ? name.trim() : "";
+  if (!n || n.length > 200) return null;
+  const t = typeof tax === "string" ? tax.trim() : "";
+  return { name: n, tax_number: t && t.length <= 40 ? t : null };
+}
+
 /** `hu` or `en`; missing is `hu`, anything else is refused (400): a wrong language must not become Hungarian silently. */
 function parseLocale(v: unknown): WebshopMailLocale {
   if (v === undefined || v === null) return "hu";
@@ -1597,6 +1669,7 @@ function parseTemplateFacts(
         orders,
         legal_version: strOrNull(f.legal_version, "facts.legal_version"),
         legal_urls: safeLegalUrls(f.legal_urls),
+        buyer_company: safeBuyerCompany(f.buyer_company),
       };
     }
     case "order-status-confirmed":

@@ -85,8 +85,46 @@ export type PriceSourceDecision =
        * megmagyarazza magat.
        */
       surcharge: Prisma.Decimal | null;
+      /**
+       * A FUTÓ AKCIÓ ÚGY, AHOGY A BOLT ÁRLISTÁJA KÉRI (kártya 54bb3779): a RENDES ár (ez marad a változat alapára) és az
+       * akciós ár az idejével. `null`, ha nincs futó akció, vagy ha az akciót nem lehet árlistának küldeni: a rendes ár
+       * ismeretlen (egy tükör-sor csak akciós árral), vagy az akciós ár nem alacsonyabb a rendesnél (az nem kedvezmény,
+       * és az áthúzott ár hazudna). Ilyenkor a `price` az akciós ár marad, ahogy eddig: a bolt azt kapja alapárként.
+       */
+      sale?: ResolvedSale | null;
     }
   | { ok: false; reason: PriceSourceRefusal; details: string };
+
+export interface ResolvedSale {
+  /** a rendes ár (felárral együtt a tükörnél), a változat alapára */
+  regular: ProjectablePrice;
+  /** az akciós ár (felárral együtt a tükörnél) */
+  amount: Prisma.Decimal;
+  /** `null`: nyitott határ azon az oldalon */
+  startsAt: Date | null;
+  endsAt: Date | null;
+}
+
+/**
+ * ÁRLISTA-E AZ AKCIÓ. Csak akkor, ha a rendes ár ismert és az akciós ár ALACSONYABB nála: egy ugyanakkora vagy magasabb
+ * "akciós" ár nem áthúzható, és az alapár alá menő lista helyett a régi, egyetlen árat kell küldeni.
+ */
+function asSale(
+  regular: Prisma.Decimal | null,
+  currency: string | null,
+  amount: Prisma.Decimal | null,
+  startsAt: Date | null,
+  endsAt: Date | null,
+): ResolvedSale | null {
+  if (regular === null || amount === null) return null;
+  if (!amount.lessThan(regular)) return null;
+  return {
+    regular: { sellingGrossPrice: regular, sellingPriceCurrency: currency },
+    amount,
+    startsAt,
+    endsAt,
+  };
+}
 
 export function resolvePriceSource(input: {
   authority: CatalogAuthority | null;
@@ -158,8 +196,21 @@ export function resolvePriceSource(input: {
           sellingPriceCurrency: input.own.sellingPriceCurrency,
         },
         surcharge: null,
+        sale: asSale(
+          input.own.sellingGrossPrice,
+          input.own.sellingPriceCurrency,
+          input.ownSale.sellingSaleGrossPrice,
+          input.ownSale.sellingSaleStartsAt,
+          input.ownSale.sellingSaleEndsAt,
+        ),
       };
-    return { ok: true, source: "own", price: input.own, surcharge: null };
+    return {
+      ok: true,
+      source: "own",
+      price: input.own,
+      surcharge: null,
+      sale: null,
+    };
   }
 
   if (input.mirror === null)
@@ -192,6 +243,13 @@ export function resolvePriceSource(input: {
       ok: true,
       source: "mirror-sale",
       surcharge: input.variantSurcharge,
+      sale: asSale(
+        addSurcharge(input.mirror.grossPrice, input.variantSurcharge),
+        input.mirror.currency ?? SUPPORTED_CURRENCY,
+        addSurcharge(input.mirror.saleGrossPrice, input.variantSurcharge),
+        input.mirror.saleStartsAt,
+        input.mirror.saleEndsAt,
+      ),
       price: {
         sellingGrossPrice: addSurcharge(
           input.mirror.saleGrossPrice,
@@ -225,6 +283,7 @@ export function resolvePriceSource(input: {
     ok: true,
     source: "mirror",
     surcharge: input.variantSurcharge,
+    sale: null,
     price: {
       sellingGrossPrice: addSurcharge(
         input.mirror.grossPrice,

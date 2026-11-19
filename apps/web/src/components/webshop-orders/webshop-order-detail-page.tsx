@@ -1,4 +1,5 @@
 "use client";
+import { OrderTaxCheck } from "./webshop-order-tax-check";
 import { Alert, ConfirmDialog, Icon, PageHeader, Skeleton } from "@acropora/ui";
 import {
   formatMoney,
@@ -2262,6 +2263,11 @@ function OrderBody({
                 }
               >
                 <Address address={order.billingAddress} />
+                <OrderTaxCheck
+                  orderId={order.id}
+                  taxNumber={order.billingAddress?.fields?.taxNumber ?? null}
+                  company={order.billingAddress?.company ?? null}
+                />
               </Field>
               <Field
                 label="Szállítás"

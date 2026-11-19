@@ -161,6 +161,33 @@ enum SimplePaySyncRunStatus {
   FAILED
 }
 
+/// Stripe elszámolás (A9): egy kifizetés (payout) akkor NEEDS_REVIEW, ha van
+/// feloldatlan sora.
+enum StripePayoutStatus {
+  COMPLETED
+  NEEDS_REVIEW
+}
+
+/// RESOLVED: a sor egy rendelés fizetése (vagy visszatérítése), a rendelés és a
+/// számla megvan; NEEDS_REVIEW: nem sikerült párosítani; NOT_APPLICABLE: nem
+/// rendelés fizetése (Stripe-díj, korrekció), csak az összegekben számít.
+enum StripeLineStatus {
+  RESOLVED
+  NEEDS_REVIEW
+  NOT_APPLICABLE
+}
+
+enum StripeResolutionSource {
+  PAYMENT_INTENT
+  MANUAL
+}
+
+enum StripeSyncRunStatus {
+  RUNNING
+  APPLIED
+  FAILED
+}
+
 /// GLS elszámolás: egy utánvét-jelentés akkor NEEDS_REVIEW, ha van
 /// feloldatlan sora.
 enum GlsCodReportStatus {
@@ -179,6 +206,8 @@ enum GlsCodResolutionSource {
   INVOICE_NUMBER
   ORDER_KEY
   MANUAL
+  /// A webshop (Medusa) csomag: csomagszám -> WebshopParcel -> rendelés -> élő számla.
+  WEBSHOP_PARCEL
 }
 
 /// Egy kimenő számla kifizetett-jelölésének állapota a Számlázz.hu felé
@@ -457,6 +486,10 @@ enum ServiceJobEventKind {
   /// hanem ÁLLAPOTVÁLTÁSNAK. Egy „van-e esemény" alakú állítás ezért a rossz
   /// fajtára is zöld -- az állítás a `kind` ÉRTÉKÉRE menjen.
   FIELDS_EDITED
+  /// Egy MÁR LÉTEZŐ munkalap HIVATKOZÁSA a karbantartási lapon (NEM áthelyezés: a lap a helyén marad), lásd `ServiceJobLinkedWorksheet`.
+  WORKSHEET_LINKED
+  /// A hivatkozás levétele. Párja a `WORKSHEET_LINKED`-nek: enélkül egy levett kapcsolat csendben tűnne el a lapról.
+  WORKSHEET_UNLINKED
 }
 
 enum ServiceJobStatus {
@@ -1111,6 +1144,7 @@ model User {
   invoicesIssued                      Invoice[]                           @relation("InvoiceIssuedBy")
   billingMailDeliveries               BillingDocumentMailDelivery[]       @relation("BillingMailInitiatedBy")
   simplePayLinesApproved              SimplePayTransactionLine[]          @relation("SimplePayLineManualApprovedBy")
+  stripeLinesApproved                 StripeTransactionLine[]             @relation("StripeLineManualApprovedBy")
   mortalityRecordsRecorded            MortalityRecord[]                   @relation("MortalityRecordRecordedBy")
   operationsLogEntriesRecorded        OperationsLogEntry[]                @relation("OperationsLogEntryRecordedBy")
   operationsLogEntryParticipations    OperationsLogEntryParticipant[]
@@ -4187,6 +4221,8 @@ model ServiceJob {
   @@index([hiddenAt])
   /// Az üzemeltetési napló bejegyzése, amelynek a rendellenességéből ez a jegy nyílt (task os-uzemeltetesi-naplo, S3).
   operationsLogEntry OperationsLogEntry? @relation("OperationsLogEntryServiceJob")
+  /// A karbantartási laphoz hivatkozásként kapcsolt munkalapok (kártya 5b366f5d), lásd `ServiceJobLinkedWorksheet`.
+  linkedWorksheets ServiceJobLinkedWorksheet[] @relation("ServiceJobLinkedWorksheets")
 }
 
 model Contract {
@@ -5753,6 +5789,24 @@ model ServiceJobAsset {
   @@index([assetId, createdAt])
 }
 
+/// A KAPCSOLÓDÓ MUNKALAP A KARBANTARTÁSI LAPON (kártya 5b366f5d, Luca 2026-11-19): egy MÁR LÉTEZŐ, elkészült munkalap HIVATKOZÁSA, hogy az
+/// elszámolás visszakövethető legyen. NEM ÁTHELYEZÉS: a munkalap a helyén marad (hibajegy alatt is), a `serviceJobId`-ja nem változik.
+/// A `worksheetId` EGYEDI: egy munkalap egyszerre egy karbantartási laphoz kapcsolható (egyszer számolódjon). Munkaóra és ár NÉLKÜL:
+/// a kapcsolat semmilyen összegbe, elszámolásba, számlába nem számít bele. A lap vagy a munkalap törlésekor a kapcsolat megszűnik
+/// (csak hivatkozás); a felvétel és a levétel naplója a `ServiceJobEvent` (WORKSHEET_LINKED / WORKSHEET_UNLINKED).
+model ServiceJobLinkedWorksheet {
+  id           String   @id @default(cuid())
+  serviceJobId String
+  worksheetId  String   @unique
+  linkedById   String?
+  createdAt    DateTime @default(now())
+
+  serviceJob ServiceJob @relation("ServiceJobLinkedWorksheets", fields: [serviceJobId], references: [id], onDelete: Cascade)
+  worksheet  Worksheet  @relation("WorksheetLinkedToJob", fields: [worksheetId], references: [id], onDelete: Cascade)
+
+  @@index([serviceJobId, createdAt])
+}
+
 /// A MUNKALAP ALTAL ERINTETT ESZKOZOK.
 ///
 /// Balazs kerese (2026-09-15 10:11, Discord, Szerviz ticketing szal, szo
@@ -6137,6 +6191,15 @@ model Worksheet {
    */
   serviceJobId         String?
   /**
+   * A MUNKALAP A KARBANTARTÁSI LAP FELELŐSEIT KÖVETI (kártya d91005e9, Luca 2026-11-19: "amit a karbantartási lapon
+   * beállítanak, az automatikusan kerüljön rá a munkalapokra; ha változik, a munkalapon még mindig felül lehet
+   * bírálni"). IGAZ: a lap keletkezésekor a felelősei pontosan a karbantartási lapéi voltak (vagy a rendszer hozta létre
+   * a lap alá), és azóta senki nem írta át őket a munkalapon: a karbantartási lap felelőseinek változása ilyenkor
+   * átmegy rá. HAMIS (az alap): önálló lap; a már meglévő lapok mind ilyenek, a változás őket nem írja át. Bármilyen kézi
+   * felelős-mentés a munkalapon HAMISRA állítja: ez a "felülbírálás".
+   */
+  followsJobAssignees  Boolean  @default(false)
+  /**
    * AZ ÁTADÁS: A SZERELŐ VÉGZETT, ÉS A LAP A SZOLGÁLTATÓÉ.
    * KÜLÖN MEZŐ, NEM ÚJ ÁLLAPOT A `WorksheetVersionStatus` ENUMBAN, és ez a
    * megkülönböztetés fontosabb, mint amilyennek látszik: az a négy állapot az
@@ -6235,6 +6298,8 @@ model Worksheet {
   continuedBy      Worksheet[]         @relation("WorksheetContinuation")
   /// A jegy naploja, ahol EZ a lap szerepel (csatolas es levalasztas).
   serviceJobEvents ServiceJobEvent[]   @relation("ServiceJobEventWorksheet")
+  /// A karbantartási lap, amelyhez ez a munkalap hivatkozásként van kapcsolva (legfeljebb egy; kártya 5b366f5d).
+  linkedToJob      ServiceJobLinkedWorksheet? @relation("WorksheetLinkedToJob")
   /// A lap által érintett eszközök. A hibajegyből nyitott lap a jegyéivel
   /// indul; onnantól a lap saját adata.
   assets           WorksheetAsset[]
@@ -7564,6 +7629,103 @@ model SimplePaySyncRun {
   failedCount    Int                    @default(0)
   errorCode      String?
   updatedAt      DateTime               @updatedAt
+
+  @@index([startedAt])
+}
+
+/// Egy Stripe-kifizetés (payout) a webshop háttérből (A9, kártya 6339b04c): az
+/// OS-nek nincs saját Stripe-kulcsa, a háttér csak olvasó végpontja adja
+/// (commerce #803). A kifizetés megváltoztathatatlan, a sorai nem: a
+/// feloldatlan sorokat a következő körben újra párosítjuk.
+model StripePayout {
+  id                  String             @id @default(cuid())
+  stripePayoutId      String             @unique
+  status              StripePayoutStatus
+  currency            String             @db.VarChar(3)
+  /// A bankba utalt összeg (főegységben, forint).
+  amount              Decimal            @db.Decimal(19, 4)
+  arrivalDate         DateTime           @db.Date
+  stripeCreatedAt     DateTime
+  automatic           Boolean
+  lineCount           Int
+  unresolvedLineCount Int
+  /// A sorok összegei: bruttó fizetések, visszatérítések, díjak, nettó.
+  grossTotal          Decimal            @db.Decimal(19, 4)
+  refundTotal         Decimal            @db.Decimal(19, 4)
+  feeTotal            Decimal            @db.Decimal(19, 4)
+  netTotal            Decimal            @db.Decimal(19, 4)
+  /// A webshop-oldali rendeléskeresés ennyi rendelésnél megállt (a válasz jelzése).
+  ordersTruncated     Boolean            @default(false)
+  /// A kifizetés szintű ok, ha nem a sorokon múlik: TOTAL_MISMATCH (a sorok
+  /// nettója nem a kifizetett összeg), MANUAL_PAYOUT (a Stripe kézi
+  /// kifizetésnél nem listáz tételeket), LINES_NOT_READ (a lapozás határán megállt).
+  errorCode           String?
+  processedAt         DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  lines StripeTransactionLine[]
+
+  @@index([arrivalDate])
+  @@index([status])
+}
+
+/// Egy Stripe-egyenlegtétel (balance transaction) egy kifizetésben. Nevet,
+/// címet, e-mailt NEM tárol: a háttér sem adja (azonosítók és összegek).
+model StripeTransactionLine {
+  id                     String                  @id @default(cuid())
+  payoutId               String
+  stripeTransactionId    String                  @unique
+  /// charge, payment, refund, payment_refund, stripe_fee, adjustment...
+  type                   String
+  reportingCategory      String?
+  stripeCreatedAt        DateTime
+  currency               String                  @db.VarChar(3)
+  /// Főegységben (forint): a Stripe legkisebb egységéből átváltva.
+  amount                 Decimal                 @db.Decimal(19, 4)
+  fee                    Decimal                 @db.Decimal(19, 4)
+  net                    Decimal                 @db.Decimal(19, 4)
+  paymentIntentId        String?
+  chargeId               String?
+  refundId               String?
+  /// A háttér által megnevezett rendelések (azonosító, rendelésszám); vegyes
+  /// kosárnál kettő.
+  webshopOrderIds        String[]
+  orderNumbers           String[]
+  orderTotal             Decimal?                @db.Decimal(19, 4)
+  invoiceNumbers         String[]
+  status                 StripeLineStatus
+  resolutionSource       StripeResolutionSource?
+  errorCode              String?
+  manualApprovedByUserId String?
+  manualApprovedAt       DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  payout           StripePayout @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  manualApprovedBy User?        @relation("StripeLineManualApprovedBy", fields: [manualApprovedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([payoutId])
+  @@index([paymentIntentId])
+  @@index([status])
+  @@index([stripeCreatedAt])
+}
+
+/// A Stripe-behúzás egy futása. Az `activeKey` egyedi, így egyszerre egy fut;
+/// egy elakadt futás 30 perc után feloldódik (a SimplePay mintája).
+model StripeSyncRun {
+  id                String              @id @default(cuid())
+  activeKey         String?             @unique
+  status            StripeSyncRunStatus @default(RUNNING)
+  trigger           SyncRunTrigger
+  startedAt         DateTime            @default(now())
+  completedAt       DateTime?
+  payoutsSeen       Int                 @default(0)
+  payoutsNew        Int                 @default(0)
+  payoutsReresolved Int                 @default(0)
+  failedCount       Int                 @default(0)
+  errorCode         String?
+  updatedAt         DateTime            @updatedAt
 
   @@index([startedAt])
 }

@@ -325,6 +325,65 @@ describe("Ár-parancs: a saját akció", () => {
   });
 });
 
+describe("Ár-parancs: az akció árlistának (kártya 54bb3779)", () => {
+  const MOST = new Date("2026-11-12T10:00:00Z");
+  const akcios = {
+    id: "var-1",
+    sku: "STAGEPROOF0002",
+    productId: "prod-os-1",
+    sellingGrossPrice: new Prisma.Decimal("12990"),
+    sellingPriceCurrency: "HUF",
+    sellingSaleGrossPrice: new Prisma.Decimal("9990"),
+    sellingSaleStartsAt: new Date("2026-11-10T00:00:00Z"),
+    sellingSaleEndsAt: new Date("2026-11-17T00:00:00Z"),
+    unasVariantExtraGrossPrice: null,
+  };
+
+  it("a futó saját akció célpontja viszi a rendes árat és az akciót, az akció nélküli nem", async () => {
+    const sale = await resolvePricingTargets(
+      "sku:STAGEPROOF0002",
+      db({ variants: [akcios] }),
+      MOST,
+    );
+    const target = sale.targets[0]!;
+    assert.equal(target.source, "own-sale");
+    assert.equal(target.price.sellingGrossPrice?.toString(), "9990");
+    assert.equal(target.sale?.regular.sellingGrossPrice?.toString(), "12990");
+    assert.equal(target.sale?.amount.toString(), "9990");
+
+    const plain = await resolvePricingTargets(
+      "sku:STAGEPROOF0002",
+      db({ variants: [{ ...akcios, sellingSaleGrossPrice: null }] }),
+      MOST,
+    );
+    assert.equal(plain.targets[0]!.sale ?? null, null);
+  });
+
+  it("a jelentés az akciós árlista sorát csak akkor írja ki, ha van mit mondani róla", () => {
+    const report: PricingProjectionReport = {
+      sku: "S",
+      sourceAmount: "12990",
+      sourceCurrency: "HUF",
+      medusaAmount: 12990,
+      medusaCurrencyCode: "huf",
+      variantId: "variant_1",
+      priceId: "price_1",
+      source: "own-sale",
+      surcharge: null,
+      result: "updated",
+    };
+    assert.doesNotMatch(describePricing(report), /akcios arlista/);
+    assert.doesNotMatch(
+      describePricing({ ...report, saleList: "none", saleAmount: null }),
+      /akcios arlista/,
+    );
+    assert.match(
+      describePricing({ ...report, saleList: "created", saleAmount: 9990 }),
+      /akcios arlista: created \(9990 huf\)/,
+    );
+  });
+});
+
 describe("Ár-parancs: mit ír ki", () => {
   const report: PricingProjectionReport = {
     sku: "STAGEPROOF0002",

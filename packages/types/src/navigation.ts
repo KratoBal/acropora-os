@@ -73,6 +73,8 @@ export type NavigationVisibility =
  * (card 393ae5cb), so they exist only where the OS may write it. `webshop-shipping-settings` is
  * `MEDUSA_WEBSHOP_SHIPPING_SETTINGS=true`: the shipping fees and the payment methods per shipping method write the TEST
  * shop's settings (card e0e2378b), so they exist only where the OS may write it.
+ * `webshop-gift-cards` is `MEDUSA_WEBSHOP_GIFT_CARDS=true`: issuing a gift card writes money into the TEST shop (card
+ * 495c0007), so the page exists only where the OS may write it.
  *
  * `jev-product-enrichment` is `JEV_PRODUCT_ENRICHMENT` not being `off`
  * (docs/jev-product-intelligence/v1-discovery.md, answer 6). Only the server
@@ -87,6 +89,7 @@ export const NAVIGATION_FEATURES = [
   "reefclub-linking",
   "webshop-coupons",
   "webshop-shipping-settings",
+  "webshop-gift-cards",
 ] as const;
 export type NavigationFeature = (typeof NAVIGATION_FEATURES)[number];
 
@@ -475,6 +478,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.FINANCE_VIEW),
   },
   {
+    // a Stripe-kifizetések (A9, kártya 6339b04c): a SimplePay kivezetésének helye
+    id: "stripe-settlement",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.FINANCE_VIEW),
+  },
+  {
     // egy banki jóváírás több saját számlára (kártya aeddb2c3); a beíráshoz a végpont billing.issue jogot kér
     id: "bank-transfer-settlement",
     surfaces: ["web"],
@@ -628,6 +637,16 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
     feature: "webshop-shipping-settings",
+  },
+  {
+    /**
+     * A WEBSHOP AJÁNDÉKKÁRTYÁI (/webshop/ajandekkartyak; kártya 495c0007). Nem menüpont: a Webshop beállítások lap kártyája.
+     * Ugyanaz a jog, mint a végpontoké (`settings.manage`), és csak ahol az OS a teszt-webshopba írhat (`webshop-gift-cards`).
+     */
+    id: "webshop-gift-cards",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+    feature: "webshop-gift-cards",
   },
   {
     id: "settings-general",

@@ -41,6 +41,7 @@ import {
   QuantityUnitSelect,
   useQuantityUnits,
 } from "./contract-kind";
+import { ContractItemAmounts } from "./contract-item-amounts";
 import { ContractRepairFees } from "./contract-repair-fees";
 
 export type DraftItem = {
@@ -617,6 +618,10 @@ export function PilotContractsPage() {
                           />
                         </PilotFormField>
                       </div>
+                      <ContractItemAmounts
+                        item={item}
+                        kind={draft.kind ?? "MAINTENANCE"}
+                      />
                       {purchase ? null : (
                         <ContractRepairFees
                           values={item}

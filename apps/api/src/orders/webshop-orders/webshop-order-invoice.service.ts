@@ -47,6 +47,8 @@ import {
 } from "./webshop-orders.rules.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
+import { WebshopOrderTaxCheckService } from "./webshop-order-tax-check.service.js";
+import { taxCheckRefusal } from "./webshop-order-tax-check.rules.js";
 
 const statusOf = (
   code: string | null | undefined,
@@ -84,6 +86,7 @@ export class WebshopOrderInvoiceService {
     private readonly issuing: BillingDocumentIssueService,
     private readonly email: BillingDocumentEmailService,
     private readonly emailDrafts: BillingDocumentEmailDraftService,
+    private readonly taxCheck: WebshopOrderTaxCheckService,
   ) {}
 
   /**
@@ -187,6 +190,14 @@ export class WebshopOrderInvoiceService {
         "A díjbekérő kiállítása elutasítva maradt. Nyisd meg a bizonylatot a Számlázásban, ott látod az okát.",
       );
     if (proforma?.status === "ISSUED") return { kind: "issued", order };
+
+    /*
+      A NAV ÁLTAL ISMERETLEN VAGY HIBÁS ALAKÚ ADÓSZÁMRA NEM ÁLLÍTUNK KI SZÁMLÁT (kártya c977aed2, P2). A vevő létrehozása ELŐTT áll: egy hibás adószámmal ne maradjon utána OS-partner. A kirakat pénztára a céges vásárlás adószámát
+      a formátum és az ellenőrző számjegy szerint őrzi; hogy a cég LÉTEZIK-e, itt dől el, a kiállítás előtt. Csak a NAV egyértelmű
+      "nincs ilyen" válasza állít meg: ha a NAV nem érhető el, a számla nem akad el rajta.
+    */
+    const taxRefusal = taxCheckRefusal(await this.taxCheck.check(order));
+    if (taxRefusal) throw new ConflictException(taxRefusal);
 
     const customerId = await this.customerFor(order, user);
     const buyer = await this.repository.customerBuyer(customerId);
@@ -462,13 +473,20 @@ export class WebshopOrderInvoiceService {
         "Előre utalásnál a számlát a Számlázz.hu állítja ki a díjbekérő kifizetésekor, és a rendelésen magától megjelenik. Az OS nem állít ki mellé másikat.",
       );
 
+    /*
+      A NAV ÁLTAL ISMERETLEN VAGY HIBÁS ALAKÚ ADÓSZÁMRA NEM ÁLLÍTUNK KI SZÁMLÁT (kártya c977aed2, P2). A vevő létrehozása ELŐTT áll: egy hibás adószámmal ne maradjon utána OS-partner. A kirakat pénztára a céges vásárlás adószámát
+      a formátum és az ellenőrző számjegy szerint őrzi; hogy a cég LÉTEZIK-e, itt dől el, a kiállítás előtt. Csak a NAV egyértelmű
+      "nincs ilyen" válasza állít meg: ha a NAV nem érhető el, a számla nem akad el rajta.
+    */
+    const taxRefusal = taxCheckRefusal(await this.taxCheck.check(order));
+    if (taxRefusal) throw new ConflictException(taxRefusal);
+
     const customerId = await this.customerFor(order, user);
     const buyer = await this.repository.customerBuyer(customerId);
     if (!buyer)
       throw new ConflictException("A rendelés OS-partnere nem található.");
     const mismatch = buyerMismatch(order, buyer);
     if (mismatch) throw new ConflictException(mismatch);
-
     const draft = invoiceDraftOf(order, { customerId, now });
     if (!draft.ok) throw new UnprocessableEntityException(draft.message);
 

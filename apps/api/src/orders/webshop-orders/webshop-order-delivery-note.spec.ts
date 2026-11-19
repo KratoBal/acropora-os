@@ -211,6 +211,7 @@ function setup(
       issuing,
       {} as never,
       {} as never,
+      { check: async () => ({ state: "NONE" }) } as never,
     ),
   };
 }

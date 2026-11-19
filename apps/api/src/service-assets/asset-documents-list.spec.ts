@@ -116,6 +116,8 @@ const VEVO = vevoUser("customer-1");
 const VEVO_HATOKOR: PartnerScope = {
   kind: "customer",
   customerId: "customer-1",
+  // the requesting user rides with a customer scope since card 5f4af2aa (the worksheets narrow by its units)
+  userId: VEVO.id,
 };
 
 describe("egy eszköz csatolmány-listája", () => {

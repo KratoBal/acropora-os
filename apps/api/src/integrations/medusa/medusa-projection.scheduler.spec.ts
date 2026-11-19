@@ -815,8 +815,16 @@ describe("MedusaProjectionScheduler, az akció határa", () => {
     const { kapott } = await korLista(
       [
         { productId: "jovo", saleStartsAt: ORAJA(30), saleEndsAt: null },
-        { productId: "vetitve", saleStartsAt: ORAJA(-20), saleEndsAt: null },
-        { productId: "kotetlen", saleStartsAt: ORAJA(-20), saleEndsAt: null },
+        {
+          productId: "vetitve",
+          saleStartsAt: ORAJA(-20),
+          saleEndsAt: ORAJA(-10),
+        },
+        {
+          productId: "kotetlen",
+          saleStartsAt: ORAJA(-20),
+          saleEndsAt: ORAJA(-10),
+        },
       ],
       [
         { entityId: "jovo", lastSyncedAt: ORAJA(-60) },
@@ -836,7 +844,14 @@ describe("MedusaProjectionScheduler, az akció határa", () => {
       lte: MOST_ORA,
     };
     assert.deepEqual(args.where, {
-      OR: [{ saleStartsAt: ablak }, { saleEndsAt: ablak }],
+      OR: [
+        { saleStartsAt: ablak },
+        { saleEndsAt: ablak },
+        {
+          saleStartsAt: { lte: MOST_ORA },
+          OR: [{ saleEndsAt: null }, { saleEndsAt: { gt: MOST_ORA } }],
+        },
+      ],
       product: { isActive: true, webshopExcluded: false },
     });
   });
@@ -943,7 +958,7 @@ describe("MedusaProjectionScheduler, a saját akció határa", () => {
         {
           productId: "vetitve",
           sellingSaleStartsAt: ORAJA(-20),
-          sellingSaleEndsAt: ORAJA(600),
+          sellingSaleEndsAt: ORAJA(-10),
         },
       ],
       [
@@ -965,13 +980,135 @@ describe("MedusaProjectionScheduler, a saját akció határa", () => {
     };
     assert.deepEqual(args.where, {
       isActive: true,
-      OR: [{ sellingSaleStartsAt: ablak }, { sellingSaleEndsAt: ablak }],
+      OR: [
+        { sellingSaleStartsAt: ablak },
+        { sellingSaleEndsAt: ablak },
+        {
+          sellingSaleStartsAt: { lte: MOST_ORA },
+          OR: [
+            { sellingSaleEndsAt: null },
+            { sellingSaleEndsAt: { gt: MOST_ORA } },
+          ],
+        },
+      ],
       product: {
         isActive: true,
         webshopExcluded: false,
         catalogAuthority: "ACROPORA",
       },
     });
+  });
+});
+
+/**
+ * A FUTÓ AKCIÓ EGYSZERI ÚJRA-VETÍTÉSE (card 54bb3779, a #2733 éles kiadása). A #2733 az akció vetítésének alakját változtatta; a már
+ * vetített, futó akciójú termék a határa miatt nem esedékes, ezért a régi alakban maradna. MI PIROSÍT: a futó akció (UNAS tükör vagy
+ * saját) a vetítés UTÁN sem kerül be az első körben; ugyanabban a folyamatban újra bekerül (nem egyszeri); a keret által levágott
+ * nem számít vetítettnek; a lejárt, a jövőbeli vagy a kötés nélküli bekerül; a vég nélküli futó akció kimarad.
+ */
+describe("MedusaProjectionScheduler, a futó akció egyszeri újra-vetítése", () => {
+  const MOST_ORA = new Date("2026-11-19T03:00:00.000Z");
+  const ORAJA = (perc: number) => new Date(MOST_ORA.getTime() + perc * 60_000);
+  const futo = (productId: string, vegeperc: number | null = 600) => ({
+    productId,
+    saleStartsAt: ORAJA(-300),
+    saleEndsAt: vegeperc === null ? null : ORAJA(vegeperc),
+  });
+  const sajatFuto = (productId: string) => ({
+    productId,
+    sellingSaleStartsAt: ORAJA(-300),
+    sellingSaleEndsAt: ORAJA(600),
+  });
+  // a vetítés a határ UTÁN volt: a régi szabály szerint nem esedékes
+  const vetitve = (...azonositok: string[]) =>
+    azonositok.map((entityId) => ({ entityId, lastSyncedAt: ORAJA(-5) }));
+
+  const korok = async (
+    meret: number,
+    kor: number,
+    akcioSorok: Parameters<typeof adatbazis>[3],
+    lekepezesek: { entityId: string; lastSyncedAt: Date | null }[],
+    sajatAkcioSorok: {
+      productId: string;
+      sellingSaleStartsAt: Date | null;
+      sellingSaleEndsAt: Date | null;
+    }[] = [],
+  ) => {
+    const { db } = adatbazis(
+      [],
+      lekepezesek,
+      undefined,
+      akcioSorok,
+      [],
+      [],
+      [],
+      [],
+      sajatAkcioSorok,
+    );
+    const { run, kapott } = futtato();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: {
+        ...BEKAPCSOLVA,
+        MEDUSA_PROJECTION_SCHEDULE_BATCH_SIZE: String(meret),
+      } as NodeJS.ProcessEnv,
+      logger: naplo().logger,
+      now: () => MOST_ORA,
+    });
+    for (let i = 0; i < kor; i += 1) await scheduler.runOnce();
+    return kapott;
+  };
+
+  it("a vetítés után futó tükör-akció az első körben bekerül, a másodikban nem", async () => {
+    const kapott = await korok(100, 2, [futo("tukros")], vetitve("tukros"));
+    assert.deepEqual(kapott, [["tukros"]]);
+  });
+
+  it("a saját futó akció is: az első körben bekerül, a másodikban nem", async () => {
+    const kapott = await korok(100, 2, [], vetitve("sajat"), [
+      sajatFuto("sajat"),
+    ]);
+    assert.deepEqual(kapott, [["sajat"]]);
+  });
+
+  it("a lejárt és a jövőbeli akció, a kötés nélküli és a vég nélküli futó akció a határ szabálya szerint marad", async () => {
+    const kapott = await korok(
+      100,
+      1,
+      [
+        {
+          productId: "lejart",
+          saleStartsAt: ORAJA(-300),
+          saleEndsAt: ORAJA(-10),
+        },
+        { productId: "jovo", saleStartsAt: ORAJA(60), saleEndsAt: ORAJA(600) },
+        futo("kotetlen"),
+      ],
+      vetitve("lejart", "jovo"),
+    );
+    assert.deepEqual(kapott, []);
+  });
+
+  it("a vég nélküli futó akció is újra-vetítődik", async () => {
+    const kapott = await korok(
+      100,
+      1,
+      [futo("nyitott", null)],
+      vetitve("nyitott"),
+    );
+    assert.deepEqual(kapott, [["nyitott"]]);
+  });
+
+  it("a keret által levágott futó akció a következő körben jön, a vitt nem ismétlődik", async () => {
+    const kapott = await korok(
+      1,
+      3,
+      [futo("egy"), futo("ketto")],
+      vetitve("egy", "ketto"),
+    );
+    assert.deepEqual(kapott, [["egy"], ["ketto"]]);
   });
 });
 
@@ -1619,6 +1756,11 @@ describe("a lista-lépések számai a kör állapotában (acrobot 45814)", () =>
         cleared: 1,
         unpaired: 1,
       },
+      brandCollections: {
+        enabled: false,
+        switchPresent: false,
+        switchLooksTrue: false,
+      },
       arrivals: { failed: false, status: "unchanged", count: 7, leftOut: 3 },
     });
   });
@@ -1628,6 +1770,11 @@ describe("a lista-lépések számai a kör állapotában (acrobot 45814)", () =>
     await kikapcsolt.runOnce();
     assert.deepEqual(kikapcsolt.allapot().lastRound!.steps, {
       leftoverKind: null,
+      brandCollections: {
+        enabled: false,
+        switchPresent: false,
+        switchLooksTrue: false,
+      },
       arrivals: null,
     });
     const dobo = indit(
@@ -1648,6 +1795,11 @@ describe("a lista-lépések számai a kör állapotában (acrobot 45814)", () =>
     await dobo.runOnce();
     assert.deepEqual(dobo.allapot().lastRound!.steps, {
       leftoverKind: { failed: true },
+      brandCollections: {
+        enabled: false,
+        switchPresent: false,
+        switchLooksTrue: false,
+      },
       arrivals: { failed: false, status: "sent", count: 2, leftOut: 0 },
     });
   });
@@ -3443,5 +3595,285 @@ describe("az ár-félnek az emberi adat-megállásai nem teszik FAILED-dé a kö
     assert.deepEqual(scheduler.allapot().lastRound!.priceFailures, {
       other: 1,
     });
+  });
+});
+
+describe("a hiányzó márka-gyűjtemények köre (kártya ec82b629)", () => {
+  /**
+   * MI PIROSIT: a lépés kapcsoló nélkül is fut (a boltba ír); a termék-vetítés UTÁN fut (akkor a frissen leképezett
+   * márka termékei csak a következő körben kapnák a gyűjteményt); egy ütközés vagy megállás nem figyelmeztetés a
+   * naplóban; egy hiba megállítja a termékek körét; a változás nem kerül a naplóba.
+   */
+  const ures = () =>
+    adatbazis([termek()], [{ entityId: "prod-1", lastSyncedAt: MOST }]).db;
+  const BEKAPCS = { ...BEKAPCSOLVA, MEDUSA_ENSURE_BRAND_COLLECTIONS: "true" };
+  const kesz = {
+    status: "applied" as const,
+    planned: {
+      create: 2,
+      mapOnly: 0,
+      staleMapping: 0,
+      skip: 5,
+      conflict: 0,
+      skipArchived: 0,
+      handleTaken: 0,
+      linkedByHandle: 0,
+      handleCurated: 0,
+      handleOtherBrand: 0,
+      handleStaleMapping: 0,
+      handleUnchecked: 0,
+    },
+    created: 2,
+    linkedOnly: 0,
+    relinked: 0,
+    touched: 2,
+    conflicts: [] as string[],
+    handleTaken: [] as string[],
+    failures: [],
+  };
+
+  it("kikapcsolva (alapból) nem fut", async () => {
+    let hivas = 0;
+    const scheduler = new MedusaProjectionScheduler({
+      db: ures(),
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      runBrandCollections: async () => {
+        hivas += 1;
+        return kesz;
+      },
+    });
+    await scheduler.runOnce();
+    assert.equal(hivas, 0);
+  });
+
+  it("bekapcsolva a termék-vetítés ELŐTT fut, üres körben is, és a változást naplózza", async () => {
+    const sorrend: string[] = [];
+    const n = naplo();
+    const { run } = futtato(0);
+    const scheduler = new MedusaProjectionScheduler({
+      db: adatbazis([termek()], []).db,
+      runProjection: async (ids, out) => {
+        sorrend.push("termekek");
+        return run(ids, out);
+      },
+      runPricing: arFuttato().run,
+      environment: BEKAPCS,
+      logger: n.logger,
+      runBrandCollections: async () => {
+        sorrend.push("markak");
+        return kesz;
+      },
+    });
+    await scheduler.runOnce();
+    assert.deepEqual(sorrend, ["markak", "termekek"]);
+    assert.ok(
+      n.sorok.some(
+        (s) => s.includes("2 létrehozva") && s.includes("2 márka megérintve"),
+      ),
+      n.sorok.join("\n"),
+    );
+  });
+
+  it("üres körben is lefut (nincs esedékes termék, a márkát mégis biztosítani kell)", async () => {
+    let hivas = 0;
+    const scheduler = new MedusaProjectionScheduler({
+      db: ures(),
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCS,
+      logger: naplo().logger,
+      runBrandCollections: async () => {
+        hivas += 1;
+        return { status: "unchanged" as const, planned: kesz.planned };
+      },
+    });
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
+    assert.equal(hivas, 1);
+  });
+
+  it("a változatlan kör nem ír a naplóba, az ütközés és a megállás figyelmeztetés", async () => {
+    const esetek: [
+      (
+        | Awaited<
+            ReturnType<
+              NonNullable<
+                ConstructorParameters<typeof MedusaProjectionScheduler>[0]
+              >["runBrandCollections" & keyof object]
+            >
+          >
+        | { status: "unchanged"; planned: typeof kesz.planned }
+        | { status: "refused"; reason: string }
+        | typeof kesz
+      ),
+      string | null,
+      "warn" | "log" | null,
+    ][] = [
+      [{ status: "unchanged", planned: kesz.planned }, null, null],
+      [
+        { ...kesz, created: 0, touched: 0, conflicts: ["brand-9"] },
+        "ÜTKÖZÉS, érintetlen marad: brand-9",
+        "warn",
+      ],
+      [
+        { status: "refused", reason: "a lista csonkolt" },
+        "a lépés megállt (a lista csonkolt)",
+        "warn",
+      ],
+    ];
+    for (const [eredmeny, szoveg, szint] of esetek) {
+      const figyelmeztetesek: string[] = [];
+      const sorok: string[] = [];
+      const scheduler = new MedusaProjectionScheduler({
+        db: ures(),
+        runProjection: futtato().run,
+        runPricing: arFuttato().run,
+        environment: BEKAPCS,
+        logger: {
+          log: (m) => void sorok.push(m),
+          warn: (m) => void figyelmeztetesek.push(m),
+          error: () => undefined,
+        },
+        runBrandCollections: async () => eredmeny as never,
+      });
+      await scheduler.runOnce();
+      if (szoveg === null) {
+        assert.ok(
+          !sorok
+            .concat(figyelmeztetesek)
+            .some((s) => s.startsWith("Márka-gyűjtemények")),
+        );
+      } else {
+        const hova = szint === "warn" ? figyelmeztetesek : sorok;
+        assert.ok(
+          hova.some((s) => s.includes(szoveg)),
+          `${szint}: ${[...sorok, ...figyelmeztetesek].join("\n")}`,
+        );
+      }
+    }
+  });
+
+  /**
+   * A LEPES A KOR ALLAPOTABAN (acrobot 13:10, a stage-en a lepes eredmenye meretlen volt). MI PIROSIT: ha a kikapcsolt lepes
+   * `null` maradna (a hianyzo es a rossz alakban allo kapcsolo megkulonboztethetetlen); ha a nyers kapcsolo-ertek a pillanatkepbe
+   * kerulne; ha egy lefutott, egy megallt es egy dobo lepes ugyanazt mutatna; ha a kovetkezo kor az elozo szamait vinne tovabb;
+   * ha a health olvaso elo hivatkozast kapna.
+   */
+  const lepes = (env: NodeJS.ProcessEnv, run?: () => Promise<unknown>) =>
+    new MedusaProjectionScheduler({
+      db: ures(),
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: env,
+      logger: naplo().logger,
+      ...(run ? { runBrandCollections: run as never } : {}),
+    });
+  const allapotuk = (scheduler: MedusaProjectionScheduler) =>
+    scheduler.allapot().lastRound!.steps.brandCollections as Record<
+      string,
+      unknown
+    > & { planned?: { create: number } };
+
+  it("a kapcsoló állapota a pillanatképben: hiányzik, rossz alakban áll", async () => {
+    const hianyzik = lepes(BEKAPCSOLVA);
+    await hianyzik.runOnce();
+    assert.deepEqual(allapotuk(hianyzik), {
+      enabled: false,
+      switchPresent: false,
+      switchLooksTrue: false,
+    });
+    const rossz = lepes({
+      ...BEKAPCSOLVA,
+      MEDUSA_ENSURE_BRAND_COLLECTIONS: '"titkos-true"',
+    });
+    await rossz.runOnce();
+    assert.deepEqual(allapotuk(rossz), {
+      enabled: false,
+      switchPresent: true,
+      switchLooksTrue: false,
+    });
+    const idezojeles = lepes({
+      ...BEKAPCSOLVA,
+      MEDUSA_ENSURE_BRAND_COLLECTIONS: '"true"',
+    });
+    await idezojeles.runOnce();
+    assert.deepEqual(allapotuk(idezojeles), {
+      enabled: false,
+      switchPresent: true,
+      switchLooksTrue: true,
+    });
+    assert.ok(!JSON.stringify(rossz.allapot()).includes("titkos"));
+  });
+
+  it("a lefutott, a megállt és a dobó lépés három különböző érték", async () => {
+    const valtozatlan = lepes(BEKAPCS, async () => ({
+      status: "unchanged",
+      planned: { ...kesz.planned, create: 45 },
+    }));
+    await valtozatlan.runOnce();
+    assert.equal(allapotuk(valtozatlan).status, "unchanged");
+    assert.equal(allapotuk(valtozatlan).planned!.create, 45);
+
+    const megallt = lepes(BEKAPCS, async () => ({
+      status: "refused",
+      reason: "a lista csonkolt",
+    }));
+    await megallt.runOnce();
+    assert.equal(allapotuk(megallt).status, "refused");
+    assert.equal(allapotuk(megallt).reason, "a lista csonkolt");
+
+    const dobo = lepes(BEKAPCS, async () => {
+      throw new Error("HTTP 400 handle exists");
+    });
+    await dobo.runOnce();
+    assert.deepEqual(allapotuk(dobo), {
+      enabled: true,
+      failed: true,
+      error: "HTTP 400 handle exists",
+    });
+  });
+
+  it("a következő kör nem viszi tovább az előző számait, és az állapot másolat", async () => {
+    let kor = 0;
+    const scheduler = lepes(BEKAPCS, async () => {
+      kor += 1;
+      return kor === 1 ? kesz : { status: "unchanged", planned: kesz.planned };
+    });
+    await scheduler.runOnce();
+    const elso = allapotuk(scheduler);
+    assert.equal(elso.status, "applied");
+    assert.equal(elso.created, 2);
+    elso.planned!.create = 999;
+    elso.created = 999;
+    assert.equal(allapotuk(scheduler).planned!.create, 2);
+    assert.equal(allapotuk(scheduler).created, 2);
+    await scheduler.runOnce();
+    assert.equal(allapotuk(scheduler).status, "unchanged");
+    assert.equal(allapotuk(scheduler).created, 0);
+  });
+
+  it("egy hiba a naplóba megy, és a termékek köre fut tovább", async () => {
+    const n = naplo();
+    const { run, kapott } = futtato(0);
+    const scheduler = new MedusaProjectionScheduler({
+      db: adatbazis([termek()], []).db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCS,
+      logger: n.logger,
+      runBrandCollections: async () => {
+        throw new Error("HTTP 502");
+      },
+    });
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+    assert.deepEqual(kapott, [["prod-1"]]);
+    assert.ok(
+      n.sorok.some((s) =>
+        s.startsWith("Márka-gyűjtemények: a kör nem futott le"),
+      ),
+      n.sorok.join("\n"),
+    );
   });
 });

@@ -31,6 +31,7 @@ import type {
   WebshopOrderShortageView,
   WebshopPickupPointSearch,
   WebshopTransferReceiptInput,
+  WebshopOrderTaxCheck,
 } from "@acropora/types";
 import { API_PREFIX } from "./api-prefix";
 import { pdfBlob } from "./billing-documents";
@@ -58,6 +59,13 @@ export const WEBSHOP_ORDER_QUERY_KEYS = [
 
 /** Webshop / Rendelések: az új (Medusa) webshop rendelései. */
 export const webshopOrdersApi = {
+  /** A rendelés adószáma a NAV-nál (c977aed2, P2): kérésre, minden hívás egy NAV-kérés. */
+  taxCheck(token: string, id: string) {
+    return apiRequest<WebshopOrderTaxCheck>(
+      `/webshop-orders/${encodeURIComponent(id)}/tax-check`,
+      token,
+    );
+  },
   list(token: string, params: URLSearchParams, signal?: AbortSignal) {
     const query = new URLSearchParams();
     for (const key of WEBSHOP_ORDER_QUERY_KEYS) {

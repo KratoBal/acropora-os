@@ -11,6 +11,7 @@ import {
   WEBSHOP_USAGE_GUIDE_LIMITS,
   hungarianDay,
   mailDay,
+  safeBuyerCompany,
   safeLegalUrls,
   safeOrderViewUrl,
   mailForint,
@@ -22,6 +23,7 @@ import {
   webshopMailText,
   type WebshopMailFacts,
   type WebshopMailOrder,
+  type WebshopPlacedOrder,
 } from "./webshop-mail.js";
 
 const BLOCKS = new Set(
@@ -161,6 +163,36 @@ describe("the derived content", () => {
       content.blocks.rendeles_tetelek?.html ?? "",
       /Só &lt;22 kg&gt; × 2/,
     );
+  });
+
+  // A15: "we are getting your order ready" would promise the parcel before the money has arrived
+  it("the next step of a shipped order paid by bank transfer waits for the payment", () => {
+    const next = (orders: WebshopPlacedOrder[], locale?: "en") =>
+      webshopMailContent({ template: "order-placed", orders, locale }).values
+        .kovetkezo_lepes;
+    const transfer = {
+      ...ORDER,
+      payment: "BANK_TRANSFER" as const,
+      pickup: false,
+    };
+    assert.equal(
+      next([transfer]),
+      "A rendelésedet a befizetés beérkezése után állítjuk össze. Követési szám csak a csomag feladása után lesz.",
+    );
+    // some shipped orders by transfer, some by card: the general sentence and the transfer one
+    assert.equal(
+      next([transfer, { ...ORDER, display_id: 39, pickup: false }]),
+      "Összekészítjük a rendelésedet. Követési szám csak a csomag feladása után lesz. Az előre utalással fizetett rendelést a befizetés beérkezése után állítjuk össze.",
+    );
+    // a pickup order paid by transfer does not change the shipped order's sentence
+    assert.equal(
+      next([
+        { ...ORDER, pickup: false },
+        { ...ORDER, display_id: 39, payment: "BANK_TRANSFER", pickup: true },
+      ]),
+      "Összekészítjük a rendelésedet. Követési szám csak a csomag feladása után lesz.\nAz élő állatos rendelést a boltban veszed át.",
+    );
+    assert.match(next([transfer], "en") ?? "", /once the payment has arrived/);
   });
 
   it("the pay-on-pickup box only where something is due on pickup", () => {
@@ -947,6 +979,145 @@ describe("the legal pages' addresses in the order confirmation", () => {
     assert.equal(
       sentence(
         { legal_urls: { aszf: ASZF, adatkezeles: AT } },
+        "order-status-confirmed",
+      ),
+      undefined,
+    );
+  });
+});
+
+/*
+  A15 (card aba7120c): A CEGES VASARLAS CEGE ES ADOSZAMA A VISSZAIGAZOLO LEVELBEN. MI PIROSIT: a magan vasarlas levele kap sort; a ceges
+  nem; a mondat nyelve nem a level nyelve; a vegen levo pont megduplazodik ("Teszt Kft.."); az adoszam nelkuli ceg "adoszam: null"-t
+  ir; a bolt barmilyen szovege (nem szoveg, ures nev, tul hosszu) egy vevo levelebe jut, vagy KUDARCOT okoz (kiegeszito, sosem utasitott
+  el level); a mas sablon is hordozza; a ket repo mondata elter (a bolt sajat szovege ugyanezt a mondatot irja).
+*/
+describe("the company of a company purchase in the order confirmation", () => {
+  it("is declared for the order confirmation and its English twin only", () => {
+    for (const id of ["WEBSHOP_ORDER_PLACED", "WEBSHOP_ORDER_PLACED_EN"]) {
+      const event = MAIL_TEMPLATE_EVENTS.find((e) => e.id === id);
+      assert.ok(event?.variables.includes("ceg_mondat"), id);
+    }
+    const confirmed = MAIL_TEMPLATE_EVENTS.find(
+      (e) => e.id === "WEBSHOP_ORDER_CONFIRMED",
+    );
+    assert.equal(confirmed?.variables.includes("ceg_mondat"), false);
+  });
+
+  it("only a company name that is text passes; the tax number is optional and text; nothing else is kept", () => {
+    assert.deepEqual(
+      safeBuyerCompany({
+        name: "  Teszt Kft. ",
+        tax_number: " 12345676-2-13 ",
+      }),
+      { name: "Teszt Kft.", tax_number: "12345676-2-13" },
+    );
+    assert.deepEqual(safeBuyerCompany({ name: "Teszt Kft." }), {
+      name: "Teszt Kft.",
+      tax_number: null,
+    });
+    for (const tax of [null, 7, "  ", "x".repeat(41), {}])
+      assert.deepEqual(
+        safeBuyerCompany({ name: "Teszt Kft.", tax_number: tax }),
+        {
+          name: "Teszt Kft.",
+          tax_number: null,
+        },
+      );
+    for (const rossz of [
+      undefined,
+      null,
+      "",
+      "Teszt Kft.",
+      42,
+      [],
+      {},
+      { name: "" },
+      { name: "   " },
+      { name: 7 },
+      { name: "x".repeat(201) },
+      { tax_number: "12345676-2-13" },
+    ])
+      assert.equal(safeBuyerCompany(rossz), null, JSON.stringify(rossz));
+  });
+
+  it("the parser keeps a good company, makes a bad or missing one null, and never refuses the mail for it", () => {
+    const sample = JSON.parse(
+      JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"]),
+    ) as Record<string, unknown>;
+    const company = (v: unknown) => {
+      const parsed = parseWebshopMailFacts("order-placed", {
+        ...sample,
+        buyer_company: v,
+      });
+      assert.equal(parsed.ok, true);
+      return (parsed as { facts: { buyer_company?: unknown } }).facts
+        .buyer_company;
+    };
+    assert.deepEqual(
+      company({ name: "Teszt Kft.", tax_number: "12345676-2-13" }),
+      {
+        name: "Teszt Kft.",
+        tax_number: "12345676-2-13",
+      },
+    );
+    for (const rossz of [undefined, null, "x", { name: 7 }, ["x"]])
+      assert.equal(company(rossz), null, JSON.stringify(rossz));
+  });
+
+  const sentence = (
+    extra: Record<string, unknown>,
+    template = "order-placed",
+  ) =>
+    webshopMailContent({
+      ...WEBSHOP_MAIL_SAMPLE_FACTS[
+        template as keyof typeof WEBSHOP_MAIL_SAMPLE_FACTS
+      ],
+      ...extra,
+    } as unknown as WebshopMailFacts).values.ceg_mondat;
+
+  it("the value is the billing sentence in the mail's language, empty for a private purchase", () => {
+    assert.equal(
+      sentence({
+        buyer_company: { name: "Teszt Kft.", tax_number: "12345676-2-13" },
+      }),
+      "Számlázási adatok: Teszt Kft., adószám: 12345676-2-13.",
+    );
+    assert.equal(
+      sentence({
+        locale: "en",
+        buyer_company: { name: "Teszt Kft.", tax_number: "12345676-2-13" },
+      }),
+      "Billing details: Teszt Kft., tax number: 12345676-2-13.",
+    );
+    // the name alone: no tax number text, and no second full stop after "Kft."
+    assert.equal(
+      sentence({ buyer_company: { name: "Teszt Kft.", tax_number: null } }),
+      "Számlázási adatok: Teszt Kft.",
+    );
+    assert.equal(
+      sentence({ buyer_company: { name: "Teszt Bt", tax_number: null } }),
+      "Számlázási adatok: Teszt Bt.",
+    );
+    assert.equal(
+      sentence({
+        locale: "en",
+        buyer_company: { name: "Teszt Bt", tax_number: null },
+      }),
+      "Billing details: Teszt Bt.",
+    );
+    for (const nincs of [undefined, null])
+      assert.equal(
+        sentence({ buyer_company: nincs }),
+        "",
+        JSON.stringify(nincs),
+      );
+  });
+
+  it("another template has no such value at all, even if its facts had the key", () => {
+    assert.equal(
+      sentence(
+        { buyer_company: { name: "Teszt Kft.", tax_number: null } },
         "order-status-confirmed",
       ),
       undefined,

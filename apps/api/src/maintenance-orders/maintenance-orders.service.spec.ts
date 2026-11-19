@@ -1033,9 +1033,9 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
   }
 
   /*
-    A MUNKALAP A TÉTEL TELJES KÉRT DARAB- ÉS ALKALOMSZÁMÁVAL, TÉTELENKÉNT KÜLÖN (Luca, 2026-11-13; acrobot: egy
-    munkalap az egészet fedi). MI PIROSÍT: ha a kért darab- és alkalomszám nem a tételsorba, a munkalapba és a
-    foglalásba kerül; ha a tételenkénti mód egy lapra teszi az összes tételt, vagy az egyik keretét nem előre
+    ANNYI MUNKALAP, AHÁNY ALKALMAT ÁTVITTEK, TÉTELENKÉNT KÜLÖN (Luca, 2026-11-19; 2026-11-13-ig egy munkalap fedte az
+    egészet). MI PIROSÍT: ha a kért darab- és alkalomszám nem a tételsorba és a foglalásba kerül, vagy az alkalmak száma
+    nem a munkalapok száma; ha a tételenkénti mód egy lapra teszi az összes tételt, vagy az egyik keretét nem előre
     ellenőrzi (az első lap létrejönne, a második elbukna); ha az egyalkalmas tételnél alkalom-sor kerül a munkalapra.
   */
   const twoItems = () =>
@@ -1064,7 +1064,7 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
       ],
     });
 
-  it("a kért darab- és alkalomszám a tételsorba, a munkalapra és a foglalásba megy", async () => {
+  it("a kért darab- és alkalomszám a tételsorba és a foglalásba megy, a munkalapokra alkalmanként egy lap (kártya c873bf3a)", async () => {
     const h = harness();
     await h.run({
       lines: [{ itemId: "item-1", quantity: "2,5", occasions: 3 }],
@@ -1078,16 +1078,15 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
         .requested,
       3,
     );
-    const lines = (
-      h.worksheetInputs[0] as { lines: Array<Record<string, unknown>> }
-    ).lines;
-    assert.deepEqual(
-      lines.map((line) => [line.unit, line.quantity]),
-      [
-        ["db", 2.5],
-        ["alkalom", 3],
-      ],
-    );
+    // HÁROM ALKALOM, HÁROM MUNKALAP (Luca, 2026-11-19), mindegyik a tétel darabszámával, "alkalmak száma" sor nélkül
+    assert.equal(h.worksheetInputs.length, 3);
+    for (const input of h.worksheetInputs) {
+      const lines = (input as { lines: Array<Record<string, unknown>> }).lines;
+      assert.deepEqual(
+        lines.map((line) => [line.unit, line.quantity]),
+        [["db", 2.5]],
+      );
+    }
   });
 
   it("egy alkalomnál nincs alkalom-sor a munkalapon", async () => {
@@ -1190,6 +1189,55 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
       "400: Csak aktív szerződésből készíthető karbantartási lap.",
       "400: A megadott tételek között olyan van, ami nem ehhez a szerződéshez tartozik, vagy már nem létezik.",
     ]);
+  });
+
+  it("a lap címe a tétel megnevezése, ha nincs kifejezett cím (kártya 17e6fcf2)", async () => {
+    const h = harness();
+    await h.run();
+    assert.equal(
+      (h.jobInputs[0] as { title: string }).title,
+      "Cápasuli RO karbantartás",
+    );
+  });
+
+  it("több tételnél az első tétel és az „és még N tétel” (egy lapon, közös helyszínen)", async () => {
+    const contract = twoItems();
+    // egy lapra csak közös helyszínű tételek kerülhetnek
+    contract.items[1]!.departmentId = "department-1";
+    const h = harness({ contract });
+    await h.run({
+      itemIds: ["item-1", "item-2"],
+      lines: [
+        { itemId: "item-1", quantity: "1", occasions: 1 },
+        { itemId: "item-2", quantity: "2", occasions: 1 },
+      ],
+    });
+    assert.equal(
+      (h.jobInputs[0] as { title: string }).title,
+      "Cápasuli RO karbantartás és még 1 tétel",
+    );
+  });
+
+  it("tételenként külön lapnál minden lap a saját tételét viseli, cím nélkül is", async () => {
+    const h = harness({ contract: twoItems() });
+    await h.run({
+      itemIds: ["item-1", "item-2"],
+      separate: true,
+      lines: [
+        { itemId: "item-1", quantity: "1", occasions: 1 },
+        { itemId: "item-2", quantity: "2", occasions: 1 },
+      ],
+    });
+    assert.deepEqual(
+      (h.jobInputs as Array<{ title: string }>).map((job) => job.title),
+      ["Cápasuli RO karbantartás", "UV-lámpa csere"],
+    );
+  });
+
+  it("a kifejezetten beírt cím előbb áll, mint a tétel megnevezése", async () => {
+    const h = harness();
+    await h.run({ title: "Saját cím" });
+    assert.equal((h.jobInputs[0] as { title: string }).title, "Saját cím");
   });
 
   it("a rendes út: előellenőrzés, lap a közös úton, tételsorok a szerződéses áron, a lap évére", async () => {

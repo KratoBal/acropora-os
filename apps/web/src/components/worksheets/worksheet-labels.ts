@@ -55,6 +55,20 @@ export function formatDate(value: string | null): string {
   return value.slice(0, 10);
 }
 
+/**
+ * A NAP, AHOGY BUDAPESTEN TELT (kártya a785e580): egy időbélyeg napja a budapesti naptári nap, nem az ISO-szöveg első tíz
+ * betűje (az UTC szerinti nap volna: a 00:30-kor megnyitott lap az előző napra esne, a "Megnyitva" szűrővel ellentétben).
+ */
+export function formatDay(value: string | null): string {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString("hu-HU", {
+    timeZone: "Europe/Budapest",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}
+
 export function formatDateTime(value: string | null): string {
   if (!value) return "—";
   return new Date(value).toLocaleString("hu-HU", {

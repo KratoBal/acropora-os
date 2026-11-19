@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  handleContentCandidates,
   planBrandImport,
   type ExistingCollection,
+  type HandleContent,
   type OurBrand,
 } from "./medusa-brand-plan.js";
 
@@ -178,16 +180,248 @@ describe("planBrandImport", () => {
     assert.deepEqual(terv.conflict, []);
   });
 
-  it("nem koti ossze a mi markankat egy idegen, azonos nevu gyujtemennyel", () => {
+  /*
+    A HANDLE UTKOZESE (kartya ec82b629, merve a teszt kirakaton: a `fauna-marin` handle mar letezett, a letrehozas elbukott, es a
+    hiba az egesz lepest leallitotta). A korabbi alak (ennek a tesztnek az elodje) azt allitotta, hogy az azonos handle-u,
+    kulso azonosito nelkuli gyujtemeny NEM kotheto ossze, hanem letre kell hozni a markat -- vagyis a Medusa elutasitasat
+    varta el. Az elvaras HAMIS volt, nem a kod: a Medusan egy handle egyedi, a letrehozas az utkozesre bukik. A VEDELEM, amit az
+    elodje orzott (egy idegen gyujtemenyt ne vegyunk at), ma ket allitasban el: a masik marka azonositojat viselo gyujtemeny
+    NEM kotheto ossze (`handleTaken`), es az elavult sor melle sem kotunk automatikusan. ES A HARMADIK (acrobot dontese,
+    2026-11-19 16:24, 57247): az azonosito nelkuli gyujtemenyt csak akkor kotjuk ossze, ha URES, vagy minden termeke ennek a
+    markanak a termeke; mas markaju vagy ismeretlen termekkel kezi valogatas lehet (`curated`), tartalom nelkul pedig nem dont
+    (`content-unchecked`). MI PIROSIT: ha a vegyes gyujtemeny osszekotodik; ha tartalom nelkul osszekotodik; ha az ures vagy
+    azonos markaju nem kotodik ossze; ha barmelyik esetben letrehozas indul.
+  */
+  const tartalom = (
+    over: Partial<HandleContent> = {},
+  ): Map<string, HandleContent> =>
+    new Map([
+      [
+        "pcol_1",
+        { total: 3, sameBrand: 3, otherBrand: 0, unknown: 0, ...over },
+      ],
+    ]);
+
+  it("az azonos handle-u, kulso azonosito nelkuli gyujtemenyhez osszekot, ha csak ennek a markanak a termekei allnak benne", () => {
+    const terv = planBrandImport(
+      [brand()],
+      [collection({ externalId: null })],
+      [],
+      tartalom(),
+    );
+
+    assert.deepEqual(terv.mapOnly, [{ ourId: "brand-1", medusaId: "pcol_1" }]);
+    assert.deepEqual(terv.mapByHandle, ["brand-1"]);
+    assert.deepEqual(terv.create, []);
+    assert.deepEqual(terv.handleTaken, []);
+  });
+
+  it("az ures, azonos handle-u gyujtemenyhez is osszekot", () => {
+    const terv = planBrandImport(
+      [brand()],
+      [collection({ externalId: null })],
+      [],
+      tartalom({ total: 0, sameBrand: 0 }),
+    );
+
+    assert.deepEqual(terv.mapByHandle, ["brand-1"]);
+    assert.deepEqual(terv.create, []);
+  });
+
+  it("mas markaju termekkel a gyujtemeny kezi valogatas lehet: foglalt handle, nem kotunk ossze es nem hozunk letre", () => {
+    const terv = planBrandImport(
+      [brand()],
+      [collection({ externalId: null })],
+      [],
+      tartalom({ sameBrand: 2, otherBrand: 1 }),
+    );
+
+    assert.deepEqual(
+      terv.handleTaken.map((h) => [h.ourId, h.reason]),
+      [["brand-1", "curated"]],
+    );
+    assert.deepEqual(terv.mapOnly, []);
+    assert.deepEqual(terv.mapByHandle, []);
+    assert.deepEqual(terv.create, []);
+  });
+
+  it("az ismeretlen markaju termek ugyanugy tart, mint a mas markaju", () => {
+    const terv = planBrandImport(
+      [brand()],
+      [collection({ externalId: null })],
+      [],
+      tartalom({ sameBrand: 2, unknown: 1 }),
+    );
+
+    assert.deepEqual(
+      terv.handleTaken.map((h) => h.reason),
+      ["curated"],
+    );
+    assert.deepEqual(terv.mapOnly, []);
+  });
+
+  it("tartalom nelkul nem dont: nem ellenorzott, es a jeloltek kozott all", () => {
     const terv = planBrandImport(
       [brand()],
       [collection({ externalId: null })],
       [],
     );
 
+    assert.deepEqual(
+      terv.handleTaken.map((h) => h.reason),
+      ["content-unchecked"],
+    );
     assert.deepEqual(terv.mapOnly, []);
+    assert.deepEqual(terv.create, []);
+    assert.deepEqual(handleContentCandidates(terv), [
+      { collectionId: "pcol_1", brandId: "brand-1" },
+    ]);
+  });
+
+  it("az osszekotes utan a kovetkezo kor mar nem csinal semmit (a lekepezes-sor ervenyes, a gyujtemeny kulso azonosito nelkul is)", () => {
+    const terv = planBrandImport(
+      [brand()],
+      [collection({ externalId: null })],
+      [{ ourId: "brand-1", medusaId: "pcol_1" }],
+    );
+
+    assert.deepEqual(terv.skip, ["brand-1"]);
+    assert.deepEqual(terv.create, []);
+    assert.deepEqual(terv.staleMapping, []);
+    assert.deepEqual(terv.mapOnly, []);
+  });
+
+  it("a masik marka azonositojat viselo, azonos handle-u gyujtemenyt nem vesszuk at: foglalt handle, nem hozunk letre", () => {
+    const terv = planBrandImport(
+      // a brand-2 MAI markank (archivalt): a gyujtemenye az ove, nem halott azonosito
+      [
+        brand(),
+        brand({ id: "brand-2", name: "Masik", slug: "masik", isActive: false }),
+      ],
+      [collection({ externalId: "brand-2" })],
+      [],
+    );
+
+    assert.deepEqual(terv.handleTaken, [
+      {
+        ourId: "brand-1",
+        handle: "tunze",
+        medusaId: "pcol_1",
+        reason: "other-brand",
+      },
+    ]);
+    assert.deepEqual(terv.create, []);
+    assert.deepEqual(terv.mapOnly, []);
+  });
+
+  it("az elavult sor melle egy szabad, azonos handle-u gyujtemenyt nem kotunk automatikusan", () => {
+    const terv = planBrandImport(
+      [brand()],
+      [collection({ id: "pcol_9", externalId: null })],
+      [{ ourId: "brand-1", medusaId: "pcol_gone" }],
+    );
+
+    assert.deepEqual(terv.handleTaken, [
+      {
+        ourId: "brand-1",
+        handle: "tunze",
+        medusaId: "pcol_9",
+        reason: "stale-mapping",
+      },
+    ]);
+    assert.deepEqual(terv.create, []);
+    assert.deepEqual(terv.staleMapping, []);
+  });
+
+  it("az a sor, ami egy masik marka azonositojat viselo gyujtemenyre mutat, foglalt, nem ervenyes", () => {
+    const terv = planBrandImport(
+      // a brand-2 MAI markank (archivalt): a gyujtemenye az ove, nem halott azonosito
+      [
+        brand(),
+        brand({ id: "brand-2", name: "Masik", slug: "masik", isActive: false }),
+      ],
+      [collection({ externalId: "brand-2" })],
+      [{ ourId: "brand-1", medusaId: "pcol_1" }],
+    );
+
+    assert.deepEqual(
+      terv.handleTaken.map((h) => h.reason),
+      ["mapped-to-other-brand"],
+    );
+    assert.deepEqual(terv.skip, []);
+  });
+
+  it("az elavult sor (a cel gyujtemeny nincs a Medusan) tovabbra is ujra letrehozast ad, ha a handle szabad", () => {
+    const terv = planBrandImport(
+      [brand()],
+      [],
+      [{ ourId: "brand-1", medusaId: "pcol_gone" }],
+    );
+
+    assert.deepEqual(terv.staleMapping, ["brand-1"]);
     assert.deepEqual(terv.create, [
       { ourId: "brand-1", title: "Tunze", handle: "tunze" },
     ]);
+  });
+
+  it("egy foglalt handle egy markat visz el, a tobbit nem (egy menetben a masik letrejon)", () => {
+    const terv = planBrandImport(
+      [
+        brand(),
+        brand({ id: "brand-3", name: "Fauna Marin", slug: "fauna-marin" }),
+        brand({ id: "brand-2", name: "Masik", slug: "masik", isActive: false }),
+      ],
+      [collection({ externalId: "brand-2" })],
+      [],
+    );
+
+    assert.deepEqual(
+      terv.handleTaken.map((h) => h.ourId),
+      ["brand-1"],
+    );
+    assert.deepEqual(
+      terv.create.map((c) => c.ourId),
+      ["brand-3"],
+    );
+  });
+
+  /*
+    A HALOTT AZONOSITO (merve a teszt kirakaton 2026-11-19 15:51 UTC): a 09-15-i gyujtemenyek a 09-25-i OS-ujratoltes elotti
+    marka-azonositokat viselik. MI PIROSIT: ha a sajat, lekepezett gyujtemenyunk halott azonositoval "masik marka" lesz (a mert
+    59 hamis utkozes); ha a halott azonositoju, azonos handle-u gyujtemeny utkozes lesz a tartalmi feltetel helyett.
+  */
+  it("a sajat sorunk celja halott azonositot visel: ervenyes sor, skip, nem utkozes", () => {
+    const terv = planBrandImport(
+      [brand()],
+      [collection({ externalId: "cmtr-regi-azonosito" })],
+      [{ ourId: "brand-1", medusaId: "pcol_1" }],
+    );
+
+    assert.deepEqual(terv.skip, ["brand-1"]);
+    assert.deepEqual(terv.handleTaken, []);
+    assert.deepEqual(terv.create, []);
+  });
+
+  it("a halott azonositoju, azonos handle-u gyujtemeny a tartalmi feltetelre megy, nem utkozes", () => {
+    const nelkule = planBrandImport(
+      [brand()],
+      [collection({ externalId: "cmtr-regi-azonosito" })],
+      [],
+    );
+    assert.deepEqual(
+      nelkule.handleTaken.map((h) => h.reason),
+      ["content-unchecked"],
+    );
+
+    const tartalommal = planBrandImport(
+      [brand()],
+      [collection({ externalId: "cmtr-regi-azonosito" })],
+      [],
+      new Map([
+        ["pcol_1", { total: 4, sameBrand: 4, otherBrand: 0, unknown: 0 }],
+      ]),
+    );
+    assert.deepEqual(tartalommal.mapByHandle, ["brand-1"]);
+    assert.deepEqual(tartalommal.handleTaken, []);
   });
 });

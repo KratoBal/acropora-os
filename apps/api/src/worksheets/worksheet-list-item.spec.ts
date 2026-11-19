@@ -22,6 +22,7 @@ function row(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: "ws-1",
     number: "ML-2026-00001",
+    createdAt: new Date("2026-10-03T21:30:00.000Z"),
     updatedAt: new Date("2026-10-04T08:00:00.000Z"),
     hiddenAt: null,
     customer: { displayName: "Kitalált Partner Kft." },
@@ -79,6 +80,13 @@ describe("a munkalap-lista sora", () => {
       }),
     );
     assert.equal(item.laborHours, "0");
+  });
+
+  it("kiadja a megnyitás pillanatát ISO-ként (a Megnyitva oszlop és szűrő alapja, a785e580)", () => {
+    assert.equal(
+      toWorksheetListItem(row()).createdAt,
+      "2026-10-03T21:30:00.000Z",
+    );
   });
 
   it("kiadja a kapcsolódó hibajegyet", () => {

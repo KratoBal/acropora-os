@@ -98,6 +98,21 @@ vi.mock("../maintenance-package-panel", () => ({
   ),
 }));
 
+// the "Kapcsolódó munkalapok" card (card 5b366f5d) has its own component test; here only WHERE it shows and with which right
+vi.mock("./pilot-linked-worksheets-card", () => ({
+  PilotLinkedWorksheetsCard: ({
+    jobId,
+    canManage,
+  }: {
+    jobId: string;
+    canManage: boolean;
+  }) => (
+    <div data-testid="linked-worksheets-card-stub">
+      kapcsolódó munkalapok ({jobId}, {canManage ? "kezelhet" : "csak olvas"})
+    </div>
+  ),
+}));
+
 /**
  * A `ServiceJobPlacementEditor` STUBOLVA VAN, UGYANAZZAL AZ OKKAL, MINT A
  * KARBANTARTAS-PANELEK: sajat API-hivasokat indit (helyszin-fa, stb.), es
@@ -244,6 +259,27 @@ describe("PilotServiceJobDetailPage -- MAINTENANCE panelek", () => {
     ).toHaveTextContent("job-1");
   });
 
+  it("olvasó jogú nézőnek a kártya csak olvasó módban jelenik meg (a levétel és a választó a szerver jogán is áll)", async () => {
+    auth.session = sessionAs("VIEWER");
+    api.detail.mockResolvedValue(detail({ kind: "MAINTENANCE" }));
+
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+
+    expect(
+      await screen.findByTestId("linked-worksheets-card-stub"),
+    ).toHaveTextContent("job-1, csak olvas");
+  });
+
+  it("MAINTENANCE jegyen megjelenik a Kapcsolódó munkalapok kártya, a kezelő joggal", async () => {
+    api.detail.mockResolvedValue(detail({ kind: "MAINTENANCE" }));
+
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+
+    expect(
+      await screen.findByTestId("linked-worksheets-card-stub"),
+    ).toHaveTextContent("job-1, kezelhet");
+  });
+
   /*
     A KÉT PANEL ÖSSZEKÖTÉSE (stage-végigjárás, 2026-11-18): az igazolás panel változása újratölti a számla-kártyát, és a forrás nélküli lap okot ad át a TIG-gombnak. MI PIROSÍT: ha az
     "igazolás változott" jelzés nem változtatja a számla-panel `refreshKey`-ét; ha a forrás nélküli lapnál nem megy át az ok.
@@ -330,6 +366,10 @@ describe("PilotServiceJobDetailPage -- MAINTENANCE panelek", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("maintenance-invoice-panel-stub"),
+    ).not.toBeInTheDocument();
+    // a repair ticket has its own attach box; the link card is for maintenance sheets only
+    expect(
+      screen.queryByTestId("linked-worksheets-card-stub"),
     ).not.toBeInTheDocument();
   });
 });

@@ -1001,6 +1001,7 @@ describe("Elszámolások", () => {
       "/penzugy/foxpost",
       "/penzugy/gls/2026-09",
       "/penzugy/simplepay",
+      "/penzugy/stripe",
     ])
       expect([pathname, isNavigationItemActive(pathname, entry)]).toEqual([
         pathname,

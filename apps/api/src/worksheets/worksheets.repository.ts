@@ -1,4 +1,8 @@
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
+import {
+  worksheetUnitAllowed,
+  worksheetUnitWhere,
+} from "./worksheet-unit-scope.js";
 import { advanceTicketOnFirstLine } from "./first-line-ticket-step.js";
 import {
   rowBelongsToScope,
@@ -55,6 +59,7 @@ import {
   worksheetSheetDocument,
 } from "./worksheet-sheet-document.js";
 import { worksheetSheetInput } from "./worksheet-sheet-mapping.js";
+import { worksheetCreatedRange } from "./worksheet-created-range.js";
 import { worksheetJobKindWhere } from "./worksheet-job-kind-filter.js";
 import {
   archiveOfIssuedSheet,
@@ -318,10 +323,8 @@ export function worksheetListWheres(
     eszkoz nem, ugyanaz a felhasznalo ket felulet kozott mast latna, es a
     kulonbsegre semmilyen szabaly nem mutatna ra.
   */
-  const egysegTengely: Prisma.WorksheetWhereInput =
-    scope.kind === "customer"
-      ? { departmentId: { in: [...assignedUnitIds] } }
-      : {};
+  // a szabály egy helyen áll, a részletes nézet is ezt olvassa (`worksheet-unit-scope.ts`, kártya 5f4af2aa)
+  const egysegTengely = worksheetUnitWhere(scope, assignedUnitIds);
 
   return {
     list: {
@@ -784,6 +787,13 @@ export class WorksheetsRepository extends Repository {
       });
       const alreadyAssigned = new Set(before.map((row) => row.userId));
 
+      // A KÉZI MENTÉS A FELÜLBÍRÁLÁS (kártya d91005e9): a munkalap onnantól nem követi a karbantartási lap felelőseit,
+      // akkor sem, ha a mentett lista történetesen ugyanaz: a döntés a munkalapé lett
+      await transaction.worksheet.update({
+        where: { id: input.worksheetId },
+        data: { followsJobAssignees: false },
+      });
+
       await transaction.worksheetAssignee.deleteMany({
         where: {
           worksheetId: input.worksheetId,
@@ -897,6 +907,7 @@ export class WorksheetsRepository extends Repository {
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.departmentId ? { departmentId: query.departmentId } : {}),
       ...worksheetJobKindWhere(query.jobKind),
+      ...worksheetCreatedRange(query.createdFrom, query.createdTo),
       ...(query.assigneeId
         ? { assignees: { some: { userId: query.assigneeId } } }
         : {}),
@@ -1069,7 +1080,19 @@ export class WorksheetsRepository extends Repository {
   ): Promise<WorksheetDetailRow | null> {
     const row = await this.detailRow(id);
     if (!row) return null;
-    return rowBelongsToScope(row, scope) ? row : null;
+    if (!rowBelongsToScope(row, scope)) return null;
+    /*
+      A VEVŐN BELÜL AZ EGYSÉG IS (kártya 5f4af2aa): ugyanaz a szabály, mint a listán. Minden partner-oldali olvasás
+      (részletes nézet, csatolmány és PDF, többes letöltés) ezen a ponton megy át. Egy kézzel épített, felhasználó nélküli
+      vevő-hatókör itt ZÁR: nem tudjuk, kinek az egységeit kellene nézni.
+    */
+    if (scope.kind === "customer") {
+      const unitIds = scope.userId
+        ? await this.assignedUnitIds(scope.userId)
+        : [];
+      if (!worksheetUnitAllowed(row.department.id, scope, unitIds)) return null;
+    }
+    return row;
   }
 
   /**
@@ -1117,7 +1140,12 @@ export class WorksheetsRepository extends Repository {
   async ticketPartner(serviceJobId: string) {
     const row = await this.database.serviceJob.findUnique({
       where: { id: serviceJobId },
-      select: { customerId: true, kind: true },
+      select: {
+        customerId: true,
+        kind: true,
+        // a karbantartasi lap felelosei: a munkalap ezeket koveti, ha a nyitaskor pontosan ezek (kartya d91005e9)
+        assignees: { select: { userId: true } },
+      },
     });
     return row ?? undefined;
   }
@@ -1155,6 +1183,8 @@ export class WorksheetsRepository extends Repository {
     assetIds?: readonly string[];
     /** A hibajegy, ami alá a lap kerül. `null`, ha jegy nélkül keletkezik. */
     serviceJobId?: string | null;
+    /** A karbantartási lap felelőseit követi (kártya d91005e9): a `followsJobAssignees` mező kezdőértéke. Alap: hamis. */
+    followsJobAssignees?: boolean;
     /**
      * A HELYSZÍNI RÖGZÍTÉS IDEMPOTENCIA-KULCSA. `undefined` a webes felvitelnél
      * -- az nem sorba áll, tehát nincs mit újraküldeni.
@@ -1211,6 +1241,7 @@ export class WorksheetsRepository extends Repository {
     assigneeIds?: readonly string[];
     assetIds?: readonly string[];
     serviceJobId?: string | null;
+    followsJobAssignees?: boolean;
     clientOperationId?: string;
   }): Promise<string> {
     return this.database.$transaction(async (transaction) => {
@@ -1228,6 +1259,7 @@ export class WorksheetsRepository extends Repository {
           // kulon hivas elbukhatna, es epp az a jegy nelkuli lap keletkezne,
           // amit a felhasznalo nem keresne ott.
           serviceJobId: input.serviceJobId ?? null,
+          followsJobAssignees: input.followsJobAssignees ?? false,
           clientOperationId: input.clientOperationId ?? null,
           versions: {
             create: {

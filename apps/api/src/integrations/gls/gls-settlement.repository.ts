@@ -1,4 +1,5 @@
 import { Prisma, prisma } from "@acropora/database";
+import { liveInvoiceNumbersByWebshopOrder } from "../webshop-live-invoices.js";
 import {
   ConflictException,
   Injectable,
@@ -289,6 +290,45 @@ export class GlsSettlementRepository {
         order.invoices.map((invoice) => invoice.invoiceNumber!),
       );
     }
+    return out;
+  }
+
+  /**
+   * GLS parcel number -> the webshop orders the OS created that parcel for (WebshopParcel, any status: a cancelled and re-created
+   * parcel keeps its order) and their LIVE outgoing invoice numbers. A parcel number that is not a webshop parcel is missing from
+   * the map. The test shop's parcels carry a STUB- number, never a real GLS one, so they never meet a real report line.
+   */
+  async webshopParcels(
+    parcelNumbers: readonly string[],
+  ): Promise<Map<string, { orderIds: string[]; invoiceNumbers: string[] }>> {
+    const out = new Map<
+      string,
+      { orderIds: string[]; invoiceNumbers: string[] }
+    >();
+    if (parcelNumbers.length === 0) return out;
+    const parcels = await prisma.webshopParcel.findMany({
+      where: {
+        carrier: "gls",
+        parcelNumber: { in: [...new Set(parcelNumbers)] },
+      },
+      select: { parcelNumber: true, commerceOrderId: true },
+    });
+    if (parcels.length === 0) return out;
+    const invoices = await liveInvoiceNumbersByWebshopOrder(
+      parcels.map((parcel) => parcel.commerceOrderId),
+    );
+    const orders = new Map<string, Set<string>>();
+    for (const parcel of parcels) {
+      if (!parcel.parcelNumber) continue;
+      const set = orders.get(parcel.parcelNumber) ?? new Set<string>();
+      set.add(parcel.commerceOrderId);
+      orders.set(parcel.parcelNumber, set);
+    }
+    for (const [parcelNumber, orderIds] of orders)
+      out.set(parcelNumber, {
+        orderIds: [...orderIds],
+        invoiceNumbers: [...orderIds].flatMap((id) => invoices.get(id) ?? []),
+      });
     return out;
   }
 

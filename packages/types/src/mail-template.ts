@@ -306,6 +306,11 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
       "A mondat a bolt ÁSZF és adatkezelési tájékoztató oldalának címével. Üres, ha a bolt nem küldte a két címet (a Fogyasztóbarát-kapcsoló mögött küldi).",
   },
   {
+    name: "ceg_mondat",
+    description:
+      "Céges vásárlásnál a számlázási adatok mondata: a cég neve és az adószáma. Üres magánszemélyes vásárlásnál.",
+  },
+  {
     name: "akklimatizacio",
     description:
       "Az élő állatnak szóló akklimatizációs útmutató, fajtánként (hal, gerinctelen, korall). Üres, ha a rendelésben nincs élő állat, vagy ha a fajtához még nincs jóváhagyott szöveg.",
@@ -728,6 +733,7 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "kovetkezo_lepes",
       "akklimatizacio",
       "rendeles_tetelek",
+      "ceg_mondat",
     ],
   },
   {

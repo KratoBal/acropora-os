@@ -241,6 +241,7 @@ export {
   isWebshopMailTemplate,
   parseWebshopMailFacts,
   safeOrderViewUrl,
+  safeBuyerCompany,
   safeLegalUrls,
   webshopMailContent,
   webshopMailKey,
@@ -319,6 +320,7 @@ export type {
   WebshopMailOrder,
   WebshopMailTemplate,
   WebshopPaymentRole,
+  WebshopBuyerCompany,
   WebshopLegalUrls,
   WebshopPlacedOrder,
   WebshopRefundFacts,
@@ -367,6 +369,11 @@ export type {
   ServiceJobStatusValue,
   ServiceJobTimelineEntry,
   ServiceJobWorksheetLink,
+  ServiceJobLinkedWorksheet,
+  ServiceJobLinkedWorksheetEvent,
+  ServiceJobLinkedWorksheetsResponse,
+  ServiceJobLinkableWorksheet,
+  ServiceJobLinkableWorksheetsResponse,
 } from "./service-job-management.js";
 export type { NamedPerson } from "./person-name.js";
 export type {
@@ -952,6 +959,10 @@ export type {
   UnasConnectionView,
 } from "./integrations/unas-connection.js";
 export type {
+  WebshopOrderTaxCheck,
+  WebshopOrderTaxCheckState,
+} from "./webshop-order-tax-check.js";
+export type {
   NavTaxpayerAddress,
   NavTaxpayerLookupResult,
 } from "./integrations/nav-taxpayer.js";
@@ -1043,6 +1054,21 @@ export type {
   SimplePaySyncStatus,
   SimplePayTransactionLine,
 } from "./integrations/simplepay-settlement.js";
+export type {
+  StripeLineError,
+  StripeLineStatus,
+  StripeManualApprovalInput,
+  StripePayoutDetail,
+  StripePayoutError,
+  StripePayoutListResponse,
+  StripePayoutStatus,
+  StripePayoutSummary,
+  StripeResolutionSource,
+  StripeSyncRunSummary,
+  StripeSyncState,
+  StripeSyncStatus,
+  StripeTransactionLine,
+} from "./integrations/stripe-settlement.js";
 export {
   AI_ACCURACY_RATINGS,
   AI_LANGUAGE_RATINGS,
@@ -1160,6 +1186,7 @@ export type {
   WorksheetListItem,
   WorksheetListResponse,
   WorksheetChainLink,
+  WorksheetCopyResult,
   WorksheetSelectablePartner,
   WorksheetSelectablePartnerListResponse,
   WorksheetSignerCandidate,
@@ -2398,3 +2425,18 @@ export type {
   WebshopShippingRole,
   WebshopShippingSettings,
 } from "./webshop-shipping-settings.js";
+export {
+  parseWebshopGiftCardIssueInput,
+  WEBSHOP_GIFT_CARD_LIMITS,
+  WEBSHOP_GIFT_CARD_TRANSACTION_LABELS,
+} from "./webshop-gift-cards.js";
+export type {
+  WebshopGiftCard,
+  WebshopGiftCardDetail,
+  WebshopGiftCardIssued,
+  WebshopGiftCardIssueInput,
+  WebshopGiftCardIssueParse,
+  WebshopGiftCardStatus,
+  WebshopGiftCardTransaction,
+  WebshopGiftCardTransactionKind,
+} from "./webshop-gift-cards.js";

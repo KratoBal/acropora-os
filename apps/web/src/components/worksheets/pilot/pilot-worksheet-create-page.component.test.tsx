@@ -918,3 +918,131 @@ describe("PilotWorksheetCreatePage kapcsolat nélkül", () => {
     expect(await savotMond("form")).toBeTruthy();
   });
 });
+
+describe("PilotWorksheetCreatePage: a karbantartási lap felelősei (kártya d91005e9)", () => {
+  /**
+   * MI PIROSÍT: ha a karbantartási lap felelősei nincsenek előre kijelölve a munkalapon; ha hibajegyből nyitott lapon is
+   * előre kijelölődnek (a hibajegy delegáltja nem feltétlenül végzi a munkalapot); ha egy kiosztható felelős nem jelölődik,
+   * vagy egy nem kiosztható (a szerepköre nem engedi) igen, vagy a kimaradása néma; ha a felvivő kijelölése felülírható az
+   * előtöltéssel (a lap betöltése a felvivő nyúlása után ér be); ha a felvivő nem tud levenni egy előre kijelölt felelőst;
+   * ha az előtöltött lista nem megy el a mentéssel.
+   */
+  const kollegak = [
+    { id: "anna", name: "Anna", role: "SERVICE" },
+    { id: "bela", name: "Béla", role: "SERVICE" },
+    { id: "cili", name: "Cili", role: "SERVICE" },
+  ];
+  const lap = (over: Record<string, unknown> = {}) => ({
+    id: "job-1",
+    kind: "MAINTENANCE",
+    jobNumber: "KT-2026-007",
+    customerId: "customer-42",
+    customerName: "Fankó Kft.",
+    departmentId: "department-1",
+    departmentName: "Biotóp",
+    assets: [],
+    assignees: [
+      { userId: "anna", name: "Anna", assignedAt: "2026-11-19T08:00:00.000Z" },
+      { userId: "bela", name: "Béla", assignedAt: "2026-11-19T08:00:00.000Z" },
+    ],
+    ...over,
+  });
+
+  beforeEach(() => {
+    auth.session = session;
+    worksheets.departments.mockReset().mockResolvedValue({
+      items: [
+        {
+          id: "department-1",
+          name: "Biotóp",
+          code: "BIO",
+          parentId: null,
+          isActive: true,
+        },
+      ],
+    });
+    worksheets.detail.mockReset();
+    worksheets.selectablePartners.mockReset().mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    worksheets.assignableUsers
+      .mockReset()
+      .mockResolvedValue({ items: kollegak });
+    worksheets.create.mockReset().mockResolvedValue({ id: "worksheet-1" });
+    assets.list.mockReset().mockResolvedValue({ items: [], total: 0 });
+    query.params = new URLSearchParams("hibajegy=job-1");
+    jobs.detail.mockReset().mockResolvedValue(lap());
+  });
+
+  const checked = async (name: string) =>
+    (await screen.findByRole("checkbox", {
+      name: new RegExp(name),
+    })) as HTMLInputElement;
+
+  it("a karbantartási lap felelősei előre ki vannak jelölve, a többi kolléga nem", async () => {
+    render(<PilotWorksheetCreatePage />);
+    await waitFor(async () =>
+      expect((await checked("Anna")).checked).toBe(true),
+    );
+    expect((await checked("Béla")).checked).toBe(true);
+    expect((await checked("Cili")).checked).toBe(false);
+    expect(screen.getByTestId("assignee-prefill-note").textContent).toMatch(
+      /előre ki vannak jelölve/,
+    );
+    expect(screen.queryByTestId("assignee-prefill-dropped")).toBeNull();
+  });
+
+  it("hibajegyből nyitott lapon a delegáltak nem jelölődnek ki", async () => {
+    jobs.detail.mockResolvedValue(lap({ kind: "REPAIR" }));
+    render(<PilotWorksheetCreatePage />);
+    await screen.findByRole("link", { name: "KT-2026-007" });
+    expect((await checked("Anna")).checked).toBe(false);
+    expect((await checked("Béla")).checked).toBe(false);
+    expect(screen.queryByTestId("assignee-prefill-note")).toBeNull();
+  });
+
+  it("aki a munkalapra nem osztható ki, kimarad, és a felvivő látja, ki maradt ki", async () => {
+    worksheets.assignableUsers.mockResolvedValue({
+      items: kollegak.filter((k) => k.id !== "bela"),
+    });
+    render(<PilotWorksheetCreatePage />);
+    await waitFor(async () =>
+      expect((await checked("Anna")).checked).toBe(true),
+    );
+    expect(
+      (await screen.findByTestId("assignee-prefill-dropped")).textContent,
+    ).toMatch(/Béla/);
+    expect(screen.queryByRole("checkbox", { name: /Béla/ })).toBeNull();
+  });
+
+  it("az előre kijelölt felelős levehető, és más hozzáadható", async () => {
+    const user = userEvent.setup();
+    render(<PilotWorksheetCreatePage />);
+    await waitFor(async () =>
+      expect((await checked("Anna")).checked).toBe(true),
+    );
+    await user.click(await checked("Anna"));
+    await user.click(await checked("Cili"));
+    expect((await checked("Anna")).checked).toBe(false);
+    expect((await checked("Cili")).checked).toBe(true);
+    expect((await checked("Béla")).checked).toBe(true);
+  });
+
+  it("amit a felvivő már kijelölt, azt a később beérkező lap nem írja felül", async () => {
+    let resolveLap: (value: unknown) => void = () => undefined;
+    jobs.detail
+      .mockReset()
+      .mockReturnValue(new Promise((resolve) => (resolveLap = resolve)));
+    const user = userEvent.setup();
+    render(<PilotWorksheetCreatePage />);
+    // a kollégák listája megvan, a lap még nem érkezett meg: a felvivő kijelöli Cilit
+    await user.click(await checked("Cili"));
+    resolveLap(lap());
+    await screen.findByRole("link", { name: "KT-2026-007" });
+    expect((await checked("Cili")).checked).toBe(true);
+    expect((await checked("Anna")).checked).toBe(false);
+    expect((await checked("Béla")).checked).toBe(false);
+  });
+});
