@@ -5,6 +5,7 @@ import {
 } from "../auth/partner-scope.util.js";
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
 import { mayHideRows } from "../common/hidden-rows.js";
+import { budapestDayKey } from "../dashboard/budapest-day.js";
 import {
   canEditWorksheetEntry,
   describeEntryEditRefusal,
@@ -81,6 +82,12 @@ import {
   type NormalizedWorksheetContent,
   type NormalizedWorksheetLine,
 } from "./worksheet-content.js";
+import {
+  BULK_SHEETS_MAX,
+  mergeSheets,
+  pickIssuedSheet,
+  zipSheets,
+} from "./worksheet-bulk-sheets.js";
 import { isSheetArchive } from "./worksheet-sheet-regeneration.js";
 import { diffWorksheetVersions } from "./worksheet-diff.js";
 import {
@@ -293,6 +300,56 @@ export class WorksheetsService {
   }
 
   /** Egy lap csatolmanyai, tartalom nelkul. */
+  /**
+   * A KIJELÖLT LAPOK KIADOTT PDF-JEI EGY FÁJLBAN (kártya a785e580). Minden lapra a SAJÁT hatókör-ellenőrzés
+   * fut (ugyanaz a `detail`, mint az egy csatolmány letöltésénél): a hatókörön kívüli és a nem létező azonosító
+   * UGYANAZ a kihagyott, nem derül ki belőle, melyik volt. A kihagyott lap nem hiba: a hívó kimondja a
+   * felhasználónak, hányat és melyiket (a sorszámukkal) hagytuk ki. Ha egyetlen lapnak sincs kiadott PDF-je,
+   * a válasz 400, nem üres fájl.
+   */
+  async bulkIssuedSheets(
+    ids: readonly string[],
+    format: "zip" | "merged",
+    scope: PartnerScope,
+    now: Date = new Date(),
+  ) {
+    const unique = [...new Set(ids)];
+    if (unique.length === 0 || unique.length > BULK_SHEETS_MAX)
+      throw new BadRequestException(
+        `Egyszerre legfeljebb ${BULK_SHEETS_MAX} munkalapot lehet kijelölni.`,
+      );
+    const files: { fileName: string; bytes: Uint8Array }[] = [];
+    const skipped: { id: string; number: string | null }[] = [];
+    for (const id of unique) {
+      const lap = await this.repository.detail(id, scope);
+      if (!lap) {
+        skipped.push({ id, number: null });
+        continue;
+      }
+      const documents = await this.repository.documents(id);
+      const sheet = pickIssuedSheet(documents);
+      if (!sheet) {
+        skipped.push({ id, number: lap.number ?? null });
+        continue;
+      }
+      const document = await this.documentBytes(id, sheet.id, scope);
+      files.push({ fileName: document.fileName, bytes: document.bytes });
+    }
+    if (files.length === 0)
+      throw new BadRequestException(
+        "A kijelölt munkalapok egyikének sincs még kiadott PDF-je (lezáratlanok).",
+      );
+    const day = budapestDayKey(now);
+    const body = format === "zip" ? zipSheets(files) : await mergeSheets(files);
+    return {
+      bytes: body,
+      fileName: `munkalapok-${day}.${format === "zip" ? "zip" : "pdf"}`,
+      contentType: format === "zip" ? "application/zip" : "application/pdf",
+      included: files.length,
+      skipped,
+    };
+  }
+
   async documents(id: string, scope: PartnerScope) {
     const lap = await this.repository.detail(id, scope);
     if (!lap) throw new NotFoundException("A munkalap nem található.");
