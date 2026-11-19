@@ -475,9 +475,10 @@ export function HomepageContentEditorPage() {
           {selected === "header" ? (
             <>
               <p className="text-xs text-pilot-grey-600">
-                A fejléc fölötti sáv négy rövid szövege, minden oldalon. Üres
-                szöveggel a sor nem jelenik meg a kirakaton, és ha mind a négy
-                üres, a sáv sem.
+                A fejléc fölötti sáv két marketing-szövege, minden oldalon. Üres
+                szöveggel a sor nem jelenik meg a kirakaton. A nyitvatartás és a
+                telefonszám a bolt céges adatából jön, ugyanabból, mint a
+                lábléc: itt nem szerkeszthető.
               </p>
               {HOMEPAGE_STANDALONE_GROUPS.map(fieldsOf)}
             </>

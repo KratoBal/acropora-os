@@ -496,18 +496,19 @@ describe("parseHomepageContentInput: brandIds", () => {
 
 /*
   THE HEADER INFO BAR KEYS (card 409ba396). What turns this red: a key missing (the bar could not be edited), a starting value
-  tagged as a sample (the shop would put the "Minta adat" label on a bar of real facts), an invented phone number back in the
-  defaults, or the keys leaving their own group.
+  tagged as a sample (the shop would put the "Minta adat" label on a bar of real facts), the opening hours and the phone
+  (`fejlec.sav.3` and `.4`) back in the catalogue (the shop's company record is their ONE source, like the footer's: an OS edit
+  would let the header and the footer differ again), or the keys leaving their own group.
 */
 describe("the header info bar fields", () => {
   const sav = HOMEPAGE_TEXT_FIELDS.filter((f) =>
     f.key.startsWith("fejlec.sav."),
   );
 
-  it("has the four keys the storefront reads, in one group, as plain text, none a sample", () => {
+  it("has the two marketing lines, in one group, as plain text, none a sample", () => {
     assert.deepEqual(
       sav.map((f) => f.key),
-      ["fejlec.sav.1", "fejlec.sav.2", "fejlec.sav.3", "fejlec.sav.4"],
+      ["fejlec.sav.1", "fejlec.sav.2"],
     );
     for (const field of sav) {
       assert.equal(field.group, "Fejléc: info-sáv");
@@ -517,10 +518,16 @@ describe("the header info bar fields", () => {
     }
   });
 
+  it("the opening hours and the phone are NOT editable: no catalogue key for them", () => {
+    const keys = new Set(HOMEPAGE_TEXT_FIELDS.map((f) => f.key));
+    assert.equal(keys.has("fejlec.sav.3"), false);
+    assert.equal(keys.has("fejlec.sav.4"), false);
+  });
+
   it("the starting values are the shop's own facts, not the invented ones", () => {
     const text = sav.map((f) => f.default).join(" | ");
-    assert.ok(text.includes("+36-20/267-6801"));
-    assert.ok(text.includes("Kedd-Péntek 10-18"));
-    assert.doesNotMatch(text, /1 234 5678|10[–-]19/);
+    assert.ok(text.includes("személyes átvétellel"));
+    assert.ok(text.includes("Foxpost"));
+    assert.doesNotMatch(text, /házhozszállítás 2[–-]3 munkanap/);
   });
 });

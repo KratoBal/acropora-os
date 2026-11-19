@@ -163,7 +163,7 @@ export function HomepageBlockList({
           Fejléc info-sáv
         </span>
         <span className="mt-1 block text-xs text-pilot-grey-500">
-          minden oldalon · négy rövid szöveg
+          minden oldalon · két marketing-szöveg
         </span>
       </button>
       <button

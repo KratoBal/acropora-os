@@ -617,25 +617,34 @@ describe("HomepageContentEditorPage", () => {
 
   /*
     THE HEADER INFO BAR (card 409ba396). What turns it red: the bar missing from the editor, or shown as a block with a
-    switch and a place in the order; a starting value tagged as a sample (the shop would label the bar "Minta adat");
-    an untouched save claiming a starting value; an edit, or an EMPTY text, not saved as the editor's own value (an empty
-    one hides its line on the shop); the preview following a block that is not selected.
+    switch and a place in the order; the opening hours or the phone editable here (their one source is the shop's company
+    record, like the footer's); a starting value tagged as a sample; an untouched save claiming a starting value; an edit,
+    or an EMPTY text, not saved as the editor's own value (an empty one hides its line on the shop).
   */
-  it("HP-ED-HEADER: the info bar has its own panel with four fields, no block switch; its texts are saved, an empty one too", async () => {
+  it("HP-ED-HEADER: the info bar has its own panel with the two marketing lines, no block switch, no hours or phone; its texts are saved, an empty one too", async () => {
     render(<HomepageContentEditorPage />);
     await open("Fejléc info-sáv");
     expect(
+      ((await field("Fejléc: info-sáv: Bal oldal, első")) as HTMLInputElement)
+        .value,
+    ).toBe("Élőállat kizárólag személyes átvétellel, a budapesti boltban");
+    expect(
       (
         (await field(
-          "Fejléc: info-sáv: Jobb oldal, második",
+          "Fejléc: info-sáv: Bal oldal, második",
         )) as HTMLInputElement
       ).value,
-    ).toBe("Tanácsadás: +36-20/267-6801");
+    ).toBe("Technika és vegyszer: Foxpost csomagpont és GLS házhozszállítás");
+    // the opening hours and the phone come from the company record: no field for them
     expect(
-      ((await field("Fejléc: info-sáv: Jobb oldal, első")) as HTMLInputElement)
-        .value,
-    ).toBe("Nyitva: Kedd-Péntek 10-18, Szombat 10-14");
-    // not a block: no "látszik" switch of its own in the panel, and no sample tag on its starting values
+      screen.queryByLabelText("Fejléc: info-sáv: Jobb oldal, első"),
+    ).toBeNull();
+    expect(
+      screen.queryByLabelText("Fejléc: info-sáv: Jobb oldal, második"),
+    ).toBeNull();
+    expect(
+      screen.getByText(/nyitvatartás és a telefonszám a bolt céges adatából/i),
+    ).toBeTruthy();
     expect(
       screen.queryByRole("switch", { name: /Fejléc info-sáv: látszik/ }),
     ).toBeNull();
