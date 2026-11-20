@@ -491,6 +491,7 @@ describe("the PDF from the UNAS order's cmfx link", () => {
           new Response(PDF_BYTES, { status: 200 })) as never,
         sleep: async () => undefined,
         rowsByNumber: async () => [],
+        ownInvoicesByNumber: async () => [],
         textOf,
       },
       {},
@@ -662,6 +663,7 @@ describe("external-invoice-mail-pdf:fill", () => {
           pdf("E-ACRW-2026-00601-a3.pdf", "ACRW-2026/00601"),
           pdf("E-ACRW-2026-00450-a4.pdf", "ACRW-2026/00450"),
         ],
+        ownInvoicesByNumber: async () => [],
         rowsByNumber: async () => [
           {
             documentNumber: "ACRW-2026/00601",
@@ -695,6 +697,26 @@ describe("external-invoice-mail-pdf:fill", () => {
     assert.match(out, /^MASIK_HONAP 2026-09\s+ACRW-2026\/00450$/m);
     assert.match(out, /számla-sor nélküli levél 1/);
     assert.deepEqual([r.puts, r.sets], [[], []]);
+  });
+
+  // 785dfea6, acrobot 58556: a letter whose number is the OS's own outbound invoice (the webshop's ACRW from the UNAS sync) is
+  // not a missing row; it is named, and only the rest is counted as missing. The lookup is asked only for the row-less numbers.
+  it("dry: a letter whose number is the OS's own invoice says so, and is not counted as a missing row", async () => {
+    const asked: string[][] = [];
+    const { out } = await run(["--month", "2026-10"], {
+      ownInvoicesByNumber: async (numbers) => {
+        asked.push([...numbers]);
+        // written differently than the letter: the key ignores spaces and case
+        return [{ invoiceNumber: "acrw-2026/ 00600", source: "UNAS" }];
+      },
+    });
+    assert.deepEqual(asked, [["ACRW-2026/00600"]]);
+    assert.match(out, /^SAJAT_SZAMLA UNAS\s+ACRW-2026\/00600$/m);
+    assert.doesNotMatch(out, /^NINCS_SZAMLA_SOR/m);
+    assert.match(
+      out,
+      /saját \(OS\) számla levele 1, számla-sor nélküli levél 0/,
+    );
   });
 
   it("applied: stores and exits 0; without a month, or applied without a document store, exits 2", async () => {
@@ -743,6 +765,7 @@ describe("external-invoice-mail-pdf:fill", () => {
               candidate("row-83", "2026/00083"),
             ],
             rowsByNumber: async () => [],
+            ownInvoicesByNumber: async () => [],
             documents: () => r.documents,
             store: r.store,
             textOf,
