@@ -143,11 +143,20 @@ export function textCarriesOurTaxNumber(text: string): boolean {
  */
 export function pdfPayableMatches(text: string, grossAmount: string): boolean {
   // the group is greedy and read as a whole number: a longer number, or a fractional feed amount, is unequal
+  const payable = pdfPayableAmount(text);
+  return payable !== null && Number(payable) === Number(grossAmount);
+}
+
+/**
+ * A PDF fizetendő végösszege, ahogy a `pdfPayableMatches` olvassa (szóköz nélkül), vagy `null`, ha a felirat nincs meg. Az
+ * `AMOUNT_MISMATCH` sor ezt írja ki a sor összege mellé (acrobot 58326: az élesen olvasó szerep a sort nem látja, a két
+ * számot csak a parancs kimenete adhatja).
+ */
+export function pdfPayableAmount(text: string): string | null {
   const match = /FIZETENDŐ\s+BRUTTÓ\s+VÉGÖSSZEG:[\s|]*(\d(?:[\d ]*\d)?)/.exec(
     text,
   );
-  if (!match) return false;
-  return Number(match[1]!.replace(/ /g, "")) === Number(grossAmount);
+  return match ? match[1]!.replace(/ /g, "") : null;
 }
 
 export type MailPdfOutcome =
@@ -159,12 +168,18 @@ export type MailPdfOutcome =
       bytes: number;
     }
   | { kind: "NO_MAIL"; documentNumber: string }
+  /** a sor összege (`expected`) és a PDF fizetendő végösszege (`found`, `null`, ha a felirat nincs a PDF-ben) */
+  | {
+      kind: "AMOUNT_MISMATCH";
+      documentNumber: string;
+      expected: string;
+      found: string | null;
+    }
   | {
       kind:
         | "NOT_PDF"
         | "NUMBER_NOT_IN_PDF"
         | "NOT_OUR_INVOICE"
-        | "AMOUNT_MISMATCH"
         | "STORE_FAILED"
         | "NOT_AUTHENTICATED";
       documentNumber: string;
@@ -230,6 +245,7 @@ export async function fillExternalPdfsFromMail(input: {
       "NOT_PDF" | "NUMBER_NOT_IN_PDF" | "NOT_OUR_INVOICE" | "AMOUNT_MISMATCH" =
       "NOT_PDF";
     let chosen: MailPdf | null = null;
+    let found: string | null = null;
     for (const pdf of trusted) {
       if (pdf.buffer.subarray(0, 5).toString("latin1") !== "%PDF-") continue;
       const text = await input.textOf(pdf.buffer).catch(() => [] as string[]);
@@ -243,13 +259,23 @@ export async function fillExternalPdfsFromMail(input: {
       }
       if (!pdfPayableMatches(text.join("\n"), row.grossAmount)) {
         verdict = "AMOUNT_MISMATCH";
+        found = pdfPayableAmount(text.join("\n"));
         continue;
       }
       chosen = pdf;
       break;
     }
     if (!chosen) {
-      outcomes.push({ kind: verdict, documentNumber: number });
+      outcomes.push(
+        verdict === "AMOUNT_MISMATCH"
+          ? {
+              kind: verdict,
+              documentNumber: number,
+              expected: row.grossAmount,
+              found,
+            }
+          : { kind: verdict, documentNumber: number },
+      );
       continue;
     }
     if (!input.apply) {

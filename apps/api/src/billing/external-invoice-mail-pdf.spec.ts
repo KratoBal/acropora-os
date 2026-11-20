@@ -11,6 +11,7 @@ import {
   fillExternalPdfsFromMail,
   numberFromCmfxFileName,
   textCarriesNumber,
+  pdfPayableAmount,
   pdfPayableMatches,
   textCarriesOurTaxNumber,
   type MailPdf,
@@ -310,6 +311,17 @@ describe("the letter really came from cmfx", () => {
     assert.deepEqual(
       [report.outcomes.map((o) => `${o.kind} ${o.documentNumber}`), r.puts],
       [["AMOUNT_MISMATCH ACRW-2026/00536"], []],
+    );
+    // both amounts come out, so a person can tell rounding from a wrong invoice (acrobot 58326)
+    assert.deepEqual(report.outcomes[0], {
+      kind: "AMOUNT_MISMATCH",
+      documentNumber: "ACRW-2026/00536",
+      expected: "45000.00",
+      found: "29210",
+    });
+    assert.deepEqual(
+      [pdfPayableAmount(PAYABLE), pdfPayableAmount("Számla ACRW-2026/00536")],
+      ["29210", null],
     );
   });
 

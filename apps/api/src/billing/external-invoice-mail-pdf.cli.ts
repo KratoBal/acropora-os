@@ -152,7 +152,7 @@ export async function main(
       );
   for (const outcome of report.outcomes)
     io.out(
-      `${outcome.kind.padEnd(17)} ${outcome.documentNumber}${"bytes" in outcome ? ` (${outcome.bytes} bájt)` : ""}\n`,
+      `${outcome.kind.padEnd(17)} ${outcome.documentNumber}${"bytes" in outcome ? ` (${outcome.bytes} bájt)` : ""}${outcome.kind === "AMOUNT_MISMATCH" ? ` (a sor: ${outcome.expected}, a PDF: ${outcome.found ?? "nincs fizetendő-sor"})` : ""}\n`,
     );
 
   const rows = await (deps.rowsByNumber ?? prismaRowsByNumber)(
