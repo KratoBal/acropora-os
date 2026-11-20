@@ -150,3 +150,66 @@ export interface PosPaymentSummaryResponse {
   days: PosPaymentSummaryDay[];
   totals: Omit<PosPaymentSummaryDay, "date">;
 }
+
+/**
+ * A „BELSŐ FELHASZNÁLÁS” (Balázs, 2026-11-20 15:10 UTC, kártya ec51e614): a polcról saját célra levett termék. NEM eladás:
+ * nincs fizetés, nyugta, számla, és a bevétel-összesítőkbe (`PosPaymentSummaryResponse`, kassza) nem kerül. A készlet ugyanúgy
+ * csökken, mint az eladásnál. Csak termék (kézi tétel nem), és a megjegyzés kötelező: miért vették ki.
+ */
+export const POS_INTERNAL_USE_NOTE_MAX = 500;
+
+export interface CreatePosInternalUseInput {
+  /** Miért vették ki (kötelező, legfeljebb `POS_INTERNAL_USE_NOTE_MAX` karakter). */
+  note: string;
+  lines: { variantId: string; quantity: number }[];
+}
+
+export interface PosInternalUseLineDetail {
+  id: string;
+  variantId: string;
+  sku: string;
+  productName: string;
+  quantity: string;
+  unit: string;
+  /** Beszerzési nettó egységár HUF-ban a rögzítéskor; `null`, ha nincs. */
+  unitCost: string | null;
+  /** `quantity × unitCost`; `null`, ha nincs beszerzési ár. */
+  lineCost: string | null;
+}
+
+export interface PosInternalUseDetail {
+  id: string;
+  number: string;
+  note: string;
+  performedByName: string | null;
+  occurredAt: string;
+  /** A tételek beszerzési értéke (nettó HUF); `null`, ha valamelyik tételnek nincs ára. */
+  totalCost: string | null;
+  lines: PosInternalUseLineDetail[];
+}
+
+export interface PosInternalUseListItem {
+  id: string;
+  number: string;
+  note: string;
+  performedByName: string | null;
+  occurredAt: string;
+  totalCost: string | null;
+  lineCount: number;
+}
+
+export interface PosInternalUseListResponse {
+  items: PosInternalUseListItem[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalItems: number;
+    totalPages: number;
+  };
+}
+
+export interface PosInternalUseResult {
+  detail: PosInternalUseDetail;
+  /** A tételek, ahol a készlet nulla alá ment; csak tájékoztatás, mint az eladásnál. */
+  stockWarnings: PosSaleStockWarning[];
+}

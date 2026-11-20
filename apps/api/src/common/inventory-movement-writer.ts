@@ -56,6 +56,8 @@ export type InventoryMovementSourceProcess =
   | "INVENTORY_COUNT"
   | "PURCHASE_INVOICE"
   | "POS_SALE"
+  /** A POS „Belső felhasználás”: saját célra levett termék, nem eladás (kártya ec51e614). */
+  | "POS_INTERNAL_USE"
   | "UNAS_ORDER_IMPORT"
   | "UNAS_ORDER_UPDATE"
   | "UNAS_ORDER_CANCEL"
@@ -81,7 +83,9 @@ export type InventoryMovementType =
   | "RETURN_OUT"
   | "DAMAGE"
   | "SCRAP"
-  | "OPENING_BALANCE";
+  | "OPENING_BALANCE"
+  /** A POS „Belső felhasználás” (kártya ec51e614). */
+  | "INTERNAL_USE";
 
 /// Written to `resolutionNote` when a row is closed without an UNAS call
 /// because the local baseline was unknown at the time of the movement.

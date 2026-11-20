@@ -39,7 +39,9 @@ import { Prisma } from "@acropora/database";
 /// inventory-count.repository.ts, and pos-sale.repository.ts /
 /// unas-order-sync.repository.ts respectively; SCRAP (and a RETURN_IN for a
 /// correction) by the mortality log since 2026-10-07 (mortality-stock.ts),
-/// always with SCRAP = -1, as listed below. DAMAGE/OPENING_BALANCE have an
+/// always with SCRAP = -1, as listed below; INTERNAL_USE by the POS "Belső
+/// felhasználás" since 2026-11-20 (pos-internal-use.repository.ts, card
+/// ec51e614), always a decrease, INTERNAL_USE = -1. DAMAGE/OPENING_BALANCE have an
 /// intuitively fixed sign and are listed below for forward-compatibility
 /// (so wiring up a future producer for them doesn't ALSO require touching
 /// the reconciliation engine), but since nothing produces them yet there is
@@ -64,6 +66,7 @@ export const LEDGER_PROVABLE_MOVEMENT_SIGN: Readonly<
   DAMAGE: -1,
   SCRAP: -1,
   OPENING_BALANCE: 1,
+  INTERNAL_USE: -1,
 });
 
 /// Movement types whose sign is NOT recoverable from the ledger alone (see

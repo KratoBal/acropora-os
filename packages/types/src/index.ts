@@ -854,8 +854,14 @@ export type {
 } from "./purchasing.js";
 export { EXPECTED_ARRIVAL_LIST_PAGE_SIZE } from "./purchasing.js";
 export type {
+  CreatePosInternalUseInput,
   CreatePosSaleInput,
   CreatePosSaleLineInput,
+  PosInternalUseDetail,
+  PosInternalUseLineDetail,
+  PosInternalUseListItem,
+  PosInternalUseListResponse,
+  PosInternalUseResult,
   PosPaymentMethod,
   PosPaymentSummaryCell,
   PosPaymentSummaryDay,
@@ -870,7 +876,11 @@ export type {
   PosSaleStockWarning,
   SalesOrderLineSyncStatus,
 } from "./pos.js";
-export { POS_MANUAL_LINE_SKU, POS_MANUAL_VAT_RATES } from "./pos.js";
+export {
+  POS_INTERNAL_USE_NOTE_MAX,
+  POS_MANUAL_LINE_SKU,
+  POS_MANUAL_VAT_RATES,
+} from "./pos.js";
 export type {
   InventoryCountApplyResult,
   InventoryCountDetail,
