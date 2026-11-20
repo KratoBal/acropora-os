@@ -19,7 +19,7 @@ import type { DocumentPairing } from "../missing-invoices/missing-invoices.servi
 export function cardPaidSupplierEvidence(input: {
   rows: readonly IncomingBillingDocument[];
   pairings: ReadonlyMap<string, DocumentPairing>;
-}): ReadonlyMap<string, { cardInvoices: number }> {
+}): ReadonlyMap<string, { kind: "CARD"; cardInvoices: number }> {
   const history = new Map<
     string,
     { card: Set<string>; transfer: Set<string> }
@@ -47,7 +47,7 @@ export function cardPaidSupplierEvidence(input: {
     ).add(row.id);
     history.set(key, entry);
   }
-  const evidence = new Map<string, { cardInvoices: number }>();
+  const evidence = new Map<string, { kind: "CARD"; cardInvoices: number }>();
   for (const row of input.rows) {
     const key = keyOf(row);
     const entry = key === null ? undefined : history.get(key);
@@ -57,7 +57,7 @@ export function cardPaidSupplierEvidence(input: {
       (id) => id !== row.id,
     ).length;
     if (otherCard > 0 && otherTransfer === 0)
-      evidence.set(row.id, { cardInvoices: otherCard });
+      evidence.set(row.id, { kind: "CARD", cardInvoices: otherCard });
   }
   return evidence;
 }

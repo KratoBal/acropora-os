@@ -101,7 +101,7 @@ export function dueInvoicesMailContent(input: {
         list.summary.probablyNotTransfer.totals
           .map((total) => pdfAmount(total.outstanding, total.currency))
           .join(" + ") || "0"
-      }). A szállító másik számláit kártyával fizettük, és a számlán nincs fizetési mód.`,
+      }). A számlán nincs fizetési mód, és a szállító másik számláit kártyával fizettük, vagy a bank a saját díját levonta.`,
     );
   lines.push("", "Acropora OS");
   return {

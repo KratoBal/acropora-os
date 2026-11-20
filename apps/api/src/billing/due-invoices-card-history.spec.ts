@@ -61,9 +61,12 @@ describe("cardPaidSupplierEvidence", () => {
       [a.id]: [true],
       [b.id]: [true, true],
     });
-    assert.deepEqual(evidence.get(target.id), { cardInvoices: 2 });
+    assert.deepEqual(evidence.get(target.id), {
+      kind: "CARD",
+      cardInvoices: 2,
+    });
     // a card-paid row gets evidence from the OTHER card row only, never from itself
-    assert.deepEqual(evidence.get(a.id), { cardInvoices: 1 });
+    assert.deepEqual(evidence.get(a.id), { kind: "CARD", cardInvoices: 1 });
     const alone = row();
     assert.equal(run([alone], { [alone.id]: [true] }).has(alone.id), false);
   });
@@ -130,7 +133,10 @@ describe("cardPaidSupplierEvidence", () => {
       [card.id]: [true],
       [other.id]: [false],
     });
-    assert.deepEqual(evidence.get(target.id), { cardInvoices: 1 });
+    assert.deepEqual(evidence.get(target.id), {
+      kind: "CARD",
+      cardInvoices: 1,
+    });
     assert.equal(evidence.has(other.id), false);
   });
 });

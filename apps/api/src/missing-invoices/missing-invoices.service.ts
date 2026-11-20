@@ -148,6 +148,13 @@ function shiftMonth(month: string, by: number): string {
   return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
 }
 
+/** A bank saját díj-levonása (a „BANK_FEE” besorolású terhelés): a nap, az összeg és a pénznem; sem partner, sem közlemény. */
+export interface BankFeeDebit {
+  bookingDate: string;
+  amount: string;
+  currency: string;
+}
+
 /** Egy forrás-dokumentum párosítása (a Számlázás „Bejövő számlák” nézetéhez). */
 export interface DocumentPairing {
   payee: CandidateDocument["payee"];
@@ -616,7 +623,31 @@ export class MissingInvoicesService {
    * mellette a dokumentum vevő-ítélete és fajtája (a „nem párosítandó”-hoz).
    */
   async documentPairings(): Promise<Map<string, DocumentPairing>> {
+    return this.pairingsOf(await this.compute());
+  }
+
+  /**
+   * A LEJÁRÓ SZÁMLÁK BANKI BEMENETE EGY SZÁMÍTÁSBÓL (acrobot 58915): a párosítás ÉS a bank saját díj-levonásai (a „BANK_FEE” besorolású terhelések, a kézi átsorolással együtt). A `compute` nehéz
+   * (az összes dokumentumot és terhelést betölti), ezért a két bemenet EGY hívásból jön, nem kettőből.
+   */
+  async dueInvoicesBankData(): Promise<{
+    pairings: Map<string, DocumentPairing>;
+    bankFeeDebits: BankFeeDebit[];
+  }> {
     const computed = await this.compute();
+    return {
+      pairings: this.pairingsOf(computed),
+      bankFeeDebits: computed.classified
+        .filter(({ classification }) => classification.category === "BANK_FEE")
+        .map(({ debit }) => ({
+          bookingDate: debit.bookingDate.toISOString().slice(0, 10),
+          amount: debit.amount.toFixed(debit.currency === "HUF" ? 0 : 2),
+          currency: debit.currency,
+        })),
+    };
+  }
+
+  private pairingsOf(computed: Computed): Map<string, DocumentPairing> {
     const result = new Map<string, DocumentPairing>();
     const entry = (document: CandidateDocument) => {
       const ids = [document.id, ...(document.aliasIds ?? [])];

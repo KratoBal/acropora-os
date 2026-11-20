@@ -247,14 +247,16 @@ describe("the due invoices PDF names where a supplied account comes from", () =>
           paymentMethod: true,
         },
       }),
-      evidence: { cardInvoices: 3 },
+      evidence: { kind: "CARD", cardInvoices: 3 },
     };
     const built = await build([row()], { probablyNotTransfer: [moved] });
     // a long cell wraps onto the next line: compare the text with its line breaks folded to spaces
     const text = built.text.replace(/\s+/g, " ");
     assert.ok(text.includes("Valószínűleg nem utalandó"), text);
     assert.ok(
-      text.includes("a szállító másik számláit kártyával fizettük"),
+      text.includes(
+        "másik számláit kártyával fizettük, vagy a bank a saját díját levonta",
+      ),
       text,
     );
     assert.ok(text.includes("Kártyás Szállító Kft."), text);
@@ -274,6 +276,32 @@ describe("the due invoices PDF names where a supplied account comes from", () =>
     assert.equal(
       (await build([row()])).text.includes("Valószínűleg nem utalandó"),
       false,
+    );
+  });
+
+  it("a bank-deduction row carries its own reason, with the debit's day", async () => {
+    const bank: ProbablyNotTransferItem = {
+      ...row({
+        id: "b1",
+        supplierName: "OTP Bank Nyrt.",
+        outstanding: "9525",
+        paymentMethod: null,
+        missing: {
+          dueDate: false,
+          supplierBankAccount: false,
+          paymentMethod: true,
+        },
+      }),
+      evidence: { kind: "BANK_DEDUCTION", bookingDate: "2026-11-05" },
+    };
+    const { text } = await build([row()], { probablyNotTransfer: [bank] });
+    const flat = text.replace(/\s+/g, " ");
+    assert.ok(flat.includes("OTP Bank Nyrt."), flat);
+    assert.ok(
+      flat.includes(
+        "a bank a saját díját valószínűleg levonta (2026. 11. 05.)",
+      ),
+      flat,
     );
   });
 });

@@ -306,7 +306,7 @@ describe("the source of a supplied bank account", () => {
 */
 describe("the probably-not-transfer section", () => {
   const evidence = (...ids: string[]) =>
-    new Map(ids.map((id) => [id, { cardInvoices: 2 }]));
+    new Map(ids.map((id) => [id, { kind: "CARD" as const, cardInvoices: 2 }]));
 
   it("a row with NO payment method and a card-paid supplier moves to the section, with its evidence; nothing drops", () => {
     const card = item({ paymentMethod: null, supplierName: "Kártyás Kft." });
@@ -314,7 +314,7 @@ describe("the probably-not-transfer section", () => {
     const list = buildDueInvoices({
       items: [card, plain],
       bankAccounts: new Map(),
-      cardPaidEvidence: evidence(card.id),
+      notTransferEvidence: evidence(card.id),
       today: TODAY,
     });
     assert.deepEqual(
@@ -323,7 +323,7 @@ describe("the probably-not-transfer section", () => {
     );
     assert.deepEqual(
       list.probablyNotTransfer.map((r) => [r.id, r.evidence]),
-      [[card.id, { cardInvoices: 2 }]],
+      [[card.id, { kind: "CARD", cardInvoices: 2 }]],
     );
     // the moved row keeps its own data and its missing flags
     assert.equal(list.probablyNotTransfer[0]!.missing.paymentMethod, true);
@@ -335,7 +335,7 @@ describe("the probably-not-transfer section", () => {
     const list = buildDueInvoices({
       items: [transfer],
       bankAccounts: new Map(),
-      cardPaidEvidence: evidence(transfer.id),
+      notTransferEvidence: evidence(transfer.id),
       today: TODAY,
     });
     assert.equal(list.items.length, 1);
@@ -358,7 +358,7 @@ describe("the probably-not-transfer section", () => {
     const list = buildDueInvoices({
       items: [main, overdueCard, eurCard],
       bankAccounts: new Map(),
-      cardPaidEvidence: evidence(overdueCard.id, eurCard.id),
+      notTransferEvidence: evidence(overdueCard.id, eurCard.id),
       today: TODAY,
     });
     assert.equal(list.summary.count, 1);
@@ -380,7 +380,7 @@ describe("the probably-not-transfer section", () => {
     const list = buildDueInvoices({
       items: [later, none, old],
       bankAccounts: new Map(),
-      cardPaidEvidence: evidence(later.id, none.id, old.id),
+      notTransferEvidence: evidence(later.id, none.id, old.id),
       today: TODAY,
     });
     assert.deepEqual(
@@ -401,6 +401,26 @@ describe("the probably-not-transfer section", () => {
     assert.deepEqual(list.summary.probablyNotTransfer, {
       count: 0,
       totals: [],
+    });
+  });
+
+  it("a bank-deduction evidence moves a row with no method too, and the note's kind rides with it", () => {
+    const bank = item({ paymentMethod: null, supplierName: "OTP Bank Nyrt." });
+    const list = buildDueInvoices({
+      items: [bank],
+      bankAccounts: new Map(),
+      notTransferEvidence: new Map([
+        [
+          bank.id,
+          { kind: "BANK_DEDUCTION" as const, bookingDate: "2026-11-05" },
+        ],
+      ]),
+      today: TODAY,
+    });
+    assert.deepEqual(list.items, []);
+    assert.deepEqual(list.probablyNotTransfer[0]!.evidence, {
+      kind: "BANK_DEDUCTION",
+      bookingDate: "2026-11-05",
     });
   });
 });

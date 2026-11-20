@@ -413,7 +413,7 @@ describe("entering a supplier bank account by hand", () => {
           paymentMethod: true,
         },
       }),
-      evidence: { cardInvoices: 2 },
+      evidence: { kind: "CARD" as const, cardInvoices: 2 },
     };
     api.list.mockResolvedValue({
       ...response([row()]),

@@ -4,6 +4,7 @@ import type {
   DueInvoiceItem,
   DueInvoicesResponse,
   IncomingDocumentListItem,
+  ProbablyNotTransferEvidence,
   ProbablyNotTransferItem,
 } from "@acropora/types";
 
@@ -20,7 +21,7 @@ import type {
  * legfelül; utána a mai vagy későbbi határidők növekvően (a határidőhöz legközelebbi elöl); a határidő nélküliek a végén. Azonos
  * határidőnél a cég neve, majd a számla száma dönt.
  *
- * A „VALÓSZÍNŰLEG NEM UTALANDÓ” SZAKASZ (acrobot 58830, nautilus 58712): a fizetési mód NÉLKÜLI sorok közül az, amelynek szállítójánál a MÁSIK számláit kártyával fizettük (`cardPaidEvidence`), nem a főlistába,
+ * A „VALÓSZÍNŰLEG NEM UTALANDÓ” SZAKASZ (acrobot 58830, nautilus 58712): a fizetési mód NÉLKÜLI sorok közül az, amelynek szállítójánál a MÁSIK számláit kártyával fizettük (`notTransferEvidence`), nem a főlistába,
  * hanem külön szakaszba kerül az okkal. NEM esik ki (Balázs szabálya), csak nem az utalandó összegben áll; az átutalás szavával jelölt sor soha nem kerül ide: a számla saját szava erősebb a szállító múltjánál.
  *
  * KÖZLEMÉNY: alapból a számla száma. Egy „a számla PDF-je más közleményt kér” olvasat az adatban ma NINCS (a `bankReference` a
@@ -53,8 +54,11 @@ export function buildDueInvoices(input: {
   bankAccounts: ReadonlyMap<string, string | null>;
   /** a sor azonosítója -> a pótolt számlaszám forrása; ami nincs benne, annak a számlaszáma a sor SAJÁT adata (`OWN`) */
   bankAccountSources?: ReadonlyMap<string, DueInvoiceAccountSource>;
-  /** a sor azonosítója -> hány MÁSIK számláját fizettük a szállítónak kártyával (és egyiket sem utalással): `cardPaidSupplierEvidence`; ami nincs benne, annak nincs ilyen múltja */
-  cardPaidEvidence?: ReadonlyMap<string, { cardInvoices: number }>;
+  /**
+   * a sor azonosítója -> miért valószínűleg nem utalandó: a szállító kártyás múltja (`cardPaidSupplierEvidence`) vagy a bank saját díjának levonása (`bankDeductionEvidence`); ami nincs benne, az utalandó.
+   * A betöltő egyesíti a kettőt (a kártyás ok elöl, mert a számla saját PDF-je is azt vizsgálja).
+   */
+  notTransferEvidence?: ReadonlyMap<string, ProbablyNotTransferEvidence>;
   /** `ÉÉÉÉ-HH-NN`, Budapest */
   today: string;
 }): DueInvoicesResponse {
@@ -98,7 +102,7 @@ export function buildDueInvoices(input: {
       },
     };
     const evidence = methodMissing
-      ? input.cardPaidEvidence?.get(item.id)
+      ? input.notTransferEvidence?.get(item.id)
       : undefined;
     if (evidence) notTransfer.push({ ...row, evidence });
     else rows.push(row);
