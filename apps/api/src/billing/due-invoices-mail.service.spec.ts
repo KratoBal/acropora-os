@@ -46,11 +46,13 @@ const LIST: DueInvoicesResponse = {
     item({ overdue: true, daysOverdue: 3, dueDate: "2026-11-20" }),
     item({ id: "row-2" }),
   ],
+  probablyNotTransfer: [],
   summary: {
     count: 2,
     overdue: 1,
     withMissingData: 0,
     totals: [{ currency: "HUF", outstanding: "254000" }],
+    probablyNotTransfer: { count: 0, totals: [] },
   },
 };
 const LAST_BANK = new Date("2026-11-23T07:15:00Z");

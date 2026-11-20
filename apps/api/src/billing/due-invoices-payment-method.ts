@@ -80,6 +80,8 @@ export type RowVerdict =
   PaymentMethodKind | "NINCS_PDF" | "OLVASHATATLAN" | "NINCS_SZOVEG" | "ELTERO";
 
 export interface PaymentMethodRow {
+  /** a célsor azonosítója (a `PaymentMethodTarget.id`): a lista ebből köti vissza az ítéletet a sorhoz */
+  readonly id: string;
   readonly supplierName: string;
   readonly documentNumber: string;
   readonly pdfCount: number;
@@ -129,6 +131,7 @@ export async function readPaymentMethods(
                 ? "NINCS_SZOVEG"
                 : "OLVASHATATLAN"));
     rows.push({
+      id: target.id,
       supplierName: target.supplierName,
       documentNumber: target.documentNumber,
       pdfCount: target.pdfIds.length,

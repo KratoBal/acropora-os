@@ -95,6 +95,14 @@ export function dueInvoicesMailContent(input: {
     lines.push(
       `${list.summary.withMissingData} sorból hiányzik adat (bankszámlaszám, fizetési mód vagy határidő): a jegyzékben „nincs adat” áll.`,
     );
+  if (list.summary.probablyNotTransfer.count > 0)
+    lines.push(
+      `Külön szakaszban, a fenti hátralékon kívül: ${list.summary.probablyNotTransfer.count} „valószínűleg nem utalandó” számla (${
+        list.summary.probablyNotTransfer.totals
+          .map((total) => pdfAmount(total.outstanding, total.currency))
+          .join(" + ") || "0"
+      }). A szállító másik számláit kártyával fizettük, és a számlán nincs fizetési mód.`,
+    );
   lines.push("", "Acropora OS");
   return {
     subject: `${DUE_INVOICES_PDF_TITLE}, ${dayText(list.asOf)}`,

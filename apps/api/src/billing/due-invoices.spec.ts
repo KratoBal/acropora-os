@@ -298,3 +298,109 @@ describe("the source of a supplied bank account", () => {
     assert.equal(out.summary.withMissingData, 1);
   });
 });
+
+/*
+  A „VALÓSZÍNŰLEG NEM UTALANDÓ” SZAKASZ (acrobot 58830, nautilus 58712). MI PIROSÍT: ha a kártyás múltú, fizetési mód NÉLKÜLI sor a főlistában marad; ha egy sor, amelyiknek van fizetési módja
+  (átutalás is), a szakaszba kerül; ha egy sor KIESIK (a szakaszban nincs meg); ha a szakasz összege beleszámít a főlista darabszámába, lejárt-számába vagy összegébe; ha a szakasz sorai nem
+  ugyanabban a sorrendben állnak, mint a főlistáé; ha a szakasz összege nem pénznemenként van.
+*/
+describe("the probably-not-transfer section", () => {
+  const evidence = (...ids: string[]) =>
+    new Map(ids.map((id) => [id, { cardInvoices: 2 }]));
+
+  it("a row with NO payment method and a card-paid supplier moves to the section, with its evidence; nothing drops", () => {
+    const card = item({ paymentMethod: null, supplierName: "Kártyás Kft." });
+    const plain = item({ paymentMethod: null, supplierName: "Más Kft." });
+    const list = buildDueInvoices({
+      items: [card, plain],
+      bankAccounts: new Map(),
+      cardPaidEvidence: evidence(card.id),
+      today: TODAY,
+    });
+    assert.deepEqual(
+      list.items.map((r) => r.id),
+      [plain.id],
+    );
+    assert.deepEqual(
+      list.probablyNotTransfer.map((r) => [r.id, r.evidence]),
+      [[card.id, { cardInvoices: 2 }]],
+    );
+    // the moved row keeps its own data and its missing flags
+    assert.equal(list.probablyNotTransfer[0]!.missing.paymentMethod, true);
+    assert.equal(list.probablyNotTransfer[0]!.outstanding, "127000");
+  });
+
+  it("a row WITH a transfer method never moves, whatever the supplier's card history says", () => {
+    const transfer = item({ paymentMethod: "Átutalás" });
+    const list = buildDueInvoices({
+      items: [transfer],
+      bankAccounts: new Map(),
+      cardPaidEvidence: evidence(transfer.id),
+      today: TODAY,
+    });
+    assert.equal(list.items.length, 1);
+    assert.equal(list.probablyNotTransfer.length, 0);
+  });
+
+  it("the section's rows are NOT in the main count, the overdue count or the totals; they have their own", () => {
+    const overdueCard = item({
+      paymentMethod: null,
+      dueDate: "2026-11-10",
+      grossAmount: "1000",
+    });
+    const main = item({ grossAmount: "5000" });
+    const eurCard = item({
+      paymentMethod: null,
+      currency: "EUR",
+      grossAmount: "20.50",
+      dueDate: null,
+    });
+    const list = buildDueInvoices({
+      items: [main, overdueCard, eurCard],
+      bankAccounts: new Map(),
+      cardPaidEvidence: evidence(overdueCard.id, eurCard.id),
+      today: TODAY,
+    });
+    assert.equal(list.summary.count, 1);
+    assert.equal(list.summary.overdue, 0);
+    assert.deepEqual(list.summary.totals, [
+      { currency: "HUF", outstanding: "5000" },
+    ]);
+    assert.equal(list.summary.probablyNotTransfer.count, 2);
+    assert.deepEqual(list.summary.probablyNotTransfer.totals, [
+      { currency: "EUR", outstanding: "20.50" },
+      { currency: "HUF", outstanding: "1000" },
+    ]);
+  });
+
+  it("the section keeps the main list's order: the overdue first, no due date last", () => {
+    const later = item({ paymentMethod: null, dueDate: "2026-12-05" });
+    const none = item({ paymentMethod: null, dueDate: null });
+    const old = item({ paymentMethod: null, dueDate: "2026-11-01" });
+    const list = buildDueInvoices({
+      items: [later, none, old],
+      bankAccounts: new Map(),
+      cardPaidEvidence: evidence(later.id, none.id, old.id),
+      today: TODAY,
+    });
+    assert.deepEqual(
+      list.probablyNotTransfer.map((r) => r.id),
+      [old.id, later.id, none.id],
+    );
+  });
+
+  it("without evidence the section is empty and every row stays (the field is optional)", () => {
+    const row = item({ paymentMethod: null });
+    const list = buildDueInvoices({
+      items: [row],
+      bankAccounts: new Map(),
+      today: TODAY,
+    });
+    assert.equal(list.items.length, 1);
+    assert.deepEqual(list.probablyNotTransfer, []);
+    assert.deepEqual(list.summary.probablyNotTransfer, {
+      count: 0,
+      totals: [],
+    });
+  });
+});

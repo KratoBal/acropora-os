@@ -68,11 +68,13 @@ const response = (
 ): DueInvoicesResponse => ({
   asOf: "2026-11-20",
   items,
+  probablyNotTransfer: [],
   summary: {
     count: items.length,
     overdue: items.filter((i) => i.overdue).length,
     withMissingData: 0,
     totals: [{ currency: "HUF", outstanding: "127000" }],
+    probablyNotTransfer: { count: 0, totals: [] },
     ...over,
   },
 });
@@ -396,5 +398,54 @@ describe("entering a supplier bank account by hand", () => {
       }),
     );
     await waitFor(() => expect(api.list).toHaveBeenCalledTimes(2));
+  });
+
+  it("shows the probably-not-transfer section with each row's reason, its own count and sum, and nothing when it is empty", async () => {
+    const moved = {
+      ...row({
+        id: "card-1",
+        supplierName: "Kártyás Kft.",
+        outstanding: "79057",
+        paymentMethod: null,
+        missing: {
+          dueDate: false,
+          supplierBankAccount: false,
+          paymentMethod: true,
+        },
+      }),
+      evidence: { cardInvoices: 2 },
+    };
+    api.list.mockResolvedValue({
+      ...response([row()]),
+      probablyNotTransfer: [moved],
+      summary: {
+        ...response([row()]).summary,
+        probablyNotTransfer: {
+          count: 1,
+          totals: [{ currency: "HUF", outstanding: "79057" }],
+        },
+      },
+    });
+    render(<DueInvoicesPage />);
+    const section = await screen.findByTestId("probably-not-transfer");
+    expect(
+      within(section).getByText("Valószínűleg nem utalandó"),
+    ).toBeInTheDocument();
+    expect(within(section).getByText("Kártyás Kft.")).toBeInTheDocument();
+    expect(
+      within(section).getByText(
+        "a szállító másik 2 számláját kártyával fizettük",
+      ),
+    ).toBeInTheDocument();
+    expect(section).toHaveTextContent(/1\s+számla, hátralék:\s+79\s?057\s?Ft/);
+    // the main table still holds only the transfer row
+    expect(screen.getByText("Alfa Kft.")).toBeInTheDocument();
+    expect(screen.getByTestId("due-summary")).toHaveTextContent(/1 számla/);
+  });
+
+  it("shows no section when no row moved", async () => {
+    render(<DueInvoicesPage />);
+    await screen.findByText("Alfa Kft.");
+    expect(screen.queryByTestId("probably-not-transfer")).toBeNull();
   });
 });

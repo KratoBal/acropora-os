@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { PDFDocument } from "pdf-lib";
-import type { DueInvoiceItem, DueInvoicesResponse } from "@acropora/types";
+import type {
+  DueInvoiceItem,
+  DueInvoicesResponse,
+  ProbablyNotTransferItem,
+} from "@acropora/types";
 
 import { pdfTextLines } from "../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import {
@@ -36,9 +40,13 @@ const row = (over: Partial<DueInvoiceItem> = {}): DueInvoiceItem => ({
   missing: { dueDate: false, supplierBankAccount: false, paymentMethod: false },
   ...over,
 });
-const list = (items: DueInvoiceItem[]): DueInvoicesResponse => ({
+const list = (
+  items: DueInvoiceItem[],
+  probablyNotTransfer: ProbablyNotTransferItem[] = [],
+): DueInvoicesResponse => ({
   asOf: "2026-11-23",
   items,
+  probablyNotTransfer,
   summary: {
     count: items.length,
     overdue: items.filter((i) => i.overdue).length,
@@ -49,6 +57,22 @@ const list = (items: DueInvoiceItem[]): DueInvoicesResponse => ({
         i.missing.paymentMethod,
     ).length,
     totals: [{ currency: "HUF", outstanding: "1234567" }],
+    probablyNotTransfer: {
+      count: probablyNotTransfer.length,
+      totals: probablyNotTransfer.length
+        ? [
+            {
+              currency: "HUF",
+              outstanding: String(
+                probablyNotTransfer.reduce(
+                  (a, i) => a + Number(i.outstanding),
+                  0,
+                ),
+              ),
+            },
+          ]
+        : [],
+    },
   },
 });
 const GENERATED = new Date("2026-11-23T08:20:00Z"); // 09:20 Budapest
@@ -56,10 +80,14 @@ const LAST_BANK = new Date("2026-11-23T07:15:00Z"); // 08:15 Budapest
 
 const build = async (
   items: DueInvoiceItem[],
-  over: { lastBankData?: Date | null; lateNotice?: boolean } = {},
+  over: {
+    lastBankData?: Date | null;
+    lateNotice?: boolean;
+    probablyNotTransfer?: ProbablyNotTransferItem[];
+  } = {},
 ) => {
   const pdf = await buildDueInvoicesPdf({
-    list: list(items),
+    list: list(items, over.probablyNotTransfer),
     lastBankData:
       "lastBankData" in over ? (over.lastBankData ?? null) : LAST_BANK,
     generatedAt: GENERATED,
@@ -204,5 +232,48 @@ describe("the due invoices PDF names where a supplied account comes from", () =>
     assert.ok(text.includes("(a szállító másik számlájáról)"), text);
     assert.equal(text.split("(a számla PDF-jéből)").length - 1, 1);
     assert.ok(!text.includes("(kézzel megadva)"), text);
+  });
+
+  it("the probably-not-transfer section is a titled second block with its explanation, each row's reason, and its own sum; the main summary does not count it", async () => {
+    const moved: ProbablyNotTransferItem = {
+      ...row({
+        id: "m1",
+        supplierName: "Kártyás Szállító Kft.",
+        outstanding: "79057",
+        paymentMethod: null,
+        missing: {
+          dueDate: false,
+          supplierBankAccount: false,
+          paymentMethod: true,
+        },
+      }),
+      evidence: { cardInvoices: 3 },
+    };
+    const built = await build([row()], { probablyNotTransfer: [moved] });
+    // a long cell wraps onto the next line: compare the text with its line breaks folded to spaces
+    const text = built.text.replace(/\s+/g, " ");
+    assert.ok(text.includes("Valószínűleg nem utalandó"), text);
+    assert.ok(
+      text.includes("a szállító másik számláit kártyával fizettük"),
+      text,
+    );
+    assert.ok(text.includes("Kártyás Szállító Kft."), text);
+    assert.ok(
+      text.includes("a szállító másik 3 számláját kártyával fizettük"),
+      text,
+    );
+    assert.ok(text.includes("1 számla, hátralék: 79 057 HUF"), text);
+    // the main line counts only the transfer rows
+    assert.ok(text.includes("Hátralék: 1 234 567 HUF."), text);
+    assert.equal(
+      text.includes("1 313 624"),
+      false,
+      "the section's sum is not added to the main total",
+    );
+    // no section when nothing moved
+    assert.equal(
+      (await build([row()])).text.includes("Valószínűleg nem utalandó"),
+      false,
+    );
   });
 });

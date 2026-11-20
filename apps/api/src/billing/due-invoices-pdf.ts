@@ -1,8 +1,10 @@
 import PDFKitDocument from "pdfkit";
 import {
   DUE_INVOICE_ACCOUNT_SOURCE_NOTES,
+  probablyNotTransferNote,
   type DueInvoiceItem,
   type DueInvoicesResponse,
+  type ProbablyNotTransferItem,
 } from "@acropora/types";
 
 import { registerEmbeddedPdfFont } from "../documents/pdf/branded-document.js";
@@ -34,6 +36,11 @@ const COLUMNS = [
 ] as const;
 
 const NO_DATA = "nincs adat";
+
+/** A második szakasz címe és magyarázata (acrobot 58830): a sor NEM esett ki, csak nem az utalandó összegben áll. */
+export const PROBABLY_NOT_TRANSFER_TITLE = "Valószínűleg nem utalandó";
+export const PROBABLY_NOT_TRANSFER_EXPLANATION =
+  "A fizetési mód hiányzik a számláról, és a szállító másik számláit kártyával fizettük. Nem kerültek ki a jegyzékből: ha a szállító mégis utalást kér, itt látszik. Az összegük nincs benne a fenti hátralékban.";
 
 /** Ezres tagolás sima szóközzel (a beágyazott betűben nincs keskeny szóköz). */
 export function pdfAmount(amount: string, currency: string): string {
@@ -160,49 +167,92 @@ export function buildDueInvoicesPdf(input: {
           MARGIN,
           y,
         );
-    for (const item of list.items) {
-      const cells = cellsOf(item);
-      doc.fontSize(9);
-      const height = Math.max(
-        ...cells.map((cell, index) =>
-          doc.heightOfString(cell.text, { width: COLUMNS[index]!.width - 8 }),
-        ),
-      );
-      if (y + height + 6 > BOTTOM) {
-        doc.addPage({ size: "A4", layout: "landscape", margin: MARGIN });
-        y = drawHeader(MARGIN);
-      }
-      let x = MARGIN;
-      cells.forEach((cell, index) => {
-        const column = COLUMNS[index]!;
+    const drawItems = (
+      items: readonly (DueInvoiceItem | ProbablyNotTransferItem)[],
+    ) => {
+      for (const item of items) {
+        const cells = cellsOf(
+          item,
+          "evidence" in item ? probablyNotTransferNote(item.evidence) : null,
+        );
+        doc.fontSize(9);
+        const height = Math.max(
+          ...cells.map((cell, index) =>
+            doc.heightOfString(cell.text, { width: COLUMNS[index]!.width - 8 }),
+          ),
+        );
+        if (y + height + 6 > BOTTOM) {
+          doc.addPage({ size: "A4", layout: "landscape", margin: MARGIN });
+          y = drawHeader(MARGIN);
+        }
+        let x = MARGIN;
+        cells.forEach((cell, index) => {
+          const column = COLUMNS[index]!;
+          doc
+            .fontSize(9)
+            .fillColor(cell.color)
+            .text(cell.text, x, y, {
+              width: column.width - 8,
+              align: "right" in column && column.right ? "right" : "left",
+            });
+          x += column.width;
+        });
+        y += height + 6;
         doc
-          .fontSize(9)
-          .fillColor(cell.color)
-          .text(cell.text, x, y, {
-            width: column.width - 8,
-            align: "right" in column && column.right ? "right" : "left",
-          });
-        x += column.width;
-      });
-      y += height + 6;
+          .moveTo(MARGIN, y - 3)
+          .lineTo(PAGE_WIDTH - MARGIN, y - 3)
+          .strokeColor(RULE)
+          .lineWidth(0.4)
+          .stroke();
+      }
+    };
+    drawItems(list.items);
+
+    if (list.probablyNotTransfer.length > 0) {
+      const sectionNote = `${list.probablyNotTransfer.length} számla, hátralék: ${
+        list.summary.probablyNotTransfer.totals
+          .map((t) => pdfAmount(t.outstanding, t.currency))
+          .join(" + ") || "0"
+      }.`;
+      // a cím, a magyarázat és legalább egy sor együtt kerüljön az oldalra
+      if (y + 90 > BOTTOM) {
+        doc.addPage({ size: "A4", layout: "landscape", margin: MARGIN });
+        y = MARGIN;
+      } else y += 12;
       doc
-        .moveTo(MARGIN, y - 3)
-        .lineTo(PAGE_WIDTH - MARGIN, y - 3)
-        .strokeColor(RULE)
-        .lineWidth(0.4)
-        .stroke();
+        .fillColor(INK)
+        .fontSize(12)
+        .text(PROBABLY_NOT_TRANSFER_TITLE, MARGIN, y);
+      doc
+        .fillColor(MUTED)
+        .fontSize(9)
+        .text(
+          `${PROBABLY_NOT_TRANSFER_EXPLANATION} ${sectionNote}`,
+          MARGIN,
+          doc.y + 2,
+          { width: PAGE_WIDTH - 2 * MARGIN },
+        );
+      y = drawHeader(doc.y + 6);
+      drawItems(list.probablyNotTransfer);
     }
     doc.end();
   });
 }
 
 /** Egy sor cellái: a szöveg és a szín. A hiányzó adat „nincs adat”, a lejárt határidő jelölve. */
-function cellsOf(item: DueInvoiceItem): { text: string; color: string }[] {
+function cellsOf(
+  item: DueInvoiceItem,
+  note: string | null = null,
+): { text: string; color: string }[] {
   return [
     {
-      text: item.missing.paymentMethod
-        ? `${item.supplierName}\nfizetési mód: ${NO_DATA}`
-        : item.supplierName,
+      text: [
+        item.supplierName,
+        item.missing.paymentMethod ? `fizetési mód: ${NO_DATA}` : null,
+        note,
+      ]
+        .filter((line) => line !== null)
+        .join("\n"),
       color: INK,
     },
     item.dueDate
