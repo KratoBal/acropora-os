@@ -160,6 +160,8 @@ describe("service-job list state in the URL", () => {
       "szivatty",
       false,
       "REPAIR",
+      undefined,
+      { from: "", to: "" },
     );
     expect(
       (screen.getByLabelText("Partner szűrő") as HTMLSelectElement).value,
@@ -253,6 +255,8 @@ describe("serviceJobListStateFromUrl / serviceJobListQuery", () => {
       includeHidden: true,
       partner: "Alfa Kft",
       location: "A / B",
+      createdFrom: "2026-11-18",
+      createdTo: "2026-11-19",
     };
     const query = serviceJobListQuery(state);
     expect(serviceJobListStateFromUrl(new URLSearchParams(query))).toEqual(
@@ -368,6 +372,8 @@ describe("service-job list, redesign columns", () => {
       "",
       true,
       "REPAIR",
+      undefined,
+      { from: "", to: "" },
     );
   });
 
@@ -383,5 +389,83 @@ describe("service-job list, redesign columns", () => {
     } finally {
       session.user.role = role;
     }
+  });
+});
+
+/**
+ * A LÉTREHOZÁS TÓL-IG SZŰRŐJE (Luca, 2026-11-20 09:39 UTC). MI PIROSÍT: ha a mezők nem a createdFrom/createdTo paramétert
+ * küldik a szervernek, vagy nem íródnak az URL-be; ha az URL-ben álló nap nem megy át, vagy nem magyarul látszik a mezőben;
+ * ha a felirat nem mondja ki, melyik dátumra szűr; ha a félig beírt nap kérést indít; ha a fordított tartomány nem szól.
+ */
+describe("service-job list, the created-day filter", () => {
+  it("a felirat a létrehozásra szűr, és a két mező a createdFrom / createdTo paramétert küldi, az URL-be is", async () => {
+    renderAt("");
+    await screen.findByText("Jegy 3");
+    expect(
+      screen.getByRole("group", { name: "Létrehozás napja" }).textContent,
+    ).toMatch(/^Létrehozva/);
+    fireEvent.change(screen.getByLabelText("Létrehozva ettől a naptól"), {
+      target: { value: "2026-11-18" },
+    });
+    fireEvent.change(screen.getByLabelText("Létrehozva eddig a napig"), {
+      target: { value: "2026-11-19" },
+    });
+    await settle();
+    expect(api.list).toHaveBeenLastCalledWith(
+      "token-1",
+      "open",
+      expect.anything(),
+      "",
+      false,
+      "REPAIR",
+      undefined,
+      { from: "2026-11-18", to: "2026-11-19" },
+    );
+    expect(navigation.replace).toHaveBeenLastCalledWith(
+      "/szerviz/hibajegyek?createdFrom=2026-11-18&createdTo=2026-11-19",
+      { scroll: false },
+    );
+  });
+
+  it("az URL-ben álló nap átmegy a szerverhez, és magyarul látszik a mezőben", async () => {
+    renderAt("createdFrom=2026-11-18&createdTo=2026-11-19");
+    await screen.findByText("Jegy 3");
+    expect(api.list.mock.calls.at(-1)?.[7]).toEqual({
+      from: "2026-11-18",
+      to: "2026-11-19",
+    });
+    expect(
+      (screen.getByLabelText("Létrehozva ettől a naptól") as HTMLInputElement)
+        .value,
+    ).toBe("2026. 11. 18.");
+    expect(
+      (screen.getByLabelText("Létrehozva eddig a napig") as HTMLInputElement)
+        .value,
+    ).toBe("2026. 11. 19.");
+    expect(navigation.replace).not.toHaveBeenCalled();
+  });
+
+  it("a félig beírt nap nem szűrőváltozás: nem megy új kérés", async () => {
+    renderAt("");
+    await screen.findByText("Jegy 3");
+    await settle();
+    const before = api.list.mock.calls.length;
+    fireEvent.change(screen.getByLabelText("Létrehozva ettől a naptól"), {
+      target: { value: "20261" },
+    });
+    await settle();
+    expect(api.list.mock.calls.length).toBe(before);
+  });
+
+  it("a fordított tartomány kimondja, mi a baj; a rendes nem szól", async () => {
+    const reversed = renderAt("createdFrom=2026-11-20&createdTo=2026-11-19");
+    await screen.findByText("Jegy 3");
+    expect((await screen.findByRole("alert")).textContent).toMatch(
+      /kezdő dátum a záró dátum után/,
+    );
+    reversed.unmount();
+    renderAt("createdFrom=2026-11-19&createdTo=2026-11-19");
+    await screen.findByText("Jegy 3");
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

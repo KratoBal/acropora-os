@@ -40,10 +40,14 @@ export const serviceJobsApi = {
     kind: "REPAIR" | "MAINTENANCE" = "REPAIR",
     /** A karbantartás füle: a szerver szűr rá (f4590db6). Hiányzik: minden lap. */
     maintenanceState?: "progress" | "done",
+    /** A létrehozás napjának tól-ig szűrője (`ÉÉÉÉ-HH-NN`, Luca 2026-11-20): a szerver szűr, mindkét határnap benne van. */
+    created?: { from?: string; to?: string },
   ) {
     const query = new URLSearchParams({ scope });
     query.set("kind", kind);
     if (maintenanceState) query.set("maintenanceState", maintenanceState);
+    if (created?.from) query.set("createdFrom", created.from);
+    if (created?.to) query.set("createdTo", created.to);
     const trimmed = search?.trim();
     if (trimmed) query.set("search", trimmed);
     /**

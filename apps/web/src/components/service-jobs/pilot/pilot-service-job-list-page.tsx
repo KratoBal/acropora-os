@@ -5,6 +5,7 @@ import {
   PageHeader,
   Skeleton,
   PilotDataTable,
+  PilotDateField,
   PilotSelect,
   type PilotTableColumn,
   PAGE_GUTTER_X,
@@ -119,6 +120,8 @@ export function serviceJobListStateFromUrl(params: URLSearchParams): {
   includeHidden: boolean;
   partner: string;
   location: string;
+  createdFrom: string;
+  createdTo: string;
 } {
   const tab = params.get("tab") as PilotTab | null;
   return {
@@ -127,6 +130,8 @@ export function serviceJobListStateFromUrl(params: URLSearchParams): {
     includeHidden: params.get("hidden") === "1",
     partner: params.get("partner") || ALL_PARTNERS,
     location: params.get("location") || ALL_LOCATIONS,
+    createdFrom: params.get("createdFrom") ?? "",
+    createdTo: params.get("createdTo") ?? "",
   };
 }
 
@@ -136,6 +141,8 @@ export function serviceJobListQuery(state: {
   includeHidden: boolean;
   partner: string;
   location: string;
+  createdFrom?: string;
+  createdTo?: string;
 }): string {
   const query = new URLSearchParams();
   if (state.tab !== "open") query.set("tab", state.tab);
@@ -143,6 +150,8 @@ export function serviceJobListQuery(state: {
   if (state.includeHidden) query.set("hidden", "1");
   if (state.partner !== ALL_PARTNERS) query.set("partner", state.partner);
   if (state.location !== ALL_LOCATIONS) query.set("location", state.location);
+  if (state.createdFrom) query.set("createdFrom", state.createdFrom);
+  if (state.createdTo) query.set("createdTo", state.createdTo);
   return query.toString();
 }
 
@@ -280,6 +289,10 @@ export function PilotServiceJobListPage() {
   const [includeHidden, setIncludeHidden] = useState(initial.includeHidden);
   const [partner, setPartner] = useState(initial.partner);
   const [location, setLocation] = useState(initial.location);
+  const [createdFrom, setCreatedFrom] = useState(initial.createdFrom);
+  const [createdTo, setCreatedTo] = useState(initial.createdTo);
+  const reversedRange =
+    Boolean(createdFrom && createdTo) && createdFrom > createdTo;
   const [data, setData] = useState<ServiceJobListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -318,6 +331,8 @@ export function PilotServiceJobListPage() {
             appliedSearch,
             includeHidden,
             "REPAIR",
+            undefined,
+            { from: createdFrom, to: createdTo },
           ),
         );
       } catch (cause) {
@@ -331,7 +346,15 @@ export function PilotServiceJobListPage() {
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [appliedSearch, canView, includeHidden, scope, token],
+    [
+      appliedSearch,
+      canView,
+      createdFrom,
+      createdTo,
+      includeHidden,
+      scope,
+      token,
+    ],
   );
 
   useEffect(() => {
@@ -360,11 +383,15 @@ export function PilotServiceJobListPage() {
       includeHidden,
       partner,
       location,
+      createdFrom,
+      createdTo,
     });
     if (next === params.toString()) return;
     router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
   }, [
     appliedSearch,
+    createdFrom,
+    createdTo,
     includeHidden,
     location,
     params,
@@ -569,6 +596,44 @@ export function PilotServiceJobListPage() {
             Rejtettek is
           </button>
         ) : null}
+        {/*
+          A LÉTREHOZÁS NAPJÁNAK TÓL-IG SZŰRŐJE (Luca, 2026-11-20): a felirat kimondja, melyik dátumra szűr (a jegy létrehozására,
+          ugyanaz, mint a Létrehozva oszlop), mindkét határnap benne van, bármelyik elhagyható. A szerver szűr, és a csempék száma
+          is a szűrt listáé. A sor TÖRHET: 390 pixelen a két 160 pixeles mező a felirattal nem fér egy sorba (a munkalap-lista
+          ugyanitt lógott ki, OS hibakör 2026-11-19).
+        */}
+        <div
+          className="flex flex-wrap items-center gap-2 text-sm text-pilot-grey-700"
+          role="group"
+          aria-label="Létrehozás napja"
+        >
+          <span>Létrehozva</span>
+          <PilotDateField
+            aria-label="Létrehozva ettől a naptól"
+            value={createdFrom}
+            max={createdTo || undefined}
+            onChange={(day) => {
+              // gépelés közben a félig beírt nap üres értéket ad: az nem szűrőváltozás
+              if (day !== createdFrom) setCreatedFrom(day);
+            }}
+            className="w-40"
+          />
+          <span aria-hidden="true">–</span>
+          <PilotDateField
+            aria-label="Létrehozva eddig a napig"
+            value={createdTo}
+            min={createdFrom || undefined}
+            onChange={(day) => {
+              if (day !== createdTo) setCreatedTo(day);
+            }}
+            className="w-40"
+          />
+          {reversedRange ? (
+            <span role="alert" className="text-xs font-medium text-red-600">
+              A kezdő dátum a záró dátum után van.
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {error ? (
