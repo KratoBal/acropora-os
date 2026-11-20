@@ -46,7 +46,14 @@ function ControlResults({ results }: { results: FeedControlResult[] }) {
         title="A Számlázz.hu a kontroll számot sem találta meg"
         description={
           "A feedben lévő, tehát biztosan létező számra sem jött számla, ezért a kérdezés alakja nem megbízható, és a „nem ismeri” válasz nem bizonyít semmit. A kör nem rögzített választ.\n" +
-          failed.map((r) => `${r.number}: ${r.detail}`).join("\n")
+          failed
+            .map((r) =>
+              [
+                `${r.number}: ${r.detail}`,
+                ...(r.diagnostics ?? []).map((line) => `  - ${line}`),
+              ].join("\n"),
+            )
+            .join("\n")
         }
       />
     </div>

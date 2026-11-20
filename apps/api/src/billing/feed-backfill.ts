@@ -109,6 +109,8 @@ export interface FeedControlResult {
   /** a Számlázz.hu hibakódja és üzenete, vagy a hiba alakja (a válasz XML-je és vevő nélkül) */
   detail: string;
   passed: boolean;
+  /** a bukott kontroll diagnosztikája: ugyanaz a szám más kérés-alakkal, a PDF-lekéréssel, és egy OS-ben kiállított számmal */
+  diagnostics?: string[];
 }
 
 /** Sorozatonként és kimenetenként a darabszám: a lap ebből mondja meg, hány ACRW számot ismer a Számlázz.hu. */

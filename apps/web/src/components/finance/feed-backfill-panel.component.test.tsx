@@ -117,6 +117,10 @@ describe("FeedBackfillPanel", () => {
               outcome: "NOT_FOUND",
               detail: "a Számlázz.hu 7-es hibakóddal felelt: Hiányzó adat",
               passed: false,
+              diagnostics: [
+                "ACRW-2026/00571, PDF-lekérés: megvan (PDF 1234 bájt)",
+                "az OS által kiállított E-2026-5, XML-lekérdezés: 7-es hibakód",
+              ],
             },
           ],
         },
@@ -126,6 +130,9 @@ describe("FeedBackfillPanel", () => {
     const failed = await screen.findByTestId("feed-backfill-control-failed");
     expect(failed).toHaveTextContent("ACRW-2026/00571");
     expect(failed).toHaveTextContent("7-es hibakóddal felelt: Hiányzó adat");
+    // the diagnostics tell a broken request shape from a number the key does not see
+    expect(failed).toHaveTextContent("PDF-lekérés: megvan (PDF 1234 bájt)");
+    expect(failed).toHaveTextContent("E-2026-5, XML-lekérdezés: 7-es hibakód");
     const acrw = screen.getByTestId("feed-backfill-series-ACRW-2026");
     expect(acrw).toHaveTextContent("nem ismeri: 0");
     expect(acrw).toHaveTextContent("ellenőrzésre vár");
