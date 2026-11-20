@@ -6,6 +6,7 @@ import { prisma } from "@acropora/database";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { worksheetUnitWhere } from "../worksheets/worksheet-unit-scope.js";
 import { ServiceJobLinkedWorksheetsRepository } from "./service-job-linked-worksheets.repository.js";
+import { linkedWorksheetReadWhere } from "./service-job-linked-worksheets.rules.js";
 
 /**
  * THE LINK OF A WORKSHEET TO A MAINTENANCE SHEET ON A REAL DATABASE (card 5b366f5d). What only Postgres can show: the unique
@@ -257,6 +258,46 @@ describe(
         worksheetUnitWhere(scope, [bejaratId]),
       );
       assert.equal(shown.length, 1);
+    });
+
+    it("a kapcsolás után elrejtett munkalap a partner listájából kimarad, a belsősből nem (kártya efe02c6f)", async () => {
+      const scope = { kind: "customer", customerId } as const;
+      await prisma.worksheet.update({
+        where: { id: ws["w-jegy"]! },
+        data: { hiddenAt: new Date() },
+      });
+      try {
+        const partner = await repository.listLinked(
+          jobA,
+          customerId,
+          linkedWorksheetReadWhere(scope, [bejaratId]),
+        );
+        const internal = await repository.listLinked(
+          jobA,
+          customerId,
+          linkedWorksheetReadWhere({ kind: "internal" }, []),
+        );
+        assert.deepEqual(
+          [partner.length, internal.map((row) => row.subject)],
+          [0, ["w-jegy"]],
+        );
+      } finally {
+        await prisma.worksheet.update({
+          where: { id: ws["w-jegy"]! },
+          data: { hiddenAt: null },
+        });
+      }
+      // visible again: the partner of that unit sees it (the same where, so the 0 above was the hiding)
+      assert.equal(
+        (
+          await repository.listLinked(
+            jobA,
+            customerId,
+            linkedWorksheetReadWhere(scope, [bejaratId]),
+          )
+        ).length,
+        1,
+      );
     });
 
     it("a levétel a hivatkozást törli, a munkalapot nem, és naplósort ír; a másodszori levétel nem ír semmit", async () => {
