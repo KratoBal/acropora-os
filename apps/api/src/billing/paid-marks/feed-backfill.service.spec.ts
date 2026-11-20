@@ -27,6 +27,8 @@ function setup(options: {
   notFoundDetail?: string;
   /** does the key find the invoice the OS issued itself: true, false, or null (not known); absent: the method does not exist */
   ownKnown?: boolean | null;
+  /** the round's own questions (not the control) wait for this, so a test can hold a round running */
+  hold?: Promise<void>;
 }) {
   const checked = new Map(
     (options.checked ?? []).map((c) => [c.number, { ...c }]),
@@ -40,6 +42,15 @@ function setup(options: {
         kindCode: "SZ",
       })),
     checked: async () => [...checked.values()],
+    clearForeign: async (series) => {
+      let removed = 0;
+      for (const [number, row] of checked)
+        if (row.series === series && row.outcome === "NOT_OUR_ACCOUNT") {
+          checked.delete(number);
+          removed += 1;
+        }
+      return removed;
+    },
     record: async ({ number, series, line }) =>
       void checked.set(number, { number, series, outcome: line.outcome }),
   };
@@ -53,6 +64,8 @@ function setup(options: {
       return [`diag ${number}`];
     },
     pull: async (numbers: string[], apply: boolean) => {
+      if (options.hold && !options.stored.includes(numbers[0]!))
+        await options.hold;
       asked.push(`${apply ? "apply" : "dry"} ${numbers.join(",")}`);
       asks += numbers.length;
       return numbers.map((number) => {
@@ -455,5 +468,141 @@ describe("the feed backfill", () => {
     const answer = await service.start(false, "u-1", NOW);
     assert.equal(answer.status, "control-failed");
     assert.equal(checked.get("ACRW-2026/00004")?.outcome, undefined);
+  });
+  /*
+    A "NEM A MI FIÓKUNK" ÍTÉLET VISSZAVONÁSA (acrobot 58207, barracuda 58157). MI PIROSÍT: ha a visszavonás nem törli az ítéletet
+    (a sorozat örökre idegen marad); ha törli a sorozat többi válaszát is (a "ismeri", "nem ismeri" számok elvesznek); ha közben
+    kérdez a Számlázz.hu-tól vagy kört indít (a visszavonás csak a jelölést törli); ha kör közben fut; ha egy nem idegen sorozaton
+    "törölt"-et mond; ha a következő ellenőrzés nem dönt újra (nem kontrollálja a sorozatot); ha a memóriában tartott kontroll
+    továbbra is idegennek mutatja.
+  */
+  it("the recheck clears only the foreign verdict, asks nothing, and the next check judges the series again", async () => {
+    const { service, asked, checked } = setup({
+      stored: ["ACRW-2026/00004", "2026/00003"],
+      checked: [
+        {
+          number: "ACRW-2026/00002",
+          series: "ACRW-2026",
+          outcome: "WOULD_STORE",
+        },
+      ],
+      knows: { "ACRW-2026/00004": "NOT_FOUND" },
+      ownKnown: true,
+    });
+    // judged foreign by the first check
+    await service.start(false, "u-1", NOW);
+    await service.settled();
+    assert.equal(checked.get("ACRW-2026/00004")?.outcome, "NOT_OUR_ACCOUNT");
+    asked.length = 0;
+
+    assert.deepEqual(await service.clearForeign("ACRW-2026", "u-2"), {
+      status: "cleared",
+      series: "ACRW-2026",
+    });
+    // nothing was asked, no round started
+    assert.equal(asked.length, 0);
+    assert.equal(checked.get("ACRW-2026/00004"), undefined);
+    // the series' other answers stay
+    assert.equal(checked.get("ACRW-2026/00002")?.outcome, "WOULD_STORE");
+    // the in-memory control no longer shows the series as foreign
+    assert.ok(
+      !(await service.status(NOW)).control?.results.some(
+        (r) => r.series === "ACRW-2026",
+      ),
+    );
+
+    // the next check controls the series again and judges again
+    await service.start(false, "u-1", NOW);
+    await service.settled();
+    assert.ok(asked.includes("dry ACRW-2026/00004"));
+    assert.equal(checked.get("ACRW-2026/00004")?.outcome, "NOT_OUR_ACCOUNT");
+  });
+
+  it("the control kept in memory no longer shows the cleared series as foreign", async () => {
+    const { service } = setup({
+      stored: ["ACRW-2026/00004"],
+      knows: { "ACRW-2026/00004": "NOT_FOUND" },
+      ownKnown: true,
+    });
+    // the only series is judged foreign, no round follows, so the control of this press is the last one
+    assert.deepEqual(await service.start(false, "u-1", NOW), {
+      status: "nothing",
+      phase: "dry",
+    });
+    assert.equal(
+      (await service.status(NOW)).control?.results[0]?.foreign,
+      true,
+    );
+    await service.clearForeign("ACRW-2026", "u-2");
+    assert.deepEqual((await service.status(NOW)).control?.results, []);
+  });
+
+  it("after the recheck a series the key now knows goes on with its numbers (the verdict is not kept)", async () => {
+    const { service, asked, checked } = setup({
+      stored: ["ACRW-2026/00004"],
+      checked: [
+        {
+          number: "ACRW-2026/00004",
+          series: "ACRW-2026",
+          outcome: "NOT_OUR_ACCOUNT",
+        },
+      ],
+      // now Számlázz.hu knows the control number: no entry for it, so the stored number answers WOULD_STORE
+      knows: {},
+      ownKnown: true,
+    });
+    await service.clearForeign("ACRW-2026", "u-2");
+    assert.deepEqual(await service.start(false, "u-1", NOW), {
+      status: "started",
+      phase: "dry",
+      total: 3,
+    });
+    await service.settled();
+    assert.ok(asked.includes("dry ACRW-2026/00001"));
+    assert.notEqual(checked.get("ACRW-2026/00004")?.outcome, "NOT_OUR_ACCOUNT");
+  });
+
+  it("a series with no foreign verdict says so and changes nothing; a running round blocks the recheck", async () => {
+    const { service, checked } = setup({
+      stored: ["2026/00003"],
+      checked: [
+        { number: "2026/00001", series: "2026", outcome: "WOULD_STORE" },
+      ],
+      knows: {},
+      ownKnown: true,
+    });
+    assert.deepEqual(await service.clearForeign("2026", "u-2"), {
+      status: "not-foreign",
+      series: "2026",
+    });
+    assert.equal(checked.get("2026/00001")?.outcome, "WOULD_STORE");
+
+    let release: () => void = () => undefined;
+    const foreign = setup({
+      hold: new Promise<void>((done) => {
+        release = done;
+      }),
+      stored: ["ACRW-2026/00004", "2026/00003"],
+      checked: [
+        {
+          number: "ACRW-2026/00004",
+          series: "ACRW-2026",
+          outcome: "NOT_OUR_ACCOUNT",
+        },
+      ],
+      knows: {},
+      ownKnown: true,
+    });
+    await foreign.service.start(false, "u-1", NOW);
+    // a round is running (the loop has not settled yet): the recheck is refused, the verdict stays
+    assert.deepEqual(await foreign.service.clearForeign("ACRW-2026", "u-2"), {
+      status: "running",
+    });
+    assert.equal(
+      foreign.checked.get("ACRW-2026/00004")?.outcome,
+      "NOT_OUR_ACCOUNT",
+    );
+    release();
+    await foreign.service.settled();
   });
 });

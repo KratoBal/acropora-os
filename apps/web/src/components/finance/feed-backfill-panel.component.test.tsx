@@ -9,7 +9,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FeedBackfillStatus } from "@/lib/api/feed-backfill";
 
-const api = vi.hoisted(() => ({ status: vi.fn(), start: vi.fn() }));
+const api = vi.hoisted(() => ({
+  status: vi.fn(),
+  start: vi.fn(),
+  recheck: vi.fn(),
+}));
 vi.mock("@/lib/api/feed-backfill", () => ({ feedBackfillApi: api }));
 vi.mock("next/font/local", () => ({
   default: () => ({ className: "pilot-inter-stub" }),
@@ -102,6 +106,96 @@ describe("FeedBackfillPanel", () => {
     expect(
       screen.getByRole("button", { name: "Behúzás (2 számla)" }),
     ).toBeEnabled();
+  });
+
+  /*
+    AZ ÍTÉLET VISSZAVONÁSA (acrobot 58207). MI PIROSÍT: ha az idegen sorozat mellett nincs "Újra ellenőrzöm" gomb; ha kiállítási jog
+    nélkül is van; ha megerősítés nélkül indul; ha a megerősítés nem a sorozat nevével hív; ha a nem idegen sorozaton is van gomb; ha
+    a gomb kör közben él; ha a válasz szövege nem mondja meg, hogy semmit nem kérdezett a Számlázz.hu-tól; ha a hiba nem látszik.
+  */
+  it("a series outside the account has a recheck that asks first, names the series, and calls the recheck only after the confirmation", async () => {
+    api.status.mockResolvedValue(foreignStatus());
+    api.recheck
+      .mockReset()
+      .mockResolvedValue({ status: "cleared", series: "ACRW-2026" });
+    render(<FeedBackfillPanel token="t" canRun />);
+    const acrw = await screen.findByTestId("feed-backfill-series-ACRW-2026");
+    // the other series has no such button
+    expect(
+      within(screen.getByTestId("feed-backfill-series-2026")).queryByRole(
+        "button",
+        { name: "Újra ellenőrzöm" },
+      ),
+    ).toBeNull();
+    fireEvent.click(
+      within(acrw).getByRole("button", { name: "Újra ellenőrzöm" }),
+    );
+    expect(api.recheck).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("ACRW-2026");
+    expect(dialog).toHaveTextContent("semmit nem kérdez a Számlázz.hu-tól");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Újra ellenőrzöm" }),
+    );
+    await waitFor(() =>
+      expect(api.recheck).toHaveBeenCalledWith("t", "ACRW-2026"),
+    );
+    expect(await screen.findByText(/ítélete törölve/)).toBeInTheDocument();
+    expect(api.start).not.toHaveBeenCalled();
+  });
+
+  it("without the right to run there is no recheck, and while a round runs the button is off", async () => {
+    api.status.mockResolvedValue(foreignStatus());
+    const { unmount } = render(<FeedBackfillPanel token="t" canRun={false} />);
+    await screen.findByTestId("feed-backfill-foreign-ACRW-2026");
+    expect(
+      screen.queryByRole("button", { name: "Újra ellenőrzöm" }),
+    ).toBeNull();
+    unmount();
+    api.status.mockResolvedValue({
+      ...foreignStatus(),
+      running: {
+        phase: "dry",
+        startedAt: "2026-11-20T12:00:00Z",
+        done: 1,
+        total: 5,
+      },
+    });
+    render(<FeedBackfillPanel token="t" canRun />);
+    await screen.findByTestId("feed-backfill-foreign-ACRW-2026");
+    expect(
+      screen.getByRole("button", { name: "Újra ellenőrzöm" }),
+    ).toBeDisabled();
+  });
+
+  it("a failed recheck shows the error and a refused one (a round running) says so", async () => {
+    api.status.mockResolvedValue(foreignStatus());
+    api.recheck
+      .mockReset()
+      .mockRejectedValueOnce(new Error("Nincs jogosultság"));
+    render(<FeedBackfillPanel token="t" canRun />);
+    const acrw = await screen.findByTestId("feed-backfill-series-ACRW-2026");
+    fireEvent.click(
+      within(acrw).getByRole("button", { name: "Újra ellenőrzöm" }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Újra ellenőrzöm",
+      }),
+    );
+    expect(await screen.findByText("Nincs jogosultság")).toBeInTheDocument();
+    api.recheck.mockResolvedValueOnce({ status: "running" });
+    fireEvent.click(
+      within(acrw).getByRole("button", { name: "Újra ellenőrzöm" }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Újra ellenőrzöm",
+      }),
+    );
+    expect(
+      await screen.findByText("Egy kör fut: előbb meg kell várni."),
+    ).toBeInTheDocument();
   });
 
   it("when every series is outside the account, both buttons are off", async () => {

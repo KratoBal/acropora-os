@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PilotButton } from "@/components/pilot/pilot-ui";
 import {
   feedBackfillApi,
+  type FeedBackfillRecheck,
   type FeedBackfillStart,
   type FeedBackfillStatus,
   type FeedControlResult,
@@ -19,6 +20,13 @@ const count = (
   answers: Record<string, number> | undefined,
   ...keys: string[]
 ) => keys.reduce((sum, key) => sum + (answers?.[key] ?? 0), 0);
+
+const recheckText = (answer: FeedBackfillRecheck) =>
+  answer.status === "cleared"
+    ? `A(z) ${answer.series} sorozat ítélete törölve. A következő Ellenőrzés újra dönt, addig semmit nem kérdeztünk a Számlázz.hu-tól.`
+    : answer.status === "running"
+      ? "Egy kör fut: előbb meg kell várni."
+      : `A(z) ${answer.series} sorozatnak nincs „nem a mi fiókunk” ítélete.`;
 
 const startText = (answer: FeedBackfillStart) =>
   answer.status === "started"
@@ -82,6 +90,8 @@ export function FeedBackfillPanel({
     FeedControlResult[] | null
   >(null);
   const [confirm, setConfirm] = useState<"dry" | "apply" | null>(null);
+  // az "Újra ellenőrzöm" megerősítése: melyik sorozatra
+  const [confirmRecheck, setConfirmRecheck] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const poll = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -116,6 +126,23 @@ export function FeedBackfillPanel({
       await load();
     } catch (cause) {
       setConfirm(null);
+      setError(errorText(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const recheck = async (name: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const answer = await feedBackfillApi.recheck(token, name);
+      setNotice(recheckText(answer));
+      setControlFailure(null);
+      setConfirmRecheck(null);
+      await load();
+    } catch (cause) {
+      setConfirmRecheck(null);
       setError(errorText(cause));
     } finally {
       setBusy(false);
@@ -201,6 +228,15 @@ export function FeedBackfillPanel({
                   Ezeket a Cashman állítja ki, a hiányzókat a NAV-ból töltjük
                   be.
                 </span>
+                {canRun ? (
+                  <PilotButton
+                    variant="secondary"
+                    disabled={busy || status.running !== null}
+                    onClick={() => setConfirmRecheck(name)}
+                  >
+                    Újra ellenőrzöm
+                  </PilotButton>
+                ) : null}
               </li>
             );
           return (
@@ -258,6 +294,16 @@ export function FeedBackfillPanel({
       {error ? (
         <Alert variant="danger" title="Hiba történt" description={error} />
       ) : null}
+      <ConfirmDialog
+        open={confirmRecheck !== null}
+        title={`Újra ellenőrzöd a(z) ${confirmRecheck ?? ""} sorozatot?`}
+        consequence="A „nem a mi fiókunk” ítélet törlődik, és a sorozat újra a Számlázz.hu-s visszatöltés része lesz, amíg a következő Ellenőrzés újra nem dönt. Most semmit nem kérdez a Számlázz.hu-tól, és kört sem indít."
+        recovery="A következő Ellenőrzés a sorozat legnagyobb számát kérdezi meg: ha arra újra 7-es jön, miközben az OS saját számlája megvan, a sorozat újra kimarad."
+        confirmLabel="Újra ellenőrzöm"
+        busy={busy}
+        onConfirm={() => void recheck(confirmRecheck ?? "")}
+        onCancel={() => setConfirmRecheck(null)}
+      />
       <ConfirmDialog
         open={confirm === "dry"}
         title="Megkérdezed a Számlázz.hu-t a feedből hiányzó számokról?"

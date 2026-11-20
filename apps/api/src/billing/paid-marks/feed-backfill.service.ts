@@ -21,6 +21,8 @@ export interface FeedBackfillStore {
     year: number,
   ): Promise<{ documentNumber: string; kindCode: string }[]>;
   checked(): Promise<{ number: string; series: string; outcome: string }[]>;
+  /** a sorozat "nem a mi fiókunk" ítéletének törlése (csak azt a kimenetet, a többi válasz marad); a törölt sorok száma */
+  clearForeign(series: string): Promise<number>;
   record(input: {
     number: string;
     series: string;
@@ -45,6 +47,12 @@ export const prismaFeedBackfillStore: FeedBackfillStore = {
     prisma.szamlazzFeedBackfillNumber.findMany({
       select: { number: true, series: true, outcome: true },
     }),
+  async clearForeign(series) {
+    const result = await prisma.szamlazzFeedBackfillNumber.deleteMany({
+      where: { series, outcome: NOT_OUR_ACCOUNT },
+    });
+    return result.count;
+  },
   async record({ number, series, line, userId, at }) {
     const data = {
       series,
@@ -68,6 +76,12 @@ export type FeedBackfillStart =
   | { status: "nothing"; phase: "dry" | "apply" }
   /** the control numbers (known to exist) were not found: nothing was asked or recorded, the reason is in `control` */
   | { status: "control-failed"; control: FeedControlResult[] };
+
+/** Egy "nem a mi fiókunk" ítélet visszavonása: törölve, nincs ilyen ítélet, vagy épp kör fut. */
+export type FeedBackfillRecheck =
+  | { status: "cleared"; series: string }
+  | { status: "not-foreign"; series: string }
+  | { status: "running" };
 
 /** Ahogy a lap látja: fut-e, hol tart, sorozatonként a hézag és a Számlázz.hu válaszai. */
 export interface FeedBackfillStatus {
@@ -142,6 +156,31 @@ export class FeedBackfillService {
       })),
       checked: backfillSummary(await this.store.checked()),
     };
+  }
+
+  /**
+   * AZ ÍTÉLET VISSZAVONÁSA (acrobot 58207, barracuda 58157: a "nem a mi fiókunk" ítélet egyetlen megfigyelésből végleges, és a
+   * visszaállítása adatbázis-írás volt). Csak törli a sorozat ítéletét: NEM kérdez semmit a Számlázz.hu-tól, és nem indít
+   * kört. A következő "Ellenőrzés" a sorozatot újra kontrollálja, és ott dönt: újra idegen, vagy a számait kérdezi tovább.
+   * Kör közben nem fut (a kör a táblát és a célokat éppen használja).
+   */
+  async clearForeign(
+    series: string,
+    userId: string,
+  ): Promise<FeedBackfillRecheck> {
+    if (this.running) return { status: "running" };
+    const cleared = await this.store.clearForeign(series);
+    if (cleared === 0) return { status: "not-foreign", series };
+    // a memóriában tartott kontroll sem állíthatja tovább, hogy ez a sorozat idegen
+    if (this.control)
+      this.control = {
+        ...this.control,
+        results: this.control.results.filter((r) => r.series !== series),
+      };
+    this.logger.log(
+      `Feed-visszatöltés: a(z) ${series} sorozat "nem a mi fiókunk" ítélete törölve (user ${userId}); a következő ellenőrzés újra dönt`,
+    );
+    return { status: "cleared", series };
   }
 
   /** A behúzás után, a teszté: megvárja a kört. */
