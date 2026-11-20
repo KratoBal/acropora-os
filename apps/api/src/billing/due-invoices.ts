@@ -23,7 +23,7 @@ import type {
  */
 
 /** A fizetendő feed-típusok: számla, végszámla, előlegszámla (a `feed-backfill.ts` ugyanezt a három kódot használja). */
-const PAYABLE_KINDS: ReadonlySet<string> = new Set(["SZ", "VS", "ES"]);
+export const PAYABLE_KINDS: ReadonlySet<string> = new Set(["SZ", "VS", "ES"]);
 
 const fold = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "");
 
