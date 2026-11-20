@@ -1643,6 +1643,14 @@ export const ANONYMIZATION_REGISTER: Readonly<
     referencedProformaNumber: "identifier",
     sourceDocumentId: "identifier",
   },
+  SupplierBankAccountFill: {
+    supplierKey: "identifier",
+    supplierName: "partyName",
+    supplierTaxNumber: "partyTaxNumber",
+    supplierEuTaxNumber: "partyTaxNumber",
+    account: "bankAccount",
+    evidenceIds: "identifier",
+  },
   BankTransactionSourceKey: {
     key: "identifier",
   },

@@ -212,3 +212,26 @@ export function formatSupplierAccount(account: string): string {
     return `${account.slice(0, 8)}-${account.slice(8, 16)}-${account.slice(16)}`;
   return account.replace(/(.{4})/g, "$1 ").trim();
 }
+
+/**
+ * EGY BANKI TERHELÉS PARTNER-SZÁMLASZÁMA (`BankTransaction.counterpartyAccount`) normalizált, ELLENŐRZÖTT alakban, vagy `null`. A bank adja, tehát címke nem kell, de az ellenőrző
+ * összeg igen: ugyanazok a szabályok, mint a PDF-ből olvasottnál (a hazai szám első 8 jegye önmagában, a második része egyben; az IBAN ország-hossza és mod 97). Ami nem ilyen
+ * alakú (kártyaszám, névtöredék, hiányos szám), `null`: nem találgatunk.
+ */
+export function accountFromBankText(
+  raw: string | null | undefined,
+): string | null {
+  const text = (raw ?? "").trim();
+  if (text === "") return null;
+  HU_ACCOUNT_PATTERN.lastIndex = 0;
+  const hungarian = HU_ACCOUNT_PATTERN.exec(text);
+  if (hungarian && hungarian[0] === text) {
+    const [, first, , second, , third] = hungarian;
+    const rest = third === undefined ? second! : `${second}${third}`;
+    if (hungarianPartValid(first!) && hungarianPartValid(rest))
+      return normalizeSupplierAccount(`${first}${rest}`);
+    return null;
+  }
+  const compact = text.replace(/\s/g, "").toUpperCase();
+  return ibanValid(compact) ? normalizeSupplierAccount(compact) : null;
+}

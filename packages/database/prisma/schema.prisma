@@ -13520,3 +13520,30 @@ model ProductDiscontinuation {
 
   @@index([replacementProductId])
 }
+
+/// Honnan tudjuk egy kitöltött szállítói bankszámlaszámot.
+enum SupplierBankAccountSource {
+  /// a szállító számlájának tárolt PDF-jéből kiolvasva (`supplier-bank-account-text.ts`)
+  INVOICE_PDF
+  /// a szállító NAV-számlájához párosított korábbi banki terhelés partner-számlaszáma
+  PAIRED_DEBIT
+}
+
+/// A SZÁLLÍTÓ BANKSZÁMLASZÁMA, AMIT A SZÁMLA PDF-JÉBŐL VAGY KORÁBBI TERHELÉSÉBŐL TÖLTÖTTÜNK KI (acrobot 58553, kártya 4900497b; Lejáró számlák).
+/// A számla sora (`IncomingBillingDocument`) a Számlázz.hu feedből SZÁRMAZTATOTT, újraépíthető, és minden új feed-verzió felülírja: egy oda írt számlaszám elveszne.
+/// Ezért külön tábla, szállítónként EGY sor (`supplierKey`: `hu:<adószám-törzs>`, `eu:<közösségi adószám>` vagy `name:<név>`). Soha nem ír felül meglévő számlaszámot
+/// (sem a soron, sem a szállító-törzsben, sem itt): a kitöltő csak akkor ír, ha a szállítónak nincs számlaszáma és pontosan egy jelölt van. Visszavonás: a sor törlése.
+model SupplierBankAccountFill {
+  id                  String                    @id @default(cuid())
+  supplierKey         String                    @unique
+  /// a szállító neve, adószáma és közösségi adószáma ÚGY, ahogy a számlasoron állt: az olvasó ezekből számolja újra a kulcsot (az anonimizálás után is egyezik)
+  supplierName        String
+  supplierTaxNumber   String?
+  supplierEuTaxNumber String?
+  /// normalizált: a hazai 16 jegyű (a 24 jegyű, nullára végződő a 16 jegyű), vagy az IBAN szóköz nélkül
+  account             String
+  source              SupplierBankAccountSource
+  /// a bizonyíték azonosítói (PDF-dokumentum vagy banki terhelés), tartalom nélkül
+  evidenceIds         String[]
+  createdAt           DateTime                  @default(now())
+}
