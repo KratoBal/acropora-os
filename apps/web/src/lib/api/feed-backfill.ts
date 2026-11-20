@@ -1,5 +1,15 @@
 import { apiRequest } from "./client";
 
+/** A kontroll-kérdés: a sorozat legnagyobb tárolt száma, amely a feedben van, tehát a Számlázz.hu-ban is létezik. */
+export interface FeedControlResult {
+  series: string;
+  number: string;
+  outcome: string;
+  /** a Számlázz.hu hibakódja és üzenete, vagy a hiba alakja */
+  detail: string;
+  passed: boolean;
+}
+
 /** A feed visszatöltésének állapota (`GET /billing/paid-marks/feed-backfill`; 6fd8c574). */
 export interface FeedBackfillStatus {
   running: {
@@ -13,17 +23,20 @@ export interface FeedBackfillStatus {
     finishedAt: string;
     done: number;
   } | null;
+  /** a legutóbbi ellenőrző kör kontrollja; `null`, amíg nem futott */
+  control: { checkedAt: string; results: FeedControlResult[] } | null;
   year: number;
   /** sorozatonként a feedből hiányzó számok darabja, és a tárolt legnagyobb szám */
   series: { series: string; highest: string; missing: number }[];
-  /** sorozatonként kimenetenként, ahogy a Számlázz.hu felelt: WOULD_STORE, STORED, NOT_FOUND, ERROR, ... */
+  /** sorozatonként kimenetenként, ahogy a Számlázz.hu felelt: WOULD_STORE, STORED, NOT_FOUND (csak sikeres kontroll után), UNVERIFIED, ERROR, ... */
   checked: Record<string, Record<string, number>>;
 }
 
 export type FeedBackfillStart =
   | { status: "started"; phase: "dry" | "apply"; total: number }
   | { status: "running" }
-  | { status: "nothing"; phase: "dry" | "apply" };
+  | { status: "nothing"; phase: "dry" | "apply" }
+  | { status: "control-failed"; control: FeedControlResult[] };
 
 /** A tárolt Számlázz.hu feed visszatöltése az év elejéig (6fd8c574): állapot, száraz kör, behúzás. */
 export const feedBackfillApi = {

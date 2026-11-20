@@ -65,7 +65,7 @@ describe("decideResolution: a Számlázz.hu igazolta a bizonylatot", () => {
         facts({
           kind,
           knownNumber: "E-TST-2026-7",
-          lookup: { outcome: "NOT_FOUND" },
+          lookup: { outcome: "NOT_FOUND", errorMessage: null },
         }),
       );
       assert.equal(decision.action, "NONE");
@@ -118,7 +118,7 @@ describe("decideResolution: a Számlázz.hu igazolta a bizonylatot", () => {
 });
 
 describe("decideResolution: a DRAFT-hoz minden feltétel kell", () => {
-  const notFound = { outcome: "NOT_FOUND" } as const;
+  const notFound = { outcome: "NOT_FOUND", errorMessage: null } as const;
 
   it("érvényes 7-es + pozitív kontroll + elég régi sor -> DRAFT", () => {
     const decision = decideResolution(facts({ lookup: notFound }));

@@ -79,6 +79,7 @@ describe("parseSzamlazzQueryResponse", () => {
       "<xmlszamlavalasz><sikeres>false</sikeres><hibakod>7</hibakod><hibauzenet>Missing data</hibauzenet></xmlszamlavalasz>";
     assert.deepEqual(parseSzamlazzQueryResponse(body), {
       outcome: "NOT_FOUND",
+      errorMessage: "Missing data",
     });
     assert.deepEqual(
       parseSzamlazzQueryResponse(
@@ -87,7 +88,17 @@ describe("parseSzamlazzQueryResponse", () => {
           '<xmlszamlavalasz xmlns="http://www.szamlazz.hu/xmlszamlavalasz">',
         ),
       ),
-      { outcome: "NOT_FOUND" },
+      { outcome: "NOT_FOUND", errorMessage: "Missing data" },
+    );
+  });
+
+  // acrobot 57804: a 7-es válasz szövege adja meg, hogy ismeretlen számról vagy el nem olvasott kérésről van-e szó
+  it("a Számlázz.hu hibaüzenete más hibakódnál is megmarad", () => {
+    assert.deepEqual(
+      parseSzamlazzQueryResponse(
+        "<xmlszamlavalasz><sikeres>false</sikeres><hibakod>3</hibakod><hibauzenet>Hibás kulcs</hibauzenet></xmlszamlavalasz>",
+      ),
+      { outcome: "ERROR", errorCode: "3", errorMessage: "Hibás kulcs" },
     );
   });
 
@@ -96,13 +107,13 @@ describe("parseSzamlazzQueryResponse", () => {
       parseSzamlazzQueryResponse(
         "<xmlszamlavalasz><sikeres>false</sikeres><hibakod>3</hibakod></xmlszamlavalasz>",
       ),
-      { outcome: "ERROR", errorCode: "3" },
+      { outcome: "ERROR", errorCode: "3", errorMessage: null },
     );
     assert.deepEqual(
       parseSzamlazzQueryResponse(
         "<xmlszamlavalasz><sikeres>false</sikeres></xmlszamlavalasz>",
       ),
-      { outcome: "ERROR", errorCode: null },
+      { outcome: "ERROR", errorCode: null, errorMessage: null },
     );
   });
 

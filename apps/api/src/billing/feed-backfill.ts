@@ -81,10 +81,17 @@ export type FeedBackfillOutcome =
   | "NOT_FOUND"
   | "ERROR"
   | "UNREADABLE"
-  | "OTHER_NUMBER";
+  | "OTHER_NUMBER"
+  | "UNVERIFIED";
 
 /**
  * A száraz kör ezeket nem kérdezi újra (folytatható): a válasz végleges. A hibás és az olvashatatlan válasz újra megy.
+ *
+ * A NOT_FOUND CSAK EGY SIKERES KONTROLL MELLETT VÉGLEGES (acrobot 57804, 2026-11-20): a 2026-11-19-i első élő kör mind az
+ * 542 számra "nincs ilyen szám"-ot rögzített, a 2026/00058-ra is, amiről tudjuk, hogy létezik, és a körnek nem volt
+ * mérője, ami ezt megmutatta volna. Azóta a kör a sorozat legnagyobb tárolt számát (ami biztosan létezik) kérdezi
+ * ELŐSZÖR, és csak akkor rögzít nemet, ha arra számla jött vissza. A kontroll nélkül rögzített nemek az UNVERIFIED
+ * kimenetet kapták (migráció): az nem végleges, újra megy, és a lapon külön sorban áll, nem "nem ismeri"-ként.
  */
 export const SETTLED_OUTCOMES: ReadonlySet<string> = new Set([
   "WOULD_STORE",
@@ -92,6 +99,17 @@ export const SETTLED_OUTCOMES: ReadonlySet<string> = new Set([
   "NOT_FOUND",
   "OTHER_NUMBER",
 ]);
+
+/** A kontroll-kérdés: a sorozat legnagyobb tárolt száma, ami a feedben van, tehát a Számlázz.hu-ban is létezik. */
+export interface FeedControlResult {
+  series: string;
+  number: string;
+  /** `WOULD_STORE`: a Számlázz.hu ismerte, a kérdezés megbízható; bármi más: nem az */
+  outcome: string;
+  /** a Számlázz.hu hibakódja és üzenete, vagy a hiba alakja (a válasz XML-je és vevő nélkül) */
+  detail: string;
+  passed: boolean;
+}
 
 /** Sorozatonként és kimenetenként a darabszám: a lap ebből mondja meg, hány ACRW számot ismer a Számlázz.hu. */
 export function backfillSummary(
