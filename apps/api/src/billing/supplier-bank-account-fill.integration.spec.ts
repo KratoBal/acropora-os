@@ -68,7 +68,11 @@ function invoicePdf(accountLine: string): Promise<Buffer> {
 const billingRow = (
   id: string,
   supplier: number,
-  over: { supplierBankAccount?: string | null } = {},
+  over: {
+    supplierBankAccount?: string | null;
+    noTax?: boolean;
+    sourceDocumentId?: string;
+  } = {},
 ) => ({
   source: "SZAMLAZZ",
   externalId: `fill-it-${id}`,
@@ -80,7 +84,8 @@ const billingRow = (
   issueDate: day("2099-04-01"),
   currency: "HUF",
   supplierName: `${NAME} ${supplier}`,
-  supplierTaxNumber: TAX(supplier),
+  supplierTaxNumber: over.noTax ? null : TAX(supplier),
+  sourceDocumentId: over.sourceDocumentId ?? null,
   supplierBankAccount: over.supplierBankAccount ?? null,
   buyerName: "Acropora Kft.",
   netAmount: 100,
@@ -124,8 +129,10 @@ describe(
     const readers = { lines: (content: Uint8Array) => pdfTextLines(content) };
     const mine = (plan: FillPlan): FillPlan => ({
       ...plan,
-      rows: plan.rows.filter((row) =>
-        row.supplier.key.startsWith("hu:9910000"),
+      rows: plan.rows.filter(
+        (row) =>
+          row.supplier.key.startsWith("hu:9910000") ||
+          row.supplier.key === "name:fill-it 8",
       ),
     });
     const verdictOf = (plan: FillPlan, n: number) =>
@@ -134,6 +141,8 @@ describe(
     before(async () => {
       if (gate.mode === "refuse") throw new Error(gate.reason);
       await removeLeftovers();
+      // 8: csak a NÉV azonosítja a szállítót (nincs adószám), a sor saját PDF-jében van számlaszám
+      ids.g = (await pdfDocument("g1", 8, "11773016-11111018-00000000")).id;
       // 1: két célsor, egy PDF a számlaszámmal
       await prisma.incomingBillingDocument.createMany({
         data: [
@@ -151,24 +160,16 @@ describe(
           billingRow("e1", 5),
           // 6: a szállító-törzsben van számlaszám
           billingRow("f1", 6),
+          // 7: egyetlen NAV-párosított terhelés, PDF nélkül
+          billingRow("h1", 7),
+          // 8: név-kulcsú szállító
+          billingRow("g1", 8, { noTax: true, sourceDocumentId: ids.g }),
         ].map((row, index) => ({ ...row, externalId: `fill-it-row-${index}` })),
       });
       ids.a = (await pdfDocument("a1", 1, "11773016-11111018-00000000")).id;
       ids.c1 = (await pdfDocument("c1", 3, "11773016-11111018-00000000")).id;
       ids.c2 = (await pdfDocument("c2", 3, "10918001-00000017")).id;
-      // a 4-es szállító: NAV-számla + hozzá párosított terhelés
-      const nav = await prisma.navIncomingInvoice.create({
-        data: {
-          navInvoiceNumber: "FILLIT-NAV-1",
-          supplierTaxNumber: TAX(4),
-          supplierName: `${NAME} 4`,
-          invoiceIssueDate: day("2099-03-01"),
-          insDate: new Date("2099-03-01T08:00:00Z"),
-          invoiceNetAmount: 1000,
-          invoiceVatAmount: 270,
-        },
-        select: { id: true },
-      });
+      // a 4-es szállító: KÉT NAV-számla, mindkettőhöz párosított terhelés; a 7-es szállítónak egy
       const account = await prisma.bankAccount.create({
         data: { accountNumber: ACCOUNT_NUMBER, currency: "HUF" },
       });
@@ -176,35 +177,52 @@ describe(
         data: {
           fileName: "fill-it",
           sha256: "fill-it",
-          rowCount: 1,
-          createdCount: 1,
+          rowCount: 3,
+          createdCount: 3,
           skippedCount: 0,
           rejectedCount: 0,
         },
       });
-      const debit = await prisma.bankTransaction.create({
-        data: {
-          bankAccountId: account.id,
-          importId: imported.id,
-          direction: "DEBIT",
-          amount: D(1270),
-          currency: "HUF",
-          bookingDate: day("2099-03-10"),
-          counterpartyAccount: "10918001-00000017",
-          counterpartyName: `${NAME} 4`,
-          narrative: "FILLIT-NAV-1",
-          transactionKey: "fill-it-debit-1",
-        },
-        select: { id: true },
-      });
-      ids.debit = debit.id;
-      await prisma.bankTransactionMatch.create({
-        data: {
-          bankTransactionId: debit.id,
-          documentSource: "NAV",
-          documentId: nav.id,
-        },
-      });
+      const paired = async (supplier: number, key: string) => {
+        const nav = await prisma.navIncomingInvoice.create({
+          data: {
+            navInvoiceNumber: `FILLIT-NAV-${key}`,
+            supplierTaxNumber: TAX(supplier),
+            supplierName: `${NAME} ${supplier}`,
+            invoiceIssueDate: day("2099-03-01"),
+            insDate: new Date("2099-03-01T08:00:00Z"),
+            invoiceNetAmount: 1000,
+            invoiceVatAmount: 270,
+          },
+          select: { id: true },
+        });
+        const debit = await prisma.bankTransaction.create({
+          data: {
+            bankAccountId: account.id,
+            importId: imported.id,
+            direction: "DEBIT",
+            amount: D(1270),
+            currency: "HUF",
+            bookingDate: day("2099-03-10"),
+            counterpartyAccount: "10918001-00000017",
+            counterpartyName: `${NAME} ${supplier}`,
+            narrative: `FILLIT-NAV-${key}`,
+            transactionKey: `fill-it-debit-${key}`,
+          },
+          select: { id: true },
+        });
+        await prisma.bankTransactionMatch.create({
+          data: {
+            bankTransactionId: debit.id,
+            documentSource: "NAV",
+            documentId: nav.id,
+          },
+        });
+        return debit.id;
+      };
+      ids.debit1 = await paired(4, "4a");
+      ids.debit2 = await paired(4, "4b");
+      ids.debit7 = await paired(7, "7a");
       await prisma.supplierBankAccountFill.create({
         data: {
           supplierKey: KEY(5),
@@ -246,8 +264,26 @@ describe(
         state: "WRITE",
         account: "1091800100000017",
         source: "PAIRED_DEBIT",
-        evidenceIds: [ids.debit],
+        evidenceIds: [ids.debit1, ids.debit2],
       });
+      // 7: egyetlen terhelés PDF nélkül: tartva; 8: csak a név azonosítja: tartva, bár a PDF-ben van számlaszám
+      assert.deepEqual(verdictOf(plan, 7), {
+        state: "HOLD",
+        reason: "SINGLE_DEBIT",
+        account: "1091800100000017",
+        source: "PAIRED_DEBIT",
+        evidenceIds: [ids.debit7],
+      });
+      assert.deepEqual(
+        plan.rows.find((row) => row.supplier.key === "name:fill-it 8")?.verdict,
+        {
+          state: "HOLD",
+          reason: "NAME_KEY",
+          account: "1177301611111018",
+          source: "INVOICE_PDF",
+          evidenceIds: [ids.g],
+        },
+      );
       assert.deepEqual(verdictOf(plan, 5), {
         state: "HAS_ACCOUNT",
         distinct: 1,
@@ -284,6 +320,13 @@ describe(
         ],
       );
       assert.equal((await writeFills(prisma, plan)).created, 0);
+      // a tartott szállítók (egyetlen terhelés, név-kulcs) nem kerülnek a táblába
+      assert.equal(
+        await prisma.supplierBankAccountFill.count({
+          where: { supplierKey: { in: [KEY(7), "name:fill-it 8"] } },
+        }),
+        0,
+      );
       // egy másik számlaszámmal erőltetett írás a MEGLÉVŐ kitöltést nem írja felül
       const forced: FillPlan = {
         ...plan,
