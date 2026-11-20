@@ -22,6 +22,7 @@ import {
   createDocumentStore,
   documentStoreEnabled,
 } from "../service-assets/document-store/document-store.provider.js";
+import { invoiceNumberKey } from "./external-billing-one-row.js";
 import {
   CMFX_SENDER,
   cmfxMailAuthenticated,
@@ -80,6 +81,9 @@ export async function main(
     candidates?: (month: string) => Promise<MailPdfCandidate[]>;
     mail?: (month: string) => Promise<MailPdf[]>;
     rowsByNumber?: (numbers: readonly string[]) => Promise<NumberRow[]>;
+    ownInvoicesByNumber?: (
+      numbers: readonly string[],
+    ) => Promise<OwnInvoiceRow[]>;
     unasLinks?: (numbers: readonly string[]) => Promise<UnasInvoiceLink[]>;
     fetchPdf?: PdfFetch;
     sleep?: (ms: number) => Promise<void>;
@@ -195,13 +199,28 @@ export async function main(
     report.notCandidates,
   );
   const byNumber = new Map(rows.map((row) => [row.documentNumber.trim(), row]));
+  /*
+    A SAJÁT SZÁMLA NEM HIÁNY (785dfea6, acrobot 58556, 58560): a levél nélküli külső sor mellett az OS saját `Invoice` táblájában
+    is állhat a szám (a webshop ACRW-számlái az UNAS rendelés-szinkronból, source UNAS). A NAV-ellenőrzés ezt meglévőnek veszi,
+    a kitöltő pedig csak a külső sorra ír; eddig ez NINCS_SZAMLA_SOR volt, ami hiánynak hangzott (2026-07: 12 levél, mind ilyen).
+    A kulcs ugyanaz, mint a NAV-ellenőrzésé (szóköz ki, nagybetű).
+  */
+  const withoutRow = report.notCandidates.filter((n) => !byNumber.has(n));
+  const own = new Map(
+    (
+      await (deps.ownInvoicesByNumber ?? prismaOwnInvoicesByNumber)(withoutRow)
+    ).map((row) => [invoiceNumberKey(row.invoiceNumber), row]),
+  );
   for (const number of report.notCandidates) {
     const row = byNumber.get(number);
-    const state = !row
-      ? "NINCS_SZAMLA_SOR"
-      : row.hasPdf
+    const ownRow = own.get(invoiceNumberKey(number));
+    const state = row
+      ? row.hasPdf
         ? "MAR_VAN_PDF"
-        : `MASIK_HONAP ${row.issueDate.toISOString().slice(0, 7)}`;
+        : `MASIK_HONAP ${row.issueDate.toISOString().slice(0, 7)}`
+      : ownRow
+        ? `SAJAT_SZAMLA ${ownRow.source}`
+        : "NINCS_SZAMLA_SOR";
     io.out(`${state.padEnd(17)} ${number}\n`);
   }
   if (report.unauthenticatedFiles)
@@ -222,7 +241,8 @@ export async function main(
     count("NOT_AUTHENTICATED");
   io.out(
     `Összesen: ${apply ? `tárolva ${count("STORED")}, közben már volt ${count("ALREADY_HAD")}` : `tárolná ${count("WOULD_STORE")}`}, levél nélkül ${count("NO_MAIL")}, ` +
-      `hibás ${failed}, számla-sor nélküli levél ${report.notCandidates.filter((n) => !byNumber.has(n)).length}\n`,
+      `hibás ${failed}, saját (OS) számla levele ${withoutRow.filter((n) => own.has(invoiceNumberKey(n))).length}, ` +
+      `számla-sor nélküli levél ${withoutRow.filter((n) => !own.has(invoiceNumberKey(n))).length}\n`,
   );
   if (!apply) {
     io.out("Ez a futás nem írt. A tároláshoz: --apply\n");
@@ -391,6 +411,25 @@ export interface NumberRow {
   documentNumber: string;
   issueDate: Date;
   hasPdf: boolean;
+}
+
+/** Az OS saját kimenő számlája (`Invoice`, OUTBOUND) ezzel a számmal, és honnan jött (UNAS, OS, ...). */
+export interface OwnInvoiceRow {
+  invoiceNumber: string;
+  source: string;
+}
+
+export async function prismaOwnInvoicesByNumber(
+  numbers: readonly string[],
+): Promise<OwnInvoiceRow[]> {
+  if (!numbers.length) return [];
+  const keys = [...new Set(numbers.map(invoiceNumberKey))];
+  return prisma.$queryRaw<OwnInvoiceRow[]>`
+    SELECT DISTINCT ON (upper(regexp_replace("invoiceNumber", '[[:space:]]', '', 'g')))
+      "invoiceNumber", "source"::text AS "source"
+    FROM "Invoice"
+    WHERE "direction" = 'OUTBOUND'
+      AND upper(regexp_replace("invoiceNumber", '[[:space:]]', '', 'g')) = ANY(${keys})`;
 }
 
 async function prismaRowsByNumber(
