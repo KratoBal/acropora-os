@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { Prisma, ServiceJobStatus } from "@acropora/database";
 
 import { lastServiceJobNumber } from "../service-jobs/service-job-last-number.js";
@@ -128,8 +130,13 @@ export async function openTicketForWorksheet(
   const job = await transaction.serviceJob.create({
     data: {
       jobNumber,
-      // egy lapra egy automatikus jegy: két egyidejű aláírás közül a második az egyedi indexen bukik
-      clientOperationId: `worksheet-auto-ticket:${input.worksheetId}`,
+      /*
+        A JEL, NEM A VÉDELEM: az előtag mutatja, hogy a jegyet a rendszer nyitotta, és melyik lapból. A végén EGYEDI tag áll
+        (barracuda, #2765): egy lap az életében több automatikus jegyet is kaphat (a jegyről leválasztva, vagy a jegy
+        törlése után, egy újra kiküldött vagy új verzióján), és egy lapra szóló kulcs ott az egyedi indexen bukna, minden
+        újrapróbán, magyarázat nélkül. A két egyidejű nyitás ellen a feltételes csatolás véd (lent, `AutoTicketLost`).
+      */
+      clientOperationId: `worksheet-auto-ticket:${input.worksheetId}:${randomUUID()}`,
       title,
       description: null,
       customerId: sheet.customerId,

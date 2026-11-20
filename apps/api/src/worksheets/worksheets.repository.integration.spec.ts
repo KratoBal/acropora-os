@@ -1408,7 +1408,9 @@ describe(
           signerName: "Vevő Viktor",
         });
         const jobs = await prisma.serviceJob.count({
-          where: { clientOperationId: `worksheet-auto-ticket:${id}` },
+          where: {
+            clientOperationId: { startsWith: `worksheet-auto-ticket:${id}:` },
+          },
         });
         assert.deepEqual(
           {
@@ -1509,6 +1511,52 @@ describe(
         );
       });
 
+      it("a jegyéről leválasztott lap újra kiküldve ÚJ automatikus jegyet kap, hiba nélkül (barracuda, #2765)", async () => {
+        const vevo = await prisma.user.create({
+          data: {
+            email: `worksheets-resend-${suffix}@${TEST_EMAIL_DOMAIN}`,
+            displayName: "Vevő Vince",
+            role: "PARTNER_SERVICE",
+            customerId,
+            isActive: true,
+          },
+          select: { id: true },
+        });
+        const id = await closedSheet();
+        const send = () =>
+          repository.sendForSignature({
+            worksheetId: id,
+            signerUserId: vevo.id,
+            actorUserId,
+            openTicketIfMissing: true,
+            now: new Date(),
+          });
+        const first = await send();
+        // a leválasztás útja (`detachWorksheet`): a lap a jegy nélküli állapotba kerül vissza, a jegy megmarad
+        await prisma.worksheet.update({
+          where: { id },
+          data: { serviceJobId: null },
+        });
+        const second = await send();
+        const firstId = first.ok ? first.autoTicket?.id : null;
+        const secondId = second.ok ? second.autoTicket?.id : null;
+        assert.deepEqual(
+          {
+            ok: [first.ok, second.ok],
+            two: Boolean(firstId && secondId && firstId !== secondId),
+            sheetUnder: (await ticketOf(id)).serviceJob?.id === secondId,
+            autoJobs: await prisma.serviceJob.count({
+              where: {
+                clientOperationId: {
+                  startsWith: `worksheet-auto-ticket:${id}:`,
+                },
+              },
+            }),
+          },
+          { ok: [true, true], two: true, sheetUnder: true, autoJobs: 2 },
+        );
+      });
+
       it("meglévő jegy alatt nem nyit újat, és elbukott aláírás után jegy sem marad", async () => {
         const job = await prisma.serviceJob.create({
           data: {
@@ -1544,12 +1592,11 @@ describe(
             piszkozatJegye: (await ticketOf(piszkozat)).serviceJob,
             autoJegyek: await prisma.serviceJob.count({
               where: {
-                clientOperationId: {
-                  in: [
-                    `worksheet-auto-ticket:${alatta}`,
-                    `worksheet-auto-ticket:${piszkozat}`,
-                  ],
-                },
+                OR: [alatta, piszkozat].map((sheet) => ({
+                  clientOperationId: {
+                    startsWith: `worksheet-auto-ticket:${sheet}:`,
+                  },
+                })),
               },
             }),
           },

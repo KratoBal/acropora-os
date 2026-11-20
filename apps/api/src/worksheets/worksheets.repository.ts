@@ -156,8 +156,7 @@ async function withAutoTicketRetry<T>(run: () => Promise<T>): Promise<T> {
         error instanceof AutoTicketLost ||
         (error instanceof Prisma.PrismaClientKnownRequestError &&
           error.code === "P2002" &&
-          (isPrismaUniqueConstraintViolation(error, "jobNumber") ||
-            isPrismaUniqueConstraintViolation(error, "clientOperationId")));
+          isPrismaUniqueConstraintViolation(error, "jobNumber"));
       if (!retriable || attempt >= 3) throw error;
     }
   }
