@@ -1409,7 +1409,7 @@ describe("a számlán álló „Fizetve” kifizetettsége", () => {
     match = unpaid,
     paidInFull = false,
     manualPaid: { paidAt: Date | null } | null = null,
-    off: Parameters<typeof incomingPaymentOf>[5] = null,
+    off: Parameters<typeof incomingPaymentOf>[4] = null,
   ) => {
     const r = incomingPaymentOf(
       row({ paymentMethod: "Fizetve", paymentsKnown: false, ...over }),
