@@ -7,6 +7,7 @@ import {
   MAIL_SENDER,
   type MailSender,
 } from "../notifications/mail/mail.port.js";
+import { formatMailFrom } from "../notifications/mail/mime.js";
 import { budapestDay } from "./billing-document-list.js";
 import { IncomingReviewService } from "./foreign-invoice/incoming-review.service.js";
 import { loadDueInvoices } from "./due-invoices.loader.js";
@@ -35,6 +36,37 @@ const TIME = new Intl.DateTimeFormat("hu-HU", {
   minute: "2-digit",
   hour12: false,
 });
+
+/**
+ * A FELADÓ ALAPÉRTELMEZÉSE (acrobot 58274): NEM a `ticket@`, mert a `ticket@`-ra jövő válaszokból jegy-vázlat lehet. A cím a környezetből jön
+ * (`DUE_INVOICES_MAIL_FROM`; ha az nincs, a vízmérés-levél feladója, `AQUARIUM_MEASUREMENT_MAIL_FROM`: ugyanaz az `info@` cím, ugyanaz a Gmail
+ * „send as” álnév); cégadat nincs a kódban. Egyik sincs: `null`, és a levélküldő a SAJÁT alapértelmezett feladóját adja (a `ticket@`-ot), amit a
+ * beállítás oldala kimond.
+ */
+export function dueInvoicesDefaultFrom(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  return (
+    env.DUE_INVOICES_MAIL_FROM?.trim() ||
+    env.AQUARIUM_MEASUREMENT_MAIL_FROM?.trim() ||
+    null
+  );
+}
+
+/** A `From:` fejléc a beállításból és a környezetből; `undefined`: a küldő alapértelmezett feladója. */
+export function dueInvoicesFromHeader(
+  fromAddress: string | null,
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const address = fromAddress ?? dueInvoicesDefaultFrom(env);
+  if (!address) return undefined;
+  return formatMailFrom(
+    env.DUE_INVOICES_MAIL_FROM_NAME?.trim() ||
+      env.AQUARIUM_MEASUREMENT_MAIL_FROM_NAME?.trim() ||
+      "Acropora",
+    address,
+  );
+}
 
 /** A levél tárgya és szövege a listából. */
 export function dueInvoicesMailContent(input: {
@@ -101,6 +133,8 @@ export class DueInvoicesMailService {
     recipients: readonly string[];
     lateNotice: boolean;
     now?: Date;
+    /** a `From:` fejléc (`dueInvoicesFromHeader`); nélküle a levélküldő alapértelmezett feladója */
+    from?: string;
   }): Promise<DueInvoicesMailResult> {
     const recipients = [
       ...new Set(input.recipients.map((r) => r.trim()).filter(Boolean)),
@@ -124,6 +158,7 @@ export class DueInvoicesMailService {
     });
     await this.sender.send({
       to: recipients,
+      ...(input.from ? { from: input.from } : {}),
       subject: content.subject,
       text: content.text,
       attachments: [

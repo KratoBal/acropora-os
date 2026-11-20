@@ -9,6 +9,8 @@ import type {
 } from "../notifications/mail/mail.port.js";
 import {
   DueInvoicesMailService,
+  dueInvoicesDefaultFrom,
+  dueInvoicesFromHeader,
   dueInvoicesMailContent,
   firstLoadOnDay,
 } from "./due-invoices-mail.service.js";
@@ -189,5 +191,69 @@ describe("the day's first bank load", () => {
     const late = new Date("2026-11-22T23:30:00Z");
     assert.deepEqual(firstLoadOnDay([late], "2026-11-23"), late);
     assert.equal(firstLoadOnDay([late], "2026-11-22"), null);
+  });
+});
+
+describe("the sender of the weekly mail (acrobot 58274: not the ticket address)", () => {
+  it("the default comes from the environment: the own variable first, then the water-measurement sender, else none", () => {
+    assert.equal(
+      dueInvoicesDefaultFrom({
+        DUE_INVOICES_MAIL_FROM: " a@acropora.example ",
+        AQUARIUM_MEASUREMENT_MAIL_FROM: "b@acropora.example",
+      }),
+      "a@acropora.example",
+    );
+    assert.equal(
+      dueInvoicesDefaultFrom({
+        AQUARIUM_MEASUREMENT_MAIL_FROM: "b@acropora.example",
+      }),
+      "b@acropora.example",
+    );
+    assert.equal(dueInvoicesDefaultFrom({}), null);
+    assert.equal(
+      dueInvoicesDefaultFrom({ DUE_INVOICES_MAIL_FROM: "  " }),
+      null,
+    );
+  });
+
+  it("the From header: the setting wins over the environment, a name is always paired, and with no address the sender's own default stays (undefined)", () => {
+    assert.match(
+      dueInvoicesFromHeader("penzugy@acropora.example", {
+        DUE_INVOICES_MAIL_FROM: "info@acropora.example",
+        DUE_INVOICES_MAIL_FROM_NAME: "Pénzügy",
+      })!,
+      /penzugy@acropora\.example/,
+    );
+    assert.match(
+      dueInvoicesFromHeader(null, {
+        DUE_INVOICES_MAIL_FROM: "info@acropora.example",
+      })!,
+      /info@acropora\.example/,
+    );
+    assert.match(
+      dueInvoicesFromHeader(null, {
+        DUE_INVOICES_MAIL_FROM: "info@acropora.example",
+      })!,
+      /Acropora/,
+    );
+    assert.equal(dueInvoicesFromHeader(null, {}), undefined);
+  });
+
+  it("the From header reaches the mail only when there is one", async () => {
+    const withFrom = setup();
+    await withFrom.service.send({
+      recipients: ["a@acropora.hu"],
+      lateNotice: false,
+      now: NOW,
+      from: "Acropora <info@acropora.example>",
+    });
+    assert.equal(withFrom.sent[0]!.from, "Acropora <info@acropora.example>");
+    const without = setup();
+    await without.service.send({
+      recipients: ["a@acropora.hu"],
+      lateNotice: false,
+      now: NOW,
+    });
+    assert.equal("from" in without.sent[0]!, false);
   });
 });

@@ -57,3 +57,31 @@ export interface DueInvoicesResponse {
     totals: { currency: string; outstanding: DecimalText }[];
   };
 }
+
+/**
+ * A HETI LEVÉL BEÁLLÍTÁSAI (Balázs, 2026-11-20; acrobot 58227, 58230, 58274): kinek megy, mikor, ki a feladó, és kikapcsolható. A küldési
+ * szabályt lásd a szerver `decideDueInvoicesMail` függvényénél: a `earliest` csak a LEGKORÁBBI idő, a levél akkor indul, amikor aznap bejött
+ * az első új banki betöltés, és legkésőbb a `latest`-kor megy.
+ */
+export interface DueInvoicesMailSettings {
+  enabled: boolean;
+  /** a címzettek (több cím), kisbetűsítve és egyedítve; üresen nem megy levél */
+  recipients: string[];
+  /** a feladó; `null`: a környezeti alapértelmezés (`defaultFromAddress`) */
+  fromAddress: string | null;
+  /** a hét napja, 1 = hétfő … 7 = vasárnap */
+  weekday: number;
+  /** `ÓÓ:PP`, budapesti fali idő: a legkorábbi küldési idő */
+  earliest: string;
+  /** `ÓÓ:PP`: a legkésőbbi küldési idő */
+  latest: string;
+}
+
+export interface DueInvoicesMailSettingsView extends DueInvoicesMailSettings {
+  /** a feladó, amikor a `fromAddress` üres (a környezetből; `null`, ha ott sincs: a levélküldő saját alapértelmezett feladója) */
+  defaultFromAddress: string | null;
+  /** az utolsó küldés nyoma; `null`, ha még nem ment levél */
+  lastSent: { day: string; at: string; recipients: number } | null;
+}
+
+export type DueInvoicesMailSettingsInput = DueInvoicesMailSettings;

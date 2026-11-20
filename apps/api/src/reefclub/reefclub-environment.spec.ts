@@ -93,6 +93,10 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "MISSING_INVOICES_DRIVE_FOLDER_URL",
   // the payment intermediaries of the missing-invoices matching (acrobot 58103): a list of name patterns, not a secret
   "MISSING_INVOICES_PAYMENT_INTERMEDIARIES",
+  // the Lejáró számlák weekly mail (acrobot 58274): the default sender address and name and the scheduler's kill-switch, none a secret
+  "DUE_INVOICES_MAIL_FROM",
+  "DUE_INVOICES_MAIL_FROM_NAME",
+  "DUE_INVOICES_MAIL_SCHEDULER",
   "MNB_API_URL",
   "NEV",
   "NEXT_PROXY_TIMEOUT_MS",

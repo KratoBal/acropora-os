@@ -55,7 +55,8 @@ const BUDAPEST = new Intl.DateTimeFormat("en-GB", {
   weekday: "short",
   hour: "2-digit",
   minute: "2-digit",
-  hour12: false,
+  // `hour12: false` egyes ICU-változatokban h24-et ad (éjfél = "24"); a h23 kiírva rögzíti, hogy az éjfél utáni óra 00 (barracuda 58276)
+  hourCycle: "h23",
 });
 const DAY = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Budapest" });
 const WEEKDAYS: Readonly<Record<string, number>> = {

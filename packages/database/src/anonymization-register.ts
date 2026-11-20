@@ -1898,6 +1898,16 @@ export const ANONYMIZATION_REGISTER: Readonly<
     id: "identifier",
     updatedById: "identifier",
   },
+  // the Lejáró számlák weekly mail (acrobot 58227, 58230): the recipients and the sender are e-mail addresses, the rest settings
+  DueInvoicesMailSetting: {
+    id: "identifier",
+    recipients: "email",
+    fromAddress: "email",
+    earliest: "business",
+    latest: "business",
+    lastSentDay: "business",
+    updatedById: "identifier",
+  },
   PartnerOrderDocument: {
     fileName: "freeText",
     contentType: "business",

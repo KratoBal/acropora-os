@@ -199,6 +199,20 @@ describe("the weekly due-invoices mail rule", () => {
     );
   });
 
+  it("just after midnight the clock reads 00:30, not 24:30 (an ICU that counts midnight as 24 would send before the earliest time)", () => {
+    // 2026-11-22T23:30:00Z is Monday 00:30 in Budapest
+    const night = new Date("2026-11-22T23:30:00Z");
+    assert.deepEqual(budapestClock(night), {
+      day: "2026-11-23",
+      weekday: 1,
+      minutes: 30,
+    });
+    assert.deepEqual(decide(night, {}, { firstBankLoadToday: night }), {
+      action: "WAIT",
+      reason: "BEFORE_EARLIEST",
+    });
+  });
+
   it("minutesOf reads only HH:MM", () => {
     assert.equal(minutesOf("07:00"), 420);
     assert.equal(minutesOf("23:59"), 1439);
