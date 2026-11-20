@@ -18,6 +18,7 @@ import { BillingDocumentListRepository } from "./billing-document-list.repositor
 import { mergeExternalDuplicates } from "./external-billing-merge.cli.js";
 import type { NavInvoiceDigestItem } from "../integrations/nav/nav-online-invoice.client.js";
 import {
+  NavOutboundBackfill,
   prismaNavOutboundPresent,
   prismaNavOutboundWriter,
 } from "./nav-outbound-backfill.js";
@@ -47,6 +48,9 @@ async function removeLeftovers() {
     where: { externalId: { startsWith: PREFIX } },
   });
   await prisma.ebizSyncRun.deleteMany({ where: { id: { in: runIds } } });
+  await prisma.invoice.deleteMany({
+    where: { invoiceNumber: { startsWith: NUMBER } },
+  });
 }
 
 const item = (id: number, invoiceNumber: string): EbizInvoiceListItem =>
@@ -345,6 +349,77 @@ describe(
         `${NUMBER}N2`,
       ]);
       assert.deepEqual([...present.external], [`${NUMBER}N1`]);
+    });
+
+    it("--apply: a number stored in another spelling (case, spaces), external or own, is present: no NAV row beside it", async () => {
+      await prisma.externalBillingDocument.create({
+        data: {
+          source: "SZAMLAZZ",
+          externalId: `${PREFIX}k`,
+          feedMessageId: "x",
+          feedReceivedAt: new Date(),
+          kindCode: "SZ",
+          documentNumber: `${NUMBER}k 1`,
+          electronic: true,
+          issueDate: new Date("2026-05-04T00:00:00Z"),
+          currency: "HUF",
+          customerName: "Teszt Vevő Kft.",
+          netAmount: "100",
+          vatAmount: "27",
+          grossAmount: "127",
+          lines: [],
+          payments: [],
+          paymentsKnown: true,
+          paidAmount: "127.00",
+        },
+      });
+      await prisma.invoice.create({
+        data: {
+          direction: "OUTBOUND",
+          source: "SZAMLAZZ",
+          partnerName: "Teszt Vevő Kft.",
+          invoiceNumber: `${NUMBER}k 2`,
+        },
+      });
+      const client = {
+        queryInvoiceDigest: async () => ({
+          currentPage: 1,
+          availablePage: 1,
+          items: [navItem(`${NUMBER}K1`), navItem(`${NUMBER}K2`)],
+        }),
+      } as never;
+      const credentials = {
+        resolve: async () => ({ technicalUser: {}, software: {} }),
+      } as never;
+      const [result] = await new NavOutboundBackfill(
+        client,
+        credentials,
+        prismaNavOutboundPresent,
+        prismaNavOutboundWriter,
+        async () => undefined,
+      ).run({
+        from: new Date("2026-05-01T00:00:00Z"),
+        to: new Date("2026-05-10T00:00:00Z"),
+        apply: true,
+      });
+      assert.deepEqual(
+        [
+          result!.presentExternal,
+          result!.presentOwn,
+          result!.missing,
+          result!.created,
+        ],
+        [1, 1, 0, 0],
+      );
+      assert.equal(
+        await prisma.externalBillingDocument.count({
+          where: {
+            source: "NAV",
+            externalId: { in: [`${NUMBER}K1`, `${NUMBER}K2`] },
+          },
+        }),
+        0,
+      );
     });
 
     it("NAV first: Számlázz.hu takes the NAV row over, the same row, and its PDF reason goes", async () => {

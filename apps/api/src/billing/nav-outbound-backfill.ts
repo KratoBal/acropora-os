@@ -132,28 +132,29 @@ export interface NavOutboundPresentLookup {
   ): Promise<{ external: Set<string>; own: Set<string> }>;
 }
 
+/**
+ * A KULCS AZ ADATBÁZIS OLDALÁN IS (barracuda, #2775): a tárolt számot ugyanúgy normalizálja, mint az `invoiceNumberKey` (szóköz ki,
+ * nagybetű), nem pontos egyezéssel keres. Írás mellett a pontos egyezés egy másként írt tárolt számot („acrw-2026/00571”)
+ * hiányzónak látna, és a NAV sor mellé kerülne: ugyanaz a szám két sorban, és a `skipDuplicates` sem fogja meg (más forrás).
+ */
 export const prismaNavOutboundPresent: NavOutboundPresentLookup = {
   async present(numbers) {
     if (numbers.length === 0) return { external: new Set(), own: new Set() };
+    const keys = [...new Set(numbers.map(invoiceNumberKey))];
     const [external, own] = await Promise.all([
-      prisma.externalBillingDocument.findMany({
-        where: { documentNumber: { in: [...numbers] } },
-        select: { documentNumber: true },
-      }),
-      prisma.invoice.findMany({
-        where: { direction: "OUTBOUND", invoiceNumber: { in: [...numbers] } },
-        select: { invoiceNumber: true },
-      }),
+      prisma.$queryRaw<{ key: string }[]>`
+        SELECT DISTINCT upper(regexp_replace("documentNumber", '[[:space:]]', '', 'g')) AS "key"
+        FROM "ExternalBillingDocument"
+        WHERE upper(regexp_replace("documentNumber", '[[:space:]]', '', 'g')) = ANY(${keys})`,
+      prisma.$queryRaw<{ key: string }[]>`
+        SELECT DISTINCT upper(regexp_replace("invoiceNumber", '[[:space:]]', '', 'g')) AS "key"
+        FROM "Invoice"
+        WHERE "direction" = 'OUTBOUND'
+          AND upper(regexp_replace("invoiceNumber", '[[:space:]]', '', 'g')) = ANY(${keys})`,
     ]);
     return {
-      external: new Set(
-        external.map((row) => invoiceNumberKey(row.documentNumber)),
-      ),
-      own: new Set(
-        own.flatMap((row) =>
-          row.invoiceNumber ? [invoiceNumberKey(row.invoiceNumber)] : [],
-        ),
-      ),
+      external: new Set(external.map((row) => row.key)),
+      own: new Set(own.map((row) => row.key)),
     };
   },
 };
