@@ -172,7 +172,7 @@ export function pdfInputOf(v: VersionTree, creationDate: Date): QuotePdfInput {
 }
 
 /** The customer at publish time (the mapper's allowlisted snapshot keys). */
-async function customerSnapshot(
+export async function customerSnapshot(
   tx: Pick<Tx, "customer">,
   customerId: string | null,
 ): Promise<Record<string, string> | null> {
