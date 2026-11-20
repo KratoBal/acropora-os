@@ -6,9 +6,15 @@ import { pathToFileURL } from "node:url";
 import { prisma } from "@acropora/database";
 
 import {
+  GOOGLE_PDF_MAX_BYTES,
   GoogleReadonlyClient,
   GoogleReadonlyError,
 } from "../integrations/google/google-readonly.client.js";
+import {
+  guardedFetch,
+  readCapped,
+  type PdfFetch,
+} from "../knowledge-base/extraction/pdf-full-text.js";
 import { supplierInvoiceMailCredentials } from "../purchasing/expected-arrivals/supplier-invoice-mail.config.js";
 import { pdfTextLines } from "../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
@@ -74,6 +80,9 @@ export async function main(
     candidates?: (month: string) => Promise<MailPdfCandidate[]>;
     mail?: (month: string) => Promise<MailPdf[]>;
     rowsByNumber?: (numbers: readonly string[]) => Promise<NumberRow[]>;
+    unasLinks?: (numbers: readonly string[]) => Promise<UnasInvoiceLink[]>;
+    fetchPdf?: PdfFetch;
+    sleep?: (ms: number) => Promise<void>;
     documents?: () => Pick<DocumentStore, "put"> | null;
     store?: {
       setPdf(id: string, key: string, reason: null): Promise<boolean | void>;
@@ -112,7 +121,28 @@ export async function main(
     );
     return 2;
   }
-  let mail = deps.mail ?? (dir ? () => readPdfDir(dir) : undefined);
+  const unasLink = argv.includes("--unas-link");
+  if (unasLink && dir !== null) {
+    io.err("A --unas-link és a --dir közül egyszerre csak az egyik.\n");
+    return 2;
+  }
+  let mail =
+    deps.mail ??
+    (dir
+      ? () => readPdfDir(dir)
+      : unasLink
+        ? async (m: string) =>
+            readUnasLinkPdfs(
+              await (deps.unasLinks ?? prismaUnasLinks)(
+                (await (deps.candidates ?? mailPdfCandidates)(m)).map(
+                  (row) => row.documentNumber,
+                ),
+              ),
+              deps.fetchPdf ?? guardedFetch(),
+              io.out,
+              deps.sleep,
+            )
+        : undefined);
   if (!mail) {
     const credentials = supplierInvoiceMailCredentials(environment);
     if (!credentials) {
@@ -145,11 +175,13 @@ export async function main(
   io.out(
     dir
       ? `Fájl a ${dir} mappából (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`
-      : `Levél a ${CMFX_SENDER} címről (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`,
+      : unasLink
+        ? `Link az UNAS-rendelésekből (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`
+        : `Levél a ${CMFX_SENDER} címről (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`,
   );
   // the folder's files with their size and fingerprint: the person reviewing the dry run compares them with the
   // downloader's lines, through the copies between the fleet and the production container (barracuda #1786)
-  if (dir)
+  if (dir || unasLink)
     for (const pdf of pdfs)
       io.out(
         `FAJL ${pdf.fileName} ${pdf.buffer.length} bájt sha256:${createHash("sha256").update(pdf.buffer).digest("hex").slice(0, 16)}\n`,
@@ -203,6 +235,137 @@ export async function main(
  * Egy mappa PDF-jei a levél-út alakjában. A futtató ember tette oda (`--dir`): az eredetet ő igazolja,
  * ezért `authenticated`; a szám, az adószám és az összeg ellenőrzése ettől még lefut.
  */
+/**
+ * A WEBSHOP-SZÁMLA PDF-JE AZ UNAS-RENDELÉS CMFX-LINKJÉRŐL (785dfea6, acrobot 58359). A levél nélküli ACRW-számlák egy részéhez
+ * az UNAS rendelés-szinkron eltárolta a számla linkjét (`Invoice.externalUrl`, source UNAS; élesen 132 ACRW-2026 sor, mind
+ * `https://www.cmfx.hu`). A cmfx felülete a régebbieket nem adja ki, ez a link igen, ha PDF-et ad.
+ *
+ * CSAK A CMFX: `https://www.cmfx.hu`, más host, más séma vagy egy máshová vivő átirányítás nem kérődik le. A letöltés a
+ * tudásbázis védett letöltőjén megy (`guardedFetch`: a kapcsolódás a nyilvános címre megy, DNS-újrakötés nincs), méretkorláttal.
+ * Két letöltés között 2 mp (Balázs, 2026-11-20 13:21 UTC: lassan). A LINK NEM KERÜL A KIMENETBE (token lehet benne): soronként
+ * a szám, a HTTP-állapot, a tartalomtípus és a méret. A PDF utána ugyanazokon az ellenőrzéseken megy át, mint a levélé (szám,
+ * adószám, fizetendő végösszeg); az eredete a cmfx https-hostja, ezért hitelesnek számít, mint a `--dir` mappáé.
+ */
+export const CMFX_LINK_HOST = "www.cmfx.hu";
+export const UNAS_LINK_GAP_MS = 2_000;
+const UNAS_LINK_MAX_REDIRECTS = 3;
+
+export interface UnasInvoiceLink {
+  number: string;
+  url: string;
+}
+
+const cmfxLink = (value: string): URL | null => {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" &&
+      url.hostname.toLowerCase() === CMFX_LINK_HOST &&
+      !url.username &&
+      !url.password &&
+      (url.port === "" || url.port === "443")
+      ? url
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+export async function readUnasLinkPdfs(
+  links: readonly UnasInvoiceLink[],
+  fetchPdf: PdfFetch,
+  report: (line: string) => void,
+  sleep: (ms: number) => Promise<void> = (ms) =>
+    new Promise((resolve) => setTimeout(resolve, ms)),
+): Promise<MailPdf[]> {
+  const pdfs: MailPdf[] = [];
+  let first = true;
+  for (const link of links) {
+    let url = cmfxLink(link.url);
+    if (!url) {
+      report(`LINK ${link.number} nem cmfx https-cím, nem kértem le\n`);
+      continue;
+    }
+    if (!first) await sleep(UNAS_LINK_GAP_MS);
+    first = false;
+    let response: Response | null = null;
+    try {
+      for (let hop = 0; ; hop++) {
+        response = await fetchPdf(url.toString(), {
+          method: "GET",
+          headers: { Accept: "application/pdf" },
+          redirect: "manual",
+          signal: AbortSignal.timeout(30_000),
+        });
+        const location = response.headers.get("location");
+        if (response.status < 300 || response.status >= 400 || !location) break;
+        const next = cmfxLink(new URL(location, url).toString());
+        if (!next || hop >= UNAS_LINK_MAX_REDIRECTS) {
+          report(
+            `LINK ${link.number} átirányítás nem cmfx-címre vagy túl sok, nem követtem\n`,
+          );
+          response = null;
+          break;
+        }
+        url = next;
+      }
+    } catch (error) {
+      report(
+        `LINK ${link.number} hiba: ${String((error as Error)?.message ?? error).slice(0, 80)}\n`,
+      );
+      continue;
+    }
+    if (!response) continue;
+    const type = response.headers.get("content-type") ?? "-";
+    if (response.status !== 200) {
+      report(`LINK ${link.number} HTTP ${response.status} ${type}\n`);
+      continue;
+    }
+    const bytes = await readCapped(response, GOOGLE_PDF_MAX_BYTES);
+    if (!bytes) {
+      report(`LINK ${link.number} HTTP 200 ${type} túl nagy\n`);
+      continue;
+    }
+    const buffer = Buffer.from(bytes);
+    const isPdf = buffer.subarray(0, 5).toString("latin1") === "%PDF-";
+    report(
+      `LINK ${link.number} HTTP 200 ${type} ${buffer.length} bájt ${isPdf ? "PDF" : "nem PDF"}\n`,
+    );
+    pdfs.push({
+      messageId: `unas:${link.number}`,
+      // the cmfx letter's attachment name, so `numberFromCmfxFileName` reads the number back
+      fileName: `E-${link.number.replace(/\//g, "-")}-0.pdf`,
+      buffer,
+      authenticated: true,
+    });
+  }
+  return pdfs;
+}
+
+/** The cmfx links the UNAS order sync stored for these invoice numbers (oldest order first; one link per number). */
+async function prismaUnasLinks(
+  numbers: readonly string[],
+): Promise<UnasInvoiceLink[]> {
+  if (!numbers.length) return [];
+  const rows = await prisma.invoice.findMany({
+    where: {
+      source: "UNAS",
+      invoiceNumber: { in: [...numbers] },
+      externalUrl: { not: null },
+    },
+    orderBy: { createdAt: "asc" },
+    select: { invoiceNumber: true, externalUrl: true },
+  });
+  const byNumber = new Map<string, string>();
+  for (const row of rows)
+    if (
+      row.invoiceNumber &&
+      row.externalUrl &&
+      !byNumber.has(row.invoiceNumber)
+    )
+      byNumber.set(row.invoiceNumber, row.externalUrl);
+  return [...byNumber].map(([number, url]) => ({ number, url }));
+}
+
 export async function readPdfDir(dir: string): Promise<MailPdf[]> {
   const names = (await readdir(dir))
     .filter((name) => name.toLowerCase().endsWith(".pdf"))
