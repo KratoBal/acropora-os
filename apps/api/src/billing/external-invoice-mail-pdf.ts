@@ -88,22 +88,35 @@ export interface MailPdf {
  * kell a Gmailének lennie. Ha valaha nem az áll felül, a levél NEM_HITELES lesz: látható, nem néma.
  */
 export function cmfxMailAuthenticated(results: readonly string[]): boolean {
+  return mailAuthenticatedFor(results, "cmfx.hu");
+}
+
+/**
+ * Ugyanez a próba egy megnevezett domainre (785dfea6, acrobot 59000): a `--mail-id` a saját domainünk
+ * (acropora.hu) levelét fogadja el, ugyanazzal a mércével, mint a cmfx-ét: a legfelső fejléc a Gmailé,
+ * benne `dkim=pass` PONTOSAN erre a domainre ÉS `dmarc=pass header.from=<domain>`.
+ */
+export function mailAuthenticatedFor(
+  results: readonly string[],
+  domain: string,
+): boolean {
   const top = results[0]?.trim() ?? "";
   if (!/^mx\.google\.com\s*;/i.test(top)) return false;
   const parts = top.split(";").map((part) => part.trim().toLowerCase());
   // the domain ends where the token ends: no letter, digit, dot or hyphen may follow
   const end = String.raw`(?![a-z0-9.-])`;
+  const host = domain.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const dkim = parts.some(
     (part) =>
       /^dkim=pass\b/.test(part) &&
       new RegExp(
-        String.raw`(?:^|\s)header\.(?:d=cmfx\.hu|i=[^\s@]*@cmfx\.hu)${end}`,
+        String.raw`(?:^|\s)header\.(?:d=${host}|i=[^\s@]*@${host})${end}`,
       ).test(part),
   );
   const dmarc = parts.some(
     (part) =>
       /^dmarc=pass\b/.test(part) &&
-      new RegExp(String.raw`(?:^|\s)header\.from=cmfx\.hu${end}`).test(part),
+      new RegExp(String.raw`(?:^|\s)header\.from=${host}${end}`).test(part),
   );
   return dkim && dmarc;
 }

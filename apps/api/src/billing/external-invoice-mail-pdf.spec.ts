@@ -10,6 +10,7 @@ import {
   REQUEST_GAP_MS,
   main,
   readCmfxMail,
+  readOwnMail,
   readUnasLinkPdfs,
   cookieHeaderFrom,
   pdfAddressesIn,
@@ -18,6 +19,7 @@ import {
   cmfxMailAuthenticated,
   cmfxMailQuery,
   fillExternalPdfsFromMail,
+  mailAuthenticatedFor,
   numberFromCmfxFileName,
   textCarriesNumber,
   pdfPayableAmount,
@@ -960,5 +962,209 @@ describe("external-invoice-mail-pdf:fill", () => {
     assert.equal(code, 2);
     assert.match(err, /levélkulcsa nincs beállítva/);
     assert.equal(out, "");
+  });
+});
+
+/*
+  ONE NAMED MAIL OF OUR OWN DOMAIN (785dfea6, acrobot 59000): Luca's monthly "nyomtatandó csomag" mails carry the cmfx PDFs as
+  attachments, named without "E-". WHAT TURNS IT RED: a mail from another domain, a look-alike domain or a subdomain, or one whose
+  top Gmail verdict is not DKIM and DMARC pass for acropora.hu, read as authentic; the "E-" prefix not added (the number would not
+  be read) or added twice; --mail-id searching the month instead of reading the one mail; a bad id or a second source accepted.
+*/
+describe("one named mail of our own domain (--mail-id)", () => {
+  const own =
+    "mx.google.com; dkim=pass header.i=@acropora.hu header.s=google header.b=AbCd; spf=pass smtp.mailfrom=luca@acropora.hu; dmarc=pass (p=NONE sp=NONE dis=NONE) header.from=acropora.hu";
+  const cmfx =
+    "mx.google.com; dkim=pass header.i=@cmfx.hu; dmarc=pass header.from=cmfx.hu";
+
+  it("our domain's verdict passes exactly: no look-alike, no suffix, no other domain's pass, only the top header", () => {
+    assert.equal(mailAuthenticatedFor([own], "acropora.hu"), true);
+    assert.equal(
+      mailAuthenticatedFor(
+        [own.replaceAll("acropora.hu", "evilacropora.hu")],
+        "acropora.hu",
+      ),
+      false,
+    );
+    assert.equal(
+      mailAuthenticatedFor(
+        [own.replaceAll("acropora.hu", "acropora.hu.evil")],
+        "acropora.hu",
+      ),
+      false,
+    );
+    assert.equal(mailAuthenticatedFor([cmfx], "acropora.hu"), false);
+    assert.equal(
+      mailAuthenticatedFor(
+        ["mx.google.com; dkim=none; dmarc=fail header.from=acropora.hu", own],
+        "acropora.hu",
+      ),
+      false,
+    );
+    // the cmfx check is the same test for cmfx.hu, unchanged
+    assert.equal(cmfxMailAuthenticated([cmfx]), true);
+    assert.equal(cmfxMailAuthenticated([own]), false);
+  });
+
+  const google = (
+    mails: Record<
+      string,
+      { sender: string | null; ar: string[]; names: string[]; text?: string }
+    >,
+    asked: string[] = [],
+  ) => ({
+    async gmailMessageIds(): Promise<string[]> {
+      throw new Error("--mail-id must not search");
+    },
+    async gmailPdfMessage(_user: string, id: string) {
+      asked.push(id);
+      const mail = mails[id]!;
+      return {
+        id,
+        receivedAt: null,
+        subject: null,
+        sender: mail.sender,
+        pdfs: mail.names.map((fileName) => ({
+          fileName,
+          buffer: pdf(fileName, mail.text ?? "Számla sorszáma: 2026/00002")
+            .buffer,
+        })),
+        authenticationResults: mail.ar,
+        skippedTooLarge: 0,
+      };
+    },
+  });
+
+  it("readOwnMail: authentic only from @acropora.hu with our pass; the E- prefix added once", async () => {
+    const g = google({
+      luca: {
+        sender: "luca@acropora.hu",
+        ar: [own],
+        names: ["2026-00002-1048133.pdf", "E-2026-00078-622273.pdf"],
+      },
+      outside: {
+        sender: "luca@gmail.com",
+        ar: [own],
+        names: ["2026-00002-1048133.pdf"],
+      },
+      sub: {
+        sender: "luca@sub.acropora.hu",
+        ar: [own],
+        names: ["2026-00002-1048133.pdf"],
+      },
+      cmfxPass: {
+        sender: "luca@acropora.hu",
+        ar: [cmfx],
+        names: ["2026-00002-1048133.pdf"],
+      },
+      noSender: { sender: null, ar: [own], names: ["2026-00002-1048133.pdf"] },
+    });
+    const luca = await readOwnMail(g, "info@acropora.hu", "luca");
+    assert.deepEqual(
+      luca.map((p) => [p.messageId, p.fileName, p.authenticated]),
+      [
+        ["luca", "E-2026-00002-1048133.pdf", true],
+        ["luca", "E-2026-00078-622273.pdf", true],
+      ],
+    );
+    assert.equal(numberFromCmfxFileName(luca[0]!.fileName), "2026/00002");
+    for (const id of ["outside", "sub", "cmfxPass", "noSender"])
+      assert.deepEqual(
+        (await readOwnMail(g, "info@acropora.hu", id)).map(
+          (p) => p.authenticated,
+        ),
+        [false],
+        id,
+      );
+  });
+
+  const go = async (
+    argv: string[],
+    mails: Parameters<typeof google>[0],
+    asked: string[] = [],
+  ) => {
+    let out = "";
+    let err = "";
+    const r = recorder();
+    const code = await main(
+      argv,
+      { out: (t) => (out += t), err: (t) => (err += t) },
+      {
+        google: google(mails, asked),
+        candidates: async () => [candidate("row-2", "2026/00002")],
+        rowsByNumber: async () => [],
+        ownInvoicesByNumber: async () => [],
+        documents: () => r.documents,
+        store: r.store,
+        textOf,
+      },
+      {},
+    );
+    return { code, out, err, r };
+  };
+
+  it("main --mail-id: reads the one mail, the same checks; an unauthentic one stores nothing; a bad id or a second source is refused", async () => {
+    const asked: string[] = [];
+    const luca = {
+      "19c20725a72c042a": {
+        sender: "luca@acropora.hu",
+        ar: [own],
+        names: ["2026-00002-1048133.pdf"],
+      },
+    };
+    const dry = await go(
+      ["--month", "2026-01", "--mail-id", "19c20725a72c042a"],
+      luca,
+      asked,
+    );
+    assert.equal(dry.code, 1);
+    assert.deepEqual(asked, ["19c20725a72c042a"]);
+    assert.match(
+      dry.out,
+      /^A 19c20725a72c042a levél \(2026-01\): 1 PDF, hiteles acropora\.hu feladó; PDF nélküli feed-sor: 1$/m,
+    );
+    assert.match(
+      dry.out,
+      /^FAJL E-2026-00002-1048133\.pdf \d+ bájt sha256:[0-9a-f]{16}$/m,
+    );
+    assert.match(dry.out, /^WOULD_STORE\s+2026\/00002 \(\d+ bájt\)$/m);
+    assert.deepEqual(dry.r.puts, []);
+
+    const applied = await go(
+      ["--month", "2026-01", "--mail-id", "19c20725a72c042a", "--apply"],
+      luca,
+    );
+    assert.deepEqual(
+      [applied.code, applied.r.sets],
+      [0, [["row-2", applied.r.sets[0]?.[1] ?? ""]]],
+    );
+    assert.equal(applied.r.puts.length, 1);
+
+    const forged = await go(
+      ["--month", "2026-01", "--mail-id", "f0f0f0f0", "--apply"],
+      {
+        f0f0f0f0: {
+          sender: "luca@acropora.hu",
+          ar: [cmfx],
+          names: ["2026-00002-1048133.pdf"],
+        },
+      },
+    );
+    assert.equal(forged.code, 3);
+    assert.match(forged.out, /NEM hiteles acropora\.hu feladó/);
+    assert.match(forged.out, /^NOT_AUTHENTICATED\s+2026\/00002/m);
+    assert.match(forged.out, /nem acropora\.hu-aláírású, nem tárolódik/);
+    assert.deepEqual([forged.r.puts, forged.r.sets], [[], []]);
+
+    for (const argv of [
+      ["--month", "2026-01", "--mail-id", "nem-azonosito"],
+      ["--month", "2026-01", "--mail-id", "--apply"],
+      ["--month", "2026-01", "--mail-id"],
+      ["--month", "2026-01", "--mail-id", "19c20725a72c042a", "--dir", "/x"],
+      ["--month", "2026-01", "--mail-id", "19c20725a72c042a", "--unas-link"],
+    ]) {
+      const refused = await go(argv, luca);
+      assert.deepEqual([refused.code, refused.r.puts], [2, []], argv.join(" "));
+    }
   });
 });
