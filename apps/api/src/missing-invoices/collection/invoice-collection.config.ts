@@ -232,8 +232,10 @@ const BUDAPEST_DAY = new Intl.DateTimeFormat("en-CA", {
  *                 150 napos ablak UNMATCHED leveleit újraolvassa, a szeptemberieket is
  *   2026-11-13.2  más devizájú számla és kártyás fizetés (USD Stripe-számla, EUR terhelés): partner, legfeljebb 3 nap,
  *                 józan arány, egyetlen jelölt (acrobot 49581); a tárolt UNASSIGNED TypeSafe így előléptethető
+ *   2026-11-20.1  az ismert számlaszám, ami adószámnak látszik, a dokumentum száma (GLS: HU + 8 jegy; acrobot 57891, 57900):
+ *                 az első futás a 150 napos ablak UNMATCHED leveleit újraolvassa, a 13 GLS PDF így köthet
  */
-export const INVOICE_COLLECTION_RULES_VERSION = "2026-11-13.2";
+export const INVOICE_COLLECTION_RULES_VERSION = "2026-11-20.1";
 
 /**
  * Az UNMATCHED újraolvasás döntése: nincs még teljes futás, az utolsó teljes
