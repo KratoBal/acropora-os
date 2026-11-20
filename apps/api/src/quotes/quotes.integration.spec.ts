@@ -229,7 +229,7 @@ describe(
     });
     // LUCA 2026-11-20: a copy's partner could not be changed. The head change was already allowed on a DRAFT; what a swap must also do is
     // rebuild the draft versions' printed partner data (a copy carries the source's snapshot) and say who swapped what.
-    it("a partner change on a DRAFT rebuilds the versions' printed partner data and logs the swap; with a published version it is refused and changes nothing", async () => {
+    it("a partner change on a DRAFT rebuilds the versions' printed partner data and logs the swap; on a sent quote it is refused and changes nothing", async () => {
       role = "ADMIN";
       const other = await prisma.customer.create({
         data: {
@@ -292,13 +292,11 @@ describe(
           ).customerSnapshot,
           { name: "Kept" },
         );
-        // a version that was published: the head is closed, nothing changes
-        await prisma.quoteVersion.update({
-          where: { id: version.id },
-          data: {
-            status: "PUBLISHED",
-            customerSnapshot: { name: "Published" },
-          },
+        // a SENT quote: the head is closed, nothing changes (the publication checks of a version row forbid a half-made PUBLISHED
+        // fixture, so the closed state is the quote's own status; the repository locks the quote row FOR UPDATE and refuses a non-DRAFT)
+        await prisma.quote.update({
+          where: { id: quoteId },
+          data: { status: "SENT" },
         });
         const refused = await request(`/quotes/${quoteId}`, "PATCH", {
           customerId: customerId,
@@ -313,8 +311,17 @@ describe(
           ).customerId,
           other.id,
         );
-        await prisma.quoteVersion.update({
-          where: { id: version.id },
+        assert.deepEqual(
+          (
+            await prisma.quoteVersion.findUniqueOrThrow({
+              where: { id: version.id },
+              select: { customerSnapshot: true },
+            })
+          ).customerSnapshot,
+          { name: "Kept" },
+        );
+        await prisma.quote.update({
+          where: { id: quoteId },
           data: { status: "DRAFT" },
         });
       } finally {
