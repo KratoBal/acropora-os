@@ -270,7 +270,7 @@ describe(
           customerFrom: null,
           customerTo: other.id,
         });
-        // a title-only change is no swap: the snapshot stays as it is
+        // a title-only change is no swap: the snapshot stays as it is (the title stays "Updated": the next tests search for it)
         await prisma.quoteVersion.update({
           where: { id: version.id },
           data: { customerSnapshot: { name: "Kept" } },
@@ -278,7 +278,7 @@ describe(
         assert.equal(
           (
             await request(`/quotes/${quoteId}`, "PATCH", {
-              title: "Only the title",
+              title: "Updated",
             })
           ).status,
           200,
