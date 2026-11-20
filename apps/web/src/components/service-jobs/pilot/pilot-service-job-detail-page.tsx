@@ -980,7 +980,12 @@ export function PilotServiceJobDetailPage({
                     key={worksheet.id}
                     className="flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-3"
                   >
-                    <div className="min-w-0 flex-1">
+                    {/*
+                      TELEFONON A TÁRGY SAJÁT SORT KAP, az állapot, a munkaóra és a leválasztás alá tör (teszt OS, 390 px,
+                      2026-11-20: a `flex-1` 0-s alapja miatt a sor sosem tört, és a hosszú tárgy betűnként tördelődött egy keskeny
+                      oszlopban). `sm`-től a régi elrendezés: a tárgy kitölti, ami a többiek mellett marad.
+                    */}
+                    <div className="min-w-0 grow basis-full sm:basis-0">
                       {/*
                         A FŐ SOR A MUNKALAP TÁRGYA, ALATTA A SZÁM (Balázs,
                         2026-10-26 12:48 UTC, msg 1564259312728150148), mint
