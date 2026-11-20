@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   NavOnlineInvoiceClient,
+  buildQueryInvoiceDigestXml,
   parseQueryInvoiceDataResponse,
   parseQueryInvoiceDigestResponse,
   parseQueryTaxpayerResponse,
@@ -100,6 +101,71 @@ describe("parseQueryInvoiceDigestResponse", () => {
       [
         ["MODIFY", "KS26/05101", 1, "-59918"],
         ["STORNO", undefined, undefined, "-59918"],
+      ],
+    );
+  });
+
+  // THE OUTBOUND PATH'S FIELDS (card 785dfea6), from the schema's InvoiceDigestType; a private-person buyer has neither name nor tax
+  // number in NAV (interface specification v3.0, 2026.02.12, pp. 95, 108)
+  it("reads the buyer, the category, the appearance, the source and the transaction of an outbound digest; a private person has no buyer", () => {
+    const digest = (number: string, buyer: string) =>
+      `<invoiceDigest>` +
+      `<invoiceNumber>${number}</invoiceNumber>` +
+      `<invoiceOperation>CREATE</invoiceOperation>` +
+      `<invoiceCategory>NORMAL</invoiceCategory>` +
+      `<invoiceIssueDate>2026-05-04</invoiceIssueDate>` +
+      `<supplierTaxNumber>23916229</supplierTaxNumber>` +
+      `<supplierName>Acropora Kft.</supplierName>` +
+      buyer +
+      `<paymentMethod>TRANSFER</paymentMethod>` +
+      `<invoiceAppearance>ELECTRONIC</invoiceAppearance>` +
+      `<source>MGM</source>` +
+      `<transactionId>4B8ZXKF2TL1SDNMQ</transactionId>` +
+      `<index>2</index>` +
+      `<insDate>2026-05-04T08:00:00.000Z</insDate>` +
+      `</invoiceDigest>`;
+    const xml =
+      `${HEADER}<QueryInvoiceDigestResponse><result><funcCode>OK</funcCode></result>` +
+      `<invoiceDigestResult><currentPage>1</currentPage><availablePage>1</availablePage>` +
+      digest(
+        "2026/00031",
+        "<customerTaxNumber>15300001</customerTaxNumber><customerName>Állatkert Kft.</customerName>",
+      ) +
+      digest("2026/00032", "") +
+      `</invoiceDigestResult></QueryInvoiceDigestResponse>`;
+    const items = parseQueryInvoiceDigestResponse(xml).items;
+    assert.deepEqual(
+      items.map((i) => [
+        i.customerName,
+        i.customerTaxNumber,
+        i.invoiceCategory,
+        i.paymentMethod,
+        i.invoiceAppearance,
+        i.source,
+        i.transactionId,
+        i.index,
+      ]),
+      [
+        [
+          "Állatkert Kft.",
+          "15300001",
+          "NORMAL",
+          "TRANSFER",
+          "ELECTRONIC",
+          "MGM",
+          "4B8ZXKF2TL1SDNMQ",
+          2,
+        ],
+        [
+          undefined,
+          undefined,
+          "NORMAL",
+          "TRANSFER",
+          "ELECTRONIC",
+          "MGM",
+          "4B8ZXKF2TL1SDNMQ",
+          2,
+        ],
       ],
     );
   });
@@ -242,6 +308,60 @@ describe("parseQueryTaxpayerResponse", () => {
     assert.throws(
       () => parseQueryTaxpayerResponse(response("", "ERROR")),
       NavApiError,
+    );
+  });
+});
+
+// THE DATE THE DIGEST SEARCHES ON (card 785dfea6): the receipt time by default (the daily inbound sync), the issue date on request; the
+// schema takes exactly one (MandatoryQueryParamsType), the issue date as xs:date with both ends included (DateIntervalParamType)
+describe("buildQueryInvoiceDigestXml", () => {
+  const from = new Date("2026-01-01T00:00:00.000Z");
+  const to = new Date("2026-01-30T00:00:00.000Z");
+  const now = new Date("2026-11-20T12:00:00.000Z");
+  const params = (xml: string) =>
+    xml.slice(
+      xml.indexOf("<invoiceQueryParams>"),
+      xml.indexOf("</invoiceQueryParams>") + 21,
+    );
+
+  it("searches the receipt time by default, as before", () => {
+    assert.equal(
+      params(
+        buildQueryInvoiceDigestXml(
+          1,
+          "INBOUND",
+          from,
+          to,
+          TECHNICAL_USER,
+          SOFTWARE,
+          now,
+        ),
+      ),
+      "<invoiceQueryParams><mandatoryQueryParams><insDate><dateTimeFrom>2026-01-01T00:00:00.000Z</dateTimeFrom>" +
+        "<dateTimeTo>2026-01-30T00:00:00.000Z</dateTimeTo></insDate></mandatoryQueryParams></invoiceQueryParams>",
+    );
+  });
+
+  it("searches the issue date by day when asked, outbound", () => {
+    const xml = buildQueryInvoiceDigestXml(
+      2,
+      "OUTBOUND",
+      from,
+      to,
+      TECHNICAL_USER,
+      SOFTWARE,
+      now,
+      "invoiceIssueDate",
+    );
+    assert.equal(
+      params(xml),
+      "<invoiceQueryParams><mandatoryQueryParams><invoiceIssueDate><dateFrom>2026-01-01</dateFrom><dateTo>2026-01-30</dateTo>" +
+        "</invoiceIssueDate></mandatoryQueryParams></invoiceQueryParams>",
+    );
+    assert.ok(
+      xml.includes(
+        "<page>2</page><invoiceDirection>OUTBOUND</invoiceDirection>",
+      ),
     );
   });
 });
