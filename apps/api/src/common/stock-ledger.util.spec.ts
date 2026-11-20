@@ -35,6 +35,19 @@ describe("classifyLedgerMovements", () => {
     assert.equal(result.provableNetByVariant.get("v1")?.toString(), "2");
   });
 
+  it("counts the POS internal use (INTERNAL_USE, card ec51e614) as a provable decrease, not an unknown type", () => {
+    const movements: LedgerMovement[] = [
+      {
+        type: "PURCHASE_RECEIPT",
+        lines: [{ variantId: "v1", quantity: d("10") }],
+      },
+      { type: "INTERNAL_USE", lines: [{ variantId: "v1", quantity: d("3") }] },
+    ];
+    const result = classifyLedgerMovements(movements);
+    assert.equal(result.provableNetByVariant.get("v1")?.toString(), "7");
+    assert.equal(result.unprovableVariantIds.has("v1"), false);
+  });
+
   it("marks a variant unprovable when any ADJUSTMENT movement touches it - sign is not recoverable", () => {
     const movements: LedgerMovement[] = [
       {

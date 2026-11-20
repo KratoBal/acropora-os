@@ -1856,6 +1856,15 @@ export const ANONYMIZATION_REGISTER: Readonly<
   MortalityLocation: {
     name: "business",
   },
+  PosInternalUse: {
+    number: "identifier",
+    note: "freeText",
+  },
+  PosInternalUseLine: {
+    sku: "business",
+    productName: "business",
+    unit: "business",
+  },
   MortalityRecordDocument: {
     fileName: "freeText",
     contentType: "business",
