@@ -4,6 +4,7 @@ import { NotificationsModule } from "../notifications/notifications.module.js";
 import { GameAdminController } from "./game-admin.controller.js";
 import { GameAdminService } from "./game-admin.service.js";
 import { GameErasureScheduler } from "./game-erasure.scheduler.js";
+import { GameMailQueueScheduler } from "./game-mail-queue.scheduler.js";
 import { GameErasureService } from "./game-erasure.service.js";
 import { GamePublicController } from "./game-public.controller.js";
 import { createGameMailSender } from "./game-smtp-mail.js";
@@ -23,6 +24,7 @@ import { GAME_MAIL_SENDER, GameService } from "./game.service.js";
     GameAdminService,
     GameErasureService,
     GameErasureScheduler,
+    GameMailQueueScheduler,
   ],
   exports: [GameService],
 })

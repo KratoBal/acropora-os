@@ -108,6 +108,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "JATEK_PUBLIC_URL",
   // the giveaway's daily mail cap (acrobot, 2026-11-05): a number, not a secret
   "JATEK_MAIL_DAILY_CAP",
+  // the switch of the giveaway's scheduled mail queue drain (card 31445d0f): a switch, not a secret
+  "JATEK_MAIL_QUEUE_AUTO",
   // the giveaway's sender and Reply-To addresses (acrobot 44556): addresses, not secrets (its SMTP login and key are under
   // JATEK_SMTP_, which the ReefClub rule refuses as an internal integration)
   "JATEK_MAIL_FROM",
