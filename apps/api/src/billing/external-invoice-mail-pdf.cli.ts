@@ -290,6 +290,123 @@ const cmfxLink = (value: string): URL | null => {
   }
 };
 
+/**
+ * THE CMFX LINK IS A VAADIN 6 APP, NOT A FILE (785dfea6; acrobot 58716, 58755, 58758, 58769, measured from the fleet): the link
+ * answers 200 text/html (2635 bytes, "FxPrint", a JSESSIONID cookie), and the app makes the PDF on its first UIDL request,
+ * then opens it from /jx/tmp/. The same steps without a browser, measured to work on ACRW-2026/00008 (66 995 bytes):
+ *   1. the link's own answer gives the session cookie (the GET already made);
+ *   2. POST <app>/UIDL?repaintAll=1&... with the body "init\u001d", the first request a Vaadin 6 client sends;
+ *   3. the .pdf address is read from the PARSED answer (after "for(;;);"): its JSON escapes the slashes, so a text search
+ *      for "/jx/tmp" found nothing;
+ *   4. GET that address with the cookie.
+ * Every step stays on the cmfx https host through the guarded fetch; an address elsewhere is not requested. The parameters
+ * are the measured names with a 1280x720 screen in Budapest's zone; the token stays in the link and is never printed.
+ */
+const VAADIN_INIT_BODY = "init\u001d";
+const VAADIN_MAX_ANSWER = 1_000_000;
+
+/** The session cookies a response set, as one Cookie header (the guarded fetch joins Set-Cookie lines with ", "). */
+export function cookieHeaderFrom(setCookie: string | null): string {
+  if (!setCookie) return "";
+  return setCookie
+    .split(/,(?=\s*[A-Za-z0-9_.-]+=)/)
+    .map((part) => part.split(";")[0]!.trim())
+    .filter((pair) => /^[A-Za-z0-9_.-]+=/.test(pair))
+    .join("; ");
+}
+
+/** Every string in a parsed Vaadin answer that names a .pdf, in document order. */
+export function pdfAddressesIn(answer: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(answer.replace(/^for\(;;\);/, ""));
+  } catch {
+    return [];
+  }
+  const found: string[] = [];
+  const walk = (node: unknown): void => {
+    if (typeof node === "string") {
+      if (/\.pdf(?:$|[?#])/i.test(node)) found.push(node);
+    } else if (Array.isArray(node)) node.forEach(walk);
+    else if (node && typeof node === "object")
+      Object.values(node).forEach(walk);
+  };
+  walk(parsed);
+  return found;
+}
+
+/** Steps 2-4 above for one link already answered with the app's page; the PDF bytes, or why not. */
+export async function vaadinPdf(
+  page: URL,
+  cookie: string,
+  fetchPdf: PdfFetch,
+  now: Date = new Date(),
+): Promise<{ pdf: Uint8Array } | { reason: string }> {
+  if (!cookie) return { reason: "a lap nem adott sütit" };
+  const uidl = new URL("UIDL", new URL("./", page));
+  const offset = now.getTimezoneOffset();
+  for (const [name, value] of Object.entries({
+    repaintAll: "1",
+    sh: "720",
+    sw: "1280",
+    cw: "1280",
+    ch: "720",
+    vw: "1280",
+    vh: "720",
+    fr: "",
+    tzo: String(offset),
+    rtzo: "-60",
+    dstd: "60",
+    dston: String(offset === -120),
+    curdate: String(now.getTime()),
+    wsver: "6.8.13",
+  }))
+    uidl.searchParams.set(name, value);
+  const answer = await fetchPdf(uidl.toString(), {
+    method: "POST",
+    headers: {
+      Cookie: cookie,
+      "Content-Type": "text/plain;charset=utf-8",
+      Origin: `https://${CMFX_LINK_HOST}`,
+      Referer: page.toString(),
+    },
+    redirect: "manual",
+    signal: AbortSignal.timeout(30_000),
+    body: VAADIN_INIT_BODY,
+  });
+  if (answer.status !== 200) return { reason: `UIDL HTTP ${answer.status}` };
+  const text = await readCapped(answer, VAADIN_MAX_ANSWER);
+  if (!text) return { reason: "a UIDL-válasz túl nagy" };
+  const addresses = pdfAddressesIn(Buffer.from(text).toString("utf8"));
+  const target = addresses
+    .map((value) => {
+      try {
+        return cmfxLink(new URL(value, new URL("./", page)).toString());
+      } catch {
+        return null;
+      }
+    })
+    .find((url): url is URL => url !== null);
+  if (!target)
+    return {
+      reason: addresses.length
+        ? "a PDF-cím nem cmfx https-cím, nem kértem le"
+        : "nincs .pdf-cím a UIDL-válaszban",
+    };
+  const pdf = await fetchPdf(target.toString(), {
+    method: "GET",
+    headers: { Cookie: cookie, Accept: "application/pdf" },
+    redirect: "manual",
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (pdf.status !== 200) return { reason: `PDF HTTP ${pdf.status}` };
+  const bytes = await readCapped(pdf, GOOGLE_PDF_MAX_BYTES);
+  if (!bytes) return { reason: "a PDF túl nagy" };
+  return Buffer.from(bytes).subarray(0, 5).toString("latin1") === "%PDF-"
+    ? { pdf: bytes }
+    : { reason: "a PDF-cím válasza nem PDF" };
+}
+
 export async function readUnasLinkPdfs(
   links: readonly UnasInvoiceLink[],
   fetchPdf: PdfFetch,
@@ -352,11 +469,31 @@ export async function readUnasLinkPdfs(
       report(`LINK ${link.number} HTTP 200 ${type} túl nagy\n`);
       continue;
     }
-    const buffer = Buffer.from(bytes);
+    let buffer = Buffer.from(bytes);
     const isPdf = buffer.subarray(0, 5).toString("latin1") === "%PDF-";
     report(
       `LINK ${link.number} HTTP 200 ${type} ${buffer.length} bájt ${isPdf ? "PDF" : "nem PDF"}\n`,
     );
+    // the Vaadin app's page: the PDF behind it, through the same guarded fetch (see `vaadinPdf`)
+    if (!isPdf && /text\/html/i.test(type)) {
+      let outcome: { pdf: Uint8Array } | { reason: string };
+      try {
+        outcome = await vaadinPdf(
+          url,
+          cookieHeaderFrom(response.headers.get("set-cookie")),
+          fetchPdf,
+        );
+      } catch (error) {
+        const failure = error as { name?: unknown } | null;
+        outcome = {
+          reason: `hiba: ${typeof failure?.name === "string" ? failure.name : "ismeretlen"}`,
+        };
+      }
+      if ("pdf" in outcome) {
+        buffer = Buffer.from(outcome.pdf);
+        report(`LINK ${link.number} Vaadin: PDF ${buffer.length} bájt\n`);
+      } else report(`LINK ${link.number} Vaadin: ${outcome.reason}\n`);
+    }
     pdfs.push({
       messageId: `unas:${link.number}`,
       // the cmfx letter's attachment name, so `numberFromCmfxFileName` reads the number back
