@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
 
 import { DueInvoicesController } from "../billing/due-invoices.controller.js";
+import { DueInvoicesMailService } from "../billing/due-invoices-mail.service.js";
+import { NotificationsModule } from "../notifications/notifications.module.js";
 import { IncomingBillingDocumentsController } from "../billing/incoming-billing-documents.controller.js";
 import { IncomingForeignReadScheduler } from "../billing/foreign-invoice/incoming-foreign-read.scheduler.js";
 import { IncomingReviewService } from "../billing/foreign-invoice/incoming-review.service.js";
@@ -36,6 +38,8 @@ import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
 
 /** HIÁNYZÓ SZÁMLÁK (Pénzügy): a banki terhelés és a számla egyeztetése. */
 @Module({
+  // a levélküldő (`MAIL_SENDER`) a Lejáró számlák heti levelének (`DueInvoicesMailService`)
+  imports: [NotificationsModule],
   controllers: [
     DueInvoicesController,
     IncomingBillingDocumentsController,
@@ -48,6 +52,7 @@ import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
     SzamlazzFeedsController,
   ],
   providers: [
+    DueInvoicesMailService,
     BankStatementImportRepository,
     BankStatementImportService,
     IncomingForeignReadScheduler,
