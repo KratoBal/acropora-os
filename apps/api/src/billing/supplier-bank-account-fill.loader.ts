@@ -7,14 +7,16 @@ import {
   type CollectedPdfSource,
 } from "./incoming-collected-pdf.js";
 import { attachedPdfIds } from "./incoming-pdf-attach.js";
-import { incomingPdfIds } from "./incoming-pdf-state.js";
 import {
   planFills,
   type FillEvidence,
   type FillPlan,
   type FillSupplierInput,
 } from "./supplier-bank-account-fill.js";
-import { readPdfOutcome } from "./supplier-bank-account-extract.js";
+import {
+  pdfIdsToRead,
+  readPdfOutcome,
+} from "./supplier-bank-account-extract.js";
 import { supplierAccountKey } from "./supplier-bank-account-key.js";
 import {
   accountFromBankText,
@@ -158,7 +160,7 @@ export async function gatherFillSuppliers(
   for (const [key, supplierRows] of bySupplier) {
     const pdf: FillEvidence[] = [];
     for (const row of supplierRows)
-      for (const id of incomingPdfIds(row, { attached, collected }))
+      for (const id of pdfIdsToRead(row, { attached, collected }))
         pdf.push(...(await pdfEvidence(id)));
     const first = supplierRows[0]!;
     suppliers.push({

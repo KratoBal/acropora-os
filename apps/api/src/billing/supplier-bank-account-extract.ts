@@ -1,4 +1,9 @@
 import {
+  incomingPdfIds,
+  type IncomingPdfRow,
+  type IncomingPdfSources,
+} from "./incoming-pdf-state.js";
+import {
   supplierAccountCandidates,
   supplierAccountVerdict,
   type SupplierAccountCandidate,
@@ -174,4 +179,18 @@ export function formatExtractReport(report: ExtractReport): string {
     );
   }
   return `${out.join("\n")}\n`;
+}
+
+/**
+ * AZ OLVASANDÓ PDF-EK EGY SORHOZ: az EGY PDF-szabály (`incomingPdfIds`), a feed saját dokumentuma nélkül, ha az NEM PDF (`hasPdf` hamis). A feed `sourceDocumentId`-ja akkor is egy dokumentumra mutat,
+ * ha a feed `pdf` mezője nem valódi PDF volt: az olvasása mindig hibára futna, és az élő mérésben (2026-11-20, 63 célsor) minden sorhoz EGY „nem olvasható PDF”-et adott, tehát a
+ * riport „nem olvasható: 63” száma zaj volt, nem hiba. A kézzel csatolt és a begyűjtött PDF-ek változatlanul benne vannak.
+ */
+export function pdfIdsToRead(
+  row: IncomingPdfRow,
+  sources: IncomingPdfSources,
+): string[] {
+  return incomingPdfIds(row, sources).filter(
+    (id) => id !== row.sourceDocumentId || row.hasPdf === true,
+  );
 }
