@@ -2,6 +2,7 @@ import type {
   AuthenticatedUser,
   InvoiceCollectionSuggestion,
   InvoiceCollectionSuggestionsResponse,
+  SupplierRuleRefusalCode,
 } from "@acropora/types";
 import {
   ConflictException,
@@ -65,6 +66,12 @@ export function toSuggestion(
         : null,
     currency: text(reading.currency),
     createdAt: row.createdAt.toISOString(),
+    ruleRefusal: row.ruleRefusal
+      ? {
+          reason: row.ruleRefusal as SupplierRuleRefusalCode,
+          ruleLabel: row.ruleRefusalLabel,
+        }
+      : null,
   };
 }
 

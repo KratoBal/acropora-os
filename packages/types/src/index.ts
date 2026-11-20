@@ -1431,6 +1431,7 @@ export type {
   InvoiceCollectionSuggestionDecision,
   SupplierRuleKind,
   SupplierRulePreview,
+  SupplierRuleRefusalCode,
   SupplierRuleView,
   InvoiceCollectionSuggestionsResponse,
   MissingInvoiceAction,

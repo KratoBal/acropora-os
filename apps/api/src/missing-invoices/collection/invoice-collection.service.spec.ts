@@ -1777,6 +1777,8 @@ describe("InvoiceCollectionService accepts by a known supplier's rule", () => {
     authentication?: string[] | null;
     storedNumbers?: Record<string, { fileName: string; origin: string }[]>;
     dry?: boolean;
+    /** the Jev is sure enough to suggest it (default: under the threshold) */
+    jevSure?: boolean;
   }) => {
     const buffer = await pdf(options.lines ?? lines());
     const made = setup({
@@ -1797,7 +1799,7 @@ describe("InvoiceCollectionService accepts by a known supplier's rule", () => {
       // a classifier under the threshold: it is asked when no rule decided, and never makes a suggestion
       classify: async () => ({
         kind: "BEJOVO_SZAMLA",
-        confidence: 0.1,
+        confidence: options.jevSure ? 0.95 : 0.1,
         decisionRunId: "run-jev-1",
       }),
     });
@@ -1900,5 +1902,93 @@ describe("InvoiceCollectionService accepts by a known supplier's rule", () => {
       changes.map((c) => [c.fileName, c.after, c.detail]),
       [["RE67456.pdf", "STORED", "szállítói szabály (TAX): DE152405660"]],
     );
+  });
+
+  /*
+    MIÉRT MARADT EMBERRE (kártya e09190c8, acrobot 58517). MI PIROSÍT: ha egy illeszkedő szabály mellett emberre maradt PDF
+    dokumentumára nem kerül rá az ok és a szabály; ha rossz ok kerül rá (a nem hitelesített feladó a döntés előtt áll); ha egy
+    PDF, amire egy szabály kulcsa sem illeszkedett, vagy a kikapcsolt szabályok mellett jött, okot kap.
+  */
+  it("puts on the document why a matching rule left it to a person, and which rule", async () => {
+    const cases: [string, Parameters<typeof run>[0], unknown][] = [
+      ["outlier", { lines: lines("Amount due: $200.00 USD") }, "OUTLIER"],
+      [
+        "new currency",
+        { lines: lines("Amount due: 20.50 EUR") },
+        "NEW_CURRENCY",
+      ],
+      [
+        "no amount",
+        { lines: lines("Thank you for your business") },
+        "NO_AMOUNT",
+      ],
+      [
+        "another authenticated sender",
+        { sender: "x@evil.example" },
+        "SENDER_MISMATCH",
+      ],
+      [
+        "not authenticated, even with an outlier amount",
+        {
+          lines: lines("Amount due: $200.00 USD"),
+          authentication: ["mx.google.com; dmarc=fail header.from=szallito.hu"],
+        },
+        "NOT_AUTHENTICATED",
+      ],
+      [
+        "same number stored",
+        {
+          storedNumbers: {
+            RE67456: [{ fileName: "other.pdf", origin: "UPLOAD" }],
+          },
+        },
+        "SAME_NUMBER",
+      ],
+    ];
+    for (const [label, options, reason] of cases) {
+      const { stored } = await run(options);
+      assert.deepEqual(
+        untied(stored).map((document) => document.ruleRefusal),
+        [{ reason, ruleId: "rule-1" }],
+        label,
+      );
+    }
+  });
+
+  it("a Jev suggestion carries the reason too", async () => {
+    const { stored } = await run({
+      lines: lines("Amount due: $200.00 USD"),
+      jevSure: true,
+    });
+    assert.deepEqual(
+      stored.map((document) => [
+        Boolean(document.suggestion),
+        document.ruleRefusal,
+      ]),
+      [[true, { reason: "OUTLIER", ruleId: "rule-1" }]],
+    );
+  });
+
+  it("no reason where no rule's key matched, or the rules are off", async () => {
+    for (const [label, options] of [
+      [
+        "another VAT number",
+        {
+          lines: [
+            "Invoice",
+            "Supplier VAT: FR12345678901",
+            ...lines().slice(2),
+          ],
+        },
+      ],
+      ["rules off", { live: false, lines: lines("Amount due: $200.00 USD") }],
+    ] as [string, Parameters<typeof run>[0]][]) {
+      const { stored } = await run(options);
+      assert.deepEqual(
+        stored.map((document) => document.ruleRefusal ?? null),
+        [null],
+        label,
+      );
+    }
   });
 });

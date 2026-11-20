@@ -35,6 +35,8 @@ function row(
       currency: "EUR",
     },
     createdAt: new Date(NOW.getTime() - ageDays * DAY),
+    ruleRefusal: null,
+    ruleRefusalLabel: null,
     ...overrides,
   } as SuggestionRow;
 }
@@ -69,6 +71,31 @@ describe("toSuggestion state and staleness", () => {
     assert.equal(unassigned.state, "UNASSIGNED");
     assert.equal(unassigned.confidence, null);
     assert.equal(unassigned.invoiceNumber, "RE67456");
+  });
+
+  // kártya e09190c8: a lap a szabály okát és nevét kapja; ahol egy szabály sem illeszkedett, null
+  it("passes on why a matching supplier rule left it to a person, with the rule's name", () => {
+    assert.deepEqual(
+      [
+        toSuggestion(
+          row("g", "UNASSIGNED", 1, {
+            ruleRefusal: "OUTLIER",
+            ruleRefusalLabel: "Szállító Kft.",
+          }),
+          NOW,
+        ).ruleRefusal,
+        toSuggestion(
+          row("h", "UNASSIGNED", 1, { ruleRefusal: "NEW_CURRENCY" }),
+          NOW,
+        ).ruleRefusal,
+        toSuggestion(row("i", "UNASSIGNED", 1), NOW).ruleRefusal,
+      ],
+      [
+        { reason: "OUTLIER", ruleLabel: "Szállító Kft." },
+        { reason: "NEW_CURRENCY", ruleLabel: null },
+        null,
+      ],
+    );
   });
 });
 

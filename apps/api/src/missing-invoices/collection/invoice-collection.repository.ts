@@ -8,6 +8,8 @@ import {
   type InvoiceCollectionSource,
   unmatchedRetryDue,
 } from "./invoice-collection.config.js";
+import type { SupplierRuleRefusalCode } from "@acropora/types";
+
 import type { KnownInvoiceFacts } from "./invoice-corroboration.js";
 import type { CardDebit, KnownInvoiceNumber } from "./invoice-text.js";
 
@@ -82,7 +84,20 @@ export interface CollectedDocumentInput {
   unassigned?: boolean;
   /** Az UNMATCHED sor oka (`INVOICE_COLLECTION_REASONS`), a `unassigned` tároláskor a sorra kerül. */
   reason?: string;
+  /** A szállítói szabály, ami illeszkedett, de emberre hagyta (kártya e09190c8); a dokumentumra kerül. */
+  ruleRefusal?: RuleRefusalRecord | null;
 }
+
+/** Miért nem fogadta el egy illeszkedő szállítói szabály, és melyik szabály volt az. */
+export interface RuleRefusalRecord {
+  reason: SupplierRuleRefusalCode;
+  ruleId: string;
+}
+
+const ruleRefusalData = (refusal: RuleRefusalRecord | null | undefined) => ({
+  ruleRefusal: refusal?.reason ?? null,
+  ruleRefusalRuleId: refusal?.ruleId ?? null,
+});
 
 /** A dokumentum állapota, amíg a gyűjtő egy ember döntésére hagyja (`IncomingSupplierDocument.reviewState`). */
 export const UNASSIGNED = "UNASSIGNED";
@@ -500,6 +515,7 @@ export class InvoiceCollectionRepository {
           payeeCheck: input.payee,
           origin:
             input.source === "DRIVE" ? "COLLECTED_DRIVE" : "COLLECTED_MAIL",
+          ...ruleRefusalData(input.ruleRefusal),
           ...(input.suggestion
             ? {
                 reviewState: "SUGGESTED",
@@ -582,11 +598,16 @@ export class InvoiceCollectionRepository {
     id: string,
     textReading: object,
     payee: string,
+    ruleRefusal: RuleRefusalRecord | null = null,
   ): Promise<void> {
     await this.database.$transaction([
+      // a szabály-ok is a mai: egy azóta felvett szabály, vagy egy azóta emelt plafon a mai okot adja
       this.database.incomingSupplierDocument.updateMany({
         where: { id, reviewState: UNASSIGNED },
-        data: { textReading: textReading as Prisma.InputJsonValue },
+        data: {
+          textReading: textReading as Prisma.InputJsonValue,
+          ...ruleRefusalData(ruleRefusal),
+        },
       }),
       // A KÉZI VEVŐ-JELÖLÉST NEM ÍRJA FELÜL (barracuda, #2489): a `payeeCheck`-be a Hiányzó számlák lapja is ír
       // (`markPayee`, jelölővel és idővel); a mai olvasás csak ott állítja, ahol ember nem jelölt
@@ -630,6 +651,7 @@ export class InvoiceCollectionRepository {
               ? Prisma.DbNull
               : (input.textReading as Prisma.InputJsonValue),
           payeeCheck: input.payee,
+          ...ruleRefusalData(input.ruleRefusal),
           reviewState: input.suggestion ? "SUGGESTED" : null,
           suggestionConfidence: input.suggestion?.confidence ?? null,
           suggestionDecisionRunId: input.suggestion?.decisionRunId ?? null,

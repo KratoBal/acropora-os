@@ -12,6 +12,7 @@ import {
   hasPermission,
   PERMISSIONS,
   type InvoiceCollectionSuggestion,
+  type SupplierRuleRefusalCode,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -27,6 +28,29 @@ import {
   SupplierRulesSection,
 } from "./missing-invoices-supplier-rules";
 import { formatAmount, formatDay } from "./missing-invoices-model";
+
+/**
+ * MIÉRT MARADT EMBERRE, HA EGY SZÁLLÍTÓI SZABÁLY ILLESZKEDETT (kártya e09190c8, acrobot 58517): a sor alatt, hogy a döntő lássa,
+ * a szabály látta-e a PDF-et, és mi tartotta vissza.
+ */
+export const RULE_REFUSAL_TEXT: Record<SupplierRuleRefusalCode, string> = {
+  SENDER_MISMATCH: "más feladótól jött, mint a szabályé",
+  UNTRUSTED_NAME_SENDER:
+    "név-szabály, de továbbított levél (a szállító saját feladója kell)",
+  NOT_AUTHENTICATED: "a feladó nem hitelesített",
+  NEW_CURRENCY: "ebben a pénznemben még nem fogadott el számlát",
+  OUTLIER: "kiugró összeg (az eddigi legnagyobb háromszorosa fölött)",
+  NO_AMOUNT: "az összeg nem olvasható",
+  SAME_NUMBER: "ilyen számú számla már tárolva van",
+};
+
+export function ruleRefusalLine(
+  refusal: InvoiceCollectionSuggestion["ruleRefusal"],
+): string | null {
+  if (!refusal) return null;
+  const rule = refusal.ruleLabel ? `Szabály (${refusal.ruleLabel})` : "Szabály";
+  return `${rule}: ${RULE_REFUSAL_TEXT[refusal.reason] ?? refusal.reason}`;
+}
 
 /**
  * A JEV JAVASLATAI A BEGYŰJTÉSBŐL (levél-válogatás terv, 4. szelet; acrobot
@@ -175,20 +199,24 @@ export function MissingInvoicesSuggestionsPage() {
     {
       id: "state",
       header: "Állapot",
-      width: "150px",
-      cell: (item) =>
-        item.state === "UNASSIGNED" ? (
-          <span className="flex flex-col">
-            <span>Nem párosodott</span>
-            {item.stale ? (
-              <span className="text-xs font-medium text-pilot-amber-700">
-                {staleAfterDays} napnál régebben vár
-              </span>
-            ) : null}
+      width: "200px",
+      cell: (item) => (
+        <span className="flex flex-col">
+          <span>
+            {item.state === "UNASSIGNED" ? "Nem párosodott" : "A Jev javasolta"}
           </span>
-        ) : (
-          "A Jev javasolta"
-        ),
+          {item.state === "UNASSIGNED" && item.stale ? (
+            <span className="text-xs font-medium text-pilot-amber-700">
+              {staleAfterDays} napnál régebben vár
+            </span>
+          ) : null}
+          {item.ruleRefusal ? (
+            <span className="text-xs text-pilot-grey-600">
+              {ruleRefusalLine(item.ruleRefusal)}
+            </span>
+          ) : null}
+        </span>
+      ),
     },
     {
       id: "confidence",
