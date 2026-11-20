@@ -987,7 +987,7 @@ function MilestonesCard({
 /**
  * A TÉTEL BRUTTÓJA A SZERKESZTŐBEN (Luca, 2026-11-20: a tétel felvitelekor a nettó ÉS a bruttó beírható, de utána a sorban csak egy "1x
  * nettó" összeg látszott; a hibák elkerülése miatt a szerkesztés alatt is mindkettő kell). Az egységár bruttója az ÁFA-kulccsal, és ha a
- * mennyiség nem 1, a sor összesen nettó és bruttó. A bruttó csak MUTAT: a tétel továbbra is nettó egységárat tárol.
+ * sor összesen (sorösszeg) nettó és bruttó, mennyiségtől függetlenül (Luca, 2026-11-20: egy darabnál is). A bruttó csak MUTAT: a tétel továbbra is nettó egységárat tárol.
  */
 function ItemGrossLines({
   item,
@@ -1002,7 +1002,6 @@ function ItemGrossLines({
     item.unitNetPrice,
     item.vatRatePercent,
   );
-  const single = Number(item.quantity) === 1;
   return (
     <>
       <p className="text-sm text-pilot-grey-700">
@@ -1010,7 +1009,7 @@ function ItemGrossLines({
           ? `${formatQuoteMoney(unitGross, currency, { fractionDigits: 2 })} bruttó · ÁFA ${formatQuantity(item.vatRatePercent)}%`
           : `ÁFA ${formatQuantity(item.vatRatePercent)}%`}
       </p>
-      {line && !single ? (
+      {line ? (
         <p className="text-xs text-pilot-grey-600">
           Összesen:{" "}
           {formatQuoteMoney(centsToDecimal(line.netCents), currency, {

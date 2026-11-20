@@ -1361,9 +1361,12 @@ describe("Ajánlat szerkesztő (569:171)", () => {
     await screen.findByText("Egy darab");
     const text = document.body.textContent ?? "";
     const flat = text.replace(/[\s\u00a0]+/g, " ");
-    // egy darab: egységár nettó és bruttó, nincs külön "Összesen" sor
+    // egy darab: egységár nettó és bruttó, és a sorösszeg is (Luca: a nettó, a bruttó ÉS az összesen mindig látszik)
     expect(flat).toMatch(/1 db × 50 000(,00)? Ft nettó/);
     expect(flat).toMatch(/63 500(,00)? Ft bruttó · ÁFA 27%/);
+    expect(flat).toMatch(
+      /Összesen: 50 000(,00)? Ft nettó · 63 500(,00)? Ft bruttó/,
+    );
     // három darab: az egységár és a sor összesen is mindkét alakban
     expect(flat).toMatch(/3 db × 10 000(,00)? Ft nettó/);
     expect(flat).toMatch(/12 700(,00)? Ft bruttó · ÁFA 27%/);
