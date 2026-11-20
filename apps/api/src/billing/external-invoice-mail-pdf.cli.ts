@@ -28,6 +28,7 @@ import {
   cmfxMailAuthenticated,
   cmfxMailQuery,
   fillExternalPdfsFromMail,
+  mailAuthenticatedFor,
   mailPdfCandidates,
   type MailPdf,
   type MailPdfCandidate,
@@ -59,6 +60,15 @@ import {
  * adószámunk és a fizetendő végösszeg ellenőrzése viszont ugyanúgy fut, és ugyanúgy tárol.
  *
  *   node dist/billing/external-invoice-mail-pdf.cli.js --month ÉÉÉÉ-HH --dir /tmp/cmfx-pdf [--apply]
+ *
+ * EGY MEGNEVEZETT SAJÁT LEVÉL (785dfea6, acrobot 59000: Luca havi „nyomtatandó csomag" levelei a cmfx-PDF-eket
+ * mellékletként viszik): `--mail-id <gmail-azonosító>` a hónap cmfx-levelei helyett az info@ EGY levelét olvassa. Csak
+ * akkor hiteles, ha a feladó @acropora.hu ÉS a Gmail legfelső ítélete szerint `dkim=pass` és `dmarc=pass` erre a
+ * domainre (`mailAuthenticatedFor`); különben minden PDF-je NOT_AUTHENTICATED, és nem tárolódik. A melléklet neve a
+ * csomagban `E-` nélküli (`2026-00002-1048133.pdf`): az olvasó elé teszi, hogy a cmfx-név szabálya olvassa. Utána
+ * ugyanaz a szám-, adószám- és végösszeg-próba fut, mint a levélnél és a mappánál.
+ *
+ *   node dist/billing/external-invoice-mail-pdf.cli.js --month ÉÉÉÉ-HH --mail-id 19c20725a72c042a [--apply]
  *
  * Soronként: STORED / WOULD_STORE / NO_MAIL / NOT_PDF / NUMBER_NOT_IN_PDF / STORE_FAILED, utána a
  * levélben talált, de nem jelölt számok, okkal (már van PDF-je; másik hónap sora; NINCS SZÁMLA-SORA:
@@ -92,6 +102,8 @@ export async function main(
       setPdf(id: string, key: string, reason: null): Promise<boolean | void>;
     };
     textOf?: (bytes: Uint8Array) => Promise<string[]>;
+    /** The Gmail reader, for a spec; unset, the info@ key builds it. */
+    google?: Pick<GoogleReadonlyClient, "gmailMessageIds" | "gmailPdfMessage">;
   } = {},
   environment: NodeJS.ProcessEnv = process.env,
 ): Promise<number> {
@@ -130,6 +142,20 @@ export async function main(
     io.err("A --unas-link és a --dir közül egyszerre csak az egyik.\n");
     return 2;
   }
+  const mailIdAt = argv.indexOf("--mail-id");
+  const mailId = mailIdAt >= 0 ? (argv[mailIdAt + 1] ?? "") : null;
+  if (mailId !== null && !GMAIL_ID.test(mailId)) {
+    io.err(
+      "A --mail-id után a levél Gmail-azonosítója kell (hexadecimális).\n",
+    );
+    return 2;
+  }
+  if (mailId !== null && (unasLink || dir !== null)) {
+    io.err(
+      "A --mail-id, a --unas-link és a --dir közül egyszerre csak az egyik.\n",
+    );
+    return 2;
+  }
   let mail =
     deps.mail ??
     (dir
@@ -148,8 +174,10 @@ export async function main(
             )
         : undefined);
   if (!mail) {
-    const credentials = supplierInvoiceMailCredentials(environment);
-    if (!credentials) {
+    const credentials = deps.google
+      ? null
+      : supplierInvoiceMailCredentials(environment);
+    if (!deps.google && !credentials) {
       io.err(
         "Az info@ levélkulcsa nincs beállítva (GMAIL_SUPPLIER_INVOICE_*): a leveleket nem lehet olvasni.\n",
       );
@@ -157,12 +185,17 @@ export async function main(
     }
     const user =
       environment.INVOICE_COLLECTION_INFO_USER?.trim() || "info@acropora.hu";
-    const google = new GoogleReadonlyClient({
-      credentials,
-      requestGapMs: CLI_REQUEST_GAP_MS,
-      rateLimitDelaysMs: CLI_RATE_LIMIT_DELAYS_MS,
-    });
-    mail = (m) => readCmfxMail(google, user, m);
+    const google =
+      deps.google ??
+      new GoogleReadonlyClient({
+        credentials: credentials!,
+        requestGapMs: CLI_REQUEST_GAP_MS,
+        rateLimitDelaysMs: CLI_RATE_LIMIT_DELAYS_MS,
+      });
+    mail =
+      mailId !== null
+        ? () => readOwnMail(google, user, mailId)
+        : (m) => readCmfxMail(google, user, m);
   }
 
   const candidates = await (deps.candidates ?? mailPdfCandidates)(month);
@@ -181,11 +214,13 @@ export async function main(
       ? `Fájl a ${dir} mappából (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`
       : unasLink
         ? `Link az UNAS-rendelésekből (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`
-        : `Levél a ${CMFX_SENDER} címről (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`,
+        : mailId !== null
+          ? `A ${mailId} levél (${month}): ${pdfs.length} PDF, ${pdfs.some((p) => p.authenticated) ? "hiteles acropora.hu feladó" : "NEM hiteles acropora.hu feladó"}; PDF nélküli feed-sor: ${candidates.length}\n`
+          : `Levél a ${CMFX_SENDER} címről (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`,
   );
   // the folder's files with their size and fingerprint: the person reviewing the dry run compares them with the
   // downloader's lines, through the copies between the fleet and the production container (barracuda #1786)
-  if (dir || unasLink)
+  if (dir || unasLink || mailId !== null)
     for (const pdf of pdfs)
       io.out(
         `FAJL ${pdf.fileName} ${pdf.buffer.length} bájt sha256:${createHash("sha256").update(pdf.buffer).digest("hex").slice(0, 16)}\n`,
@@ -225,7 +260,7 @@ export async function main(
   }
   if (report.unauthenticatedFiles)
     io.out(
-      `Hitelesítetlen levél PDF-je (nem cmfx-aláírású, nem tárolódik): ${report.unauthenticatedFiles}\n`,
+      `Hitelesítetlen levél PDF-je (${mailId !== null ? "nem acropora.hu-aláírású" : "nem cmfx-aláírású"}, nem tárolódik): ${report.unauthenticatedFiles}\n`,
     );
   if (report.unrecognizedFiles)
     io.out(`Nem cmfx alakú melléklet-név: ${report.unrecognizedFiles}\n`);
@@ -631,6 +666,35 @@ export async function readCmfxMail(
       });
   }
   return pdfs;
+}
+
+/** A Gmail üzenet-azonosítója: hexadecimális (a `gcal.sh` és az API is így adja). */
+const GMAIL_ID = /^[0-9a-f]{8,32}$/;
+
+/** A saját domain, aminek a levelét a `--mail-id` elfogadja. */
+export const OWN_MAIL_DOMAIN = "acropora.hu";
+
+/**
+ * EGY megnevezett levél PDF-jei, a levél ítéletével: hiteles, ha a feladó @acropora.hu és a Gmail legfelső fejléce
+ * erre a domainre DKIM- és DMARC-pass. A melléklet nevét `E-` előtaggal adja tovább, ha nincs rajta (a csomag
+ * levelében `2026-00002-1048133.pdf` alakú), hogy a cmfx-név szabálya olvassa; a szám a PDF szövegében úgyis
+ * próbát áll. Exportálva, hogy a teszt hamis Gmail-klienssel mérje a hitelesítés bekötését.
+ */
+export async function readOwnMail(
+  google: Pick<GoogleReadonlyClient, "gmailPdfMessage">,
+  user: string,
+  messageId: string,
+): Promise<MailPdf[]> {
+  const message = await google.gmailPdfMessage(user, messageId);
+  const authenticated =
+    message.sender?.split("@")[1] === OWN_MAIL_DOMAIN &&
+    mailAuthenticatedFor(message.authenticationResults ?? [], OWN_MAIL_DOMAIN);
+  return message.pdfs.map((pdf) => ({
+    messageId,
+    fileName: /^E-/i.test(pdf.fileName) ? pdf.fileName : `E-${pdf.fileName}`,
+    buffer: pdf.buffer,
+    authenticated,
+  }));
 }
 
 if (
