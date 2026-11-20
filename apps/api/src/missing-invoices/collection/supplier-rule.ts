@@ -154,7 +154,14 @@ export type RuleDecision =
       grossCents: number | null;
       currency: string | null;
     }
-  | { accept: false; reason: RuleRefusal; rule?: SupplierRule };
+  /** egy szabály kulcsa sem illeszkedett (vagy a PDF nem a cégre szól): nincs szabály, amire hivatkozni lehetne */
+  | { accept: false; reason: "NO_RULE" | "NOT_COMPANY"; rule?: undefined }
+  /** egy szabály kulcsa illeszkedett, de emberre hagyta: az ok a Javasolt számlák sorára kerül (kártya e09190c8) */
+  | {
+      accept: false;
+      reason: Exclude<RuleRefusal, "NO_RULE" | "NOT_COMPANY">;
+      rule: SupplierRule;
+    };
 
 /** Egy pénzösszeg szövegből centbe (`-1234.50`, `1234,5`); null, ha nem olvasható. */
 export function grossCentsOf(value: string | null): number | null {

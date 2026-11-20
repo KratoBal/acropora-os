@@ -90,6 +90,7 @@ const suggestion = (
   gross: "1063.00",
   currency: "EUR",
   createdAt: "2026-10-01T08:00:00.000Z",
+  ruleRefusal: null,
 });
 
 const incomingRow = (id: string, documentNumber: string, hasPdf: boolean) => ({
@@ -199,6 +200,44 @@ describe("MissingInvoicesSuggestionsPage", () => {
     await waitFor(() =>
       expect(api.acceptSuggestion).toHaveBeenCalledWith("token-1", "doc-u"),
     );
+  });
+
+  /**
+   * kártya e09190c8: ha egy szállítói szabály illeszkedett, de emberre hagyta a PDF-et, a sor kimondja, melyik szabály és miért.
+   * MI PIROSÍT: ha az ok vagy a szabály neve nem látszik; ha egy ok nélküli sor is kap ilyen sort; ha a név nélküli szabálynál
+   * üres zárójel áll.
+   */
+  it("says which supplier rule matched and why it still left the PDF to a person", async () => {
+    api.suggestions.mockResolvedValue({
+      items: [
+        {
+          ...suggestion("doc-o", "RE1.pdf"),
+          state: "UNASSIGNED",
+          confidence: null,
+          ruleRefusal: { reason: "OUTLIER", ruleLabel: "SIA Waterro" },
+        },
+        {
+          ...suggestion("doc-n", "RE2.pdf"),
+          ruleRefusal: { reason: "NOT_AUTHENTICATED", ruleLabel: null },
+        },
+        suggestion("doc-p", "RE3.pdf"),
+      ],
+      staleAfterDays: 60,
+      staleCount: 0,
+      supplierRules: { live: true, amountlessAccepted: false },
+    });
+    render(<MissingInvoicesSuggestionsPage />);
+    expect(
+      within(await rowOf("RE1.pdf")).getByText(
+        "Szabály (SIA Waterro): kiugró összeg (az eddigi legnagyobb háromszorosa fölött)",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(await rowOf("RE2.pdf")).getByText(
+        "Szabály: a feladó nem hitelesített",
+      ),
+    ).toBeInTheDocument();
+    expect(within(await rowOf("RE3.pdf")).queryByText(/^Szabály/)).toBeNull();
   });
 
   /**

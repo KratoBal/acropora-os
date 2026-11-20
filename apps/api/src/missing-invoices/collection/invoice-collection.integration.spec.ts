@@ -55,6 +55,9 @@ async function removeLeftovers() {
   await prisma.user.deleteMany({
     where: { email: { startsWith: "collect-it-" } },
   });
+  await prisma.incomingSupplierRule.deleteMany({
+    where: { label: { startsWith: "collect-it-" } },
+  });
 }
 
 describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () => {
@@ -582,6 +585,16 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
       },
       select: { id: true },
     });
+    // kártya e09190c8: egy illeszkedett, de emberre hagyó szabály; a B fájl az okával tárolódik
+    const refusingRule = await prisma.incomingSupplierRule.create({
+      data: {
+        kind: "TAX",
+        taxKey: "DE152405660",
+        senderDomain: "szallito.example",
+        label: "collect-it-szallito",
+      },
+      select: { id: true },
+    });
     const keep = (externalId: string) =>
       repository.store({
         source: "INFO_MAIL",
@@ -598,6 +611,10 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
         textReading: { invoiceNumber: "RE67456", gross: "1063.00" },
         payee: "NOT_COMPANY",
         unassigned: true,
+        ruleRefusal:
+          externalId === "collect-it-un-b"
+            ? { reason: "OUTLIER", ruleId: refusingRule.id }
+            : null,
       });
     const docA = await keep("collect-it-un-a");
     const docB = await keep("collect-it-un-b");
@@ -638,6 +655,19 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
         .sort(),
       Array(3).fill(["UNASSIGNED", null]),
     );
+    // az ok a dokumentumon áll, a lista a szabály nevével adja; a többinél nincs ok
+    const refusals = async () =>
+      (await suggestions.list())
+        .filter((row) => [docA, docB, docC].includes(row.id))
+        .map((row) => [row.id, row.ruleRefusal, row.ruleRefusalLabel]);
+    assert.deepEqual(
+      (await refusals()).sort(),
+      [
+        [docA, null, null],
+        [docB, "OUTLIER", "collect-it-szallito"],
+        [docC, null, null],
+      ].sort(),
+    );
 
     // előléptetés: rendes begyűjtött dokumentum, STORED sor; másodszor nem hat
     const tiedInput = {
@@ -670,6 +700,19 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
       textReading: fresh,
       payeeCheck: "COMPANY",
     });
+    // a mai újraolvasás a mai okot írja: itt egy szabály sem tartotta vissza, tehát a régi ok törlődik
+    assert.deepEqual(
+      (await refusals()).find(([id]) => id === docB),
+      [docB, null, null],
+    );
+    await repository.refreshUnassignedReading(docB, fresh, "COMPANY", {
+      reason: "NEW_CURRENCY",
+      ruleId: refusingRule.id,
+    });
+    assert.deepEqual(
+      (await refusals()).find(([id]) => id === docB),
+      [docB, "NEW_CURRENCY", "collect-it-szallito"],
+    );
     // a kézi vevő-jelölés (markPayee) megmarad: az olvasat frissül, a jelölt vevő nem (barracuda, #2489)
     const markedAt = new Date("2026-11-12T20:00:00Z");
     await prisma.incomingSupplierDocument.update({

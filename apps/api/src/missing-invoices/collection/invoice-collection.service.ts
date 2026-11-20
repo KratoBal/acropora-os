@@ -46,6 +46,7 @@ import {
   type CollectedDocumentInput,
   type InvoiceCollectionCounts,
   type InvoiceCollectionVerdict,
+  type RuleRefusalRecord,
 } from "./invoice-collection.repository.js";
 import {
   hasNoTextLayer,
@@ -585,6 +586,12 @@ export class InvoiceCollectionService {
       többi kötés UTÁN fut, a díjbekérőn soha, és a kiugró, új pénznemű vagy összeg nélküli PDF emberre marad
       (`decideSupplierRule`). A száraz újraértékelés csak feljegyzi.
     */
+    /*
+      MIÉRT MARADT EMBERRE (kártya e09190c8, acrobot 58517): ha egy szabály kulcsa illeszkedett, de nem fogadott el, az ok és a
+      szabály a dokumentumra kerül, és a Javasolt számlák sora mutatja. Enélkül egy élő szabály mellett emberre maradt PDF-ről a lap
+      nem mondja meg, hogy a szabály látta-e. Ha egy kulcs sem illeszkedett, nincs mit mondani: null.
+    */
+    let ruleRefusal: RuleRefusalRecord | null = null;
     const bySupplierRule = async (
       reading: InvoiceTextReading,
       kind: "INVOICE" | "PROFORMA",
@@ -596,21 +603,9 @@ export class InvoiceCollectionService {
         kind === "PROFORMA"
       )
         return null;
-      /*
-        A FELADÓ HITELES-E (barracuda, #2769): a `From` fejlécet a feladó írja, ezért önmagában nem bizonyít semmit (bárki írhat
-        `From: valami@acropora.hu`-t). A szabály csak akkor dönt, ha a Gmail saját `Authentication-Results` fejléce `dmarc=pass`-t mond
-        a `From` tartományára (`authenticationVerdict`, ugyanaz az ellenőrzés, mint a hibajegy-levelezésé: minden Gmail-fejléc, egy
-        dmarc-bejegyzés, a `header.from` egyezik). Hiányzó vagy nem-Gmail fejléc, Drive-fájl: nem hitelesített, ember dönt.
-      */
-      const senderDomainStrict = strictSenderDomain(found.sender);
-      if (
-        !senderDomainStrict ||
-        !authenticationVerdict(found.authenticationResults ?? [], found.sender)
-          .verified
-      )
-        return null;
       const rules = await this.supplierRules.activeRules();
       if (rules.length === 0) return null;
+      const senderDomainStrict = strictSenderDomain(found.sender);
       const decision = decideSupplierRule({
         rules,
         document: {
@@ -625,13 +620,39 @@ export class InvoiceCollectionService {
         normalizeName,
         amountless: amountlessAccepted(this.environment),
       });
-      if (!decision.accept) return null;
+      /*
+        A FELADÓ HITELES-E (barracuda, #2769): a `From` fejlécet a feladó írja, ezért önmagában nem bizonyít semmit (bárki írhat
+        `From: valami@acropora.hu`-t). A szabály csak akkor dönt, ha a Gmail saját `Authentication-Results` fejléce `dmarc=pass`-t mond
+        a `From` tartományára (`authenticationVerdict`, ugyanaz az ellenőrzés, mint a hibajegy-levelezésé: minden Gmail-fejléc, egy
+        dmarc-bejegyzés, a `header.from` egyezik). Hiányzó vagy nem-Gmail fejléc, Drive-fájl: nem hitelesített, ember dönt.
+        A döntés ELŐTT áll: egy illeszkedő szabály mellett is ez az ok (`NOT_AUTHENTICATED`), akármit mondana a döntés.
+      */
+      if (
+        !senderDomainStrict ||
+        !authenticationVerdict(found.authenticationResults ?? [], found.sender)
+          .verified
+      ) {
+        if (decision.rule)
+          ruleRefusal = {
+            reason: "NOT_AUTHENTICATED",
+            ruleId: decision.rule.id,
+          };
+        return null;
+      }
+      if (!decision.accept) {
+        if (decision.rule)
+          ruleRefusal = { reason: decision.reason, ruleId: decision.rule.id };
+        return null;
+      }
       // ugyanazzal a számmal már tárolt másik dokumentum: ember dönt (a saját, újraolvasott példány nem számít)
       if (reading.invoiceNumber) {
         const same = await this.repository.sameNumberDocuments(
           reading.invoiceNumber,
         );
-        if (same.length > (reassess ? 1 : 0)) return null;
+        if (same.length > (reassess ? 1 : 0)) {
+          ruleRefusal = { reason: "SAME_NUMBER", ruleId: decision.rule.id };
+          return null;
+        }
       }
       const detail = `szállítói szabály (${decision.rule.kind}): ${decision.rule.taxKey ?? decision.rule.nameKey ?? ""}`;
       if (this.dry) {
@@ -704,6 +725,7 @@ export class InvoiceCollectionService {
           reassess,
           reading,
           payee,
+          ruleRefusal,
         );
       if (reassess || this.dry) return skip("UNMATCHED", reason);
       await this.repository.store({
@@ -722,6 +744,7 @@ export class InvoiceCollectionService {
         payee,
         unassigned: true,
         reason,
+        ruleRefusal,
       });
       counts.unmatchedCount++;
       return "UNMATCHED";
@@ -890,6 +913,7 @@ export class InvoiceCollectionService {
                 textReading: withLabelledTotal(textReading, lines),
                 payee: payeeFromText(text),
                 suggestion,
+                ruleRefusal,
               }))
             )
               return skip("DUPLICATE", "SAME_CONTENT");

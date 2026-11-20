@@ -1553,6 +1553,8 @@ export const ANONYMIZATION_REGISTER: Readonly<
     suggestionDecisionRunId: "identifier",
     reviewedByUserId: "identifier",
     acceptedByRuleId: "identifier",
+    ruleRefusal: "business",
+    ruleRefusalRuleId: "identifier",
   },
   // az ismert szállító szabálya: cégadat (adószám, név), egy tartomány, számok; vevő és magánszemély nincs benne
   IncomingSupplierRule: {

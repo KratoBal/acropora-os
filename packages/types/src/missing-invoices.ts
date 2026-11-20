@@ -642,7 +642,34 @@ export interface InvoiceCollectionSuggestion {
   gross: string | null;
   currency: string | null;
   createdAt: string;
+  /**
+   * MIÉRT MARADT EMBERRE, HA EGY SZÁLLÍTÓI SZABÁLY ILLESZKEDETT (kártya e09190c8): az ok és a szabály neve, a begyűjtés (vagy az
+   * újraolvasás) idején. `null`: egy szabály kulcsa sem illeszkedett.
+   */
+  ruleRefusal: {
+    reason: SupplierRuleRefusalCode;
+    ruleLabel: string | null;
+  } | null;
 }
+
+/**
+ * A SZÁLLÍTÓI SZABÁLY ILLESZKEDETT, DE NEM FOGADOTT EL (kártya e09190c8):
+ * - `SENDER_MISMATCH`: más feladótól jött, mint a szabályé;
+ * - `UNTRUSTED_NAME_SENDER`: név-szabály, de a PDF a saját továbbítónkon át jött (a név-szabályhoz a szállító saját feladója kell);
+ * - `NOT_AUTHENTICATED`: a feladó tartománya nem hitelesített (nincs `dmarc=pass` a Gmail fejlécében, vagy Drive-fájl);
+ * - `NEW_CURRENCY`: ebben a pénznemben a szabály még nem fogadott el számlát;
+ * - `OUTLIER`: az összeg több, mint az eddig elfogadott legnagyobb háromszorosa;
+ * - `NO_AMOUNT`: az összeg nem olvasható;
+ * - `SAME_NUMBER`: ugyanilyen számú dokumentum már tárolva van.
+ */
+export type SupplierRuleRefusalCode =
+  | "SENDER_MISMATCH"
+  | "UNTRUSTED_NAME_SENDER"
+  | "NOT_AUTHENTICATED"
+  | "NEW_CURRENCY"
+  | "OUTLIER"
+  | "NO_AMOUNT"
+  | "SAME_NUMBER";
 
 export interface InvoiceCollectionSuggestionsResponse {
   items: InvoiceCollectionSuggestion[];

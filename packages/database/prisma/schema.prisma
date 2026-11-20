@@ -9502,6 +9502,11 @@ model IncomingSupplierDocument {
   /// Az ismert szállító szabálya, ami ezt a dokumentumot magától elfogadta (`IncomingSupplierRule`); NULL: ember döntött,
   /// vagy nincs döntés. A visszavonás ebből és a `reviewedAt`-ből tudja, mit állít vissza.
   acceptedByRuleId        String?
+  /// A SZABÁLY, AMI ILLESZKEDETT, DE A PDF-ET MÉGIS EMBERRE HAGYTA (kártya e09190c8, acrobot 58517): az ok kódja
+  /// (`SupplierRuleRefusalCode`: új pénznem, kiugró összeg, eltérő vagy nem hitelesített feladó, ...) és a szabály. A begyűjtés és
+  /// az újraolvasás írja, a Javasolt számlák sora mutatja. NULL: egy szabály kulcsa sem illeszkedett, vagy a szabályok ki vannak kapcsolva.
+  ruleRefusal             String?
+  ruleRefusalRuleId       String?
   /// A beszerzési számla, amihez kézzel csatolták (kártya 5ec62e35, Luca: a
   /// beszkennelt számla). Közvetlen kapcsolat: ugyanarra a számlaszámra és
   /// adószámra ez nyer a szám szerinti párosítás előtt.
