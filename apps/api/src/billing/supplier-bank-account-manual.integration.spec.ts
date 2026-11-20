@@ -213,6 +213,7 @@ describe(
       assert.deepEqual(other.outcome, {
         kind: "SHADOWED",
         by: "OTHER_INVOICE",
+        conflicting: false,
       });
       const master = await enter("d1", "10918001-00000017");
       assert.deepEqual(master.outcome, {
