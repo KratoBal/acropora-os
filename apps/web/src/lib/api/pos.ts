@@ -1,5 +1,8 @@
 import type {
+  CreatePosInternalUseInput,
   CreatePosSaleInput,
+  PosInternalUseListResponse,
+  PosInternalUseResult,
   PosProductSearchResult,
   PosPaymentSummaryResponse,
   PosSaleDetail,
@@ -51,6 +54,20 @@ export const posApi = {
     const params = new URLSearchParams({ from: query.from, to: query.to });
     return apiRequest<PosPaymentSummaryResponse>(
       `/pos/summary?${params.toString()}`,
+      token,
+    );
+  },
+  // a „Belső felhasználás” (kártya ec51e614): saját rekord, nem eladás
+  createInternalUse(token: string, input: CreatePosInternalUseInput) {
+    return apiRequest<PosInternalUseResult>(`/pos/internal-uses`, token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  },
+  listInternalUses(token: string, query: PosSaleListQuery) {
+    return apiRequest<PosInternalUseListResponse>(
+      `/pos/internal-uses?${listQueryString(query)}`,
       token,
     );
   },
