@@ -119,19 +119,25 @@ export function useMailImages(
 /**
  * A HTML MEGJELENITHETO MASA AZ ELONEZETHEZ: a sajat hivatkozas helyere a
  * betoltott `data:` cim kerul. A bemenet TISZTITOTT HTML (a `src` a tisztito
- * egyseges alakjaban all), tehat a minta megbizhato. Ami meg nincs betoltve,
- * hivatkozas marad -- a homokozoban az egy ures kep.
+ * egyseges alakjaban all), tehat a minta megbizhato.
+ *
+ * AMI MEG NINCS BETOLTVE (vagy torolt kepre mutat), az `src` NELKUL kerul a
+ * keretbe, nem a sajat hivatkozassal: a bongeszo az `acropora-image:` semat
+ * nem ismeri, es minden ilyen kep `net::ERR_UNKNOWN_URL_SCHEME` konzol-hibat
+ * adott a Levelsablonok lapon (OS hibakor 3, 2026-11-20). A latvany ugyanaz,
+ * egy ures kep; a mas semaju `src`-hez nem nyul.
  */
 export function withImageSources(
   html: string,
   sources: ReadonlyMap<string, string>,
 ): string {
   return html.replace(
-    /(<img[^>]*\ssrc=")([^"]*)"/g,
+    /(<img[^>]*\s)src="([^"]*)"/g,
     (egesz, eleje: string, src: string) => {
       const id = richImageId(src);
-      const cim = id ? sources.get(id) : undefined;
-      return cim ? `${eleje}${cim}"` : egesz;
+      if (!id) return egesz;
+      const cim = sources.get(id);
+      return cim ? `${eleje}src="${cim}"` : `${eleje}data-nincs-betoltve=""`;
     },
   );
 }
