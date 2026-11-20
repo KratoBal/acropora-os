@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
@@ -411,25 +411,17 @@ describe("the bulk command: dry run and apply", () => {
   });
 });
 
-/** The path of the package root (`apps/api`), because the spec runs from `test-dist`. */
-const COMPILED = "dist/products/product-discontinuation-bulk.cli.js";
+/**
+ * FROM `test-dist`, NOT `dist` (card afb4d0f2, acrobot 58585): the package `test` command deletes and recompiles `test-dist`
+ * before every run, from the same source with the same compiler as `dist` (byte-identical output, per `tsconfig.test.json`).
+ * `dist` is built only in the turbo graph, so the plain `pnpm --filter @acropora/api test` ran this on a MISSING or OLD
+ * `dist`, a "known local red" explained anew every round. This way every form of the call starts the current source.
+ */
+const COMPILED = "test-dist/products/product-discontinuation-bulk.cli.js";
 const SOURCE = "src/products/product-discontinuation-bulk";
 
 describe("the bulk command: start", () => {
   it("starts in a separate process: --help prints the usage and exits 0", () => {
-    // the diagnosis comes before the run: a missing `dist` is not the code's fault
-    assert.ok(
-      existsSync(COMPILED),
-      `the compiled command is MISSING (${COMPILED}) -- this is NOT the code's fault: the package test does not build dist; run it the repo's way (turbo run test --filter=@acropora/api).`,
-    );
-    const stale = [".mag.ts", ".cli.ts"]
-      .map((end) => `${SOURCE}${end}`)
-      .filter((path) => statSync(path).mtimeMs > statSync(COMPILED).mtimeMs);
-    assert.deepEqual(
-      stale,
-      [],
-      "the compiled command is OLDER than its source -- rebuild it.",
-    );
     const output = execFileSync("node", [COMPILED, "--help"], {
       encoding: "utf8",
     });
