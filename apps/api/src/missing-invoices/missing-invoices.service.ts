@@ -56,6 +56,10 @@ import {
   type MatchOutcome,
 } from "./missing-invoice-matching.js";
 import {
+  parsePaymentIntermediaries,
+  type PaymentIntermediary,
+} from "./payment-intermediaries.js";
+import {
   FOXPOST_TAX_BASE,
   GLS_TAX_BASE,
   MissingInvoicesRepository,
@@ -233,6 +237,25 @@ export class MissingInvoicesService {
     @Optional()
     private readonly jev?: MissingInvoiceJevService,
   ) {}
+
+  private intermediariesCache: readonly PaymentIntermediary[] | null = null;
+
+  /**
+   * A fizetési közvetítők a konfigból (`payment-intermediaries.ts`), egyszer olvasva. Egy hibás bejegyzés kimarad és
+   * a naplóba kerül (a többi marad), egy hibás egész érték üres listát ad: a szabály ilyenkor nem fut, nem téved.
+   */
+  private paymentIntermediaries(): readonly PaymentIntermediary[] {
+    if (this.intermediariesCache) return this.intermediariesCache;
+    const parsed = parsePaymentIntermediaries(
+      this.environment.MISSING_INVOICES_PAYMENT_INTERMEDIARIES,
+    );
+    for (const problem of parsed.problems)
+      this.logger.warn(
+        `MISSING_INVOICES_PAYMENT_INTERMEDIARIES skipped: ${problem}`,
+      );
+    this.intermediariesCache = parsed.intermediaries;
+    return parsed.intermediaries;
+  }
 
   async months(): Promise<MissingInvoiceMonthsResponse> {
     const computed = await this.compute();
@@ -532,7 +555,11 @@ export class MissingInvoicesService {
       action:
         item.state === "NO_INVOICE" && item.category === "INSURANCE"
           ? "PROVIDE_PREMIUM_NOTICE"
-          : ACTION[item.state],
+          : // a jelöltek közt van olyan, amelyiknek az összege pontosan egyezik: azt kell előbb megnézni, nem a
+            // számlát kérni (a név nem egyezik: közvetítőn át fizetés vagy kártyás vásárlás)
+            item.state === "NO_INVOICE" && outcome?.amountCandidates?.length
+            ? "CHECK_AMOUNT_CANDIDATES"
+            : ACTION[item.state],
       driveFolderUrl: httpsOrNull(
         this.environment.MISSING_INVOICES_DRIVE_FOLDER_URL,
       ),
@@ -1599,6 +1626,7 @@ export class MissingInvoicesService {
         asOf: [...debits, ...credits]
           .map((t) => dayOf(t.bookingDate))
           .reduce((a, b) => (a > b ? a : b)),
+        intermediaries: this.paymentIntermediaries(),
       });
     // a kézzel párosított, olvashatatlan feltöltés a számla sorával egy (7ff26bc9)
     const firstPass = mergeManualUploads(loaded, manual, matchable);

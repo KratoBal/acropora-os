@@ -97,6 +97,13 @@ describe("the model", () => {
     expect(whatToDo("PROVIDE_PREMIUM_NOTICE", "Próba Kft.")).toMatch(
       /díjértesítőt/,
     );
+    // an exact-amount candidate exists: look at it before asking the partner (acrobot 58107 a)
+    expect(whatToDo("CHECK_AMOUNT_CANDIDATES", null)).toMatch(
+      /összege pontosan egyezik.*párosítsd/,
+    );
+    expect(whatToDo("CHECK_AMOUNT_CANDIDATES", null)).not.toBe(
+      whatToDo("REQUEST_INVOICE", null),
+    );
   });
 });
 

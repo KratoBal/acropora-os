@@ -91,6 +91,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "KNOWLEDGE_DISCOVERY",
   "MAINTENANCE_INVOICE_ISSUE_ENABLED",
   "MISSING_INVOICES_DRIVE_FOLDER_URL",
+  // the payment intermediaries of the missing-invoices matching (acrobot 58103): a list of name patterns, not a secret
+  "MISSING_INVOICES_PAYMENT_INTERMEDIARIES",
   "MNB_API_URL",
   "NEV",
   "NEXT_PROXY_TIMEOUT_MS",

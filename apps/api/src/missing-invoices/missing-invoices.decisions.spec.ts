@@ -32,7 +32,11 @@ const ACCOUNT = {
 };
 
 /** Állapotos hamis tároló: a döntéseket megjegyzi, és a következő olvasás látja. */
-function setup(env: NodeJS.ProcessEnv = {}, extra: CandidateDocument[] = []) {
+function setup(
+  env: NodeJS.ProcessEnv = {},
+  extra: CandidateDocument[] = [],
+  debitOverrides: Record<string, unknown> = {},
+) {
   const debit = {
     id: "debit-1",
     bankAccountId: ACCOUNT.id,
@@ -47,6 +51,7 @@ function setup(env: NodeJS.ProcessEnv = {}, extra: CandidateDocument[] = []) {
     categoryOverride: null as string | null,
     paperOriginalAt: null as Date | null,
   };
+  Object.assign(debit, debitOverrides);
   const nav: CandidateDocument = candidateDocument({
     id: "nav-1",
     number: "SZ-1",
@@ -365,5 +370,61 @@ describe("the decisions on a debit", () => {
       BadRequestException,
     );
     assert.deepEqual(marked, []);
+  });
+  /*
+    A FIZETÉSI KÖZVETÍTŐ A KONFIGBÓL ÉS A „MIT KELL TENNI” (acrobot 58103 és 58107). MI PIROSÍT: ha a konfigban álló
+    közvetítő mellett a fizetés nem lenne Megvan; ha a konfig nélkül is Megvan lenne (a szabály beégetve); ha a hibás
+    konfig kivételt dobna vagy a szabályt működtetné; ha az összeg szerinti jelölttel bíró Nincs számla sor tovább
+    azt mondaná, hogy kérd el a számlát; ha jelölt nélkül a számla-kérés szövegének kulcsa megváltozna.
+  */
+  const DIJNET = { counterpartyName: "SIMPLEP*dijnet" };
+  const sewage = () =>
+    candidateDocument({
+      id: "csm-1",
+      number: "203609SZC26",
+      date: "2026-08-05",
+      gross: new Prisma.Decimal(12700),
+      supplierName: "Fővárosi Csatornázási Művek Zrt.",
+      hasOriginal: true,
+    });
+  const MAPPING_ENV = {
+    MISSING_INVOICES_PAYMENT_INTERMEDIARIES: JSON.stringify([
+      { payment: "simplep[*]dijne", issuers: ["csatornazasi muvek"] },
+    ]),
+  };
+
+  it("a configured intermediary pairs the payment with the invoice of its issuer, and without the configuration it does not", async () => {
+    const withMapping = await setup(
+      MAPPING_ENV,
+      [sewage()],
+      DIJNET,
+    ).missing.item("debit-1");
+    assert.equal(withMapping.state, "FOUND");
+    const without = await setup({}, [sewage()], DIJNET).missing.item("debit-1");
+    assert.equal(without.state, "NO_INVOICE");
+  });
+
+  it("a broken configuration is skipped, never thrown, and never runs the rule", async () => {
+    for (const bad of ["{not json", '[{"payment":"(","issuers":["x"]}]']) {
+      const item = await setup(
+        { MISSING_INVOICES_PAYMENT_INTERMEDIARIES: bad },
+        [sewage()],
+        DIJNET,
+      ).missing.item("debit-1");
+      assert.equal(item.state, "NO_INVOICE");
+    }
+  });
+
+  it("a no-invoice debit with an amount candidate says to look at the candidates, not only to ask for the invoice", async () => {
+    const withCandidate = await setup({}, [sewage()], DIJNET).missing.item(
+      "debit-1",
+    );
+    assert.equal(withCandidate.state, "NO_INVOICE");
+    assert.equal(withCandidate.action, "CHECK_AMOUNT_CANDIDATES");
+    assert.equal(withCandidate.candidates[0]?.amountOnly, true);
+    // nothing of the same amount: the plain request stays
+    const none = await setup({}, [], DIJNET).missing.item("debit-1");
+    assert.equal(none.state, "NO_INVOICE");
+    assert.equal(none.action, "REQUEST_INVOICE");
   });
 });

@@ -2,6 +2,11 @@ import { Prisma } from "@acropora/database";
 
 import type { BankCategory } from "./bank-transaction.classify.js";
 import { NO_INVOICE_CATEGORIES } from "./bank-transaction.classify.js";
+import {
+  isIntermediaryIssuer,
+  issuersForPayment,
+  type PaymentIntermediary,
+} from "./payment-intermediaries.js";
 import { sequenceRatio } from "./sequence-ratio.js";
 
 /**
@@ -323,31 +328,6 @@ export function amountGap(
 /** PONTOS: HUF-ban 1 Ft, devizában 5 cent (barracuda 4.2). */
 export const exact = (gap: Prisma.Decimal | null, currency: string) =>
   gap !== null && gap.lte(currency === "HUF" ? 1 : 0.05);
-/**
- * DIJNET-FIZETÉS: a bank közleménye a Dijnet fizető-portált nevezi meg („SIMPLEP*dijnet”, a kivonatban csonkán is:
- * „SIMPLEP*DIJNE”), nem a számla kiállítóját. Ugyanaz a felismerés, mint a jev-jelölteké (`isUtilityPayment`),
- * de csak a Dijnet: a Vízművek (SIMPLEP*VIZMUVEK.HU) kiállítója a saját partnernevén párosodik, és ide nem tartozik.
- */
-const DIJNET_PAYMENT = /simplep\*dijne/i;
-
-export function isDijnetPayment(
-  debit: Pick<MatchableDebit, "counterpartyName" | "narrative">,
-): boolean {
-  return DIJNET_PAYMENT.test(
-    `${debit.counterpartyName ?? ""} ${debit.narrative}`,
-  );
-}
-
-/**
- * A DIJNET-EN ÁT FIZETETT KIÁLLÍTÓK. Szűk lista, szándékosan: a Dijnet fizető-portál, a számlák kiállítóit a kivonatból
- * nem lehet kiolvasni, és egy összeg-egyezés bármely számlával (a név ismerete nélkül) tévedne. Egy szolgáltató a
- * listára akkor kerül, ha a Dijnet-fizetései megvannak a kivonatban (a név az első szóra illeszkedik, kis- és nagybetű
- * nélkül). Ma: MOHU MOL Hulladékgazdálkodási Zrt. (mérve 2026-11-12, 10 882 Ft).
- */
-export const DIJNET_ISSUERS: readonly RegExp[] = [/^\s*mohu\b/i];
-
-export const isDijnetIssuer = (supplierName: string): boolean =>
-  DIJNET_ISSUERS.some((issuer) => issuer.test(supplierName));
 
 /** KEREKÍTÉSSEL: HUF-ban 5 Ft-ig Megvan (acrobot 25265 a). */
 const rounded = (gap: Prisma.Decimal | null, currency: string) =>
@@ -864,6 +844,11 @@ export interface MatchMonthInput {
    * nem jelent elmaradt visszatérítést. Nélküle semmi sem „elmaradt”.
    */
   asOf?: string;
+  /**
+   * A FIZETÉSI KÖZVETÍTŐK (`payment-intermediaries.ts`, a konfigból): a bank közleménye a közvetítőt nevezi meg, nem a
+   * számla kiállítóját. Nélküle (üresen) a 3d szabály nem fut.
+   */
+  intermediaries?: readonly PaymentIntermediary[];
 }
 
 /**
@@ -1407,47 +1392,54 @@ export function matchMonth(input: MatchMonthInput): Map<string, MatchOutcome> {
         `kártyás vásárlás: a kereskedő („${debit.counterpartyName ?? ""}”) egy másik párosítás szerint a(z) ${invoices[0]!.supplierName} számláját hozza`,
       );
   }
-  // 3d. DIJNET-FIZETÉS A DIJNETES KIÁLLÍTÓ SZÁMLÁJÁVAL (acrobot 49440, Balázs 2026-11-12 este: „ezek maguktól
-  // párosodjanak”). A Dijnet fizető-portál: a bank közleménye („SIMPLEP*dijnet”) a PORTÁLT nevezi meg, a számla
-  // kiállítóját soha, ezért a név szerinti szabályok (3., 4., 5.) nem látnak jelöltet, és a fizetés „Nincs számla”
-  // marad, holott a szolgáltató számlája megvan (mérve: MOHU MOL Hulladékgazdálkodási Zrt., 10 882 Ft, két azonos
-  // összegű számla). A szabály szűk: a fizetés Dijnet-fizetés, a számla kiállítója a Dijnet-en át fizetett
-  // szolgáltatók ismert listáján áll (`DIJNET_ISSUERS`), az összeg pontos, és a számla a fizetés napján vagy ELŐTTE
-  // kelt (a havi számlát a fizetés előtt állítják ki, az utána kelt a KÖVETKEZŐ hónapé: a jev-jelöltek szabálya,
-  // `missing-invoice-jev-candidates.ts`). Több azonos összegű számlánál a fizetéshez időben legközelebbi nyer, a
-  // már elvitt (`used`) számla ki van zárva, és a rangsor globális, mint a 3.-ban (egy számlát egy fizetés visz).
-  const dijnetPairs = open
-    .filter((debit) => !outcomes.has(debit.id) && isDijnetPayment(debit))
-    .flatMap((debit) =>
-      window(debit)
-        .filter(
-          (d) =>
-            d.gross !== null &&
-            !zeroTotal(d) &&
-            d.date <= debit.bookingDate &&
-            isDijnetIssuer(d.supplierName) &&
-            exact(amountGap(debit, d.gross, d.currency), d.currency),
+  // 3d. FIZETÉSI KÖZVETÍTŐN ÁT FIZETETT SZÁMLA (acrobot 49440, Balázs 2026-11-12 este: „ezek maguktól
+  // párosodjanak”; általánosítva 2026-11-20: acrobot 58103 és 58107). A bank közleménye a KÖZVETÍTŐT nevezi meg
+  // („SIMPLEP*dijnet” a Dijnet-en át fizetett szolgáltatók helyett, „PCSOMAG356” a csomagautomata mögötti webshop
+  // helyett), a számla kiállítóját soha, ezért a név szerinti szabályok (3., 4., 5.) nem látnak jelöltet, és a fizetés
+  // „Nincs számla” marad, holott a számla megvan (mérve: MOHU 10 882 Ft, két azonos összegű számla; Csatornázási
+  // Művek 27 329 Ft; Micro-Trend 26 975 Ft). A szabály szűk: a fizetés egy konfigban megnevezett közvetítőé
+  // (`intermediaries`), a számla kiállítója ugyanannak a leképezésnek a listáján áll, az összeg pontos, és a számla a
+  // fizetés napján vagy ELŐTTE kelt (a havi számlát a fizetés előtt állítják ki, az utána kelt a KÖVETKEZŐ hónapé: a
+  // jev-jelöltek szabálya, `missing-invoice-jev-candidates.ts`). Több azonos összegű számlánál a fizetéshez időben
+  // legközelebbi nyer, a már elvitt (`used`) számla ki van zárva, és a rangsor globális, mint a 3.-ban (egy számlát
+  // egy fizetés visz). A leképezés a kiállító-NÉV elvárást váltja ki; az összeg és a kelte nem enged.
+  const intermediaries = input.intermediaries ?? [];
+  const intermediaryPairs = intermediaries.length
+    ? open
+        .filter((debit) => !outcomes.has(debit.id))
+        .flatMap((debit) => {
+          const issuers = issuersForPayment(intermediaries, debit);
+          if (!issuers.length) return [];
+          return window(debit)
+            .filter(
+              (d) =>
+                d.gross !== null &&
+                !zeroTotal(d) &&
+                d.date <= debit.bookingDate &&
+                isIntermediaryIssuer(issuers, d.supplierName) &&
+                exact(amountGap(debit, d.gross, d.currency), d.currency),
+            )
+            .map((d) => ({
+              debit,
+              document: d,
+              days: dayDistance(d.date, debit.bookingDate),
+            }));
+        })
+        .sort(
+          (x, y) =>
+            proformaLast(x.document, y.document) ||
+            x.days - y.days ||
+            x.debit.bookingDate.localeCompare(y.debit.bookingDate) ||
+            x.debit.id.localeCompare(y.debit.id) ||
+            x.document.id.localeCompare(y.document.id),
         )
-        .map((d) => ({
-          debit,
-          document: d,
-          days: dayDistance(d.date, debit.bookingDate),
-        })),
-    )
-    .sort(
-      (x, y) =>
-        proformaLast(x.document, y.document) ||
-        x.days - y.days ||
-        x.debit.bookingDate.localeCompare(y.debit.bookingDate) ||
-        x.debit.id.localeCompare(y.debit.id) ||
-        x.document.id.localeCompare(y.document.id),
-    );
-  for (const pair of dijnetPairs) {
+    : [];
+  for (const pair of intermediaryPairs) {
     if (outcomes.has(pair.debit.id) || used.has(pair.document.id)) continue;
     found(
       pair.debit,
       [pair.document],
-      "Dijnet-fizetés: egyező összegű, a fizetés napján vagy előtte kelt számla a Dijnet-en át fizetett kiállítótól",
+      "fizetési közvetítő: egyező összegű, a fizetés napján vagy előtte kelt számla a közvetítőn át fizetett kiállítótól",
     );
   }
   for (const debit of open) {
