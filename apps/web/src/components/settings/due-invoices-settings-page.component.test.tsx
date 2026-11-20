@@ -55,6 +55,7 @@ const view = (
   latest: "12:00",
   defaultFromAddress: "info@acropora.example",
   lastSent: null,
+  claimedWithoutSend: null,
   ...over,
 });
 
@@ -168,6 +169,18 @@ describe("the due-invoices mail settings page", () => {
     );
     expect(screen.getByTestId("due-last-sent")).toHaveTextContent(
       "Utolsó küldés: 2026. 11. 23., 2 címzettnek.",
+    );
+  });
+
+  it("a claimed day with no send is said in words; a normal state shows nothing of it", async () => {
+    const { unmount } = render(<DueInvoicesSettingsPage />);
+    await screen.findByLabelText("Címzettek");
+    expect(screen.queryByTestId("due-claimed")).toBeNull();
+    unmount();
+    api.read.mockResolvedValue(view({ claimedWithoutSend: "2026-11-23" }));
+    render(<DueInvoicesSettingsPage />);
+    expect(await screen.findByTestId("due-claimed")).toHaveTextContent(
+      "A(z) 2026. 11. 23. nap foglalt, de a levél nem ment ki",
     );
   });
 

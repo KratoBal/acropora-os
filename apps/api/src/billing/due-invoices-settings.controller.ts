@@ -12,6 +12,7 @@ import {
   type DueInvoicesMailSettingsView,
 } from "@acropora/types";
 
+import { budapestDay } from "./billing-document-list.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { DueInvoicesMailSettingsDto } from "./due-invoices-settings.dto.js";
@@ -35,6 +36,11 @@ export function dueInvoicesSettingsView(
     earliest: row.earliest,
     latest: row.latest,
     defaultFromAddress: dueInvoicesDefaultFrom(env),
+    claimedWithoutSend:
+      row.lastSentDay &&
+      (!row.lastSentAt || budapestDay(row.lastSentAt) !== row.lastSentDay)
+        ? row.lastSentDay
+        : null,
     lastSent:
       row.lastSentDay && row.lastSentAt
         ? {

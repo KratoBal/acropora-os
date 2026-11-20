@@ -229,6 +229,17 @@ export function DueInvoicesSettingsPage() {
             kimegy, és a PDF tetején áll az utolsó banki adat ideje. Naponta
             legfeljebb egyszer megy.
           </p>
+          {loaded.claimedWithoutSend ? (
+            <p
+              role="status"
+              data-testid="due-claimed"
+              className="rounded-lg bg-pilot-amber-50 p-3 text-sm text-pilot-amber-700"
+            >
+              A(z) {formatDayHu(loaded.claimedWithoutSend)} nap foglalt, de a
+              levél nem ment ki (a folyamat a foglalás és a küldés között állt
+              le, vagy a küldés nem sikerült). Aznap már nem megy levél.
+            </p>
+          ) : null}
           <div className="flex flex-wrap items-center gap-3">
             <PilotButton disabled={busy} onClick={() => void save()}>
               Mentés

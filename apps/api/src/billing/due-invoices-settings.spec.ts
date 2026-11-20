@@ -223,6 +223,39 @@ describe("the settings endpoint", () => {
     assert.equal(dueInvoicesSettingsView(row(), {}).defaultFromAddress, null);
   });
 
+  it("a day claimed but not sent is named; a normal send, and no send at all, name nothing", () => {
+    const claimed = dueInvoicesSettingsView(
+      row({ lastSentDay: "2026-11-23" }),
+      {},
+    );
+    assert.equal(claimed.claimedWithoutSend, "2026-11-23");
+    // the trace of an OLDER send does not belong to the claimed day
+    assert.equal(
+      dueInvoicesSettingsView(
+        row({
+          lastSentDay: "2026-11-23",
+          lastSentAt: new Date("2026-11-16T07:15:00Z"),
+          lastSentRecipients: 2,
+        }),
+        {},
+      ).claimedWithoutSend,
+      "2026-11-23",
+    );
+    // a send on the claimed Budapest day (07:15 UTC is the same day in Budapest) is normal
+    assert.equal(
+      dueInvoicesSettingsView(
+        row({
+          lastSentDay: "2026-11-23",
+          lastSentAt: new Date("2026-11-23T07:15:00Z"),
+          lastSentRecipients: 2,
+        }),
+        {},
+      ).claimedWithoutSend,
+      null,
+    );
+    assert.equal(dueInvoicesSettingsView(row(), {}).claimedWithoutSend, null);
+  });
+
   it("saves the cleaned value, and a bad body is a 400 that writes nothing", async () => {
     const state = { row: row(), saved: [] as unknown[] };
     const controller = new DueInvoicesSettingsController(repo(state));

@@ -82,6 +82,12 @@ export interface DueInvoicesMailSettingsView extends DueInvoicesMailSettings {
   defaultFromAddress: string | null;
   /** az utolsó küldés nyoma; `null`, ha még nem ment levél */
   lastSent: { day: string; at: string; recipients: number } | null;
+  /**
+   * A FOGLALT, DE NEM KÜLDÖTT NAP (barracuda 58331): a nap a küldés előtt lefoglalódik, és ha a folyamat a foglalás után, a küldés előtt áll
+   * le (újraindítás, telepítés), a nap foglalt marad, és aznap nem megy levél. Ez a nap (`ÉÉÉÉ-HH-NN`), ha az utolsó küldés ideje nem erre a napra esik;
+   * `null`, ha nincs ilyen.
+   */
+  claimedWithoutSend: string | null;
 }
 
 export type DueInvoicesMailSettingsInput = DueInvoicesMailSettings;
