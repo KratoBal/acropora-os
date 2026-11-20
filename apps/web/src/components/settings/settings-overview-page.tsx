@@ -175,6 +175,19 @@ export const SETTINGS_AREAS: SettingsArea[] = [
     ],
   },
   {
+    title: "Pénzügy",
+    icon: "finance",
+    links: [
+      {
+        label: "Lejáró számlák levele",
+        description:
+          "A heti Utalási jegyzék PDF: kinek megy, mikor (legkorábban, legkésőbb), ki a feladó, és kikapcsolható.",
+        href: "/beallitasok/lejaro-szamlak",
+        permission: PERMISSIONS.FINANCE_MANAGE,
+      },
+    ],
+  },
+  {
     title: "AI csevegés",
     icon: "settings",
     links: [

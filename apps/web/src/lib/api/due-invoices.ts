@@ -1,4 +1,8 @@
-import type { DueInvoicesResponse } from "@acropora/types";
+import type {
+  DueInvoicesMailSettingsInput,
+  DueInvoicesMailSettingsView,
+  DueInvoicesResponse,
+} from "@acropora/types";
 
 import { apiRequest } from "./client";
 
@@ -12,6 +16,26 @@ export const dueInvoicesApi = {
       "/billing/due-invoices",
       token,
       signal ? { signal } : undefined,
+    );
+  },
+};
+
+/**
+ * A HETI LEVÉL BEÁLLÍTÁSA (acrobot 58227, 58274): olvasni és írni is `finance.manage`. A hibás bemenetre a szerver 400-at ad, a hibákat egy
+ * mondatban; az `apiRequest` ezt a mondatot adja tovább.
+ */
+export const dueInvoicesSettingsApi = {
+  read(token: string) {
+    return apiRequest<DueInvoicesMailSettingsView>(
+      "/billing/due-invoices/settings",
+      token,
+    );
+  },
+  save(token: string, input: DueInvoicesMailSettingsInput) {
+    return apiRequest<DueInvoicesMailSettingsView>(
+      "/billing/due-invoices/settings",
+      token,
+      { method: "PUT", body: JSON.stringify(input) },
     );
   },
 };

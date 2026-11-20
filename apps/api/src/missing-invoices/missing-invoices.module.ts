@@ -1,7 +1,10 @@
 import { Module } from "@nestjs/common";
 
 import { DueInvoicesController } from "../billing/due-invoices.controller.js";
+import { DueInvoicesMailScheduler } from "../billing/due-invoices-mail.scheduler.js";
 import { DueInvoicesMailService } from "../billing/due-invoices-mail.service.js";
+import { DueInvoicesSettingsController } from "../billing/due-invoices-settings.controller.js";
+import { DueInvoicesSettingsRepository } from "../billing/due-invoices-settings.repository.js";
 import { NotificationsModule } from "../notifications/notifications.module.js";
 import { IncomingBillingDocumentsController } from "../billing/incoming-billing-documents.controller.js";
 import { IncomingForeignReadScheduler } from "../billing/foreign-invoice/incoming-foreign-read.scheduler.js";
@@ -42,6 +45,7 @@ import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
   imports: [NotificationsModule],
   controllers: [
     DueInvoicesController,
+    DueInvoicesSettingsController,
     IncomingBillingDocumentsController,
     InvoiceCollectionSuggestionsController,
     SupplierRulesController,
@@ -53,6 +57,8 @@ import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
   ],
   providers: [
     DueInvoicesMailService,
+    DueInvoicesMailScheduler,
+    DueInvoicesSettingsRepository,
     BankStatementImportRepository,
     BankStatementImportService,
     IncomingForeignReadScheduler,

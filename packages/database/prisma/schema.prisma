@@ -13039,6 +13039,28 @@ model PartnerOrderSetting {
   updatedAt   DateTime @updatedAt
 }
 
+/// A LEJÁRÓ SZÁMLÁK HETI LEVELÉNEK BEÁLLÍTÁSAI (egy sor, az azonosítója a kódban rögzített; Balázs, 2026-11-20, acrobot 58227, 58230, 58274).
+/// `recipients`: a címzettek (több cím); üresen nem megy levél. `fromAddress`: a feladó; NULL = a környezeti alapértelmezés (info@).
+/// `weekday`: 1 = hétfő … 7 = vasárnap. `earliest` és `latest`: `ÓÓ:PP` budapesti fali idő; a levél a legkorábbi után indul, amikor aznap
+/// bejött az első új banki betöltés, és legkésőbb a `latest`-kor megy, a PDF tetején az utolsó banki adat idejével.
+/// `lastSentDay` (budapesti nap), `lastSentAt` és `lastSentRecipients`: az utolsó küldés nyoma; a nap egy feltételes írással foglalódik,
+/// hogy két folyamat se küldje kétszer (`claimDay`). `updatedById` csak a napló: a felhasználó törlése ne érintse a beállítást.
+model DueInvoicesMailSetting {
+  id                 String    @id
+  enabled            Boolean   @default(true)
+  recipients         String[]  @default([])
+  fromAddress        String?
+  weekday            Int       @default(1)
+  earliest           String    @default("07:00")
+  latest             String    @default("12:00")
+  lastSentDay        String?
+  lastSentAt         DateTime?
+  lastSentRecipients Int?
+  updatedById        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
 model PartnerOrderDocument {
   id           String                   @id @default(cuid())
   orderId      String
