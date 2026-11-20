@@ -34,19 +34,31 @@ function validDay(value: string): Date {
   );
 }
 
-export function worksheetCreatedRange(
+/**
+ * A NAP-TARTOMÁNY MAGA, modelltől függetlenül: a hibajegy-lista „Létrehozva" szűrője is ezt használja (Luca 2026-11-20),
+ * hogy a két lista egy szabály szerint számoljon. `null`: nincs szűrő.
+ */
+export function createdDayRange(
   from?: string,
   to?: string,
-): Prisma.WorksheetWhereInput {
-  if (!from && !to) return {};
+): { gte?: Date; lt?: Date } | null {
+  if (!from && !to) return null;
   const start = from ? validDay(from) : null;
   const end = to ? validDay(to) : null;
   if (start && end && start.getTime() > end.getTime())
     throw new BadRequestException(
       "A kezdő dátum a záró dátum utáni napra esik.",
     );
-  const range: Prisma.DateTimeFilter = {};
+  const range: { gte?: Date; lt?: Date } = {};
   if (start) range.gte = startOfBudapestDay(start);
   if (end) range.lt = startOfBudapestDay(end, 1);
-  return { createdAt: range };
+  return range;
+}
+
+export function worksheetCreatedRange(
+  from?: string,
+  to?: string,
+): Prisma.WorksheetWhereInput {
+  const range = createdDayRange(from, to);
+  return range ? { createdAt: range } : {};
 }
