@@ -50,6 +50,7 @@ const row = (over: Partial<DueInvoiceItem> = {}): DueInvoiceItem => ({
   overdue: false,
   daysOverdue: null,
   supplierBankAccount: "11700000-12345678-00000000",
+  supplierBankAccountSource: "OWN",
   outstanding: "127000",
   currency: "HUF",
   reference: "SZ-2026-7",
@@ -124,6 +125,37 @@ describe("the due invoices page", () => {
     expect(screen.getAllByText(/Lejárt \(/)).toHaveLength(1);
   });
 
+  it("names the source of a supplied bank account under it, and writes nothing under an own one", async () => {
+    api.list.mockResolvedValue(
+      response([
+        row({ id: "own", supplierName: "Saját Kft." }),
+        row({
+          id: "pdf",
+          supplierName: "PDF Kft.",
+          supplierBankAccount: "11773016-11111018",
+          supplierBankAccountSource: "INVOICE_PDF",
+        }),
+        row({
+          id: "other",
+          supplierName: "Másik Kft.",
+          supplierBankAccount: "10918001-00000017",
+          supplierBankAccountSource: "OTHER_INVOICE",
+        }),
+      ]),
+    );
+    render(<DueInvoicesPage />);
+    const ownRow = (await screen.findByText("Saját Kft.")).closest("tr")!;
+    const pdfRow = screen.getByText("PDF Kft.").closest("tr")!;
+    const otherRow = screen.getByText("Másik Kft.").closest("tr")!;
+    expect(within(pdfRow).getByText("a számla PDF-jéből")).toBeInTheDocument();
+    expect(
+      within(otherRow).getByText("a szállító másik számlájáról"),
+    ).toBeInTheDocument();
+    expect(
+      within(ownRow).queryByText(/PDF-jéből|másik számlájáról/),
+    ).toBeNull();
+  });
+
   it("writes 'nincs adat' for a missing bank account, due date and payment method, and keeps the row", async () => {
     api.list.mockResolvedValue(
       response(
@@ -133,6 +165,7 @@ describe("the due invoices page", () => {
             supplierName: "Hiányos Kft.",
             dueDate: null,
             supplierBankAccount: null,
+            supplierBankAccountSource: null,
             paymentMethod: null,
             missing: {
               dueDate: true,

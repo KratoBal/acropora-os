@@ -79,6 +79,7 @@ describe("which invoices the due list holds", () => {
       overdue: false,
       daysOverdue: null,
       supplierBankAccount: "11700000-12345678-00000000",
+      supplierBankAccountSource: "OWN",
       outstanding: "127000",
       currency: "HUF",
       reference: "SZ-2026-7",
@@ -262,5 +263,38 @@ describe("the summary and the access", () => {
       Reflect.getMetadata(REQUIRED_PERMISSIONS_KEY, DueInvoicesController),
       [PERMISSIONS.FINANCE_VIEW],
     );
+  });
+});
+
+/*
+  A PÓTOLT SZÁMLASZÁM FORRÁSA A SORBAN (acrobot 58654, 58655). MI PIROSÍT: ha a sor saját számlaszáma nem OWN jelölést kapna; ha a pótolt számlaszám forrás nélkül maradna (az utalási jegyzékbe
+  kerülő számot a forrásáról kell megítélni); ha a számlaszám nélküli sorhoz forrás kerülne; ha a pótolt számlaszám után a sor még "hiányzó adat"-ként számolna.
+*/
+describe("the source of a supplied bank account", () => {
+  it("an own account is OWN, a supplied one carries its source, no account has no source", () => {
+    const own = item();
+    const supplied = item();
+    const none = item();
+    const out = buildDueInvoices({
+      items: [own, supplied, none],
+      bankAccounts: new Map<string, string | null>([
+        [own.id, "11700000-12345678-00000000"],
+        [supplied.id, "11773016-11111018-00000000"],
+        [none.id, null],
+      ]),
+      bankAccountSources: new Map([
+        [supplied.id, "INVOICE_PDF"],
+        // egy számlaszám nélküli sorhoz hiába van forrás: nincs számlaszám, nincs forrás
+        [none.id, "OTHER_INVOICE"],
+      ]),
+      today: TODAY,
+    });
+    const by = new Map(out.items.map((r) => [r.id, r]));
+    assert.equal(by.get(own.id)?.supplierBankAccountSource, "OWN");
+    assert.equal(by.get(supplied.id)?.supplierBankAccountSource, "INVOICE_PDF");
+    assert.equal(by.get(none.id)?.supplierBankAccountSource, null);
+    assert.equal(by.get(supplied.id)?.missing.supplierBankAccount, false);
+    assert.equal(by.get(none.id)?.missing.supplierBankAccount, true);
+    assert.equal(out.summary.withMissingData, 1);
   });
 });

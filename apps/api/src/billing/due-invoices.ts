@@ -1,5 +1,6 @@
 import { Prisma } from "@acropora/database";
 import type {
+  DueInvoiceAccountSource,
   DueInvoiceItem,
   DueInvoicesResponse,
   IncomingDocumentListItem,
@@ -44,8 +45,10 @@ const blank = (value: string | null | undefined) =>
 
 export function buildDueInvoices(input: {
   items: readonly IncomingDocumentListItem[];
-  /** a sor azonosítója -> a cég bankszámlaszáma (a lista sora nem hordozza) */
+  /** a sor azonosítója -> a cég bankszámlaszáma (a lista sora nem hordozza); a sor saját adata, ennek hiányában a pótlás (`supplier-bank-account-resolve.ts`) */
   bankAccounts: ReadonlyMap<string, string | null>;
+  /** a sor azonosítója -> a pótolt számlaszám forrása; ami nincs benne, annak a számlaszáma a sor SAJÁT adata (`OWN`) */
+  bankAccountSources?: ReadonlyMap<string, DueInvoiceAccountSource>;
   /** `ÉÉÉÉ-HH-NN`, Budapest */
   today: string;
 }): DueInvoicesResponse {
@@ -73,6 +76,9 @@ export function buildDueInvoices(input: {
       overdue,
       daysOverdue: overdue ? dayGap(dueDate, today) : null,
       supplierBankAccount: blank(account) ? null : account!.trim(),
+      supplierBankAccountSource: blank(account)
+        ? null
+        : (input.bankAccountSources?.get(item.id) ?? "OWN"),
       outstanding: outstanding.toFixed(item.currency === "HUF" ? 0 : 2),
       currency: item.currency,
       reference: item.documentNumber,

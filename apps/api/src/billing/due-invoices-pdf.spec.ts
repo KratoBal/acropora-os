@@ -27,6 +27,7 @@ const row = (over: Partial<DueInvoiceItem> = {}): DueInvoiceItem => ({
   overdue: false,
   daysOverdue: null,
   supplierBankAccount: "11700000-12345678-00000000",
+  supplierBankAccountSource: "OWN",
   outstanding: "1234567",
   currency: "HUF",
   reference: "SZ-2026-7",
@@ -139,6 +140,7 @@ describe("the due invoices PDF", () => {
         supplierName: "Hiányos Kft.",
         dueDate: null,
         supplierBankAccount: null,
+        supplierBankAccountSource: null,
         paymentMethod: null,
         missing: {
           dueDate: true,
@@ -174,5 +176,33 @@ describe("the due invoices PDF", () => {
     assert.equal(pdfAmount("1234567", "HUF"), "1 234 567 HUF");
     assert.equal(pdfAmount("115.50", "EUR"), "115,50 EUR");
     assert.equal(pdfAmount("999", "HUF"), "999 HUF");
+  });
+});
+
+/*
+  A PÓTOLT SZÁMLASZÁM FORRÁSA AZ UTALÁSI JEGYZÉKEN (acrobot 58654, 58655). MI PIROSÍT: ha a pótolt számlaszám forrás nélkül kerülne a jegyzékre; ha a sor saját számlaszáma mellé is forrás-megjegyzés
+  kerülne; ha a megjegyzés szövege nem a forrást nevezné meg.
+*/
+describe("the due invoices PDF names where a supplied account comes from", () => {
+  it("a supplied account carries its source note, an own account carries none", async () => {
+    const { text } = await build([
+      row({ id: "own", documentNumber: "SZ-OWN" }),
+      row({
+        id: "pdf",
+        documentNumber: "SZ-PDF",
+        supplierBankAccount: "11773016-11111018",
+        supplierBankAccountSource: "INVOICE_PDF",
+      }),
+      row({
+        id: "other",
+        documentNumber: "SZ-OTHER",
+        supplierBankAccount: "10918001-00000017",
+        supplierBankAccountSource: "OTHER_INVOICE",
+      }),
+    ]);
+    assert.ok(text.includes("(a számla PDF-jéből)"), text);
+    assert.ok(text.includes("(a szállító másik számlájáról)"), text);
+    assert.equal(text.split("(a számla PDF-jéből)").length - 1, 1);
+    assert.ok(!text.includes("(kézzel megadva)"), text);
   });
 });

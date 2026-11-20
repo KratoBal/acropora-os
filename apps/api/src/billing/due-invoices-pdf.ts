@@ -1,5 +1,9 @@
 import PDFKitDocument from "pdfkit";
-import type { DueInvoiceItem, DueInvoicesResponse } from "@acropora/types";
+import {
+  DUE_INVOICE_ACCOUNT_SOURCE_NOTES,
+  type DueInvoiceItem,
+  type DueInvoicesResponse,
+} from "@acropora/types";
 
 import { registerEmbeddedPdfFont } from "../documents/pdf/branded-document.js";
 
@@ -210,7 +214,15 @@ function cellsOf(item: DueInvoiceItem): { text: string; color: string }[] {
         }
       : { text: NO_DATA, color: AMBER },
     item.supplierBankAccount
-      ? { text: item.supplierBankAccount, color: INK }
+      ? {
+          // a pótolt számlaszám forrása a sorban áll: az utalási jegyzékbe kerülő számot a forrásáról kell megítélni
+          text:
+            item.supplierBankAccountSource &&
+            item.supplierBankAccountSource !== "OWN"
+              ? `${item.supplierBankAccount}\n(${DUE_INVOICE_ACCOUNT_SOURCE_NOTES[item.supplierBankAccountSource]})`
+              : item.supplierBankAccount,
+          color: INK,
+        }
       : { text: NO_DATA, color: AMBER },
     { text: pdfAmount(item.outstanding, item.currency), color: INK },
     {
