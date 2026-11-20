@@ -116,7 +116,7 @@ export class IncomingBillingDocumentsController {
       ]);
     const [manualPaid, setOff] = await Promise.all([
       loadManualPurchasePayments(this.database, rows),
-      loadSetOffPayments(rows),
+      loadSetOffPayments(this.database, rows),
     ]);
     return incomingListResponse(
       incomingListItems({
@@ -187,7 +187,7 @@ export class IncomingBillingDocumentsController {
         loadManualPurchasePayments(this.database, [row]),
         attachedPdfIds(this.database, [row.id]),
         loadRelatedDocuments(this.database, row.sourceDocumentId),
-        loadSetOffPayments([row]),
+        loadSetOffPayments(this.database, [row]),
       ]);
     return toIncomingDetail(
       row,

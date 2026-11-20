@@ -197,7 +197,7 @@ describe(
     });
 
     it("marks the Foxpost fee invoice paid on the day of the credit named by the settlement code", async () => {
-      const found = await loadSetOffPayments([row("IT-FX-0001", 7803)]);
+      const found = await loadSetOffPayments(prisma, [row("IT-FX-0001", 7803)]);
       assert.deepEqual(found.get("IT-FX-0001"), {
         day: FX_DAY,
         carrier: "FOXPOST",
@@ -206,12 +206,12 @@ describe(
     });
 
     it("does not count a credit marked as a duplicate", async () => {
-      const found = await loadSetOffPayments([row("IT-FX-0002", 5000)]);
+      const found = await loadSetOffPayments(prisma, [row("IT-FX-0002", 5000)]);
       assert.equal(found.size, 0);
     });
 
     it("marks every invoice of the GLS letter paid on the compensation day", async () => {
-      const found = await loadSetOffPayments([
+      const found = await loadSetOffPayments(prisma, [
         row("HU99000001", 2000),
         row("HU99000002", 4000),
         row("HU99000003", 1000),
@@ -223,14 +223,14 @@ describe(
 
     it("leaves the letter alone when one referenced invoice is not among the given rows", async () => {
       // a levél két számlát nevez meg, a másik ismeretlen: a beszámítás nem bizonyított
-      const found = await loadSetOffPayments([row("HU99000001", 2000)]);
+      const found = await loadSetOffPayments(prisma, [row("HU99000001", 2000)]);
       assert.equal(found.size, 0);
     });
 
     it("reads nothing for numbers no settlement names", async () => {
-      assert.equal((await loadSetOffPayments([])).size, 0);
+      assert.equal((await loadSetOffPayments(prisma, [])).size, 0);
       assert.equal(
-        (await loadSetOffPayments([row("MAS-SZAMLA-1", 100)])).size,
+        (await loadSetOffPayments(prisma, [row("MAS-SZAMLA-1", 100)])).size,
         0,
       );
     });

@@ -1,5 +1,5 @@
-import type { IncomingBillingDocument } from "@acropora/database";
-import { Prisma, prisma } from "@acropora/database";
+import type { IncomingBillingDocument, PrismaClient } from "@acropora/database";
+import { Prisma } from "@acropora/database";
 
 import { foxpostNarrativeMark } from "../integrations/foxpost/foxpost-paid-marks.js";
 import { codNarrativePrefix } from "../integrations/gls/gls-cod-paid-marks.dry-run.js";
@@ -16,6 +16,13 @@ const day = (value: Date) => value.toISOString().slice(0, 10);
  * megadott sorok valamelyikét nevezik meg, tehát a lista költsége a sorok számával nő, nem az elszámolásokéval.
  */
 export async function loadSetOffPayments(
+  database: Pick<
+    PrismaClient,
+    | "foxpostSettlement"
+    | "glsCompensationLetter"
+    | "glsCodReport"
+    | "bankTransaction"
+  >,
   rows: readonly Pick<
     IncomingBillingDocument,
     "documentNumber" | "grossAmount" | "currency"
@@ -24,7 +31,7 @@ export async function loadSetOffPayments(
   const numbers = [...new Set(rows.map((row) => row.documentNumber))];
   if (numbers.length === 0) return new Map();
   const [settlements, letters] = await Promise.all([
-    prisma.foxpostSettlement.findMany({
+    database.foxpostSettlement.findMany({
       where: { invoiceNumber: { in: numbers } },
       select: {
         settlementCode: true,
@@ -37,7 +44,7 @@ export async function loadSetOffPayments(
         lines: { select: { collectedAmount: true } },
       },
     }),
-    prisma.glsCompensationLetter.findMany({
+    database.glsCompensationLetter.findMany({
       where: { references: { hasSome: numbers } },
       select: {
         compensationDate: true,
@@ -57,7 +64,7 @@ export async function loadSetOffPayments(
   const [foxpostCredits, glsCredits, reports] = await Promise.all([
     settlementCodes.length === 0
       ? Promise.resolve([])
-      : prisma.bankTransaction.findMany({
+      : database.bankTransaction.findMany({
           where: {
             direction: "CREDIT",
             duplicateMarkedAt: null,
@@ -69,7 +76,7 @@ export async function loadSetOffPayments(
         }),
     letterDays.length === 0
       ? Promise.resolve([])
-      : prisma.bankTransaction.findMany({
+      : database.bankTransaction.findMany({
           where: {
             direction: "CREDIT",
             duplicateMarkedAt: null,
@@ -82,7 +89,7 @@ export async function loadSetOffPayments(
         }),
     letterDays.length === 0
       ? Promise.resolve([])
-      : prisma.glsCodReport.findMany({
+      : database.glsCodReport.findMany({
           where: {
             transferDate: {
               in: letterDays.map((d) => new Date(`${d}T00:00:00Z`)),

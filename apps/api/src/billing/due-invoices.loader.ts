@@ -39,7 +39,7 @@ export async function loadDueInvoices(
     ]);
   const [manualPaid, setOff] = await Promise.all([
     loadManualPurchasePayments(database, rows),
-    loadSetOffPayments(rows),
+    loadSetOffPayments(database, rows),
   ]);
   return buildDueInvoices({
     items: incomingListItems({
