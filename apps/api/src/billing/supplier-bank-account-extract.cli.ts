@@ -9,9 +9,9 @@ import { pdfTextLines } from "../purchasing/supplier-invoice-import/pdf-text-lin
 import { PAYABLE_KINDS, isTransferMethod } from "./due-invoices.js";
 import { loadCollectedPdfIndex } from "./incoming-collected-pdf.js";
 import { attachedPdfIds } from "./incoming-pdf-attach.js";
-import { incomingPdfIds } from "./incoming-pdf-state.js";
 import {
   extractSupplierAccounts,
+  pdfIdsToRead,
   formatExtractReport,
 } from "./supplier-bank-account-extract.js";
 
@@ -54,7 +54,7 @@ async function main(): Promise<number> {
       supplierName: row.supplierName,
       documentNumber: row.documentNumber,
       // az EGY PDF-szabály (`incoming-pdf-state.ts`): a feed saját PDF-je, a kézzel csatolt és a begyűjtött
-      pdfIds: incomingPdfIds(row, { attached, collected }),
+      pdfIds: pdfIdsToRead(row, { attached, collected }),
     }));
   const report = await extractSupplierAccounts({
     targets: async () => targets,

@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   extractSupplierAccounts,
   formatExtractReport,
+  pdfIdsToRead,
   type ExtractDeps,
   type ExtractTarget,
 } from "./supplier-bank-account-extract.js";
@@ -118,5 +119,53 @@ describe("a bankszámlaszám kinyerésének száraz mérése", () => {
     );
     assert.deepEqual(report.byKind, { HU_ACCOUNT: 1, IBAN: 1 });
     assert.deepEqual(report.byLabel, { BANK: 2 });
+  });
+});
+
+/*
+  AZ OLVASANDÓ PDF-EK (élő mérés, 2026-11-20): a feed saját dokumentuma, ha nem PDF (`hasPdf` hamis), minden sorhoz egy „nem olvasható PDF”-et adott. MI PIROSÍT: ha a nem PDF feed-dokumentum
+  az olvasandók között maradna; ha a valódi PDF-es (hasPdf igaz) feed-dokumentum kiesne; ha a kézzel csatolt vagy a begyűjtött PDF kiesne vagy duplán szerepelne.
+*/
+describe("az olvasandó PDF-ek egy sorhoz", () => {
+  const row = (over: {
+    hasPdf?: boolean;
+    sourceDocumentId?: string | null;
+  }) => ({
+    id: "r1",
+    documentNumber: "KS-1",
+    supplierTaxNumber: "12345678-2-13",
+    sourceDocumentId: "feed-doc",
+    hasPdf: false,
+    ...over,
+  });
+  const sources = {
+    attached: new Map([["r1", ["att-1"]]]),
+    // a begyűjtött index kulcsa a számlaszám (nagybetűs) és az adószám-törzs (a lista PDF-jelzésével azonos)
+    collected: new Map([["KS-1|12345678", ["col-1", "feed-doc"]]]),
+  };
+
+  it("a nem PDF feed-dokumentum kimarad, a csatolt és a begyűjtött marad", () => {
+    assert.deepEqual(pdfIdsToRead(row({ hasPdf: false }), sources), [
+      "att-1",
+      "col-1",
+    ]);
+  });
+
+  it("a valódi PDF-es feed-dokumentum az olvasandók elején áll, egyszer", () => {
+    assert.deepEqual(pdfIdsToRead(row({ hasPdf: true }), sources), [
+      "feed-doc",
+      "att-1",
+      "col-1",
+    ]);
+  });
+
+  it("feed-dokumentum nélküli sor és üres források: üres lista", () => {
+    assert.deepEqual(
+      pdfIdsToRead(row({ sourceDocumentId: null }), {
+        attached: new Map(),
+        collected: new Map(),
+      }),
+      [],
+    );
   });
 });

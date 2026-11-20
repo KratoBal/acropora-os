@@ -72,6 +72,7 @@ const billingRow = (
     supplierBankAccount?: string | null;
     noTax?: boolean;
     sourceDocumentId?: string;
+    hasPdf?: boolean;
   } = {},
 ) => ({
   source: "SZAMLAZZ",
@@ -86,6 +87,8 @@ const billingRow = (
   supplierName: `${NAME} ${supplier}`,
   supplierTaxNumber: over.noTax ? null : TAX(supplier),
   sourceDocumentId: over.sourceDocumentId ?? null,
+  // a feed saját dokumentuma csak akkor PDF, ha a sor `hasPdf`-je igaz (a kinyerő csak ilyet olvas)
+  hasPdf: over.hasPdf ?? false,
   supplierBankAccount: over.supplierBankAccount ?? null,
   buyerName: "Acropora Kft.",
   netAmount: 100,
@@ -163,7 +166,11 @@ describe(
           // 7: egyetlen NAV-párosított terhelés, PDF nélkül
           billingRow("h1", 7),
           // 8: név-kulcsú szállító
-          billingRow("g1", 8, { noTax: true, sourceDocumentId: ids.g }),
+          billingRow("g1", 8, {
+            noTax: true,
+            sourceDocumentId: ids.g,
+            hasPdf: true,
+          }),
         ].map((row, index) => ({ ...row, externalId: `fill-it-row-${index}` })),
       });
       ids.a = (await pdfDocument("a1", 1, "11773016-11111018-00000000")).id;
