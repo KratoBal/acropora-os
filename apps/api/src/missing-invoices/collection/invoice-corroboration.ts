@@ -38,7 +38,7 @@ export interface CorroborationHooks {
  * és szándékosan szűk, bővíthető, ha egy valódi szállítónál kiderül, hogy a
  * jel magától teljesül.
  */
-const GENERIC_SIGN_WORDS = new Set([
+export const GENERIC_SIGN_WORDS: ReadonlySet<string> = new Set([
   "magyar",
   "magyarorszag",
   "hungary",

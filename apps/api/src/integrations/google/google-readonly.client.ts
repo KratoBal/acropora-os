@@ -212,12 +212,14 @@ function isPdf(part: GmailPart): boolean {
   );
 }
 
-/** `Név <cím@gép>` vagy puszta cím, kisbetűvel. */
+/**
+ * `Név <cím@gép>` vagy puszta cím, kisbetűvel. Az UTOLSÓ `<...>` cím a feladó: a megjelenített név maga is állhat egy címet
+ * (`"x <szamla@acropora.hu>" <barki@akarmi.example>`), és az nem a feladó (barracuda, #2769; ugyanaz a hiba, amit a #391 javított).
+ */
 function senderAddress(from: string | null): string | null {
   if (!from) return null;
-  const address =
-    /<([^<>\s]+@[^<>\s]+)>/.exec(from)?.[1] ??
-    /([^\s<>"]+@[^\s<>"]+)/.exec(from)?.[1];
+  const bracketed = [...from.matchAll(/<([^<>\s]+@[^<>\s]+)>/g)].at(-1)?.[1];
+  const address = bracketed ?? /([^\s<>"]+@[^\s<>"]+)/.exec(from)?.[1];
   return address ? address.toLowerCase() : null;
 }
 

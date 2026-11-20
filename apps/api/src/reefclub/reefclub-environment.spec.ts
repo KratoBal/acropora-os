@@ -83,6 +83,10 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "INCOMING_FOREIGN_READ_ENABLED",
   "INCOMING_FOREIGN_READ_INTERVAL_MINUTES",
   "INCOMING_FOREIGN_READ_SINCE",
+  // the known-supplier rules' switch and its two settings (acrobot 57884): a switch, a switch and a domain list, none a secret
+  "INVOICE_SUPPLIER_RULES",
+  "INVOICE_SUPPLIER_RULES_AMOUNTLESS",
+  "INVOICE_SUPPLIER_RULE_TRUSTED_DOMAINS",
   // the research source discovery's switch (S2): on | off, not a secret
   "KNOWLEDGE_DISCOVERY",
   "MAINTENANCE_INVOICE_ISSUE_ENABLED",

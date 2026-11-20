@@ -21,6 +21,9 @@ import {
 } from "./collection/invoice-collection-items.controller.js";
 import { InvoiceCollectionItemsRepository } from "./collection/invoice-collection-items.repository.js";
 import { InvoiceCollectionItemsService } from "./collection/invoice-collection-items.service.js";
+import { SupplierRulesController } from "./collection/supplier-rules.controller.js";
+import { SupplierRulesRepository } from "./collection/supplier-rules.repository.js";
+import { SupplierRulesService } from "./collection/supplier-rules.service.js";
 import { InvoiceCollectionSuggestionsController } from "./collection/invoice-collection-suggestions.controller.js";
 import { InvoiceCollectionSuggestionsRepository } from "./collection/invoice-collection-suggestions.repository.js";
 import { InvoiceCollectionSuggestionsService } from "./collection/invoice-collection-suggestions.service.js";
@@ -35,6 +38,7 @@ import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
   controllers: [
     IncomingBillingDocumentsController,
     InvoiceCollectionSuggestionsController,
+    SupplierRulesController,
     InvoiceCollectionItemsController,
     InvoiceCollectionRunsController,
     MissingInvoicesController,
@@ -53,6 +57,8 @@ import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
     InvoiceCollectionItemsRepository,
     InvoiceCollectionItemsService,
     InvoiceCollectionSuggestionsService,
+    SupplierRulesRepository,
+    SupplierRulesService,
     LetterClassJevService,
     MissingInvoiceJevRepository,
     MissingInvoiceJevService,

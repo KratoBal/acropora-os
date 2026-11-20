@@ -1552,6 +1552,19 @@ export const ANONYMIZATION_REGISTER: Readonly<
     reviewState: "business",
     suggestionDecisionRunId: "identifier",
     reviewedByUserId: "identifier",
+    acceptedByRuleId: "identifier",
+  },
+  // az ismert szállító szabálya: cégadat (adószám, név), egy tartomány, számok; vevő és magánszemély nincs benne
+  IncomingSupplierRule: {
+    kind: "business",
+    taxKey: "partyTaxNumber",
+    nameKey: "partyName",
+    senderDomain: "business",
+    label: "partyName",
+    grossCeilings: "json",
+    sourceDocumentId: "identifier",
+    createdByUserId: "identifier",
+    disabledByUserId: "identifier",
   },
   SupplierInvoiceMailMessage: {
     gmailMessageId: "identifier",
