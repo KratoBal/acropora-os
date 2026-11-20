@@ -18,6 +18,22 @@ import { Prisma } from "@acropora/database";
  *                       the PDF stored under it stays (`takeOverEbizRow`).
  */
 
+/**
+ * THE THIRD SOURCE (card 785dfea6): `NAV`, our outgoing invoices from NAV Online Számla's OUTBOUND query. It knows only that an
+ * invoice exists, so it ranks lowest: it writes a row only where no source has the number, and Számlázz.hu and eBIZ take its row
+ * over (`takeOverNavRow`), keeping the row id.
+ */
+export const NAV_SOURCE = "NAV";
+
+/** The stored source as the API names it; anything unknown reads as Számlázz.hu, as before. */
+export function externalSourceOf(source: string): "SZAMLAZZ" | "EBIZ" | "NAV" {
+  return source === "EBIZ"
+    ? "EBIZ"
+    : source === NAV_SOURCE
+      ? "NAV"
+      : "SZAMLAZZ";
+}
+
 /** The number as compared: case and spacing do not make another invoice. */
 export const invoiceNumberKey = (number: string): string =>
   number.replace(/\s/g, "").toUpperCase();
@@ -37,6 +53,21 @@ export function takeOverEbizRow(
     externalId: szamlazz.externalId,
     ebizExternalId: ebizRow.externalId,
     externalPaymentStatus: null,
+  };
+}
+
+/**
+ * Számlázz.hu or eBIZ takes over a NAV row (card 785dfea6): the row keeps its id (a payment already paired to it stays) and its
+ * creation time; everything else is the incoming source's. NAV's "no PDF" reason goes, so the source's own PDF fill can try.
+ */
+export function takeOverNavRow(
+  incoming: { source: string; externalId: string } & Record<string, unknown>,
+): Prisma.ExternalBillingDocumentUpdateInput {
+  return {
+    ...(incoming as Prisma.ExternalBillingDocumentUpdateInput),
+    source: incoming.source,
+    externalId: incoming.externalId,
+    pdfMissingReason: null,
   };
 }
 

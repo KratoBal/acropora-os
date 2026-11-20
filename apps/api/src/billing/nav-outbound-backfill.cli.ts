@@ -6,19 +6,21 @@ import { NavConnectionRepository } from "../integrations/nav/nav-connection.repo
 import { NavCredentialCryptoService } from "../integrations/nav/nav-credential-crypto.service.js";
 import { NavCredentialsService } from "../integrations/nav/nav-credentials.service.js";
 import { NavOnlineInvoiceClient } from "../integrations/nav/nav-online-invoice.client.js";
+import { ebizSince } from "../integrations/ebiz/ebiz-sync.service.js";
 import {
   NavOutboundBackfill,
   parseNavOutboundArgs,
 } from "./nav-outbound-backfill.js";
 
 /**
- * A KIMENŐ SZÁMLÁK A NAV-BÓL, SZÁRAZON (kártya 785dfea6; lásd `nav-outbound-backfill.ts`).
+ * A KIMENŐ SZÁMLÁK A NAV-BÓL (kártya 785dfea6; lásd `nav-outbound-backfill.ts`).
  *
- *   pnpm --filter @acropora/api nav:outbound-backfill -- --from=2026-01-01 [--to=2026-11-20]
+ *   node dist/billing/nav-outbound-backfill.cli.js --from=2026-01-01 [--to=2026-11-20] [--apply]
  *
- * CSAK OLVAS: a NAV OUTBOUND digestjét kérdezi kelt szerint, és ablakonként kiírja, mi van már meg (külső számla vagy az OS saját
- * számlája) és mi hiányzik, sorozatonként. Vevőnevet, adószámot és összeget nem ír ki. Kilépés: 0 lefutott; 2 rossz bemenet vagy a NAV
- * hibája (a hiba szövegével, például a 9-es: a technikai felhasználónak nincs joga a lekérdezéshez).
+ * ALAPBÓL SZÁRAZ: a NAV OUTBOUND digestjét kérdezi kelt szerint, és ablakonként kiírja, mi van már meg (külső számla vagy az OS saját
+ * számlája) és mi hiányzik, sorozatonként. `--apply`-jal a hiányzókat fel is veszi (`source` NAV). Vevőnevet, adószámot és összeget
+ * nem ír ki. Kilépés: 0 lefutott; 2 rossz bemenet, a NAV hibája (a szövegével, például a 9-es: a technikai felhasználónak nincs joga a
+ * lekérdezéshez), vagy az oldalhatár (az ablak megnevezésével).
  */
 async function main(argv: readonly string[]): Promise<number> {
   const args = parseNavOutboundArgs(argv);
@@ -31,15 +33,21 @@ async function main(argv: readonly string[]): Promise<number> {
     ),
   );
   ki(
-    `SZÁRAZ: kimenő számlák a NAV-ból, kelt ${args.from.toISOString().slice(0, 10)} .. ${args.to.toISOString().slice(0, 10)}\n`,
+    `${args.apply ? "ÉLES" : "SZÁRAZ"}: kimenő számlák a NAV-ból, kelt ${args.from.toISOString().slice(0, 10)} .. ${args.to.toISOString().slice(0, 10)}\n`,
   );
-  const results = await backfill.dryRun({
+  const results = await backfill.run({
     from: args.from,
     to: args.to,
+    apply: args.apply,
+    ebizSince: ebizSince(process.env),
     onWindow: (w) =>
       ki(
         `  ${w.windowStart.slice(0, 10)} .. ${w.windowEnd.slice(0, 10)}  látott ${w.seen}, megvan (külső) ${w.presentExternal}, megvan (OS) ${w.presentOwn}, HIÁNYZIK ${w.missing}` +
-          `, sztornó ${w.storno}, módosító ${w.modification}, magánszemély ${w.privatePerson}\n`,
+          `, sztornó ${w.storno}, módosító ${w.modification}, magánszemély ${w.privatePerson}` +
+          (args.apply
+            ? `; felvéve ${w.created}, érvénytelenítve ${w.cancelled}, összeg nélkül kihagyva ${w.skippedNoAmount}, eBIZ-határ miatt kihagyva ${w.skippedEbizCutoff}`
+            : "") +
+          `\n`,
       ),
   });
   const series = new Map<string, { seen: number; missing: number }>();

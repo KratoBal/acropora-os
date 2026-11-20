@@ -11,6 +11,7 @@ import {
   outgoingPackageRows,
   type OutgoingCandidate,
 } from "./outgoing-package.js";
+import { externalSourceOf } from "./external-billing-one-row.js";
 
 const KIND_LABEL: Partial<Record<string, string>> = {
   STORNO: "sztornó",
@@ -119,8 +120,7 @@ export class OutgoingPackageService {
             : Promise.resolve(null),
       })),
       ...external.map((row) => ({
-        source:
-          row.source === "EBIZ" ? ("EBIZ" as const) : ("SZAMLAZZ" as const),
+        source: externalSourceOf(row.source),
         number: row.documentNumber,
         issuedAt: row.issueDate,
         fulfillmentDate: row.fulfillmentDate,

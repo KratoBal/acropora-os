@@ -203,8 +203,11 @@ export interface BillingDocumentPdfState {
  * meg (a rendelésszám szerint), és ha abban visszatérítés is van, azt jelöljük
  * (acrobot 25979).
  */
-/** Egy külső kimenő bizonylat forrása. */
-export type ExternalBillingSource = "SZAMLAZZ" | "EBIZ";
+/**
+ * Egy külső kimenő bizonylat forrása. A `NAV` a NAV Online Számla kimenő lekérdezéséből jött sor (kártya 785dfea6): csak a számla
+ * LÉTEZÉSÉT tudjuk belőle (szám, kelt, összeg, vevő), fizetést és PDF-et nem; a Számlázz.hu és az eBIZ átveszi, ha ugyanazt hozza.
+ */
+export type ExternalBillingSource = "SZAMLAZZ" | "EBIZ" | "NAV";
 
 export type BillingPaymentSource =
   | "SZAMLAZZ"
