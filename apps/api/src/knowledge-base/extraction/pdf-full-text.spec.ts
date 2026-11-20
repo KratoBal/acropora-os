@@ -407,6 +407,7 @@ describe("the address guard, at connect time (a local server, a name resolved by
     assert.equal(requests, before);
     const response = await post(
       guardedFetch({ resolve: to("127.0.0.1"), isPublic: () => true }),
+      "uidl-atengedett.example.org",
     );
     await response.text();
     assert.deepEqual(seen.at(-1), { method: "POST", body: "init\u001d" });
