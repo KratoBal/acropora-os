@@ -232,7 +232,12 @@ export type BillingPaymentSource =
    * Bejövő számla: a futár (Foxpost, GLS) levonta a díjszámláját az utánvét-utalásból (acrobot 58315, 58343): a díjszámlához nincs banki terhelés,
    * a kifizetettséget az elszámolás és a hozzá tartozó jóváírás adja.
    */
-  | "CARRIER_SETOFF";
+  | "CARRIER_SETOFF"
+  /**
+   * Bejövő számla: a számlán álló fizetési mód pontosan „Fizetve” (a kiállító állítása, ma csak a SimplePay díjszámlái), és a Számlázz.hu nem ismer fizetést
+   * (acrobot 58529, 58530). A kifizetés napja nem ismert.
+   */
+  | "ISSUER_PAID";
 
 /**
  * EGY SAJÁT KIFIZETETT-JELÖLÉS, AMIT A SZÁMLÁZZ.HU ELFOGADOTT (acrobot 26027).

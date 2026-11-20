@@ -668,6 +668,9 @@ describe("the accountant package by invoice date", () => {
     currency: "HUF",
     issueDate: new Date("2026-10-22T00:00:00Z"),
     paperOriginalAt: null,
+    source: "SZAMLAZZ",
+    paymentMethod: null,
+    paymentsKnown: false,
     pdfIds: [`src-${overrides.id}`],
     ...overrides,
   });
@@ -1318,6 +1321,37 @@ describe("the accountant package by invoice date", () => {
     assert.equal((await missing.item(first.id)).state, "DOUBLE_PAID");
     const check = await missing.packageCheck("2026-10");
     assert.deepEqual(check.unpaid, []);
+  });
+
+  /*
+    A SZÁMLÁN ÁLLÓ „FIZETVE” (acrobot 58530): a SimplePay díjszámlái. MI PIROSÍT: ha a Fizetve módú, fizetést nem ismerő számla „kifizetetlen” maradna; ha a Számlázz.hu által
+    ismert fizetés mellett, vagy más módú számlán is kikerülne; ha a postafiókos sorra is hatna.
+  */
+  it("an invoice the issuer marks Fizetve is not unpaid, only when the invoicing service knows no payment and the row is a feed row", async () => {
+    const check = async (over: Partial<PackageBillingRow>) =>
+      (
+        await service({
+          debits: [],
+          documents: [],
+          billing: [
+            billingRow({
+              id: "sp",
+              documentNumber: "E-P3-2026-21536",
+              pdfIds: [],
+              paymentMethod: "Fizetve",
+              ...over,
+            }),
+          ],
+          files: {},
+        }).missing.packageCheck("2026-10")
+      ).unpaid.map((invoice) => invoice.number);
+    assert.deepEqual(await check({}), []);
+    assert.deepEqual(await check({ paymentsKnown: true }), ["E-P3-2026-21536"]);
+    assert.deepEqual(await check({ paymentMethod: "átutalás" }), [
+      "E-P3-2026-21536",
+    ]);
+    assert.deepEqual(await check({ paymentMethod: null }), ["E-P3-2026-21536"]);
+    assert.deepEqual(await check({ source: "MAILBOX" }), ["E-P3-2026-21536"]);
   });
 
   /*

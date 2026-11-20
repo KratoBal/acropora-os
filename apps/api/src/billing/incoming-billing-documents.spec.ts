@@ -1392,3 +1392,81 @@ describe("az bejövő lista a levonást szállító és szám szerint keresi vis
     );
   });
 });
+
+/*
+  A SZÁMLÁN ÁLLÓ „FIZETVE” A KIFIZETETTSÉGBEN (acrobot 58530). MI PIROSÍT: ha a „Fizetve” módú számla nem kifizetett, a bruttóval, forrás-jelöléssel (ISSUER_PAID) és nap nélkül; ha
+  megelőzi a Számlázz.hu fizetését, a banki párosítást vagy a futár-levonást (azok előbbre valók); ha nem előzi meg a kézi jelölést; ha a Számlázz.hu által ismert, nulla fizetés
+  mellett is kifizetett lenne; ha a postafiókos vagy a beszerzésből jött sorra is hatna.
+*/
+describe("a számlán álló „Fizetve” kifizetettsége", () => {
+  const unpaid = bankMatchOf(row(), new Map());
+  const paired = bankMatchOf(
+    row(),
+    new Map([["doc-1", pairing({ debits: [debit] })]]),
+  );
+  const state = (
+    over: Partial<IncomingBillingDocument>,
+    match = unpaid,
+    paidInFull = false,
+    manualPaid: { paidAt: Date | null } | null = null,
+    off: Parameters<typeof incomingPaymentOf>[4] = null,
+  ) => {
+    const r = incomingPaymentOf(
+      row({ paymentMethod: "Fizetve", paymentsKnown: false, ...over }),
+      match,
+      paidInFull,
+      manualPaid,
+      off,
+    );
+    return [r.paymentState, r.paymentSource, r.paidAmount, r.lastPaymentDate];
+  };
+
+  it("a Fizetve módú számla fizetett, a bruttóval, megnevezett forrással, nap nélkül", () => {
+    assert.deepEqual(state({}), ["PAID", "ISSUER_PAID", "12700", null]);
+  });
+
+  it("a Számlázz.hu ismert fizetése, a banki párosítás és a futár-levonás előbbre való", () => {
+    assert.equal(
+      state({ paymentsKnown: true, paidAmount: D("12700") })[1],
+      "SZAMLAZZ",
+    );
+    assert.equal(state({}, paired, true)[1], "BANK_PAIRING");
+    assert.equal(
+      state({}, unpaid, false, null, {
+        day: "2026-09-03",
+        carrier: "FOXPOST",
+        reference: "26H35",
+      })[1],
+      "CARRIER_SETOFF",
+    );
+  });
+
+  it("a kézi jelölés mögött áll: a kézi jelölés forrás nélkül, a Fizetve előbb", () => {
+    assert.deepEqual(state({}, unpaid, false, { paidAt: day("2026-10-05") }), [
+      "PAID",
+      "ISSUER_PAID",
+      "12700",
+      null,
+    ]);
+  });
+
+  it("a Számlázz.hu ismert nulla fizetése mellett nem fizetett: az ő nyilvántartása nyer", () => {
+    const result = state({ paymentsKnown: true, paidAmount: D("0") });
+    assert.notEqual(result[1], "ISSUER_PAID");
+    assert.notEqual(result[0], "PAID");
+  });
+
+  it("más fizetési mód vagy hasonló szöveg nem fizetett", () => {
+    for (const method of ["átutalás", "Nem fizetve", null])
+      assert.notEqual(
+        state({ paymentMethod: method })[1],
+        "ISSUER_PAID",
+        String(method),
+      );
+  });
+
+  it("a postafiókos és a beszerzésből jött sorra nem hat", () => {
+    for (const source of ["MAILBOX", "PURCHASE"])
+      assert.notEqual(state({ source })[1], "ISSUER_PAID", source);
+  });
+});
