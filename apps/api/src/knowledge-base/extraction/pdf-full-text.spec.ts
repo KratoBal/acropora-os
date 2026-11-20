@@ -332,9 +332,15 @@ describe("fetching the open PDF", () => {
 describe("the address guard, at connect time (a local server, a name resolved by the test)", () => {
   let port = 0;
   let requests = 0;
-  const server = createServer((_req, res) => {
+  const seen: { method: string; body: string }[] = [];
+  const server = createServer((req, res) => {
     requests += 1;
-    res.end("%PDF-1.4 kitalalt");
+    let body = "";
+    req.on("data", (chunk: Buffer) => (body += chunk.toString("utf8")));
+    req.on("end", () => {
+      seen.push({ method: req.method ?? "", body });
+      res.end("%PDF-1.4 kitalalt");
+    });
   });
   before(
     () =>
@@ -376,6 +382,35 @@ describe("the address guard, at connect time (a local server, a name resolved by
     assert.equal(response.status, 200);
     assert.equal(await response.text(), "%PDF-1.4 kitalalt");
     assert.equal(requests, 1);
+  });
+
+  // 785dfea6: the cmfx Vaadin app's first UIDL request is a POST with a text body, on the same guarded path. Its own host
+  // names: the global agent keeps a connection per host:port alive, and a socket the test above opened with the guard let
+  // through would be reused without a lookup (in production every call carries the same guard, so a pooled socket was vetted)
+  it("a POST carries its method and body through, and is refused by the same guard on a private address", async () => {
+    const post = (fetch: PdfFetch, host: string) =>
+      fetch(`http://${host}:${port}/UIDL`, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        redirect: "manual",
+        signal: AbortSignal.timeout(5_000),
+        body: "init\u001d",
+      });
+    const before = requests;
+    await assert.rejects(
+      post(
+        guardedFetch({ resolve: to("127.0.0.1") }),
+        "uidl-tiltott.example.org",
+      ),
+      (e: { code?: string }) => e.code === NOT_PUBLIC_ADDRESS,
+    );
+    assert.equal(requests, before);
+    const response = await post(
+      guardedFetch({ resolve: to("127.0.0.1"), isPublic: () => true }),
+      "uidl-atengedett.example.org",
+    );
+    await response.text();
+    assert.deepEqual(seen.at(-1), { method: "POST", body: "init\u001d" });
   });
 });
 

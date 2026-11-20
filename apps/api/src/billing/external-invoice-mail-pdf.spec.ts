@@ -11,6 +11,8 @@ import {
   main,
   readCmfxMail,
   readUnasLinkPdfs,
+  cookieHeaderFrom,
+  pdfAddressesIn,
 } from "./external-invoice-mail-pdf.cli.js";
 import {
   cmfxMailAuthenticated,
@@ -451,6 +453,154 @@ describe("the PDF from the UNAS order's cmfx link", () => {
       out,
       /^LINK ACRW-2026\/00540 HTTP 200 text\/html 27 bájt nem PDF$/m,
     );
+  });
+
+  /*
+    THE VAADIN APP BEHIND THE LINK (785dfea6; acrobot 58716-58769): the link answers HTML, the app makes the PDF on its
+    first UIDL request. WHAT TURNS IT RED: the UIDL step not a POST with the init body and the page's session cookie; the
+    PDF address missed because the JSON escapes its slashes; an address off the cmfx host requested; a cookie with an
+    Expires date (a comma inside) split wrong; the link or its token printed; a failed app step dropping the row instead of
+    letting it reach the checks as NOT_PDF.
+  */
+  const vaadin = (uidlAnswer: string, pdfAnswer?: () => Response) => {
+    const calls: {
+      url: string;
+      method: string;
+      body?: string;
+      cookie?: string;
+    }[] = [];
+    const fetch = async (
+      url: string,
+      init: { method: string; headers: Record<string, string>; body?: string },
+    ) => {
+      calls.push({
+        url: url.replace(/curdate=\d+/, "curdate=N"),
+        method: init.method,
+        body: init.body,
+        cookie: init.headers.Cookie,
+      });
+      if (url === "https://www.cmfx.hu/FxPrint/?t=SECRET")
+        return new Response("<html>FxPrint</html>", {
+          status: 200,
+          headers: {
+            "content-type": "text/html;charset=UTF-8",
+            "set-cookie":
+              "JSESSIONID=abc123; Path=/FxPrint, lang=hu; Expires=Thu, 01 Jan 2027 00:00:00 GMT; Path=/",
+          },
+        });
+      if (url.startsWith("https://www.cmfx.hu/FxPrint/UIDL?"))
+        return new Response(uidlAnswer, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      if (url === "https://www.cmfx.hu/jx/tmp/ACROPORA/a1b2c3.pdf" && pdfAnswer)
+        return pdfAnswer();
+      throw new Error(`unexpected ${url}`);
+    };
+    return { calls, fetch };
+  };
+  const link = [
+    { number: "ACRW-2026/00536", url: "https://www.cmfx.hu/FxPrint/?t=SECRET" },
+  ];
+
+  it("the Vaadin app: a UIDL init POST with the page's cookie, the escaped .pdf address read, and the PDF taken from it", async () => {
+    const v = vaadin(
+      'for(;;);[{"Vaadin-Security-Key":"da62bef","changes":[["change",{},["open",{"src":"\\/jx\\/tmp\\/ACROPORA\\/a1b2c3.pdf","name":"_self"}]]]}]',
+      () =>
+        new Response(PDF_BYTES, {
+          status: 200,
+          headers: { "content-type": "application/pdf" },
+        }),
+    );
+    let out = "";
+    const pdfs = await readUnasLinkPdfs(
+      link,
+      v.fetch as never,
+      (line) => (out += line),
+      async () => undefined,
+    );
+    assert.deepEqual(
+      v.calls.map((c) => [c.method, c.url.split("?")[0], c.body, c.cookie]),
+      [
+        ["GET", "https://www.cmfx.hu/FxPrint/", undefined, undefined],
+        [
+          "POST",
+          "https://www.cmfx.hu/FxPrint/UIDL",
+          "init\u001d",
+          "JSESSIONID=abc123; lang=hu",
+        ],
+        [
+          "GET",
+          "https://www.cmfx.hu/jx/tmp/ACROPORA/a1b2c3.pdf",
+          undefined,
+          "JSESSIONID=abc123; lang=hu",
+        ],
+      ],
+    );
+    assert.match(
+      v.calls[1]!.url,
+      /\?repaintAll=1&sh=720&sw=1280&.*&wsver=6\.8\.13$/,
+    );
+    assert.deepEqual(
+      pdfs.map((p) => [p.fileName, p.buffer.equals(PDF_BYTES)]),
+      [["E-ACRW-2026-00536-0.pdf", true]],
+    );
+    assert.match(out, /^LINK ACRW-2026\/00536 Vaadin: PDF \d+ bájt$/m);
+    assert.doesNotMatch(out, /SECRET|FxPrint|jx\/tmp|abc123/);
+  });
+
+  it("a .pdf address off the cmfx host is not requested, and the row still reaches the checks (as NOT_PDF)", async () => {
+    const v = vaadin(
+      'for(;;);[{"open":[{"src":"https:\\/\\/evil.example\\/x.pdf"}]}]',
+    );
+    let out = "";
+    const pdfs = await readUnasLinkPdfs(
+      link,
+      v.fetch as never,
+      (line) => (out += line),
+      async () => undefined,
+    );
+    assert.equal(v.calls.length, 2);
+    assert.match(
+      out,
+      /^LINK ACRW-2026\/00536 Vaadin: a PDF-cím nem cmfx https-cím, nem kértem le$/m,
+    );
+    assert.deepEqual(
+      pdfs.map((p) => p.buffer.toString()),
+      ["<html>FxPrint</html>"],
+    );
+  });
+
+  it("an answer without a .pdf address says so", async () => {
+    const v = vaadin('for(;;);[{"changes":[]}]');
+    let out = "";
+    await readUnasLinkPdfs(
+      link,
+      v.fetch as never,
+      (line) => (out += line),
+      async () => undefined,
+    );
+    assert.match(
+      out,
+      /^LINK ACRW-2026\/00536 Vaadin: nincs \.pdf-cím a UIDL-válaszban$/m,
+    );
+  });
+
+  it("cookieHeaderFrom keeps the pairs, also past an Expires date's comma; pdfAddressesIn reads escaped slashes", () => {
+    assert.equal(
+      cookieHeaderFrom(
+        "JSESSIONID=abc; Path=/FxPrint; HttpOnly, lang=hu; Expires=Thu, 01 Jan 2027 00:00:00 GMT",
+      ),
+      "JSESSIONID=abc; lang=hu",
+    );
+    assert.equal(cookieHeaderFrom(null), "");
+    assert.deepEqual(
+      pdfAddressesIn(
+        'for(;;);[{"a":["x","\\/jx\\/tmp\\/b.pdf"],"b":{"c":"d.pdf?x=1"}}]',
+      ),
+      ["/jx/tmp/b.pdf", "d.pdf?x=1"],
+    );
+    assert.deepEqual(pdfAddressesIn("nem json"), []);
   });
 
   it("a failed fetch names only the error's name and code, never its message (it may carry the link)", async () => {
