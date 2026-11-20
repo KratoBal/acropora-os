@@ -22,13 +22,13 @@ import { normalizeName } from "../missing-invoice-matching.js";
 import { payeeFromText } from "../payee-check.js";
 import { invoiceCollectionSources } from "./invoice-collection.config.js";
 import { INVOICE_COLLECTION_ENV } from "./invoice-collection.service.js";
-import { senderDomain } from "./invoice-corroboration.js";
 import { InvoiceCollectionSuggestionsRepository } from "./invoice-collection-suggestions.repository.js";
 import {
   decideSupplierRule,
   grossCentsOf,
   nameKeyOf,
   raisedCeilings,
+  strictSenderDomain,
   taxMatchKey,
   textHasNameKey,
   trustedForwarderDomains,
@@ -113,7 +113,7 @@ export class SupplierRulesService {
       out.push({
         id: row.id,
         taxNumber: str(r.supplierTaxNumber),
-        senderDomain: senderDomain(row.sender),
+        senderDomain: strictSenderDomain(row.sender),
         text,
         gross:
           str(r.gross) ??

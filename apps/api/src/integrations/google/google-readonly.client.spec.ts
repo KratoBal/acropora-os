@@ -99,6 +99,27 @@ describe("GoogleReadonlyClient", () => {
     );
   });
 
+  // barracuda #2769: the display name may hold an address ("x <szamla@acropora.hu>" <barki@akarmi.example>); the sender is the LAST <...>
+  it("takes the last <...> address as the sender, not an address written into the display name", async () => {
+    const google = client((url) => {
+      if (url.pathname.endsWith("/messages/m-3"))
+        return Response.json({
+          id: "m-3",
+          payload: {
+            headers: [
+              {
+                name: "From",
+                value: '"Szamla <szamla@acropora.hu>" <Barki@Akarmi.example>',
+              },
+            ],
+            parts: [],
+          },
+        });
+    }, []);
+    const message = await google.gmailPdfMessage("info@acropora.hu", "m-3");
+    assert.equal(message.sender, "barki@akarmi.example");
+  });
+
   it("skips a too large attachment but keeps the rest of the mail", async () => {
     const google = client((url) => {
       if (url.pathname.endsWith("/messages/m-2"))

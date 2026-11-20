@@ -18,10 +18,12 @@ import {
 import { pdfTextLines } from "../../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import { SupplierInvoiceImportService } from "../../purchasing/supplier-invoice-import/supplier-invoice-import.service.js";
 import { normalizeName } from "../missing-invoice-matching.js";
-import { corroboratedBy, senderDomain } from "./invoice-corroboration.js";
+import { corroboratedBy } from "./invoice-corroboration.js";
+import { authenticationVerdict } from "../../service-drafts/ticket-mail/ticket-mail-message.js";
 import {
   amountlessAccepted,
   decideSupplierRule,
+  strictSenderDomain,
   supplierRulesLive,
   trustedForwarderDomains,
 } from "./supplier-rule.js";
@@ -125,6 +127,8 @@ interface Found {
   sender: string | null;
   subject: string | null;
   receivedAt: Date | null;
+  /** a levél `Authentication-Results` fejlécei (Gmail): a szállítói szabály csak hitelesített feladót fogad el; Drive-fájlnál nincs */
+  authenticationResults?: readonly string[];
 }
 
 /**
@@ -477,6 +481,7 @@ export class InvoiceCollectionService {
           sender: message.sender,
           subject: message.subject,
           receivedAt: message.receivedAt,
+          authenticationResults: message.authenticationResults,
         });
       // egy PDF nélküli levél is látott: a következő futás ne kérje le újra
       if (!message.pdfs.length && !message.skippedTooLarge)
@@ -591,13 +596,26 @@ export class InvoiceCollectionService {
         kind === "PROFORMA"
       )
         return null;
+      /*
+        A FELADÓ HITELES-E (barracuda, #2769): a `From` fejlécet a feladó írja, ezért önmagában nem bizonyít semmit (bárki írhat
+        `From: valami@acropora.hu`-t). A szabály csak akkor dönt, ha a Gmail saját `Authentication-Results` fejléce `dmarc=pass`-t mond
+        a `From` tartományára (`authenticationVerdict`, ugyanaz az ellenőrzés, mint a hibajegy-levelezésé: minden Gmail-fejléc, egy
+        dmarc-bejegyzés, a `header.from` egyezik). Hiányzó vagy nem-Gmail fejléc, Drive-fájl: nem hitelesített, ember dönt.
+      */
+      const senderDomainStrict = strictSenderDomain(found.sender);
+      if (
+        !senderDomainStrict ||
+        !authenticationVerdict(found.authenticationResults ?? [], found.sender)
+          .verified
+      )
+        return null;
       const rules = await this.supplierRules.activeRules();
       if (rules.length === 0) return null;
       const decision = decideSupplierRule({
         rules,
         document: {
           taxNumber: reading.supplierTaxNumber,
-          senderDomain: senderDomain(found.sender),
+          senderDomain: senderDomainStrict,
           text,
           gross: reading.gross ?? null,
           currency: reading.currency ?? null,
@@ -656,7 +674,7 @@ export class InvoiceCollectionService {
         userId: null,
         signals: {
           ruleKind: decision.rule.kind,
-          senderDomain: senderDomain(found.sender),
+          senderDomain: senderDomainStrict,
           fileName: found.fileName,
         },
       });

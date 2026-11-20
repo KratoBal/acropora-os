@@ -89,6 +89,8 @@ function setup(input: {
   facts?: KnownInvoiceFacts;
   /** a levél feladója (alapból szamla@szallito.hu) */
   sender?: string;
+  /** a levél `Authentication-Results` fejlécei (alapból nincs) */
+  authenticationResults?: string[];
   debits?: string[];
   cardDebits?: CardDebit[];
   retryDue?: boolean;
@@ -215,6 +217,7 @@ function setup(input: {
         receivedAt: null,
         subject: input.subjects?.[id] ?? null,
         sender: input.sender ?? "szamla@szallito.hu",
+        authenticationResults: input.authenticationResults,
         pdfs: input.messages[id]!,
         skippedTooLarge: 0,
       };
@@ -1751,7 +1754,7 @@ describe("InvoiceCollectionService accepts by a known supplier's rule", () => {
     kind: "TAX" as const,
     taxKey: "DE152405660",
     nameKey: null,
-    senderDomain: "szallitohu",
+    senderDomain: "szallito.hu",
     grossCeilings: { USD: 5000 },
   };
   const lines = (total = "Amount due: $20.50 USD", extra: string[] = []) => [
@@ -1763,11 +1766,15 @@ describe("InvoiceCollectionService accepts by a known supplier's rule", () => {
     total,
     ...extra,
   ];
+  const PASS = (domain: string) =>
+    `mx.google.com; dmarc=pass header.from=${domain}`;
   const run = async (options: {
     lines?: string[];
     live?: boolean;
     extraEnv?: Record<string, string>;
     sender?: string;
+    /** the mail's Authentication-Results (default: Gmail's dmarc=pass for the sender's own domain) */
+    authentication?: string[] | null;
     storedNumbers?: Record<string, { fileName: string; origin: string }[]>;
     dry?: boolean;
   }) => {
@@ -1780,6 +1787,12 @@ describe("InvoiceCollectionService accepts by a known supplier's rule", () => {
       messages: { "m-1": [{ fileName: "RE67456.pdf", buffer }] },
       supplierRules: [rule],
       sender: options.sender,
+      authenticationResults:
+        options.authentication === null
+          ? undefined
+          : (options.authentication ?? [
+              PASS((options.sender ?? "szamla@szallito.hu").split("@")[1]!),
+            ]),
       storedNumbers: options.storedNumbers,
       // a classifier under the threshold: it is asked when no rule decided, and never makes a suggestion
       classify: async () => ({
@@ -1834,6 +1847,25 @@ describe("InvoiceCollectionService accepts by a known supplier's rule", () => {
       allowed.accepted.map((a) => [a.grossCents, a.currency]),
       [[null, null]],
     );
+  });
+
+  // barracuda #2769: the From header is written by the sender; only Gmail's dmarc=pass for the From domain is believed
+  it("a PDF whose sender is not authenticated waits for a person: no header, dmarc fail, another header.from, a foreign authserv", async () => {
+    for (const authentication of [
+      null,
+      ["mx.google.com; dmarc=fail header.from=szallito.hu"],
+      ["mx.google.com; dmarc=pass header.from=other.example"],
+      ["mx.evil.example; dmarc=pass header.from=szallito.hu"],
+      // two headers that disagree: one failing one is enough
+      [
+        PASS("szallito.hu"),
+        "mx.google.com; dmarc=fail header.from=szallito.hu",
+      ],
+    ]) {
+      const { stored, accepted } = await run({ authentication });
+      assert.equal(untied(stored).length, 1, JSON.stringify(authentication));
+      assert.deepEqual(accepted, [], JSON.stringify(authentication));
+    }
   });
 
   it("another sender's PDF with the same VAT number waits for a person", async () => {

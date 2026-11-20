@@ -1,4 +1,4 @@
-import { GENERIC_SIGN_WORDS, senderDomain } from "./invoice-corroboration.js";
+import { GENERIC_SIGN_WORDS } from "./invoice-corroboration.js";
 
 /**
  * AZ ISMERT SZÁLLÍTÓ SZABÁLYA (PDF-javaslatok 2. útja; acrobot 57881, 2026-11-20). A 144 függő PDF élő mérése szerint a
@@ -26,10 +26,33 @@ export interface SupplierRule {
   taxKey: string | null;
   /** NAME: a jellemző szavak, szóközzel (`nameKeyOf`) */
   nameKey: string | null;
-  /** a feladó tartománya (`senderDomain` alakban), vagy null, ha a szabály egy megbízott továbbítótól jött (csak TAX) */
+  /** a feladó tartománya (`strictSenderDomain` alakban), vagy null, ha a szabály egy megbízott továbbítótól jött (csak TAX) */
   senderDomain: string | null;
   /** pénznemenként a legnagyobb elfogadott bruttó, centben */
   grossCeilings: Readonly<Record<string, number>>;
+}
+
+/**
+ * A SZABÁLY FELADÓ-TARTOMÁNYA, SZIGORÚAN (barracuda, #2769). A szabály kulcsa, ezért NEM a `senderDomain` (az betűre-számjegyre
+ * szűr: a `gls-hungary.com` és a `glshungary.com` ugyanaz lenne, és egy olcsón regisztrált párdomain átvenné a szállító szabályát).
+ * Itt a teljes tartomány, kisbetűvel, pontokkal, pontos egyezéssel; az UTOLSÓ `<...>` cím számít (a megjelenített név is
+ * állhat egy címet); és csak tartomány-alakú érték fogadható el.
+ */
+export function strictSenderDomain(
+  sender: string | null | undefined,
+): string | null {
+  if (!sender) return null;
+  const bracketed = [...sender.matchAll(/<([^<>\s]+@[^<>\s]+)>/g)].at(-1)?.[1];
+  const address = bracketed ?? sender.trim();
+  const at = address.lastIndexOf("@");
+  if (at < 1) return null;
+  const domain = address
+    .slice(at + 1)
+    .trim()
+    .toLowerCase();
+  return /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/.test(domain)
+    ? domain
+    : null;
 }
 
 /** Az összeg legfeljebb ennyiszerese lehet az eddig elfogadott legnagyobbnak. */
@@ -72,22 +95,17 @@ export function textHasNameKey(
   return nameKey.split(" ").every((word) => words.has(word));
 }
 
-/** A begyűjtött postafiókok tartománya és a beállított további megbízott tartományok (`senderDomain` alakban). */
+/** A begyűjtött postafiókok tartománya és a beállított további megbízott tartományok (szigorú tartomány-alakban). */
 export function trustedForwarderDomains(
   mailboxUsers: readonly string[],
   environment: NodeJS.ProcessEnv = process.env,
 ): string[] {
   const extra = (environment.INVOICE_SUPPLIER_RULE_TRUSTED_DOMAINS ?? "")
     .split(",")
-    .map((value) =>
-      value
-        .trim()
-        .toLowerCase()
-        .replace(/[^\p{L}\p{N}]/gu, ""),
-    )
-    .filter(Boolean);
+    .map((value) => strictSenderDomain(`x@${value.trim()}`))
+    .filter((value): value is string => Boolean(value));
   const own = mailboxUsers
-    .map((user) => senderDomain(user))
+    .map((user) => strictSenderDomain(user))
     .filter((value): value is string => Boolean(value));
   return [...new Set([...own, ...extra])];
 }
@@ -109,7 +127,7 @@ export function amountlessAccepted(
 export interface RuleDocument {
   /** a PDF-ből kiolvasott szállítói adószám, ahogy áll */
   taxNumber: string | null;
-  /** a feladó `senderDomain` alakban, vagy null */
+  /** a feladó `strictSenderDomain` alakban, vagy null */
   senderDomain: string | null;
   /** a PDF szövege */
   text: string;
@@ -164,11 +182,12 @@ export function decideSupplierRule(input: {
   for (const rule of rules) {
     if (rule.kind === "TAX") {
       if (!taxKey || rule.taxKey !== taxKey) continue;
-      // a rule from a trusted forwarder has no sender; an external one needs its sender
+      // a rule from a trusted forwarder has no sender and takes ONLY a trusted forwarder's PDF (the tax number is public: without
+      // this a stranger's PDF carrying it would pass); an external rule takes its own sender, or a trusted forwarder's PDF
       if (
-        rule.senderDomain !== null &&
-        !trusted &&
-        rule.senderDomain !== document.senderDomain
+        rule.senderDomain === null
+          ? !trusted
+          : !trusted && rule.senderDomain !== document.senderDomain
       ) {
         refusal = { accept: false, reason: "SENDER_MISMATCH", rule };
         continue;

@@ -149,6 +149,95 @@ describe("az ismert szállító szabályai", { skip: gate.mode === "skip" }, () 
     await insert({ kind: "TAX", taxKey: "DE152405660", senderDomain: null });
   });
 
+  // barracuda #2769: the ceiling rises only by a PERSON's acceptance, and a document that is already logged (or not a regular one) is not recorded twice
+  it("a machine acceptance does not raise the ceiling, a person's does; a document is recorded once, and only a regular one", async () => {
+    const rule = await rules.create(
+      newRule({ label: `${MARK}-ceiling`, taxKey: "DE888888888" }),
+    );
+    const accept = async (key: string) => {
+      const id = await unassigned(key);
+      await prisma.incomingSupplierDocument.update({
+        where: { id },
+        data: { reviewState: null },
+      });
+      return id;
+    };
+    const machine = await accept("ceil-1");
+    assert.equal(
+      await rules.recordAccepted({
+        ruleId: rule.id,
+        documentId: machine,
+        grossCents: 900_000,
+        currency: "EUR",
+        userId: null,
+        signals: {},
+      }),
+      true,
+    );
+    const afterMachine = await prisma.incomingSupplierRule.findUniqueOrThrow({
+      where: { id: rule.id },
+      select: { acceptedCount: true, grossCeilings: true },
+    });
+    assert.deepEqual(
+      [afterMachine.acceptedCount, afterMachine.grossCeilings],
+      [1, { EUR: 4950 }],
+    );
+    // the same document again: nothing is written, the count and the ceiling stand
+    assert.equal(
+      await rules.recordAccepted({
+        ruleId: rule.id,
+        documentId: machine,
+        grossCents: 900_000,
+        currency: "EUR",
+        userId: userId,
+        signals: {},
+      }),
+      false,
+    );
+    const person = await accept("ceil-2");
+    assert.equal(
+      await rules.recordAccepted({
+        ruleId: rule.id,
+        documentId: person,
+        grossCents: 7000,
+        currency: "EUR",
+        userId,
+        signals: {},
+      }),
+      true,
+    );
+    const afterPerson = await prisma.incomingSupplierRule.findUniqueOrThrow({
+      where: { id: rule.id },
+      select: { acceptedCount: true, grossCeilings: true },
+    });
+    assert.deepEqual(
+      [afterPerson.acceptedCount, afterPerson.grossCeilings],
+      [2, { EUR: 7000 }],
+    );
+    // a document still waiting for a decision (UNASSIGNED) is not accepted by a machine acceptance
+    const waiting = await unassigned("ceil-3");
+    assert.equal(
+      await rules.recordAccepted({
+        ruleId: rule.id,
+        documentId: waiting,
+        grossCents: 100,
+        currency: "EUR",
+        userId: null,
+        signals: {},
+      }),
+      false,
+    );
+    assert.equal(
+      (
+        await prisma.incomingSupplierDocument.findUniqueOrThrow({
+          where: { id: waiting },
+          select: { reviewState: true },
+        })
+      ).reviewState,
+      "UNASSIGNED",
+    );
+  });
+
   it("an acceptance logs the rule, raises the ceiling and the count, and an undo puts the document back unless it was paired meanwhile", async () => {
     const rule = await rules.create(
       newRule({ label: `${MARK}-accepted`, taxKey: "DE777777777" }),

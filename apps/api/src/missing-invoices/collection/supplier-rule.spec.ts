@@ -10,6 +10,7 @@ import {
   nameKeyOf,
   raisedCeilings,
   supplierRulesLive,
+  strictSenderDomain,
   taxMatchKey,
   textHasNameKey,
   trustedForwarderDomains,
@@ -23,14 +24,14 @@ import {
   ha az összeg nélküli PDF elfogad (alapból emberre marad); ha a nem a cégre szóló PDF elfogad; ha a kapcsoló hiányában fut.
 */
 const norm = normalizeName;
-const TRUSTED = ["acroporahu"];
+const TRUSTED = ["acropora.hu"];
 
 const taxRule = (over: Partial<SupplierRule> = {}): SupplierRule => ({
   id: "rule-tax",
   kind: "TAX",
   taxKey: "DE123456789",
   nameKey: null,
-  senderDomain: "hetznerde",
+  senderDomain: "hetzner.de",
   grossCeilings: { EUR: 5000 },
   ...over,
 });
@@ -39,13 +40,13 @@ const nameRule = (over: Partial<SupplierRule> = {}): SupplierRule => ({
   kind: "NAME",
   taxKey: null,
   nameKey: "tessie",
-  senderDomain: "tessiecom",
+  senderDomain: "tessie.com",
   grossCeilings: { USD: 1000 },
   ...over,
 });
 const doc = (over: Partial<RuleDocument> = {}): RuleDocument => ({
   taxNumber: "DE 123 456 789",
-  senderDomain: "hetznerde",
+  senderDomain: "hetzner.de",
   text: "Hetzner Online GmbH Rechnung Total 49.50 EUR",
   gross: "49.50",
   currency: "EUR",
@@ -104,8 +105,33 @@ describe("the keys", () => {
       trustedForwarderDomains(["info@acropora.hu", "balazs@acropora.hu"], {
         INVOICE_SUPPLIER_RULE_TRUSTED_DOMAINS: "Partner.EU",
       }),
-      ["acroporahu", "partnereu"],
+      ["acropora.hu", "partner.eu"],
     );
+  });
+
+  it("the sender domain is the whole domain with its dots, from the LAST address (barracuda #2769)", () => {
+    assert.equal(strictSenderDomain("billing@Hetzner.DE"), "hetzner.de");
+    assert.equal(
+      strictSenderDomain("Hetzner <billing@hetzner.de>"),
+      "hetzner.de",
+    );
+    // a display name holding an address is not the sender: the last <...> is
+    assert.equal(
+      strictSenderDomain('"x <szamla@acropora.hu>" <barki@akarmi.example>'),
+      "akarmi.example",
+    );
+    // look-alike domains stay different: dots and hyphens count
+    assert.notEqual(
+      strictSenderDomain("a@gls-hungary.com"),
+      strictSenderDomain("a@glshungary.com"),
+    );
+    assert.notEqual(
+      strictSenderDomain("a@acro-pora.hu"),
+      strictSenderDomain("a@acropora.hu"),
+    );
+    assert.equal(strictSenderDomain("nobody"), null);
+    assert.equal(strictSenderDomain("a@localhost"), null);
+    assert.equal(strictSenderDomain(null), null);
   });
 
   it("the switches are off unless set to exactly live / accept", () => {
@@ -141,26 +167,39 @@ describe("a TAX rule", () => {
   });
 
   it("does not accept the same tax number from another external domain", () => {
-    const decision = decide([taxRule()], doc({ senderDomain: "evilcom" }));
+    const decision = decide([taxRule()], doc({ senderDomain: "evil.com" }));
     assert.equal(decision.accept, false);
     if (!decision.accept) assert.equal(decision.reason, "SENDER_MISMATCH");
   });
 
-  it("a rule made from a trusted forwarder has no sender: it takes the forwarder's PDF and a vendor's own PDF", () => {
+  it("a rule made from a trusted forwarder has no sender: it takes the forwarder's PDF (and not the vendor's own, which would carry only the public tax number)", () => {
     const rule = taxRule({ senderDomain: null });
     assert.equal(
-      decide([rule], doc({ senderDomain: "acroporahu" })).accept,
+      decide([rule], doc({ senderDomain: "acropora.hu" })).accept,
       true,
     );
     assert.equal(
-      decide([rule], doc({ senderDomain: "hetznerde" })).accept,
-      true,
+      decide([rule], doc({ senderDomain: "hetzner.de" })).accept,
+      false,
     );
+  });
+
+  it("a rule with NO sender takes only a trusted forwarder's PDF: a stranger carrying the public tax number waits for a person (barracuda #2769)", () => {
+    const rule = taxRule({ senderDomain: null });
+    const decision = decide([rule], doc({ senderDomain: "stranger.example" }));
+    assert.equal(decision.accept, false);
+    if (!decision.accept) assert.equal(decision.reason, "SENDER_MISMATCH");
+    // a look-alike of our own domain is a stranger
+    assert.equal(
+      decide([rule], doc({ senderDomain: "acro-pora.hu" })).accept,
+      false,
+    );
+    assert.equal(decide([rule], doc({ senderDomain: null })).accept, false);
   });
 
   it("a rule with an external sender also takes the same PDF through a trusted forwarder", () => {
     assert.equal(
-      decide([taxRule()], doc({ senderDomain: "acroporahu" })).accept,
+      decide([taxRule()], doc({ senderDomain: "acropora.hu" })).accept,
       true,
     );
   });
@@ -170,7 +209,7 @@ describe("a NAME rule", () => {
   const tessie = (over: Partial<RuleDocument> = {}) =>
     doc({
       taxNumber: null,
-      senderDomain: "tessiecom",
+      senderDomain: "tessie.com",
       text: "Tessie Inc. Receipt",
       gross: "8.00",
       currency: "USD",
@@ -182,7 +221,7 @@ describe("a NAME rule", () => {
   });
 
   it("does not accept the name from another sender", () => {
-    const decision = decide([nameRule()], tessie({ senderDomain: "otherde" }));
+    const decision = decide([nameRule()], tessie({ senderDomain: "other.de" }));
     assert.equal(decision.accept, false);
     if (!decision.accept) assert.equal(decision.reason, "SENDER_MISMATCH");
   });
@@ -190,7 +229,7 @@ describe("a NAME rule", () => {
   it("does not accept the name through a trusted forwarder: a name alone is no key", () => {
     const decision = decide(
       [nameRule()],
-      tessie({ senderDomain: "acroporahu" }),
+      tessie({ senderDomain: "acropora.hu" }),
     );
     assert.equal(decision.accept, false);
     if (!decision.accept)

@@ -150,7 +150,7 @@ describe("SupplierRulesService: accept with a rule", () => {
     assert.equal(created.length, 1);
     assert.deepEqual(
       [created[0]!.kind, created[0]!.taxKey, created[0]!.senderDomain],
-      ["TAX", "DE152405660", "hetznerexample"],
+      ["TAX", "DE152405660", "hetzner.example"],
     );
     assert.deepEqual(created[0]!.grossCeilings, { EUR: 4950 });
     assert.deepEqual(

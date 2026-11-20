@@ -163,8 +163,12 @@ export class SupplierRulesRepository {
 
   /**
    * AZ ELFOGADÁS NAPLÓJA: a dokumentum a szabály nevén elfogadott (ki: a szabály, `reviewedByUserId` üres, vagy az ember, ha ő
-   * erősítette meg a kötegben), a szabály legnagyobb összege nő, a darabszám nő, az auditnaplóba a jelekkel. A dokumentum
-   * UNASSIGNED vagy SUGGESTED állapotú legyen még: különben (közben döntöttek) nem ír semmit, és `false`.
+   * erősítette meg a kötegben), a darabszám nő, az auditnaplóba a jelekkel. FELTÉTELES ÍRÁS: csak olyan dokumentumon hat, ami már rendes
+   * (nem döntésre váró: `reviewState` üres) és még nincs szabály nevén (`acceptedByRuleId` üres); egyébként (közben más rögzítette, vagy
+   * a dokumentum állapota megváltozott) nem ír semmit, és `false`: sem a plafon, sem a napló nem változik.
+   *
+   * A PLAFONT CSAK EMBERI ELFOGADÁS EMELI (`userId` nem null; barracuda, #2769): a gépi elfogadás nem nyújthatja a saját határát,
+   * különben egy sorozat lépcsőzetesen nőne (3x, 9x, 27x) ember nélkül, és a visszavonás sem csökkentené.
    */
   async recordAccepted(input: {
     ruleId: string;
@@ -181,23 +185,32 @@ export class SupplierRulesRepository {
         select: { grossCeilings: true },
       });
       if (!rule) return false;
-      await transaction.incomingSupplierDocument.update({
-        where: { id: input.documentId },
+      const { count } = await transaction.incomingSupplierDocument.updateMany({
+        where: {
+          id: input.documentId,
+          reviewState: null,
+          acceptedByRuleId: null,
+        },
         data: {
           acceptedByRuleId: input.ruleId,
           reviewedAt: new Date(),
           reviewedByUserId: input.userId,
         },
       });
+      if (count === 0) return false;
       await transaction.incomingSupplierRule.update({
         where: { id: input.ruleId },
         data: {
           acceptedCount: { increment: 1 },
-          grossCeilings: raisedCeilings(
-            ceilingsOf(rule.grossCeilings),
-            input.currency,
-            input.grossCents,
-          ),
+          ...(input.userId !== null
+            ? {
+                grossCeilings: raisedCeilings(
+                  ceilingsOf(rule.grossCeilings),
+                  input.currency,
+                  input.grossCents,
+                ),
+              }
+            : {}),
         },
       });
       await transaction.auditLog.create({
