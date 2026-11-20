@@ -42,12 +42,25 @@ export type FeedBackfillStart =
   | { status: "nothing"; phase: "dry" | "apply" }
   | { status: "control-failed"; control: FeedControlResult[] };
 
+/** A "nem a mi fiókunk" ítélet visszavonása (acrobot 58207): törölve, nincs ilyen ítélet, vagy épp kör fut. */
+export type FeedBackfillRecheck =
+  | { status: "cleared"; series: string }
+  | { status: "not-foreign"; series: string }
+  | { status: "running" };
+
 /** A tárolt Számlázz.hu feed visszatöltése az év elejéig (6fd8c574): állapot, száraz kör, behúzás. */
 export const feedBackfillApi = {
   status(token: string) {
     return apiRequest<FeedBackfillStatus>(
       "/billing/paid-marks/feed-backfill",
       token,
+    );
+  },
+  recheck(token: string, series: string) {
+    return apiRequest<FeedBackfillRecheck>(
+      "/billing/paid-marks/feed-backfill/recheck",
+      token,
+      { method: "POST", body: JSON.stringify({ series }) },
     );
   },
   start(token: string, apply: boolean) {
