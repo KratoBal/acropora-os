@@ -10,15 +10,19 @@ import {
   type PosInternalUseDetail,
   type PosInternalUseListResponse,
   type PosInternalUseResult,
+  type PosInternalUseSummaryResponse,
 } from "@acropora/types";
 
 import { withUniqueCode } from "../common/unique-code.util.js";
+import type { PosPaymentSummaryQueryDto } from "./dto/pos-payment-summary-query.dto.js";
 import type { PosSaleListQueryDto } from "./dto/pos-sale-list-query.dto.js";
+import { summarizeInternalUses } from "./pos-internal-use-summary.js";
 import {
   PosInternalUseRepository,
   type CreatePosInternalUseLine,
 } from "./pos-internal-use.repository.js";
 import { PosSaleRepository } from "./pos-sale.repository.js";
+import { PosSaleService } from "./pos-sale.service.js";
 
 /**
  * A POS „BELSŐ FELHASZNÁLÁS” (Balázs, 2026-11-20 15:10 UTC, kártya ec51e614): „amit leveszünk a polcról magunknak”, egy
@@ -39,6 +43,19 @@ export class PosInternalUseService {
 
   list(query: PosSaleListQueryDto): Promise<PosInternalUseListResponse> {
     return this.internalUses.list(query);
+  }
+
+  /** The internal uses of Budapest days `from`..`to` (default today), at purchase value; the unpriced lines apart. */
+  async summary(
+    query: PosPaymentSummaryQueryDto,
+    now: Date = new Date(),
+  ): Promise<PosInternalUseSummaryResponse> {
+    const { from, to } = PosSaleService.summaryRange(query, now);
+    return summarizeInternalUses(
+      from,
+      to,
+      await this.internalUses.summaryRows(from, to),
+    );
   }
 
   async getDetail(id: string): Promise<PosInternalUseDetail> {

@@ -208,6 +208,35 @@ export interface PosInternalUseListResponse {
   };
 }
 
+/**
+ * A BELSŐ FELHASZNÁLÁS IDŐSZAKOS ÖSSZESÍTŐJE (kártya ada14a7c, az ec51e614 folytatása; acrobot 58517): egy budapesti
+ * naptári időszak (jellemzően egy hónap) rögzítései beszerzési értéken, és külön a beszerzési ár nélküli tételek, hogy
+ * látsszon, minek kell árat pótolni. Az érték a rögzítéskor rögzített nettó HUF beszerzési ár (`snapshotCost`).
+ */
+export interface PosInternalUseSummaryResponse {
+  /** A kért napok, `YYYY-MM-DD`, mindkettő benne. */
+  from: string;
+  to: string;
+  recordCount: number;
+  lineCount: number;
+  /** Az ismert árú tételek beszerzési értéke (nettó HUF, két tizedes); az ár nélküliek nincsenek benne. */
+  knownCost: string;
+  /** Hány tételnek nincs beszerzési ára; 0 esetén a `knownCost` a teljes érték. */
+  unpricedLineCount: number;
+  /** A rögzítések, a legújabb elöl. */
+  records: (PosInternalUseListItem & { unpricedLineCount: number })[];
+  /** Az ár nélküli tételek, a legújabb rögzítés elöl. */
+  unpricedLines: {
+    internalUseId: string;
+    number: string;
+    occurredAt: string;
+    sku: string;
+    productName: string;
+    quantity: string;
+    unit: string;
+  }[];
+}
+
 export interface PosInternalUseResult {
   detail: PosInternalUseDetail;
   /** A tételek, ahol a készlet nulla alá ment; csak tájékoztatás, mint az eladásnál. */

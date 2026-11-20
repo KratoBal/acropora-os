@@ -15,6 +15,7 @@ import {
   type CostSnapshotDatabase,
 } from "../quotes/quote-cost-snapshot.js";
 import type { PosSaleListQueryDto } from "./dto/pos-sale-list-query.dto.js";
+import type { PosInternalUseSummaryRow } from "./pos-internal-use-summary.js";
 import type { PosSaleStockComponent } from "./pos-sale.repository.js";
 
 /** The `referenceType` of the stock movement a record posts; the movement points back to the record with it. */
@@ -240,6 +241,47 @@ export class PosInternalUseRepository extends Repository {
         totalPages: Math.ceil(totalItems / query.pageSize),
       },
     };
+  }
+
+  /**
+   * The records of the Budapest days `from`..`to` with their lines. The read is padded by a day on each side (instants): the
+   * day boundaries are decided in Budapest time by `summarizeInternalUses`, not by the database.
+   */
+  async summaryRows(
+    from: string,
+    to: string,
+  ): Promise<PosInternalUseSummaryRow[]> {
+    const day = 86_400_000;
+    const rows = await this.database.posInternalUse.findMany({
+      where: {
+        occurredAt: {
+          gte: new Date(Date.parse(`${from}T00:00:00Z`) - day),
+          lt: new Date(Date.parse(`${to}T00:00:00Z`) + 2 * day),
+        },
+      },
+      select: {
+        id: true,
+        number: true,
+        note: true,
+        occurredAt: true,
+        totalCost: true,
+        performedBy: { select: { displayName: true } },
+        lines: {
+          orderBy: { id: "asc" },
+          select: {
+            sku: true,
+            productName: true,
+            quantity: true,
+            unit: true,
+            unitCost: true,
+          },
+        },
+      },
+    });
+    return rows.map(({ performedBy, ...row }) => ({
+      ...row,
+      performedByName: performedBy?.displayName ?? null,
+    }));
   }
 
   async findById(id: string): Promise<PosInternalUseDetail | null> {
