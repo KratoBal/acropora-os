@@ -74,6 +74,7 @@
     "invoice-text:reread": "tsc -p tsconfig.json && node --env-file=../../.env dist/missing-invoices/collection/stored-text-reread.cli.js",
     "billing:supplier-account-fill": "tsc -p tsconfig.json && node --env-file=../../.env dist/billing/supplier-bank-account-fill.cli.js",
     "billing:supplier-accounts": "tsc -p tsconfig.json && node --env-file=../../.env dist/billing/supplier-bank-account-extract.cli.js",
+    "billing:payment-methods": "tsc -p tsconfig.json && node --env-file=../../.env dist/billing/due-invoices-payment-method.cli.js",
     "invoice-collection:own-invoices": "tsc -p tsconfig.json && node --env-file=../../.env dist/missing-invoices/collection/own-invoice-mark.cli.js",
     "billing:issuing-diagnose": "tsc -p tsconfig.json && node --env-file=../../.env dist/billing/billing-issuing-diagnose.cli.js",
     "billing:incoming-bank-diagnose": "tsc -p tsconfig.json && node --env-file=../../.env dist/billing/incoming-bank-diagnose.cli.js",
