@@ -37,6 +37,7 @@ import { SupplierInvoiceImportService } from "../purchasing/supplier-invoice-imp
 import { pdfTextLines } from "../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import {
   classifyTransaction,
+  isCardTransaction,
   NO_INVOICE_CATEGORIES,
   payrollNamesOf,
   type BankCategory,
@@ -157,6 +158,11 @@ export interface DocumentPairing {
     currency: string;
     /** a bank által közölt eredeti összeg, ha a terhelés átváltott (az automatikus jóváhagyásnak) */
     original?: { amount: string; currency: string } | null;
+    /**
+     * Kártyás-e a terhelés (`isCardTransaction`): a Lejáró számlák „valószínűleg nem utalandó” szakasza ebből látja, hogy a szállító számláit kártyával fizettük.
+     * Hiányzó = nem kártyás (a hiányzó típus nem kártya).
+     */
+    card?: boolean;
   }[];
   /**
    * A TERHELÉSEK A TELJES SZÁMLÁT FIZETIK (murena lelete, 26014): minden
@@ -627,6 +633,11 @@ export class MissingInvoicesService {
       return pairing;
     };
     for (const document of computed.documents) entry(document);
+    const cardDebits = new Set(
+      computed.classified
+        .filter(({ debit }) => isCardTransaction(debit))
+        .map(({ debit }) => debit.id),
+    );
     for (const item of computed.items) {
       const outcome = computed.outcomes.get(item.id);
       const inFull =
@@ -642,6 +653,7 @@ export class MissingInvoicesService {
           amount: item.amount,
           currency: item.currency,
           original: item.original,
+          card: cardDebits.has(item.id),
         });
       }
     }

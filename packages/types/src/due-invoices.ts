@@ -73,11 +73,37 @@ export interface DueInvoiceItem {
   };
 }
 
+/**
+ * A „VALÓSZÍNŰLEG NEM UTALANDÓ” SZAKASZ SORA (acrobot 58830, nautilus 58712 javaslata): a fizetési mód NÉLKÜLI sor, amelynek szállítójánál a MÁSIK számláit KÁRTYÁVAL fizettük (a számlához párosított banki
+ * terhelés kártyás), és egyiket sem utalással. A sor NEM esik ki: külön szakaszban áll az okkal, hogy ha egy kártyás szállító mégis utalást kér, látszik. Ez a szállító múltjából következtetett VALÓSZÍNŰSÉG,
+ * nem a számla szava (a számla PDF-jének fizetési módja erősebb jel, az külön lépés).
+ */
+export interface ProbablyNotTransferItem extends DueInvoiceItem {
+  evidence: {
+    /** hány MÁSIK számláját fizettük a szállítónak kártyával (a számlához párosított terhelés kártyás) */
+    cardInvoices: number;
+  };
+}
+
+/** A sor mellé írt ok, egy mondatban; a lista és a PDF ugyanezt mutatja. */
+export function probablyNotTransferNote(
+  evidence: ProbablyNotTransferItem["evidence"],
+): string {
+  return evidence.cardInvoices === 1
+    ? "a szállító másik számláját kártyával fizettük"
+    : `a szállító másik ${evidence.cardInvoices} számláját kártyával fizettük`;
+}
+
 export interface DueInvoicesResponse {
   /** a nap, amihez a „lejárt” mérve van (`ÉÉÉÉ-HH-NN`, Budapest) */
   asOf: string;
   /** lejárt, ki nem fizetett tétel elöl (a legrégebben lejárt legfelül), utána a határidő szerint növekvően, határidő nélkül a végén */
   items: DueInvoiceItem[];
+  /**
+   * A „VALÓSZÍNŰLEG NEM UTALANDÓ” szakasz: ugyanabban a sorrendben, mint az `items`. NINCS benne az `items` összegében és darabszámában (a főlista számai az UTALANDÓ tételekre
+   * szólnak); a saját darabszáma és összege a `summary.probablyNotTransfer`-ben áll.
+   */
+  probablyNotTransfer: ProbablyNotTransferItem[];
   summary: {
     count: number;
     overdue: number;
@@ -85,6 +111,11 @@ export interface DueInvoicesResponse {
     withMissingData: number;
     /** pénznemenként a hátralék összege */
     totals: { currency: string; outstanding: DecimalText }[];
+    /** a „valószínűleg nem utalandó” szakasz: a sorok száma és pénznemenként az összege (a fenti számokban NINCS benne) */
+    probablyNotTransfer: {
+      count: number;
+      totals: { currency: string; outstanding: DecimalText }[];
+    };
   };
 }
 

@@ -4,12 +4,16 @@ import type { DueInvoicesResponse } from "@acropora/types";
 import type { MissingInvoicesService } from "../missing-invoices/missing-invoices.service.js";
 import { budapestDay } from "./billing-document-list.js";
 import { buildDueInvoices } from "./due-invoices.js";
+import { cardPaidSupplierEvidence } from "./due-invoices-card-history.js";
+import { withoutPdfTransfer } from "./due-invoices-pdf-transfer.js";
+import { pdfTextLines } from "../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import type { IncomingReviewService } from "./foreign-invoice/incoming-review.service.js";
 import { loadCollectedPdfIndex } from "./incoming-collected-pdf.js";
 import { loadSupplierAccountResolution } from "./supplier-bank-account-resolve.loader.js";
 import { loadSetOffPayments } from "./incoming-set-off.loader.js";
 import { attachedPdfIds } from "./incoming-pdf-attach.js";
 import { incomingHasPdf } from "./incoming-pdf-state.js";
+import { pdfIdsToRead } from "./supplier-bank-account-extract.js";
 import {
   incomingListItems,
   loadManualPurchasePayments,
@@ -43,6 +47,21 @@ export async function loadDueInvoices(
     loadSetOffPayments(database, rows),
     loadSupplierAccountResolution(database, rows),
   ]);
+  // a szállító kártyás múltja csak akkor tesz egy sort a „valószínűleg nem utalandó” szakaszba, ha a számla SAJÁT PDF-je nem mond átutalást
+  const cardPaidEvidence = await withoutPdfTransfer({
+    evidence: cardPaidSupplierEvidence({ rows, pairings }),
+    rows,
+    // a feed XML-dokumentuma nem PDF: `pdfIdsToRead` nélkül minden sor egy „nem olvasható” PDF-et kapna (a #2803 hibája, nautilus 58846)
+    pdfIdsOf: (row) => pdfIdsToRead(row, { attached, collected }),
+    content: async (id) =>
+      (
+        await database.incomingSupplierDocument.findUnique({
+          where: { id },
+          select: { content: true },
+        })
+      )?.content ?? null,
+    lines: (content) => pdfTextLines(content),
+  });
   return buildDueInvoices({
     items: incomingListItems({
       rows,
@@ -65,6 +84,7 @@ export async function loadDueInvoices(
     bankAccountSources: new Map(
       [...resolved].map(([id, account]) => [id, account.source]),
     ),
+    cardPaidEvidence,
     today: budapestDay(now)!,
   });
 }

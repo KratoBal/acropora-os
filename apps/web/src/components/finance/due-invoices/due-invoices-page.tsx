@@ -5,8 +5,10 @@ import {
   formatMoney,
   hasPermission,
   PERMISSIONS,
+  probablyNotTransferNote,
   type DueInvoiceItem,
   type DueInvoicesResponse,
+  type ProbablyNotTransferItem,
 } from "@acropora/types";
 import {
   PilotBadge,
@@ -51,7 +53,7 @@ function buildColumns(options: {
   canManage: boolean;
   token: string;
   onSaved: () => void;
-}): PilotTableColumn<DueInvoiceItem>[] {
+}): PilotTableColumn<DueInvoiceItem | ProbablyNotTransferItem>[] {
   return [
     {
       id: "supplier",
@@ -64,6 +66,12 @@ function buildColumns(options: {
           {row.missing.paymentMethod ? (
             <span className="block text-xs text-pilot-amber-700">
               fizetési mód: {NO_DATA}
+            </span>
+          ) : null}
+          {"evidence" in row ? (
+            // a „valószínűleg nem utalandó” szakasz oka: a sor nem esett ki, csak a szállító múltja miatt áll itt
+            <span className="block text-xs text-pilot-grey-600">
+              {probablyNotTransferNote(row.evidence)}
             </span>
           ) : null}
         </span>
@@ -259,6 +267,39 @@ export function DueInvoicesPage() {
           />
         )}
       </section>
+      {data && data.probablyNotTransfer.length > 0 ? (
+        <section
+          className="overflow-hidden rounded-xl bg-white ring-1 ring-pilot-grey-200"
+          data-testid="probably-not-transfer"
+        >
+          <div className="space-y-1 px-5 py-4">
+            <h2 className="text-base font-semibold text-pilot-grey-900">
+              Valószínűleg nem utalandó
+            </h2>
+            <p className="text-sm text-pilot-grey-700">
+              A fizetési mód hiányzik a számláról, és a szállító másik számláit
+              kártyával fizettük. Nem kerültek ki a listából: ha a szállító
+              mégis utalást kér, itt látszik.{" "}
+              {data.summary.probablyNotTransfer.count} számla, hátralék:{" "}
+              {data.summary.probablyNotTransfer.totals
+                .map((total) => formatMoney(total.outstanding, total.currency))
+                .join(" + ")}
+              . Az összegük nincs benne a fenti hátralékban.
+            </p>
+          </div>
+          <PilotDataTable
+            columns={buildColumns({
+              canManage,
+              token,
+              onSaved: () => void load(),
+            })}
+            rows={data.probablyNotTransfer}
+            rowKey={(row) => row.id}
+            rowLabel={(row) => `${row.supplierName} ${row.documentNumber}`}
+            minWidth={980}
+          />
+        </section>
+      ) : null}
     </PilotThemeRoot>
   );
 }

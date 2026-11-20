@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   classifyTransaction,
+  isCardTransaction,
   NO_INVOICE_CATEGORIES,
   payrollNamesOf,
   type ClassifiableTransaction,
@@ -244,6 +245,58 @@ describe("classifyTransaction", () => {
     assert.equal(
       category({ counterpartyName: "Ismeretlen Személy" }),
       "UNCERTAIN",
+    );
+  });
+});
+
+/*
+  KÁRTYÁS TERHELÉS-E (a Lejáró számlák „valószínűleg nem utalandó” szakaszához, acrobot 58830). MI PIROSÍT: ha egy kártyás típusú terhelés nem kártya; ha egy átutalás vagy beszedés kártyának
+  számít; ha a típus hiányában az Apple Pay jel (-APPLE) nem számít; ha a típus MEGLÉTE mellett a közlemény jele felülírja a típust (az átutalás közleménye is hordozhat „-APPLE”-t).
+*/
+describe("isCardTransaction", () => {
+  it("the type decides: a card type is a card, a transfer or a debit type is not", () => {
+    assert.equal(
+      isCardTransaction(row({ transactionType: "KÁRTYÁS VÁSÁRLÁS" })),
+      true,
+    );
+    assert.equal(
+      isCardTransaction(row({ transactionType: "kártyatranzakció" })),
+      true,
+    );
+    assert.equal(
+      isCardTransaction(row({ transactionType: "ÁTUTALÁS" })),
+      false,
+    );
+    assert.equal(
+      isCardTransaction(row({ transactionType: "CSOPORTOS BESZEDÉS" })),
+      false,
+    );
+  });
+
+  it("with no type the Apple Pay mark in the narrative counts, and a plain narrative does not", () => {
+    assert.equal(
+      isCardTransaction(
+        row({
+          transactionType: null,
+          narrative: "TELEKOMSZAML* 003426827 -APPLE 167,100EUR",
+        }),
+      ),
+      true,
+    );
+    assert.equal(
+      isCardTransaction(
+        row({ transactionType: null, narrative: "szamla 2026/12" }),
+      ),
+      false,
+    );
+  });
+
+  it("a PRESENT type is not overridden by the narrative", () => {
+    assert.equal(
+      isCardTransaction(
+        row({ transactionType: "ÁTUTALÁS", narrative: "megjegyzés -APPLE" }),
+      ),
+      false,
     );
   });
 });

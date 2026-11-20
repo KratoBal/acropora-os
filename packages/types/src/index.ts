@@ -2463,7 +2463,10 @@ export type {
   WebshopGiftCardTransaction,
   WebshopGiftCardTransactionKind,
 } from "./webshop-gift-cards.js";
-export { DUE_INVOICE_ACCOUNT_SOURCE_NOTES } from "./due-invoices.js";
+export {
+  DUE_INVOICE_ACCOUNT_SOURCE_NOTES,
+  probablyNotTransferNote,
+} from "./due-invoices.js";
 export type {
   DueInvoiceAccountSource,
   DueInvoiceItem,
@@ -2471,4 +2474,5 @@ export type {
   DueInvoicesMailSettingsInput,
   DueInvoicesMailSettingsView,
   DueInvoicesResponse,
+  ProbablyNotTransferItem,
 } from "./due-invoices.js";

@@ -4,6 +4,7 @@ import type {
   DueInvoiceItem,
   DueInvoicesResponse,
   IncomingDocumentListItem,
+  ProbablyNotTransferItem,
 } from "@acropora/types";
 
 /**
@@ -18,6 +19,9 @@ import type {
  * SORREND (Balázs jóváhagyta, 2026-11-20 14:51 UTC): a LEJÁRT, ki nem fizetett tételek elöl, külön jelölve, a legrégebben lejárt
  * legfelül; utána a mai vagy későbbi határidők növekvően (a határidőhöz legközelebbi elöl); a határidő nélküliek a végén. Azonos
  * határidőnél a cég neve, majd a számla száma dönt.
+ *
+ * A „VALÓSZÍNŰLEG NEM UTALANDÓ” SZAKASZ (acrobot 58830, nautilus 58712): a fizetési mód NÉLKÜLI sorok közül az, amelynek szállítójánál a MÁSIK számláit kártyával fizettük (`cardPaidEvidence`), nem a főlistába,
+ * hanem külön szakaszba kerül az okkal. NEM esik ki (Balázs szabálya), csak nem az utalandó összegben áll; az átutalás szavával jelölt sor soha nem kerül ide: a számla saját szava erősebb a szállító múltjánál.
  *
  * KÖZLEMÉNY: alapból a számla száma. Egy „a számla PDF-je más közleményt kér” olvasat az adatban ma NINCS (a `bankReference` a
  * banki terhelés közleményéből olvasott hivatkozás, nem a PDF kérése), ezért minden sor az alapértelmezést jelöli.
@@ -49,11 +53,14 @@ export function buildDueInvoices(input: {
   bankAccounts: ReadonlyMap<string, string | null>;
   /** a sor azonosítója -> a pótolt számlaszám forrása; ami nincs benne, annak a számlaszáma a sor SAJÁT adata (`OWN`) */
   bankAccountSources?: ReadonlyMap<string, DueInvoiceAccountSource>;
+  /** a sor azonosítója -> hány MÁSIK számláját fizettük a szállítónak kártyával (és egyiket sem utalással): `cardPaidSupplierEvidence`; ami nincs benne, annak nincs ilyen múltja */
+  cardPaidEvidence?: ReadonlyMap<string, { cardInvoices: number }>;
   /** `ÉÉÉÉ-HH-NN`, Budapest */
   today: string;
 }): DueInvoicesResponse {
   const { today } = input;
   const rows: DueInvoiceItem[] = [];
+  const notTransfer: ProbablyNotTransferItem[] = [];
   for (const item of input.items) {
     if (!PAYABLE_KINDS.has(item.kindCode.toUpperCase())) continue;
     if (item.cancelled || item.notBookable) continue;
@@ -68,7 +75,7 @@ export function buildDueInvoices(input: {
     const account = input.bankAccounts.get(item.id) ?? null;
     const dueDate = item.dueDate;
     const overdue = dueDate !== null && dueDate < today;
-    rows.push({
+    const row: DueInvoiceItem = {
       id: item.id,
       documentNumber: item.documentNumber,
       supplierName: item.supplierName,
@@ -89,26 +96,42 @@ export function buildDueInvoices(input: {
         supplierBankAccount: blank(account),
         paymentMethod: methodMissing,
       },
-    });
+    };
+    const evidence = methodMissing
+      ? input.cardPaidEvidence?.get(item.id)
+      : undefined;
+    if (evidence) notTransfer.push({ ...row, evidence });
+    else rows.push(row);
   }
   // a lejárt tételek a legkorábbi határidejük miatt eleve elöl állnak, tehát a csoportosítás csak a határidő nélkülieket választja le
   const group = (row: DueInvoiceItem) => (row.dueDate === null ? 1 : 0);
-  rows.sort(
-    (a, b) =>
-      group(a) - group(b) ||
-      (a.dueDate ?? "").localeCompare(b.dueDate ?? "") ||
-      a.supplierName.localeCompare(b.supplierName, "hu") ||
-      a.documentNumber.localeCompare(b.documentNumber),
-  );
-  const totals = new Map<string, Prisma.Decimal>();
-  for (const row of rows)
-    totals.set(
-      row.currency,
-      (totals.get(row.currency) ?? new Prisma.Decimal(0)).plus(row.outstanding),
-    );
+  const order = (a: DueInvoiceItem, b: DueInvoiceItem) =>
+    group(a) - group(b) ||
+    (a.dueDate ?? "").localeCompare(b.dueDate ?? "") ||
+    a.supplierName.localeCompare(b.supplierName, "hu") ||
+    a.documentNumber.localeCompare(b.documentNumber);
+  rows.sort(order);
+  notTransfer.sort(order);
+  const sumByCurrency = (list: readonly DueInvoiceItem[]) => {
+    const totals = new Map<string, Prisma.Decimal>();
+    for (const row of list)
+      totals.set(
+        row.currency,
+        (totals.get(row.currency) ?? new Prisma.Decimal(0)).plus(
+          row.outstanding,
+        ),
+      );
+    return [...totals]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([currency, sum]) => ({
+        currency,
+        outstanding: sum.toFixed(currency === "HUF" ? 0 : 2),
+      }));
+  };
   return {
     asOf: today,
     items: rows,
+    probablyNotTransfer: notTransfer,
     summary: {
       count: rows.length,
       overdue: rows.filter((r) => r.overdue).length,
@@ -118,12 +141,11 @@ export function buildDueInvoices(input: {
           r.missing.supplierBankAccount ||
           r.missing.paymentMethod,
       ).length,
-      totals: [...totals]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([currency, sum]) => ({
-          currency,
-          outstanding: sum.toFixed(currency === "HUF" ? 0 : 2),
-        })),
+      totals: sumByCurrency(rows),
+      probablyNotTransfer: {
+        count: notTransfer.length,
+        totals: sumByCurrency(notTransfer),
+      },
     },
   };
 }
