@@ -3,7 +3,11 @@ import { createHash } from "node:crypto";
 import { describe, it } from "node:test";
 
 import { main } from "./feed-pull.cli.js";
-import { pullFromSzamlazz, type FeedPullDeps } from "./feed-pull.js";
+import {
+  diagnoseQueryFailure,
+  pullFromSzamlazz,
+  type FeedPullDeps,
+} from "./feed-pull.js";
 
 /*
   THE MISSING FEED INVOICE PULLED FROM SZÁMLÁZZ.HU (aeddb2c3; Balázs's live run 2026-11-05: ACRW-2026/00469 paired on
@@ -159,5 +163,108 @@ describe("feed-pull", () => {
     assert.equal(await main(["2026-00083"], () => {}, deps), 2);
     assert.equal(await main([], () => {}, deps), 2);
     assert.equal(queries.length, 1);
+  });
+});
+
+/*
+  A KONTROLL BUKÁSÁNAK DIAGNOSZTIKÁJA (acrobot 57902: a feed legnagyobb száma sem kapott választ a Számlázz.hu-tól, 7-es hibakóddal).
+  MI PIROSÍT: ha a diagnosztika nem kérdezi ugyanazt a számot a kiírt `<pdf>false</pdf>` elemmel; ha a PDF-lekérés kimarad (az élesben
+  működő művelet, amihez az XML-lekérdezés mérhető); ha az OS által kiállított számra nem kérdez; ha a válasz XML-je (vevő, tételek)
+  a kimenetbe kerül; ha egy hálózati hiba kivételként kiszalad.
+*/
+describe("diagnoseQueryFailure", () => {
+  const pdfOk = `<?xml version="1.0" encoding="UTF-8"?><xmlszamlavalasz xmlns="http://www.szamlazz.hu/xmlszamlavalasz"><sikeres>true</sikeres><pdf>JVBERg==</pdf></xmlszamlavalasz>`;
+  const code7 = `<?xml version="1.0" encoding="UTF-8"?><xmlszamlavalasz xmlns="http://www.szamlazz.hu/xmlszamlavalasz"><sikeres>false</sikeres><hibakod>7</hibakod><hibauzenet>Hiányzó adat: számla xml</hibauzenet></xmlszamlavalasz>`;
+
+  function setup(input: {
+    xml: (number: string, hasPdfFlag: boolean) => string | Error;
+    pdf?: (number: string) => string | Error;
+    own?: string | null;
+  }) {
+    const queries: { number: string; hasPdfFlag: boolean }[] = [];
+    const pdfs: string[] = [];
+    const deps: FeedPullDeps = {
+      agentKey: async () => "kulcs-teszt",
+      client: {
+        queryDocument: async (xml: string) => {
+          const number =
+            /<szamlaszam>([^<]*)<\/szamlaszam>/.exec(xml)?.[1] ?? "";
+          const hasPdfFlag = xml.includes("<pdf>false</pdf>");
+          queries.push({ number, hasPdfFlag });
+          const answer = input.xml(number, hasPdfFlag);
+          if (answer instanceof Error) throw answer;
+          return answer;
+        },
+      },
+      ...(input.pdf
+        ? {
+            pdf: {
+              downloadInvoicePdf: async (xml: string) => {
+                const number =
+                  /<szamlaszam>([^<]*)<\/szamlaszam>/.exec(xml)?.[1] ?? "";
+                pdfs.push(number);
+                const answer = input.pdf!(number);
+                if (answer instanceof Error) throw answer;
+                const { parseSzamlazzAgentXmlResponse } =
+                  await import("../integrations/szamlazz/szamlazz-agent-xml.js");
+                return parseSzamlazzAgentXmlResponse(answer);
+              },
+            },
+          }
+        : {}),
+      ...(input.own !== undefined
+        ? { ownIssuedNumber: async () => input.own ?? null }
+        : {}),
+      store: async () => "NEW",
+      project: async () => "PROJECTED",
+    };
+    return { deps, queries, pdfs };
+  }
+
+  it("asks the same number with the written pdf flag, by the PDF route, and an OS-issued number both ways", async () => {
+    const { deps, queries, pdfs } = setup({
+      xml: (number) => (number === "E-2026-5" ? szamla("E-2026-5") : code7),
+      pdf: (number) => (number === "2026/00090" ? pdfOk : code7),
+      own: "E-2026-5",
+    });
+    const lines = await diagnoseQueryFailure("2026/00090", deps);
+    assert.deepEqual(queries, [
+      { number: "2026/00090", hasPdfFlag: true },
+      { number: "E-2026-5", hasPdfFlag: false },
+    ]);
+    assert.deepEqual(pdfs, ["2026/00090", "E-2026-5"]);
+    assert.deepEqual(lines, [
+      "2026/00090, XML-lekérdezés kiírt <pdf>false</pdf> elemmel: 7-es hibakód: Hiányzó adat: számla xml",
+      "2026/00090, PDF-lekérés: megvan (PDF 4 bájt)",
+      "az OS által kiállított E-2026-5, XML-lekérdezés: megvan (E-2026-5)",
+      "az OS által kiállított E-2026-5, PDF-lekérés: hibakód 7: Hiányzó adat: számla xml",
+    ]);
+  });
+
+  it("the output carries no buyer or line data from a found document", async () => {
+    const { deps } = setup({
+      xml: (number) => szamla(number),
+      own: "E-2026-5",
+    });
+    const lines = await diagnoseQueryFailure("2026/00090", deps);
+    assert.doesNotMatch(lines.join("\n"), /Pesti Gábor|Acropora Kft|23916229/);
+  });
+
+  it("a network error on one question is a line, not an exception, and the others still run", async () => {
+    const { deps, queries } = setup({
+      xml: (number) =>
+        number === "2026/00090" ? new TypeError("network") : code7,
+      own: "E-2026-5",
+    });
+    const lines = await diagnoseQueryFailure("2026/00090", deps);
+    assert.match(lines[0]!, /nem olvasható válasz \(TypeError\)/);
+    assert.equal(queries.length, 2);
+  });
+
+  it("without a PDF client or an OS-issued number it says so and does not invent one", async () => {
+    const { deps } = setup({ xml: () => code7, own: null });
+    const lines = await diagnoseQueryFailure("2026/00090", deps);
+    assert.equal(lines.length, 2);
+    assert.equal(lines[1], "OS által kiállított számlaszám: nincs ilyen sor");
   });
 });

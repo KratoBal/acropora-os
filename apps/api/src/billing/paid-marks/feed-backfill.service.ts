@@ -165,7 +165,7 @@ export class FeedBackfillService {
       // a check that cannot fail proves nothing: ask the numbers that EXIST first, and ask nothing else if they are not found
       let results: FeedControlResult[];
       try {
-        results = await this.controlRound(userId, now);
+        results = await this.controlRound(userId, now, true);
       } catch (error) {
         this.running = null;
         throw error;
@@ -203,6 +203,7 @@ export class FeedBackfillService {
   private async controlRound(
     userId: string,
     now: Date,
+    diagnose = false,
   ): Promise<FeedControlResult[]> {
     const results: FeedControlResult[] = [];
     const withGap = (await this.gaps(now)).filter((g) => g.missing.length > 0);
@@ -221,19 +222,29 @@ export class FeedBackfillService {
           detail: `a lekérdezés nem futott le (${error instanceof Error ? error.name : "UNKNOWN"})`,
         };
       }
+      const passed = line.outcome === "WOULD_STORE";
       results.push({
         series: gap.series,
         number: gap.highest,
         outcome: line.outcome,
         detail: line.detail,
-        passed: line.outcome === "WOULD_STORE",
+        passed,
+        // a bukott kontroll okát a három olvasó kérdés választja szét (`diagnoseQueryFailure`); a kör végi kontroll nem kérdezi
+        ...(!passed && diagnose && typeof this.feedPull.diagnose === "function"
+          ? { diagnostics: await this.feedPull.diagnose(gap.highest) }
+          : {}),
       });
     }
     this.control = { checkedAt: new Date().toISOString(), results };
     const failed = results.filter((r) => !r.passed);
     this.logger.log(
       `Feed-visszatöltés kontroll (user ${userId}): ${results.length - failed.length}/${results.length} sorozat rendben${failed
-        .map((r) => `; ${r.number} ${r.outcome} ${r.detail}`)
+        .map(
+          (r) =>
+            `; ${r.number} ${r.outcome} ${r.detail}${
+              r.diagnostics?.length ? ` [${r.diagnostics.join(" | ")}]` : ""
+            }`,
+        )
         .join("")}`,
     );
     return results;

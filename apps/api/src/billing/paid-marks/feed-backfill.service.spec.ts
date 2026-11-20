@@ -41,7 +41,12 @@ function setup(options: {
     record: async ({ number, series, line }) =>
       void checked.set(number, { number, series, outcome: line.outcome }),
   };
+  const diagnosed: string[] = [];
   const feedPull = {
+    diagnose: async (number: string) => {
+      diagnosed.push(number);
+      return [`diag ${number}`];
+    },
     pull: async (numbers: string[], apply: boolean) => {
       asked.push(`${apply ? "apply" : "dry"} ${numbers.join(",")}`);
       asks += numbers.length;
@@ -64,7 +69,7 @@ function setup(options: {
   const service = new FeedBackfillService(feedPull as never);
   service.store = store;
   service.delayMs = 0;
-  return { service, asked, checked };
+  return { service, asked, checked, diagnosed };
 }
 
 describe("the feed backfill", () => {
@@ -311,5 +316,34 @@ describe("the feed backfill", () => {
     await service.start(true, "u-1", NOW);
     await service.settled();
     assert.equal(checked.get("2026/00001")?.outcome, "UNVERIFIED");
+  });
+
+  // acrobot 57902: a kontroll bukása után a három olvasó kérdés választja szét, hogy a kérés alakja vagy a szám látszata a baj
+  it("a failed control carries the diagnostics of each failing series, and a passed one carries none", async () => {
+    const { service, diagnosed } = setup({
+      stored: ["ACRW-2026/00004", "2026/00003"],
+      knows: { "ACRW-2026/00004": "NOT_FOUND" },
+    });
+    await service.start(false, "u-1", NOW);
+    const results = (await service.status(NOW)).control!.results;
+    assert.deepEqual(
+      results.map((r) => [r.series, r.passed, r.diagnostics]),
+      [
+        ["2026", true, undefined],
+        ["ACRW-2026", false, ["diag ACRW-2026/00004"]],
+      ],
+    );
+    assert.deepEqual(diagnosed, ["ACRW-2026/00004"]);
+  });
+
+  it("the control asked at the end of a round does not run the diagnostics again", async () => {
+    const { service, diagnosed } = setup({
+      stored: ["2026/00003"],
+      knows: {},
+      breakAfterAsks: 3,
+    });
+    await service.start(false, "u-1", NOW);
+    await service.settled();
+    assert.deepEqual(diagnosed, []);
   });
 });

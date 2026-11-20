@@ -50,6 +50,35 @@ describe("buildSzamlazzQueryXml", () => {
     assert.doesNotMatch(xml, /szamlaKulsoAzon|<pdf>/);
   });
 
+  it("a mindennapi kérés nem küld pdf elemet; a diagnosztikai alak a sémabeli helyén, az azonosító után küldi", () => {
+    const plain = buildSzamlazzQueryXml({
+      agentKey: "k",
+      key: { by: "invoiceNumber", value: "2026/00090" },
+    });
+    assert.doesNotMatch(plain, /<pdf>/);
+    const diagnostic = buildSzamlazzQueryXml({
+      agentKey: "k",
+      key: { by: "invoiceNumber", value: "2026/00090" },
+      pdfFlag: false,
+    });
+    assert.match(
+      diagnostic,
+      /<szamlaagentkulcs>k<\/szamlaagentkulcs><szamlaszam>2026\/00090<\/szamlaszam><pdf>false<\/pdf><\/xmlszamlaxml>$/,
+    );
+  });
+
+  it("külső azonosítónál a pdf elem az azonosító ELŐTT áll (sémabeli sorrend: szamlaszam, rendelesSzam, pdf, szamlaKulsoAzon)", () => {
+    const xml = buildSzamlazzQueryXml({
+      agentKey: "k",
+      key: { by: "externalId", value: "X-1" },
+      pdfFlag: false,
+    });
+    assert.match(
+      xml,
+      /<szamlaagentkulcs>k<\/szamlaagentkulcs><pdf>false<\/pdf><szamlaKulsoAzon>X-1<\/szamlaKulsoAzon><\/xmlszamlaxml>$/,
+    );
+  });
+
   it("az azonosító és a kulcs XML-védett", () => {
     const xml = buildSzamlazzQueryXml({
       agentKey: "a&b",

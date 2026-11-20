@@ -8,6 +8,8 @@ export interface FeedControlResult {
   /** a Számlázz.hu hibakódja és üzenete, vagy a hiba alakja */
   detail: string;
   passed: boolean;
+  /** a bukott kontroll diagnosztikája, soronként egy mondat */
+  diagnostics?: string[];
 }
 
 /** A feed visszatöltésének állapota (`GET /billing/paid-marks/feed-backfill`; 6fd8c574). */
