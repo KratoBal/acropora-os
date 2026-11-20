@@ -8,6 +8,8 @@ import {
 import type {
   InvoiceCollectionSuggestion,
   Session,
+  SupplierRulePreview,
+  SupplierRuleView,
   UserRole,
 } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -41,6 +43,12 @@ const api = vi.hoisted(() => ({
   suggestionFile: vi.fn(),
   acceptSuggestion: vi.fn(),
   rejectSuggestion: vi.fn(),
+  supplierRulePreview: vi.fn(),
+  acceptWithRule: vi.fn(),
+  supplierRules: vi.fn(),
+  disableSupplierRule: vi.fn(),
+  autoAccepted: vi.fn(),
+  undoAutoAccepted: vi.fn(),
 }));
 vi.mock("@/lib/api/missing-invoices", () => ({ missingInvoicesApi: api }));
 
@@ -113,6 +121,21 @@ beforeEach(() => {
   });
   api.acceptSuggestion.mockResolvedValue(undefined);
   api.rejectSuggestion.mockResolvedValue(undefined);
+  api.supplierRules.mockResolvedValue([]);
+  api.autoAccepted.mockResolvedValue([]);
+  api.supplierRulePreview.mockResolvedValue(preview());
+});
+
+const preview = (
+  over: Partial<SupplierRulePreview> = {},
+): SupplierRulePreview => ({
+  documentId: "doc-a",
+  taxKey: "LV40003005253",
+  externalSender: true,
+  senderDomain: "waterrolv",
+  taxLooksUnstable: false,
+  pendingCount: { TAX: 3, NAME: 0 },
+  ...over,
 });
 
 const rowOf = async (fileName: string) =>
@@ -351,5 +374,210 @@ describe("MissingInvoicesSuggestionsPage", () => {
       ),
     ).toBeInTheDocument();
     await waitFor(() => expect(api.suggestions).toHaveBeenCalledTimes(2));
+  });
+});
+
+/*
+  AZ ISMERT SZÁLLÍTÓ SZABÁLYA A LAPON (acrobot 57881, 57884). MI PIROSÍT: ha az "Elfogad és szabály" gomb a sima elfogadás
+  végpontját hívná; ha a szabály kulcsa nem az előnézetből jön (az olvasó-hiba figyelmeztetés nélkül névszabály helyett adószámot
+  ajánlana); ha a név nélküli névszabály elküldhető; ha a többi függő PDF a megerősítés nélkül elfogadódna; ha a visszavonás
+  közben-párosult PDF-et a lap visszavontnak mondaná; ha a szabály kikapcsolása nem a szabályt kapcsolja.
+*/
+describe("MissingInvoicesSuggestionsPage: supplier rules", () => {
+  const openPanel = async (fileName = "WR26-0220.pdf") => {
+    render(<MissingInvoicesSuggestionsPage />);
+    const row = await rowOf(fileName);
+    fireEvent.click(
+      within(row).getByRole("button", {
+        name: `${fileName} elfogadása szállítói szabállyal`,
+      }),
+    );
+    return screen.findByRole("region", {
+      name: "Elfogadás és szállítói szabály",
+    });
+  };
+
+  it("accepts with a TAX rule from the preview, and takes the other pending PDFs only when ticked", async () => {
+    api.acceptWithRule.mockResolvedValue({
+      ruleId: "r-1",
+      created: true,
+      alsoAccepted: 3,
+    });
+    const panel = await openPanel();
+    expect(await within(panel).findByText(/Adószám: LV40003005253/)).toBeInTheDocument();
+    expect(within(panel).getByText(/waterrolv/)).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole("checkbox"));
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Elfogad és szabályt hoz létre" }),
+    );
+    await waitFor(() =>
+      expect(api.acceptWithRule).toHaveBeenCalledWith("token-1", "doc-a", {
+        kind: "TAX",
+        alsoPending: true,
+      }),
+    );
+    expect(api.acceptSuggestion).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(/létrejött, és 3 további függő PDF is elfogadva/),
+    ).toBeInTheDocument();
+  });
+
+  it("without the tick the other pending PDFs are not asked for", async () => {
+    api.acceptWithRule.mockResolvedValue({
+      ruleId: "r-1",
+      created: true,
+      alsoAccepted: 0,
+    });
+    const panel = await openPanel();
+    await within(panel).findByText(/Adószám: LV40003005253/);
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Elfogad és szabályt hoz létre" }),
+    );
+    await waitFor(() =>
+      expect(api.acceptWithRule).toHaveBeenCalledWith("token-1", "doc-a", {
+        kind: "TAX",
+        alsoPending: false,
+      }),
+    );
+  });
+
+  it("an unstable tax number (a reader error) warns and suggests a name rule; the name is required and goes with the request", async () => {
+    api.supplierRulePreview.mockResolvedValue(
+      preview({ taxKey: "HU00956903", taxLooksUnstable: true }),
+    );
+    api.acceptWithRule.mockResolvedValue({
+      ruleId: "r-2",
+      created: true,
+      alsoAccepted: 0,
+    });
+    const panel = await openPanel();
+    expect(
+      await within(panel).findByText("Valószínűleg olvasó-hiba az adószámnál"),
+    ).toBeInTheDocument();
+    const submit = within(panel).getByRole("button", {
+      name: "Elfogad és szabályt hoz létre",
+    });
+    // the name rule is the default here, and it needs the name
+    expect(submit).toBeDisabled();
+    fireEvent.change(within(panel).getByLabelText("A szállító neve a számlán"), {
+      target: { value: "GLS" },
+    });
+    await waitFor(() => expect(submit).not.toBeDisabled());
+    fireEvent.click(submit);
+    await waitFor(() =>
+      expect(api.acceptWithRule).toHaveBeenCalledWith("token-1", "doc-a", {
+        kind: "NAME",
+        alsoPending: false,
+        vendorName: "GLS",
+      }),
+    );
+  });
+
+  it("a forwarded PDF cannot get a name rule: the option is off", async () => {
+    api.supplierRulePreview.mockResolvedValue(
+      preview({ externalSender: false, senderDomain: "acroporahu" }),
+    );
+    const panel = await openPanel();
+    await within(panel).findByText(/saját továbbítótól érkezett/);
+    const radios = within(panel).getAllByRole("radio");
+    expect(radios[1]).toBeDisabled();
+  });
+
+  it("shows the rule's error and does not close", async () => {
+    api.acceptWithRule.mockRejectedValue(
+      new Error("A megadott név nem szerepel a PDF szövegében."),
+    );
+    const panel = await openPanel();
+    await within(panel).findByText(/Adószám: LV40003005253/);
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Elfogad és szabályt hoz létre" }),
+    );
+    expect(
+      await screen.findByText("A megadott név nem szerepel a PDF szövegében."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Elfogadás és szállítói szabály" }),
+    ).toBeInTheDocument();
+  });
+
+  const rule = (over: Partial<SupplierRuleView> = {}): SupplierRuleView => ({
+    id: "r-1",
+    kind: "TAX",
+    label: "Waterro",
+    key: "LV40003005253",
+    senderDomain: "waterrolv",
+    grossCeilings: { EUR: 106300 },
+    acceptedCount: 4,
+    createdAt: "2026-11-20T10:00:00.000Z",
+    disabledAt: null,
+    ...over,
+  });
+
+  it("lists the active rules and disables the right one; a disabled one is not listed", async () => {
+    api.supplierRules
+      .mockResolvedValueOnce([rule(), rule({ id: "r-0", label: "Régi", disabledAt: "2026-11-19T10:00:00.000Z" })])
+      .mockResolvedValue([]);
+    api.disableSupplierRule.mockResolvedValue(undefined);
+    render(<MissingInvoicesSuggestionsPage />);
+    const list = await screen.findByRole("list", { name: "Aktív szállítói szabályok" });
+    expect(within(list).getByText("Waterro")).toBeInTheDocument();
+    expect(within(list).getByText(/4 automatikus elfogadás/)).toBeInTheDocument();
+    expect(within(list).queryByText("Régi")).toBeNull();
+    fireEvent.click(
+      within(list).getByRole("button", { name: "Waterro szabály kikapcsolása" }),
+    );
+    await waitFor(() =>
+      expect(api.disableSupplierRule).toHaveBeenCalledWith("token-1", "r-1"),
+    );
+  });
+
+  const autoRow = {
+    documentId: "doc-x",
+    fileName: "auto.pdf",
+    sender: "billing@waterro.lv",
+    receivedAt: "2026-11-19T08:00:00.000Z",
+    acceptedAt: "2026-11-20T08:00:00.000Z",
+    ruleId: "r-1",
+    invoiceNumber: "WR26-0300",
+    gross: "10.00",
+    currency: "EUR",
+  };
+
+  it("undoes an automatic acceptance and reloads the pending list", async () => {
+    api.supplierRules.mockResolvedValue([rule()]);
+    api.autoAccepted.mockResolvedValueOnce([autoRow]).mockResolvedValue([]);
+    api.undoAutoAccepted.mockResolvedValue("UNDONE");
+    render(<MissingInvoicesSuggestionsPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "auto.pdf visszavonása" }),
+    );
+    await waitFor(() =>
+      expect(api.undoAutoAccepted).toHaveBeenCalledWith("token-1", "doc-x"),
+    );
+    expect(await screen.findByText(/visszavonva, újra döntésre vár/)).toBeInTheDocument();
+    // the pending list is reloaded (first load + after the undo)
+    await waitFor(() => expect(api.suggestions.mock.calls.length).toBeGreaterThanOrEqual(2));
+  });
+
+  it("an undo of a PDF paired meanwhile says so and does not claim it was undone", async () => {
+    api.supplierRules.mockResolvedValue([rule()]);
+    api.autoAccepted.mockResolvedValue([autoRow]);
+    api.undoAutoAccepted.mockResolvedValue("IN_USE");
+    render(<MissingInvoicesSuggestionsPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "auto.pdf visszavonása" }),
+    );
+    expect(await screen.findByText(/Közben párosult vagy csatolták/)).toBeInTheDocument();
+    expect(screen.queryByText(/visszavonva, újra döntésre vár/)).toBeNull();
+    expect(api.suggestions).toHaveBeenCalledTimes(1);
+  });
+
+  it("without the manage right there are no rule buttons", async () => {
+    auth.role = "READ_ONLY" as UserRole;
+    api.supplierRules.mockResolvedValue([rule()]);
+    api.autoAccepted.mockResolvedValue([autoRow]);
+    render(<MissingInvoicesSuggestionsPage />);
+    await screen.findByText("Waterro");
+    expect(screen.queryByRole("button", { name: /kikapcsolása|visszavonása|szállítói szabállyal/ })).toBeNull();
   });
 });
