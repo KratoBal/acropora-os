@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
@@ -175,8 +175,14 @@ describe("a UNAS teljes ujraolvasas parancsanak teste", () => {
   });
 });
 
-/** A csomag gyokerehez kepest (`apps/api`), mert a teszt a `test-dist` alol fut. */
-const FORDITOTT = "dist/imports/unas/unas-product-sync-full.cli.js";
+/**
+ * A `test-dist`-BŐL INDUL, NEM A `dist`-BŐL (kártya afb4d0f2, acrobot 58585). A `test-dist`-et a csomag `test` parancsa minden
+ * futás előtt törli és újrafordítja, ugyanabból a forrásból, ugyanazzal a fordítóval, mint a `dist`-et (a `tsconfig.test.json`
+ * szerint a kimenet bájtra azonos, a sourcemap-kommenttől eltekintve). A `dist` viszont csak a turbo-gráfban épül: a nyers
+ * `pnpm --filter @acropora/api test` egy HIÁNYZÓ vagy RÉGI `dist`-en futott, és ez a teszt helyben „ismert piros” lett, amit
+ * minden körben külön kellett magyarázni. Így minden hívási alakban a mostani forrás lefordított parancsát indítja.
+ */
+const FORDITOTT = "test-dist/imports/unas/unas-product-sync-full.cli.js";
 const FORRAS = "src/imports/unas/unas-product-sync-full";
 
 describe("a UNAS teljes ujraolvasas parancsanak INDULASA", () => {
@@ -186,19 +192,6 @@ describe("a UNAS teljes ujraolvasas parancsanak INDULASA", () => {
    * kapcsolat-ujraepites parancsa 13-as kilepessel nem indult, mikozben harom orzo zold volt).
    */
   it("kulon folyamatban elindul, es --help-pel nem ures kimenettel er veget", () => {
-    // A DIAGNOZIS A FUTTATAS ELOTT All: a `dist` hianya nem a kod hibaja.
-    assert.ok(
-      existsSync(FORDITOTT),
-      `a lefordított parancs NINCS MEG (${FORDITOTT}) -- ez NEM a kód hibája: a csomag test parancsa a dist-et nem építi; futtasd a repó saját alakjával (turbo run test --filter=@acropora/api).`,
-    );
-    const regebbi = [".mag.ts", ".cli.ts"]
-      .map((veg) => `${FORRAS}${veg}`)
-      .filter((ut) => statSync(ut).mtimeMs > statSync(FORDITOTT).mtimeMs);
-    assert.deepEqual(
-      regebbi,
-      [],
-      "a lefordított parancs RÉGEBBI, mint a forrása -- építsd újra (turbo run test --filter=@acropora/api).",
-    );
     const kimenet = execFileSync("node", [FORDITOTT, "--help"], {
       encoding: "utf8",
     });
