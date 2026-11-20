@@ -13,6 +13,7 @@ import {
   Post,
   Put,
   Query,
+  Res,
   StreamableFile,
   UploadedFiles,
   UseInterceptors,
@@ -30,7 +31,9 @@ import { RequirePermissions } from "../auth/decorators/require-permissions.decor
 import {
   AmendWorksheetDto,
   AttachableWorksheetQueryDto,
+  BulkWorksheetSheetsDto,
   CreateWorksheetDepartmentDto,
+  CopyWorksheetsDto,
   CreateWorksheetDto,
   CreateWorksheetEntryDto,
   CreateWorksheetLineDto,
@@ -65,6 +68,42 @@ export class WorksheetsController {
       user,
       hasPermission(user, PERMISSIONS.SERVICE_HIDE),
     );
+  }
+
+  /**
+   * A KIJELÖLT LAPOK KIADOTT PDF-JEI EGYBEN (kártya a785e580): `zip` a letöltéshez, `merged` a nyomtatáshoz.
+   * `POST`, mert a kijelölés listája a törzsben megy (a címsor hossza nem határ). A hatókört laponként a
+   * szolgáltatás tartja. A kihagyottakról (nincs még kiadott PDF-jük) a fejlécek szólnak: `X-Sheets-Included`,
+   * `X-Sheets-Skipped` (darab) és `X-Sheets-Skipped-Numbers` (a sorszámok, vesszővel).
+   */
+  @Post("bulk/sheets")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  @Header("Cache-Control", "private, no-store")
+  async bulkSheets(
+    @Body() input: BulkWorksheetSheetsDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Res({ passthrough: true })
+    response: { setHeader(name: string, value: string): unknown },
+  ) {
+    const result = await this.service.bulkIssuedSheets(
+      input.ids,
+      input.format,
+      partnerScopeOf(user),
+    );
+    response.setHeader("X-Sheets-Included", String(result.included));
+    response.setHeader("X-Sheets-Skipped", String(result.skipped.length));
+    response.setHeader(
+      "X-Sheets-Skipped-Numbers",
+      result.skipped
+        .map((sheet) => sheet.number)
+        .filter((number): number is string => Boolean(number))
+        .join(","),
+    );
+    return new StreamableFile(result.bytes, {
+      type: result.contentType,
+      length: result.bytes.length,
+      disposition: `attachment; filename*=UTF-8''${encodeURIComponent(result.fileName)}`,
+    });
   }
 
   @Get("customers/:customerId/departments")
@@ -151,6 +190,19 @@ export class WorksheetsController {
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
   assignableUsers(@CurrentUser() user: AuthenticatedUser) {
     return this.service.assignableUsers(partnerScopeOf(user));
+  }
+
+  /**
+   * A KIJELÖLT MUNKALAPOK MÁSOLÁSA (kártya a785e580): laponként egy új piszkozat ugyanazon a szülőn, laponként
+   * eredménnyel (`WorksheetsService.copyWorksheets`). Statikus útvonal, a `:id` alakúak előtt.
+   */
+  @Post("bulk/copy")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  copyWorksheets(
+    @Body() input: CopyWorksheetsDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.copyWorksheets(input.ids, user, input.requestId);
   }
 
   @Get(":id")

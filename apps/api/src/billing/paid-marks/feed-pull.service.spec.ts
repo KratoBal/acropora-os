@@ -69,3 +69,29 @@ describe("FeedPullService", () => {
     assert.deepEqual(stored, []);
   });
 });
+
+describe("FeedPullService.keyKnowsOwnNumber", () => {
+  const service = (query: () => Promise<string>, own: string | null) => {
+    const instance = new FeedPullService(
+      {} as unknown as ConstructorParameters<typeof FeedPullService>[0],
+    );
+    instance.deps = {
+      agentKey: async () => "k",
+      client: { queryDocument: query },
+      ownIssuedNumber: async () => own,
+      store: async () => "NEW",
+      project: async () => "PROJECTED",
+    };
+    return instance;
+  };
+
+  it("a failing question is null (not known), never an exception, so a network fault can not turn a series foreign", async () => {
+    assert.equal(
+      await service(async () => {
+        throw new TypeError("network");
+      }, "E-2026-5").keyKnowsOwnNumber(),
+      null,
+    );
+    assert.equal(await service(async () => "", null).keyKnowsOwnNumber(), null);
+  });
+});

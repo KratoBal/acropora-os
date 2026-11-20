@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
 
 import { PosController } from "./pos.controller.js";
+import { PosInternalUseRepository } from "./pos-internal-use.repository.js";
+import { PosInternalUseService } from "./pos-internal-use.service.js";
 import { PosProductSearchRepository } from "./pos-product-search.repository.js";
 import { PosProductSearchService } from "./pos-product-search.service.js";
 import { PosSaleRepository } from "./pos-sale.repository.js";
@@ -13,6 +15,8 @@ import { PosSaleService } from "./pos-sale.service.js";
 @Module({
   controllers: [PosController],
   providers: [
+    PosInternalUseRepository,
+    PosInternalUseService,
     PosProductSearchRepository,
     PosProductSearchService,
     PosSaleRepository,

@@ -55,6 +55,8 @@ const api = vi.hoisted(() => ({
   parcelLabel: vi.fn(),
   releaseParcel: vi.fn(),
   parcelTracking: vi.fn(),
+  loyalty: vi.fn(),
+  adjustLoyalty: vi.fn(),
 }));
 const billing = vi.hoisted(() => ({ pdf: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
@@ -303,6 +305,9 @@ const detail: WebshopOrderDetail = {
 };
 
 beforeEach(() => {
+  // the loyalty card loads on its own; a guest-like answer keeps it out of the way of the page's own tests
+  api.loyalty.mockReset().mockResolvedValue({ available: false });
+  api.adjustLoyalty.mockReset();
   api.parcelTracking.mockReset().mockResolvedValue({
     events: [],
     checkedAt: "2026-10-06T08:00:00.000Z",
@@ -490,6 +495,216 @@ describe("WebshopOrderDetailPage", () => {
     expect(
       screen.getByText("Ehhez az állapothoz nem tartozik levél."),
     ).toBeTruthy();
+  });
+
+  /*
+    A KISZÁLLÍTÁSI KAPU FELÜLBÍRÁLÁSA (kártya 33a0d3c7). MI PIROSÍT: ha a felülbírálás a kapu mondata nélkül (más 409-nél, elavult lapnál) is
+    megjelenik; ha jog nélkül megjelenik; ha indok nélkül (vagy 10 karakter alatt) elküldhető; ha az indok nem jut el a kérésig; ha az
+    első, indok nélküli próbálkozás is indokot küld.
+  */
+  describe("shipping gate override", () => {
+    const GATE =
+      "A Kiszállítás előtt kell: kiállított számla és feladott csomag. Hiányzik: kiállított számla, feladott csomag. (A sorrend: számla, csomag, kiszállítás; a kártyás levonás a Kiszállításra fut.)";
+    const shippingDetail = {
+      ...detail,
+      nextStatuses: [{ status: "out_for_delivery", label: "Kiszállítás" }],
+    } as WebshopOrderDetail;
+    const openDialog = async () => {
+      api.detail.mockResolvedValue(shippingDetail);
+      render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Státusz módosítása" }),
+      );
+      return screen.getByRole("dialog", { name: "Státusz módosítása" });
+    };
+
+    it("the gate's sentence shows the override for a user with the right; the reason is required and goes with the request", async () => {
+      api.changeStatus.mockRejectedValueOnce(new Error(GATE));
+      const dialog = await openDialog();
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Státusz módosítása" }),
+      );
+      expect((await within(dialog).findByRole("alert")).textContent).toContain(
+        "Hiányzik: kiállított számla, feladott csomag",
+      );
+      // the first, plain attempt sent no reason
+      expect(api.changeStatus).toHaveBeenCalledWith(
+        "token",
+        "order_38",
+        "out_for_delivery",
+        true,
+      );
+      const save = within(dialog).getByRole("button", {
+        name: "Mentés felülbírálással",
+      }) as HTMLButtonElement;
+      const reason = within(dialog).getByLabelText(
+        "Indoklás a felülbíráláshoz",
+      );
+      expect(save.disabled).toBe(true);
+      fireEvent.change(reason, { target: { value: "rövid" } });
+      expect(save.disabled).toBe(true);
+      fireEvent.change(reason, {
+        target: { value: "  A csomagot a GLS portálján adtuk fel kézzel  " },
+      });
+      expect(save.disabled).toBe(false);
+      api.changeStatus.mockResolvedValueOnce({
+        order: { ...shippingDetail, nextStatuses: [] },
+        mail: { sent: false, reason: "no_mail_for_status" },
+        shippingGateOverridden: true,
+      });
+      fireEvent.click(save);
+      await waitFor(() => expect(api.changeStatus).toHaveBeenCalledTimes(2));
+      expect(api.changeStatus).toHaveBeenLastCalledWith(
+        "token",
+        "order_38",
+        "out_for_delivery",
+        true,
+        "A csomagot a GLS portálján adtuk fel kézzel",
+      );
+    });
+
+    /*
+      A SZEMÉLYES KISZÁLLÍTÁS (Luca, 2026-11-20): külön választás a Kiszállítás lépésnél, nem rejtett felülbírálás. MI PIROSÍT: ha a választás nem látszik a
+      Kiszállításnál (vagy más lépésnél, vagy bolti átvételnél is látszik); ha a bejelölés nem jut el a kérésig; ha jelölés nélkül is megy; ha jog nélküli
+      kezelőnek is látszik/nem látszik (nem kell hozzá jog); ha a bejelölt választás mellett a felülbírálás indok-mezője is áll; ha a visszalépés nem törli.
+    */
+    it("the Kiszállítás step offers the personal delivery as its own choice, for a user without the override right too", async () => {
+      auth.session = session("SALES");
+      const dialog = await openDialog();
+      const box = within(dialog).getByRole("checkbox", {
+        name: /Személyes kiszállítás: a kolléga viszi ki, csomag nélkül/,
+      }) as HTMLInputElement;
+      expect(box.checked).toBe(false);
+      expect(dialog.textContent).toContain("Számla ilyenkor is kell");
+    });
+
+    it("a ticked personal delivery goes with the request; unticked, the plain four arguments", async () => {
+      api.changeStatus.mockResolvedValue({
+        order: { ...shippingDetail, nextStatuses: [] },
+        mail: { sent: false, reason: "no_mail_for_status" },
+        personalDelivery: true,
+      });
+      const dialog = await openDialog();
+      fireEvent.click(
+        within(dialog).getByRole("checkbox", {
+          name: /Személyes kiszállítás/,
+        }),
+      );
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Státusz módosítása" }),
+      );
+      await waitFor(() => expect(api.changeStatus).toHaveBeenCalledTimes(1));
+      expect(api.changeStatus).toHaveBeenLastCalledWith(
+        "token",
+        "order_38",
+        "out_for_delivery",
+        true,
+        undefined,
+        true,
+      );
+    });
+
+    it("an unticked personal delivery sends the plain request", async () => {
+      api.changeStatus.mockResolvedValue({
+        order: { ...shippingDetail, nextStatuses: [] },
+        mail: { sent: false, reason: "no_mail_for_status" },
+      });
+      const dialog = await openDialog();
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Státusz módosítása" }),
+      );
+      await waitFor(() => expect(api.changeStatus).toHaveBeenCalledTimes(1));
+      expect(api.changeStatus).toHaveBeenLastCalledWith(
+        "token",
+        "order_38",
+        "out_for_delivery",
+        true,
+      );
+    });
+
+    it("the personal choice is not offered for another step or for a store pickup", async () => {
+      api.detail.mockResolvedValue(detail);
+      render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Státusz módosítása" }),
+      );
+      const dialog = screen.getByRole("dialog", { name: "Státusz módosítása" });
+      expect(
+        within(dialog).queryByRole("checkbox", {
+          name: /Személyes kiszállítás/,
+        }),
+      ).toBeNull();
+      cleanup();
+      api.detail.mockResolvedValue({
+        ...shippingDetail,
+        shipping: { ...shippingDetail.shipping, storePickup: true },
+      } as WebshopOrderDetail);
+      render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Státusz módosítása" }),
+      );
+      expect(
+        within(
+          screen.getByRole("dialog", { name: "Státusz módosítása" }),
+        ).queryByRole("checkbox", { name: /Személyes kiszállítás/ }),
+      ).toBeNull();
+    });
+
+    it("with the personal choice ticked the override's reason field is not shown (the choice is the reason)", async () => {
+      api.changeStatus.mockRejectedValueOnce(new Error(GATE));
+      const dialog = await openDialog();
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Státusz módosítása" }),
+      );
+      await within(dialog).findByRole("alert");
+      expect(
+        within(dialog).getByLabelText("Indoklás a felülbíráláshoz"),
+      ).toBeTruthy();
+      fireEvent.click(
+        within(dialog).getByRole("checkbox", { name: /Személyes kiszállítás/ }),
+      );
+      expect(
+        within(dialog).queryByLabelText("Indoklás a felülbíráláshoz"),
+      ).toBeNull();
+    });
+
+    it("a user without the right sees the gate's sentence and no way around it", async () => {
+      auth.session = session("SALES");
+      api.changeStatus.mockRejectedValueOnce(new Error(GATE));
+      const dialog = await openDialog();
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Státusz módosítása" }),
+      );
+      expect((await within(dialog).findByRole("alert")).textContent).toContain(
+        "Hiányzik",
+      );
+      expect(
+        within(dialog).queryByLabelText("Indoklás a felülbíráláshoz"),
+      ).toBeNull();
+      expect(
+        within(dialog).queryByRole("button", {
+          name: "Mentés felülbírálással",
+        }),
+      ).toBeNull();
+    });
+
+    it("another conflict (a stale page) does not offer the override, even with the right", async () => {
+      api.changeStatus.mockRejectedValueOnce(
+        new Error(
+          "A rendelés „Visszaigazolva” állapotból nem léptethető „Kiszállítás” állapotba. Frissítsd az oldalt.",
+        ),
+      );
+      const dialog = await openDialog();
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Státusz módosítása" }),
+      );
+      expect((await within(dialog).findByRole("alert")).textContent).toContain(
+        "Frissítsd az oldalt",
+      );
+      expect(
+        within(dialog).queryByLabelText("Indoklás a felülbíráláshoz"),
+      ).toBeNull();
+    });
   });
 
   /**

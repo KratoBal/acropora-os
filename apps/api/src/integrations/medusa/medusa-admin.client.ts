@@ -444,7 +444,7 @@ export interface MedusaCollectionInput {
 
 export interface MedusaCollectionListResult {
   rows: MedusaCollectionRow[];
-  /** Igaz, ha a valasz kimeritette a limitet, tehat lehet tobb is. */
+  /** Igaz, ha a lapozas a biztonsagi felso hatarba utkozott, tehat lehet tobb is (nem a 500-as oldalmeret miatt). */
   truncated: boolean;
 }
 
@@ -457,6 +457,9 @@ export interface MedusaCollectionListResult {
  * letrehozni, amik mar leteznek.
  */
 export const COLLECTION_LIST_LIMIT = 500;
+
+/** A lapozas biztonsagi felso hatara: 20 oldal x 500 = 10 000 gyujtemeny. Ennel tobbnel a lista csonkoltnak szamit. */
+export const COLLECTION_LIST_MAX_PAGES = 20;
 
 /**
  * A kategoria-lista felso hatara.
@@ -722,6 +725,36 @@ export interface MedusaOrderMethodChange {
   payment_state: string | null;
 }
 
+/**
+ * A vevő hűségpont-főkönyve (`GET /admin/loyalty/:customer_id`, commerce #808): az egyenleg és a legújabb sorok. Az
+ * egyenleg a sorok összege, nincs külön oszlopa; az OS semmit nem tart belőle saját példányban.
+ */
+export interface MedusaLoyaltyEntry {
+  id: string;
+  kind: string;
+  points: number;
+  order_id: string | null;
+  reference: string | null;
+  reason: string;
+  actor: string;
+  created_at: string;
+}
+
+export interface MedusaLoyalty {
+  customer_id: string;
+  balance: number;
+  entries: MedusaLoyaltyEntry[];
+}
+
+/**
+ * `POST /admin/loyalty/adjustments`: 201 az új sor, 200 az ugyanazon `reference` újraküldése (a már tárolt sor). A 404
+ * (nincs ilyen vevő) és a 409 (`reference_conflict`, `overdraw`) hibaként érkezik, nem ebben az alakban.
+ */
+export interface MedusaLoyaltyAdjustment {
+  balance: number;
+  entry: MedusaLoyaltyEntry;
+}
+
 /** `POST /admin/order-notes/:id` (commerce #493): a mentés utáni állapot. */
 export interface MedusaOrderNotes {
   customer_note: string | null;
@@ -898,6 +931,63 @@ export interface MedusaOrderPayment {
    * megmarad, és a Kiszállításkor vonódik le). Régebbi webshopnál hiányzik.
    */
   due?: { amount: number; reason: "released" | "difference" } | null;
+}
+
+/**
+ * STRIPE'S PAYOUTS AND THEIR BALANCE TRANSACTIONS, as the backend's read-only feed gives them (A9, commerce #803, #804): the OS has
+ * no Stripe key of its own. Amounts come in Stripe's smallest unit (`*_minor`) and in the major unit (forint). A transaction names
+ * the shop orders its PaymentIntent paid (`orders`), none when no order carries it.
+ */
+export interface MedusaStripePayout {
+  id: string;
+  status: string;
+  currency: string;
+  amount_minor: number;
+  amount: number;
+  /** Unix seconds. */
+  arrival_date: number;
+  created: number;
+  automatic: boolean;
+}
+
+export interface MedusaStripePayoutPage {
+  payouts: MedusaStripePayout[];
+  has_more: boolean;
+  next_cursor: string | null;
+}
+
+export interface MedusaStripeTransaction {
+  id: string;
+  type: string;
+  reporting_category: string | null;
+  /** Unix seconds. */
+  created: number;
+  currency: string;
+  amount_minor: number;
+  fee_minor: number;
+  net_minor: number;
+  amount: number;
+  fee: number;
+  net: number;
+  source_kind: string | null;
+  /** The id of what the transaction came from (a charge, a refund, a payout...). */
+  source_id: string | null;
+  payment_intent: string | null;
+  charge: string | null;
+  refund: string | null;
+  orders: {
+    id: string;
+    display_id: number | null;
+    total: number;
+    currency_code: string;
+  }[];
+}
+
+export interface MedusaStripeTransactionPage {
+  transactions: MedusaStripeTransaction[];
+  has_more: boolean;
+  next_cursor: string | null;
+  orders_truncated: boolean;
 }
 
 /** Egy változat a cseréhez (`GET /admin/product-variants`). */
@@ -1089,6 +1179,20 @@ export interface MedusaAdminClient {
    * szállítás”) és a fizetési link küldése.
    */
   orderPayment(orderId: string): Promise<MedusaOrderPayment | null>;
+  /**
+   * Stripe's payouts from `createdGte` (unix seconds) on, one page, paid ones only (the backend's read-only feed). `startingAfter`
+   * is the previous page's `next_cursor`.
+   */
+  stripePayouts(input: {
+    createdGte?: number;
+    startingAfter?: string;
+    limit?: number;
+  }): Promise<MedusaStripePayoutPage>;
+  /** The balance transactions one payout paid out, with the orders each intent paid; one page. */
+  stripePayoutTransactions(
+    payoutId: string,
+    input?: { startingAfter?: string },
+  ): Promise<MedusaStripeTransactionPage>;
   /** Megjött az előre utalás: a webshop levont fizetéssé teszi (commerce #509). */
   recordTransferReceipt(
     orderId: string,
@@ -1140,6 +1244,18 @@ export interface MedusaAdminClient {
     orderId: string,
     input: { point_id: string; source?: "finder" | "fallback"; actor?: string },
   ): Promise<MedusaOrderPointChange>;
+  /** A vevő hűségpont-egyenlege és legújabb sorai (commerce #808). */
+  customerLoyalty(customerId: string, limit?: number): Promise<MedusaLoyalty>;
+  /**
+   * Kézi jóírás (pozitív) vagy levonás (negatív). A `reference` az újraküldés kulcsa: ugyanaz a mozgás egyszer
+   * tárolódik. `created`: az új sor (201) kontra a már tárolt (200).
+   */
+  adjustCustomerLoyalty(input: {
+    customer_id: string;
+    points: number;
+    reason: string;
+    reference?: string;
+  }): Promise<{ created: boolean; adjustment: MedusaLoyaltyAdjustment }>;
   /** A vevő és a szállító megjegyzése (commerce #493); a hiányzó kulcs nem változik. */
   updateOrderNotes(
     orderId: string,
@@ -1207,6 +1323,13 @@ export interface MedusaAdminClient {
    * A reszletek a megvalositas mellett allnak.
    */
   listProductCollections(): Promise<MedusaCollectionListResult>;
+  /**
+   * Egy gyujtemeny termekeinek azonositoi, lapozva (kartya ec82b629: a handle-t foglalo gyujtemeny tartalma). `truncated`: a
+   * lapozas a biztonsagi felso hatarba utkozott.
+   */
+  listCollectionProductIds(
+    collectionId: string,
+  ): Promise<{ ids: string[]; truncated: boolean }>;
   /** Egy gyujtemeny letrehozasa. EZ IR A BOLTI OLDALRA. */
   createProductCollection(
     input: MedusaCollectionInput,
@@ -2030,6 +2153,26 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     return (await response.json()) as T;
   }
 
+  /**
+   * UGYANAZ, MINT A `request`, DE A STÁTUSZT IS ADJA: egy 201 és egy 200 ugyanazzal a törzzsel jön, és a hívónak tudnia
+   * kell, melyik volt (a kézi hűségpont-mozgás újraküldése 200, az új sor 201). A hibás státusz ugyanúgy
+   * `MedusaAdminHttpError`.
+   */
+  private async requestWithStatus<T>(
+    path: string,
+    init?: RequestInit,
+  ): Promise<{ status: number; body: T }> {
+    const response = await this.fetchImpl(`${this.config.baseUrl}${path}`, {
+      ...init,
+      headers: this.requestHeaders(init?.headers),
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      throw new MedusaAdminHttpError(response.status, body.slice(0, 500));
+    }
+    return { status: response.status, body: (await response.json()) as T };
+  }
+
   async findByExternalId(externalId: string): Promise<MedusaLookupResult> {
     const params = new URLSearchParams({
       external_id: externalId,
@@ -2254,6 +2397,32 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     }
   }
 
+  async stripePayouts(input: {
+    createdGte?: number;
+    startingAfter?: string;
+    limit?: number;
+  }): Promise<MedusaStripePayoutPage> {
+    const params = new URLSearchParams({ status: "paid" });
+    if (input.createdGte !== undefined)
+      params.set("created_gte", String(input.createdGte));
+    if (input.startingAfter) params.set("starting_after", input.startingAfter);
+    params.set("limit", String(input.limit ?? 50));
+    return this.request<MedusaStripePayoutPage>(
+      `/admin/stripe-settlement/payouts?${params.toString()}`,
+    );
+  }
+
+  async stripePayoutTransactions(
+    payoutId: string,
+    input: { startingAfter?: string } = {},
+  ): Promise<MedusaStripeTransactionPage> {
+    const params = new URLSearchParams({ limit: "100" });
+    if (input.startingAfter) params.set("starting_after", input.startingAfter);
+    return this.request<MedusaStripeTransactionPage>(
+      `/admin/stripe-settlement/payouts/${encodeURIComponent(payoutId)}/transactions?${params.toString()}`,
+    );
+  }
+
   async releaseHold(
     orderId: string,
     notifyCustomer: boolean,
@@ -2370,6 +2539,30 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     );
   }
 
+  async customerLoyalty(
+    customerId: string,
+    limit = 20,
+  ): Promise<MedusaLoyalty> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    return this.request<MedusaLoyalty>(
+      `/admin/loyalty/${encodeURIComponent(customerId)}?${params.toString()}`,
+    );
+  }
+
+  async adjustCustomerLoyalty(input: {
+    customer_id: string;
+    points: number;
+    reason: string;
+    reference?: string;
+  }): Promise<{ created: boolean; adjustment: MedusaLoyaltyAdjustment }> {
+    const { status, body } =
+      await this.requestWithStatus<MedusaLoyaltyAdjustment>(
+        `/admin/loyalty/adjustments`,
+        { method: "POST", body: JSON.stringify(input) },
+      );
+    return { created: status === 201, adjustment: body };
+  }
+
   async updateOrderNotes(
     orderId: string,
     input: { customer_note?: string | null; carrier_note?: string | null },
@@ -2474,15 +2667,60 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
    * A valasz kulcsa ugyanebbol a forrasbol: `{ collections, count, offset, limit }`.
    */
   async listProductCollections(): Promise<MedusaCollectionListResult> {
-    const params = new URLSearchParams({
-      fields: "id,title,handle,external_id",
-      limit: String(COLLECTION_LIST_LIMIT),
-    });
-    const body = await this.request<{
-      collections: MedusaCollectionRow[];
-    }>(`/admin/collections?${params.toString()}`);
-    const rows = body.collections ?? [];
-    return { rows, truncated: rows.length >= COLLECTION_LIST_LIMIT };
+    /*
+      LAPOZVA (kartya ec82b629): az elso oldal 500 sornal megallt, es `truncated` megtagadta a lepest, amint a bolt gyujtemenyeinek
+      szama ezt elerte -- pedig a valasz a `count`-ot es az `offset`-et is hozza. Most a `count`-ig (vagy az elso nem teli oldalig)
+      lapozunk, es CSAK a biztonsagi felso hatar (`COLLECTION_LIST_MAX_PAGES` oldal) elerese csonkolt: egy vegtelen ciklus ellen
+      kell, nem a normal eset.
+    */
+    const rows: MedusaCollectionRow[] = [];
+    for (let page = 0; page < COLLECTION_LIST_MAX_PAGES; page += 1) {
+      const params = new URLSearchParams({
+        fields: "id,title,handle,external_id",
+        limit: String(COLLECTION_LIST_LIMIT),
+        offset: String(rows.length),
+      });
+      const body = await this.request<{
+        collections: MedusaCollectionRow[];
+        count?: number;
+      }>(`/admin/collections?${params.toString()}`);
+      const batch = body.collections ?? [];
+      rows.push(...batch);
+      const more =
+        typeof body.count === "number"
+          ? rows.length < body.count
+          : batch.length >= COLLECTION_LIST_LIMIT;
+      // egy ures oldal a `count` ellenere is megall: a visszaadott szam nem tarthat vegtelen ciklusban
+      if (!more || batch.length === 0) return { rows, truncated: false };
+    }
+    return { rows, truncated: true };
+  }
+
+  async listCollectionProductIds(
+    collectionId: string,
+  ): Promise<{ ids: string[]; truncated: boolean }> {
+    // ugyanaz a lapozas, mint a gyujtemeny-listanal: a `count`-ig, a biztonsagi felso hataron belul
+    const ids: string[] = [];
+    for (let page = 0; page < COLLECTION_LIST_MAX_PAGES; page += 1) {
+      const params = new URLSearchParams({
+        fields: "id",
+        limit: String(COLLECTION_LIST_LIMIT),
+        offset: String(ids.length),
+      });
+      params.append("collection_id[]", collectionId);
+      const body = await this.request<{
+        products: { id: string }[];
+        count?: number;
+      }>(`/admin/products?${params.toString()}`);
+      const batch = body.products ?? [];
+      ids.push(...batch.map((product) => product.id));
+      const more =
+        typeof body.count === "number"
+          ? ids.length < body.count
+          : batch.length >= COLLECTION_LIST_LIMIT;
+      if (!more || batch.length === 0) return { ids, truncated: false };
+    }
+    return { ids, truncated: true };
   }
 
   /**

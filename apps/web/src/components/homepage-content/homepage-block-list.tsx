@@ -7,7 +7,8 @@ import { useState } from "react";
 import { blockMeta, moveBlock } from "./homepage-blocks";
 import { Kapcsolo } from "./homepage-fields";
 
-export type HomepageSelection = HomepageBlockKey | "newsletter" | "footer";
+export type HomepageSelection =
+  HomepageBlockKey | "newsletter" | "footer" | "header";
 
 /**
  * THE LEFT COLUMN, "Blokkok" (Figma 685:535; Balázs's brief, 4. pont): the
@@ -147,6 +148,24 @@ export function HomepageBlockList({
           onChange={onNewsletterOn}
         />
       </div>
+      <button
+        type="button"
+        aria-label="Fejléc info-sáv szerkesztése"
+        aria-current={selected === "header" ? "true" : undefined}
+        onClick={() => onSelect("header")}
+        className={`mb-2 block w-full rounded-lg p-3 text-left ring-1 ${
+          selected === "header"
+            ? "bg-pilot-aqua-50 ring-pilot-aqua-500"
+            : "bg-pilot-grey-50 ring-pilot-grey-200"
+        }`}
+      >
+        <span className="block text-[13px] font-semibold text-pilot-grey-900">
+          Fejléc info-sáv
+        </span>
+        <span className="mt-1 block text-xs text-pilot-grey-500">
+          minden oldalon · két marketing-szöveg
+        </span>
+      </button>
       <button
         type="button"
         aria-label="Lábléc szerkesztése"

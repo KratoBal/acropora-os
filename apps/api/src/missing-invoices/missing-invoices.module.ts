@@ -1,5 +1,8 @@
 import { Module } from "@nestjs/common";
 
+import { DueInvoicesController } from "../billing/due-invoices.controller.js";
+import { DueInvoicesMailService } from "../billing/due-invoices-mail.service.js";
+import { NotificationsModule } from "../notifications/notifications.module.js";
 import { IncomingBillingDocumentsController } from "../billing/incoming-billing-documents.controller.js";
 import { IncomingForeignReadScheduler } from "../billing/foreign-invoice/incoming-foreign-read.scheduler.js";
 import { IncomingReviewService } from "../billing/foreign-invoice/incoming-review.service.js";
@@ -21,6 +24,9 @@ import {
 } from "./collection/invoice-collection-items.controller.js";
 import { InvoiceCollectionItemsRepository } from "./collection/invoice-collection-items.repository.js";
 import { InvoiceCollectionItemsService } from "./collection/invoice-collection-items.service.js";
+import { SupplierRulesController } from "./collection/supplier-rules.controller.js";
+import { SupplierRulesRepository } from "./collection/supplier-rules.repository.js";
+import { SupplierRulesService } from "./collection/supplier-rules.service.js";
 import { InvoiceCollectionSuggestionsController } from "./collection/invoice-collection-suggestions.controller.js";
 import { InvoiceCollectionSuggestionsRepository } from "./collection/invoice-collection-suggestions.repository.js";
 import { InvoiceCollectionSuggestionsService } from "./collection/invoice-collection-suggestions.service.js";
@@ -32,9 +38,13 @@ import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
 
 /** HIÁNYZÓ SZÁMLÁK (Pénzügy): a banki terhelés és a számla egyeztetése. */
 @Module({
+  // a levélküldő (`MAIL_SENDER`) a Lejáró számlák heti levelének (`DueInvoicesMailService`)
+  imports: [NotificationsModule],
   controllers: [
+    DueInvoicesController,
     IncomingBillingDocumentsController,
     InvoiceCollectionSuggestionsController,
+    SupplierRulesController,
     InvoiceCollectionItemsController,
     InvoiceCollectionRunsController,
     MissingInvoicesController,
@@ -42,6 +52,7 @@ import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
     SzamlazzFeedsController,
   ],
   providers: [
+    DueInvoicesMailService,
     BankStatementImportRepository,
     BankStatementImportService,
     IncomingForeignReadScheduler,
@@ -53,6 +64,8 @@ import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
     InvoiceCollectionItemsRepository,
     InvoiceCollectionItemsService,
     InvoiceCollectionSuggestionsService,
+    SupplierRulesRepository,
+    SupplierRulesService,
     LetterClassJevService,
     MissingInvoiceJevRepository,
     MissingInvoiceJevService,

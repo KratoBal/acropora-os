@@ -5,10 +5,14 @@ import type {
 } from "@acropora/types";
 import {
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 
+import { amountlessAccepted, supplierRulesLive } from "./supplier-rule.js";
+import { INVOICE_COLLECTION_ENV } from "./invoice-collection.service.js";
 import {
   InvoiceCollectionSuggestionsRepository,
   type SuggestionRow,
@@ -74,6 +78,9 @@ export function toSuggestion(
 export class InvoiceCollectionSuggestionsService {
   constructor(
     private readonly repository: InvoiceCollectionSuggestionsRepository,
+    @Optional()
+    @Inject(INVOICE_COLLECTION_ENV)
+    private readonly environment: NodeJS.ProcessEnv = process.env,
   ) {}
 
   async list(
@@ -86,6 +93,10 @@ export class InvoiceCollectionSuggestionsService {
       items,
       staleAfterDays: UNASSIGNED_STALE_AFTER_DAYS,
       staleCount: items.filter((item) => item.stale).length,
+      supplierRules: {
+        live: supplierRulesLive(this.environment),
+        amountlessAccepted: amountlessAccepted(this.environment),
+      },
     };
   }
 

@@ -89,6 +89,9 @@ export const MISSING_INVOICES_PATH = "/penzugy/hianyzo-szamlak";
 
 export const SETTLEMENTS_PATH = "/penzugy/elszamolasok";
 
+/** A Lejáró számlák (Balázs, 2026-11-20): az átutalással fizetendő, még ki nem fizetett bejövő számlák. */
+export const DUE_INVOICES_PATH = "/penzugy/lejaro-szamlak";
+
 /** A katalógus adatminőség-nézete (JEV 5. fázis, Figma 394:316). */
 export const PRODUCT_DATA_QUALITY_PATH = "/products/adatminoseg";
 
@@ -109,6 +112,12 @@ export const SETTLEMENT_TABS: ReadonlyArray<{
     href: "/penzugy/simplepay",
     label: "SimplePay",
     entryId: "simplepay-settlement",
+  },
+  {
+    // Balázs, 2026-11-18 20:16 UTC: "átállunk majd a stripera. Ilyen elszámolásunk nincs." (kártya 6339b04c)
+    href: "/penzugy/stripe",
+    label: "Stripe",
+    entryId: "stripe-settlement",
   },
   {
     // Balázs, 2026-11-04: egy utalás négy számlára (kártya aeddb2c3)
@@ -459,6 +468,13 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         label: "Hiányzó számlák",
         icon: "alert",
         entryId: "missing-invoices",
+      },
+      {
+        // Lejáró számlák (Balázs, 2026-11-20): a Hiányzó számlák mellett, ugyanazzal a joggal.
+        href: DUE_INVOICES_PATH,
+        label: "Lejáró számlák",
+        icon: "calendar",
+        entryId: "due-invoices",
       },
       {
         // Balázs, 2026-09-30 15:06 UTC: "Szintén a Pénzügyek alá készüljön

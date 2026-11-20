@@ -37,6 +37,8 @@ vi.mock("next/navigation", () => ({
 const api = vi.hoisted(() => ({
   list: vi.fn(),
   selectablePartners: vi.fn(),
+  bulkSheets: vi.fn(),
+  copy: vi.fn(),
 }));
 vi.mock("@/lib/api/worksheets", () => ({ worksheetsApi: api }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
@@ -78,6 +80,7 @@ function row(overrides: Partial<WorksheetListItem> = {}): WorksheetListItem {
     assigneeNames: ["Ádám", "Péter"],
     laborHours: "2.5",
     serviceJob: { id: "job-1", jobNumber: "HJ-2026-0142" },
+    createdAt: "2026-10-01T08:00:00.000Z",
     updatedAt: "2026-10-04T08:00:00.000Z",
     hidden: false,
     ...overrides,
@@ -99,6 +102,8 @@ beforeEach(() => {
   navigation.push.mockReset();
   api.list.mockReset();
   api.selectablePartners.mockReset().mockResolvedValue({ items: [] });
+  api.bulkSheets.mockReset();
+  api.copy.mockReset();
 });
 
 describe("worksheetHoursCell", () => {
@@ -131,10 +136,13 @@ describe("PilotWorksheetListPage -- redesign", () => {
       td.getAttribute("data-label"),
     );
     expect(labels).toEqual([
+      // the selection checkbox column (card a785e580): no text header, hidden on the phone card
+      null,
       "Munkalap",
       "Partner / helyszín",
       "Felelős",
       "Állapot",
+      "Megnyitva",
       "Munkaóra",
       // a oszlopban hibajegy (HJ-) és karbantartási lap (KT-) száma is áll, ezért a fejléc semleges (hibajegy-maradek lista, 2026-11-18)
       "Jegy / lap",
@@ -344,5 +352,399 @@ describe("PilotWorksheetListPage -- a kapcsolt munka fajtája", () => {
     );
     expect(url.searchParams.has("jobKind")).toBe(false);
     expect(url.searchParams.has("customerId")).toBe(false);
+  });
+});
+
+describe("PilotWorksheetListPage -- a Megnyitva oszlop és a tól-ig szűrő (kártya a785e580)", () => {
+  /**
+   * MI PIROSÍT: ha a Megnyitva oszlop az UTC szerinti napot írja (a budapesti 00:30-kor megnyitott lap előző napra
+   * esne, a szűrővel ellentétben); ha a tól-ig mező nem a createdFrom/createdTo paramétert állítja, vagy az első oldalra
+   * lapozás elmarad; ha az URL-ben álló dátum nem megy át a szerverhez, vagy nem látszik a mezőben; ha a Szűrők törlése
+   * nem törli a dátumot (egy lépésben a többivel); ha a fordított tartomány nem mondja ki, mi a baj.
+   */
+  const urlOfLast = () =>
+    new URL(navigation.replace.mock.calls.at(-1)![0] as string, "http://x");
+
+  it("a Megnyitva a budapesti naptári napot írja: az UTC szerint előző napon, budapesti 00:30-kor megnyitott lap a jó napra esik", async () => {
+    navigation.search = "";
+    api.list.mockResolvedValue(
+      response([row({ createdAt: "2026-11-18T23:30:00.000Z" })]),
+    );
+    render(<PilotWorksheetListPage />);
+    const cella = (
+      await screen.findAllByTestId("worksheet-row")
+    )[0]!.querySelector('td[data-label="Megnyitva"]')!;
+    expect(cella.textContent).toMatch(/2026\.\s*11\.\s*19\./);
+  });
+
+  it("a tól-ig mezők a createdFrom és a createdTo paramétert állítják, az első oldalra lapozva", async () => {
+    navigation.search = "page=3";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    fireEvent.change(screen.getByLabelText("Megnyitva ettől a naptól"), {
+      target: { value: "2026-11-18" },
+    });
+    expect(urlOfLast().searchParams.get("createdFrom")).toBe("2026-11-18");
+    expect(urlOfLast().searchParams.get("page")).toBe("1");
+    fireEvent.change(screen.getByLabelText("Megnyitva eddig a napig"), {
+      target: { value: "2026-11-19" },
+    });
+    expect(urlOfLast().searchParams.get("createdTo")).toBe("2026-11-19");
+  });
+
+  /**
+   * A TÓL-IG SOR TÖRHET (OS hibakör, 2026-11-19): 390 pixeles telefonon a felirat és a két 160 pixeles mező nem fért el, és
+   * az egész lap 47 pixellel oldalra gördült. A jsdom nem számol elrendezést, tehát ez az állítás az osztályt nézi; a valódi
+   * bizonyíték az os-hibakor-stage.mjs 390 pixeles kilógás-mérése. MI PIROSIT: a `flex-wrap` lekerül a csoportról.
+   */
+  it("a tól-ig sor keskeny képernyőn törhet", async () => {
+    navigation.search = "";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    expect(
+      screen
+        .getByRole("group", { name: "Megnyitás napja" })
+        .className.split(/\s+/),
+    ).toContain("flex-wrap");
+  });
+
+  it("a félig beírt nap nem szűrőváltozás: nem megy kérés, amíg a nap nincs készen", async () => {
+    navigation.search = "";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    navigation.replace.mockClear();
+    fireEvent.change(screen.getByLabelText("Megnyitva ettől a naptól"), {
+      target: { value: "20261" },
+    });
+    expect(navigation.replace).not.toHaveBeenCalled();
+  });
+
+  it("egy mező kiürítése törli a paramétert (nem üres szöveget küld)", async () => {
+    navigation.search = "createdFrom=2026-11-18";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    fireEvent.change(screen.getByLabelText("Megnyitva ettől a naptól"), {
+      target: { value: "" },
+    });
+    expect(urlOfLast().searchParams.has("createdFrom")).toBe(false);
+  });
+
+  it("az URL-ben álló dátum átmegy a szerverhez, és látszik a mezőben", async () => {
+    navigation.search = "createdFrom=2026-11-18&createdTo=2026-11-19";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    const query = api.list.mock.calls.at(-1)![1] as URLSearchParams;
+    expect(query.get("createdFrom")).toBe("2026-11-18");
+    expect(query.get("createdTo")).toBe("2026-11-19");
+    // a mező magyarul mutatja a napot (a közös PilotDateField), nem a böngésző nyelvén
+    expect(
+      (screen.getByLabelText("Megnyitva ettől a naptól") as HTMLInputElement)
+        .value,
+    ).toBe("2026. 11. 18.");
+    expect(
+      (screen.getByLabelText("Megnyitva eddig a napig") as HTMLInputElement)
+        .value,
+    ).toBe("2026. 11. 19.");
+  });
+
+  it("a Szűrők törlése a dátumot is törli, egy lépésben", async () => {
+    navigation.search =
+      "createdFrom=2026-11-18&createdTo=2026-11-19&jobKind=MAINTENANCE";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    navigation.replace.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Szűrők törlése" }));
+    expect(navigation.replace).toHaveBeenCalledTimes(1);
+    const url = urlOfLast();
+    for (const kulcs of ["createdFrom", "createdTo", "jobKind"])
+      expect(url.searchParams.has(kulcs)).toBe(false);
+  });
+
+  it("a fordított tartomány kimondja, mi a baj", async () => {
+    navigation.search = "createdFrom=2026-11-20&createdTo=2026-11-19";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    expect((await screen.findByRole("alert")).textContent).toMatch(
+      /kezdő dátum a záró dátum után/,
+    );
+  });
+
+  it("rendes tartománynál nincs figyelmeztetés", async () => {
+    navigation.search = "createdFrom=2026-11-19&createdTo=2026-11-19";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+/*
+  A KIJELÖLT MUNKALAPOK EGYBEN (kártya a785e580, 2. szelet; Luca 2026-11-19 10:22 UTC). MI PIROSÍT: a pipa a sort is
+  megnyitja; a sáv nem a kijelöltek számát mondja; a fejléc-pipa nem az oldal lapjait jelöli; a letöltés nem zipet kér,
+  vagy nem a szerver fájlnevén ment; a nyomtatás nem a kattintás pillanatában nyit lapot (a böngésző a késői megnyitást
+  tiltja), vagy nem összefűzött PDF-et kér; letiltott új lapnál nem töltődik le, és nem mondja ki; hibánál nyitva marad
+  az üres lap, vagy a hiba nem látszik; a kimaradt lapok nincsenek kimondva.
+*/
+describe("PilotWorksheetListPage -- selection and bulk sheets", () => {
+  const twoRows = () =>
+    response([
+      row(),
+      row({ id: "ws-2", number: "ML-2026-00815", subject: "Szűrőcsere" }),
+    ]);
+  const result = (over: Record<string, unknown> = {}) => ({
+    blob: new Blob(["%PDF"], { type: "application/pdf" }),
+    fileName: "munkalapok-2026-11-19.zip",
+    included: 2,
+    skipped: 0,
+    skippedNumbers: [],
+    ...over,
+  });
+
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => "blob:munkalapok");
+    URL.revokeObjectURL = vi.fn();
+  });
+
+  const select = async () => {
+    api.list.mockResolvedValue(twoRows());
+    render(<PilotWorksheetListPage />);
+    await screen.findAllByTestId("worksheet-row");
+    fireEvent.click(
+      screen.getByLabelText("Kijelölés: Tömítéscsere és ellenőrzés"),
+    );
+    fireEvent.click(screen.getByLabelText("Kijelölés: Szűrőcsere"));
+  };
+
+  it("the checkboxes select without opening the row, and the bar counts them", async () => {
+    await select();
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("region", { name: "Kijelölt munkalapok" }).textContent,
+    ).toContain("2 munkalap kijelölve");
+    fireEvent.click(screen.getByLabelText("Kijelölés: Szűrőcsere"));
+    expect(
+      screen.getByRole("region", { name: "Kijelölt munkalapok" }).textContent,
+    ).toContain("1 munkalap kijelölve");
+    fireEvent.click(screen.getByRole("button", { name: "Kijelölés törlése" }));
+    expect(
+      screen.queryByRole("region", { name: "Kijelölt munkalapok" }),
+    ).toBeNull();
+    // the header box takes the whole page, and a second press clears it
+    fireEvent.click(
+      screen.getByLabelText("Az oldal összes munkalapjának kijelölése"),
+    );
+    expect(
+      screen.getByRole("region", { name: "Kijelölt munkalapok" }).textContent,
+    ).toContain("2 munkalap kijelölve");
+    fireEvent.click(
+      screen.getByLabelText("Az oldal összes munkalapjának kijelölése"),
+    );
+    expect(
+      screen.queryByRole("region", { name: "Kijelölt munkalapok" }),
+    ).toBeNull();
+  });
+
+  it("download asks for one zip of the selected sheets and saves it under the server's name", async () => {
+    api.bulkSheets.mockResolvedValue(
+      result({ skipped: 1, skippedNumbers: ["ML-2026-00800"], included: 1 }),
+    );
+    const clicked: string[] = [];
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        clicked.push(`${this.download}|${this.href}`);
+      });
+    await select();
+    fireEvent.click(screen.getByRole("button", { name: "Letöltés (zip)" }));
+    await waitFor(() =>
+      expect(clicked).toEqual(["munkalapok-2026-11-19.zip|blob:munkalapok"]),
+    );
+    expect(api.bulkSheets).toHaveBeenCalledWith(
+      "token-1",
+      ["ws-1", "ws-2"],
+      "zip",
+    );
+    const note = (await screen.findByRole("status")).textContent ?? "";
+    expect(note).toContain("A zip 1 munkalap PDF-jét tartalmazza.");
+    expect(note).toContain("ML-2026-00800");
+    click.mockRestore();
+  });
+
+  it("print opens the new tab at the click, then shows the merged PDF in it", async () => {
+    const tab = { location: { href: "" }, close: vi.fn() };
+    const open = vi
+      .spyOn(window, "open")
+      .mockReturnValue(tab as unknown as Window);
+    let openedBeforeRequest = false;
+    api.bulkSheets.mockImplementation(async () => {
+      openedBeforeRequest = open.mock.calls.length === 1;
+      return result({ fileName: "munkalapok.pdf" });
+    });
+    await select();
+    fireEvent.click(screen.getByRole("button", { name: "Nyomtatás" }));
+    await waitFor(() => expect(tab.location.href).toBe("blob:munkalapok"));
+    expect(openedBeforeRequest).toBe(true);
+    expect(api.bulkSheets).toHaveBeenCalledWith(
+      "token-1",
+      ["ws-1", "ws-2"],
+      "merged",
+    );
+    expect((await screen.findByRole("status")).textContent).toContain(
+      "A nyomtatható PDF 2 munkalapot tartalmaz.",
+    );
+    open.mockRestore();
+  });
+
+  it("a blocked tab downloads the PDF instead and says so", async () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const clicked: string[] = [];
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        clicked.push(this.download);
+      });
+    api.bulkSheets.mockResolvedValue(result({ fileName: "munkalapok.pdf" }));
+    await select();
+    fireEvent.click(screen.getByRole("button", { name: "Nyomtatás" }));
+    await waitFor(() => expect(clicked).toEqual(["munkalapok.pdf"]));
+    expect((await screen.findByRole("status")).textContent).toContain(
+      "a böngésző letiltotta",
+    );
+    open.mockRestore();
+    click.mockRestore();
+  });
+
+  it("an error closes the empty tab and shows the server's sentence", async () => {
+    const tab = { location: { href: "" }, close: vi.fn() };
+    const open = vi
+      .spyOn(window, "open")
+      .mockReturnValue(tab as unknown as Window);
+    api.bulkSheets.mockRejectedValue(
+      new Error("A kijelölt munkalapok egyikének sincs kiadott PDF-je."),
+    );
+    await select();
+    fireEvent.click(screen.getByRole("button", { name: "Nyomtatás" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "A kijelölt munkalapok egyikének sincs kiadott PDF-je.",
+    );
+    expect(tab.close).toHaveBeenCalled();
+    open.mockRestore();
+  });
+});
+
+/*
+  A KIJELÖLT LAPOK MÁSOLÁSA (kártya a785e580; az API a #2746). MI PIROSÍT: a gomb nem a kijelölt lapokat küldi, vagy
+  kérés-azonosító nélkül; egy elakadt kérés újrapróbálása ÚJ azonosítót kap (a szerver akkor második másolatot készít); a
+  válasz után új másolás a régi azonosítóval megy (a szerver a régi másolatokat adná vissza, sikerként); a laponkénti
+  eredményből hiányzik az új lap, a hiba mondata vagy a forrás neve; a kijelölés megmarad (egy második kattintás újra
+  másolna); a lista nem frissül; partnerfióknak is megjelenik a gomb, pedig a szerver elutasítja.
+*/
+describe("PilotWorksheetListPage -- copy the selected sheets", () => {
+  const twoRows = () =>
+    response([
+      row(),
+      row({ id: "ws-2", number: "ML-2026-00815", subject: "Szűrőcsere" }),
+    ]);
+
+  const select = async () => {
+    api.list.mockResolvedValue(twoRows());
+    render(<PilotWorksheetListPage />);
+    await screen.findAllByTestId("worksheet-row");
+    fireEvent.click(
+      screen.getByLabelText("Kijelölés: Tömítéscsere és ellenőrzés"),
+    );
+    fireEvent.click(screen.getByLabelText("Kijelölés: Szűrőcsere"));
+  };
+
+  it("copies the selected sheets and lists each: the new sheet, or why not", async () => {
+    api.copy.mockResolvedValue({
+      results: [
+        { sourceId: "ws-1", ok: true, id: "ws-9", number: null },
+        {
+          sourceId: "ws-2",
+          ok: false,
+          message: "Lezárt hibajegyhez nem nyitható új munkalap.",
+        },
+      ],
+    });
+    await select();
+    const listCalls = api.list.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Másolás" }));
+    const results = await screen.findByRole("list", {
+      name: "A másolás eredménye",
+    });
+    const [ids, requestId] = api.copy.mock.calls[0]!.slice(1) as [
+      string[],
+      string,
+    ];
+    expect(api.copy.mock.calls[0]![0]).toBe("token-1");
+    expect(ids).toEqual(["ws-1", "ws-2"]);
+    expect(requestId).toMatch(/^[A-Za-z0-9_.:-]{8,64}$/);
+    expect(results.textContent).toContain(
+      "Tömítéscsere és ellenőrzés: új piszkozat (még nincs száma)",
+    );
+    expect(
+      screen
+        .getByRole("link", { name: "új piszkozat (még nincs száma)" })
+        .getAttribute("href"),
+    ).toBe("/szerviz/munkalapok/ws-9");
+    expect(results.textContent).toContain(
+      "Szűrőcsere: Lezárt hibajegyhez nem nyitható új munkalap.",
+    );
+    expect(screen.getByRole("status").textContent).toBe(
+      "1 munkalap másolata elkészült piszkozatként. 1 lapról nem készült másolat.",
+    );
+    expect(
+      screen.queryByRole("region", { name: "Kijelölt munkalapok" }),
+    ).toBeNull();
+    await waitFor(() =>
+      expect(api.list.mock.calls.length).toBeGreaterThan(listCalls),
+    );
+  });
+
+  it("a retry after a lost answer reuses the request id; the next copy gets a new one", async () => {
+    api.copy
+      .mockRejectedValueOnce(new Error("A szerver nem válaszolt."))
+      .mockResolvedValue({
+        results: [
+          { sourceId: "ws-1", ok: true, id: "ws-9", number: "ML-2026-00900" },
+          { sourceId: "ws-2", ok: true, id: "ws-10", number: null },
+        ],
+      });
+    await select();
+    fireEvent.click(screen.getByRole("button", { name: "Másolás" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "A szerver nem válaszolt.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Másolás" }));
+    await screen.findByRole("list", { name: "A másolás eredménye" });
+    expect(
+      screen.getByRole("link", { name: "új lap: ML-2026-00900" }),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByLabelText("Kijelölés: Tömítéscsere és ellenőrzés"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Másolás" }));
+    await waitFor(() => expect(api.copy).toHaveBeenCalledTimes(3));
+    const requestIds = api.copy.mock.calls.map((call) => call[2]);
+    expect(requestIds[1]).toBe(requestIds[0]);
+    expect(requestIds[2]).not.toBe(requestIds[1]);
+  });
+
+  it("a partner account does not get the button (the server refuses it)", async () => {
+    auth.session = {
+      ...sessionAs("ADMIN"),
+      user: { ...sessionAs("ADMIN").user, customerId: "customer-1" },
+    };
+    await select();
+    expect(screen.getByRole("button", { name: "Letöltés (zip)" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Másolás" })).toBeNull();
   });
 });

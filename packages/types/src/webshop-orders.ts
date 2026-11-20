@@ -381,9 +381,34 @@ export interface WebshopOrderMailState {
 export type WebshopStatusMailOutcome =
   { sent: true } | { sent: false; reason: string };
 
+/**
+ * A KISZÁLLÍTÁSI KAPU FELÜLBÍRÁLÁSÁNAK INDOKA (kártya 33a0d3c7): kötelező, szabad szöveg, a naplóba kerül. Az alsó határ nem kényelem:
+ * egy "x" vagy "ok" indok nem indok, és a napló épp az indokért van.
+ */
+export const SHIPPING_OVERRIDE_REASON_MIN = 10;
+
+/**
+ * A KAPU 409-ES MONDATÁNAK ELEJE: a felület ebből ismeri fel, hogy a váltást a kiszállítási kapu tartotta vissza (és nem egy másik
+ * ütközés, például egy elavult lap), és csak akkor kínálja a felülbírálást. A mondatot a szerver ezzel kezdi (`shippingGateRefusal`).
+ */
+export const SHIPPING_GATE_SENTENCE_PREFIX = "A Kiszállítás előtt kell:";
+export const SHIPPING_OVERRIDE_REASON_MAX = 500;
+
+/**
+ * A SZEMÉLYES KISZÁLLÍTÁS (Luca, 2026-11-20 08:17 UTC, a Kiszállítás kivétele a kapu alól; acrobot 57771): ritkán, de a kolléga viszi ki a csomagot, ilyenkor
+ * csomag nincs, SZÁMLA viszont kell. Nem felülbírálás: külön, kimondott választás a Kiszállítás gombnál, saját naplósorral (ki, mikor, ok). Az ok állandó, a
+ * kezelő nem ír indokot: a választás maga az ok.
+ */
+export const PERSONAL_DELIVERY_REASON =
+  "Személyes kiszállítás: a kolléga viszi ki, csomag nélkül.";
+
 export interface WebshopOrderStatusChangeResult {
   order: WebshopOrderDetail;
   mail: WebshopStatusMailOutcome;
+  /** Igaz, ha a Kiszállítás a kapu felülbírálásával ment át (a napló az indokot tartalmazza). */
+  shippingGateOverridden?: boolean;
+  /** Igaz, ha a Kiszállítás személyes kiszállításként ment át (csomag nélkül; a napló tartalmazza, ki és mikor). */
+  personalDelivery?: boolean;
 }
 
 export interface WebshopOrderDetail {

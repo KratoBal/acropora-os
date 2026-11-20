@@ -17,7 +17,16 @@ import type { AuthenticatedUser } from "@acropora/types";
  */
 export type PartnerScope =
   | { readonly kind: "internal" }
-  | { readonly kind: "customer"; readonly customerId: string }
+  | {
+      readonly kind: "customer";
+      readonly customerId: string;
+      /**
+       * A KÉRŐ FELHASZNÁLÓ (kártya 5f4af2aa): a vevőn belül a hozzá rendelt egységek szűkítenek (a munkalap listája, a
+       * részletes nézete, a PDF-je és a többes letöltés ugyanazzal a szabállyal). Elhagyható, mert kézzel épített
+       * hatókör is van (tesztek); ahol a szűkítés ezen múlik, a hiánya ZÁR, nem enged (`worksheet-unit-scope.ts`).
+       */
+      readonly userId?: string;
+    }
   | { readonly kind: "supplier"; readonly supplierId: string };
 
 /**
@@ -38,7 +47,8 @@ export function partnerScopeOf(user: AuthenticatedUser): PartnerScope {
         "ezért a hatóköre nem állapítható meg. Ez adathiba, nem jogosultsági kérdés.",
     );
   }
-  if (customerId !== null) return { kind: "customer", customerId };
+  if (customerId !== null)
+    return { kind: "customer", customerId, userId: user.id };
   if (supplierId !== null) return { kind: "supplier", supplierId };
   return { kind: "internal" };
 }

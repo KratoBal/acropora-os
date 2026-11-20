@@ -364,6 +364,18 @@ export class ServiceJobListQueryDto {
   search?: string;
 
   /**
+   * A LÉTREHOZÁS NAPJÁNAK TÓL-IG SZŰRŐJE (Luca, 2026-11-20 09:39 UTC): `ÉÉÉÉ-HH-NN`, a budapesti naptári nap, mindkét határnap
+   * benne van, bármelyik elhagyható. Ugyanaz a szabály, mint a munkalap-lista „Megnyitva" szűrőjéé (`createdDayRange`). A
+   * SZERVEREN szűr, mert a lista a legújabb kétszázat adja: kliensoldalon egy régebbi tartomány üresnek látszana.
+   */
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "A dátum alakja ÉÉÉÉ-HH-NN." })
+  @IsOptional()
+  createdFrom?: string;
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "A dátum alakja ÉÉÉÉ-HH-NN." })
+  @IsOptional()
+  createdTo?: string;
+
+  /**
    * A REJTETT JEGYEK IS JÖJJENEK. Alapból nem jönnek.
    *
    * Ugyanaz a mező és ugyanaz a szabály, mint a munkalap-listán: a kapcsoló

@@ -31,7 +31,7 @@ export interface ContractItemForJob {
   departmentId: string | null;
   description: string;
   quantity: number;
-  /** hány alkalmat fed a lap ebből a tételből (alap: 1); a munkalap külön sorban kiírja, ha több */
+  /** hány alkalmat fed a lap ebből a tételből (alap: 1): annyi munkalap készül a tételből, alkalmanként egy */
   occasions?: number;
 }
 
@@ -162,37 +162,40 @@ export async function createJobFromContractItems(
   );
 
   for (const item of input.items) {
-    await deps.worksheets.create(
-      {
-        customerId: input.contract.customerId,
-        departmentId: item.departmentId as string,
-        serviceJobId: serviceJob.id,
-        subject: item.description,
-        assetIds: onSite(item.id),
-        clientOperationId: `${input.worksheetOperationIdPrefix}${item.id}`,
-        lines: [
-          {
-            description: item.description,
-            quantity: item.quantity,
-            unit: "db",
-            kind: "OTHER",
-          },
-          // a tétel teljes kért alkalomszáma egy munkalapon (Luca, 2026-11-13; acrobot: a munkalap az egészet
-          // fedi); a munkalapnak nincs külön alkalom-mezője, ezért külön sor viszi
-          ...((item.occasions ?? 1) > 1
-            ? [
-                {
-                  description: `${item.description}: alkalmak száma`,
-                  quantity: item.occasions as number,
-                  unit: "alkalom",
-                  kind: "OTHER" as const,
-                },
-              ]
-            : []),
-        ],
-      },
-      actor,
-    );
+    // ANNYI MUNKALAP, AHÁNY ALKALMAT A TÉTELBŐL ÁTVITTEK (kártya c873bf3a, Luca 2026-11-19: "ha a szerződésből 2
+    // alkalmat húzok át karbantartási lapra, annyi munkalap legyen generálva hozzá, ahány alkalomról van szó"). A
+    // munkalapoknak nincs dátumuk: azokat és a többi paramétert Luca írja be utána. Az első alkalom kulcsa a régi
+    // (`<előtag><tétel>`), tehát az egyalkalmas tétel ugyanazt a lapot adja, mint eddig; a többié a sorszámot is viseli,
+    // egy újrafuttatás ugyanazokat a lapokat kapja vissza. Egy alkalom egy munkalap: a darabszám alkalmanként ugyanaz,
+    // a régi "alkalmak száma" sor (egy lap, minden alkalommal) megszűnt.
+    const occasions = Math.max(1, Math.floor(item.occasions ?? 1));
+    for (let occasion = 1; occasion <= occasions; occasion += 1) {
+      await deps.worksheets.create(
+        {
+          customerId: input.contract.customerId,
+          departmentId: item.departmentId as string,
+          serviceJobId: serviceJob.id,
+          subject:
+            occasions > 1
+              ? `${item.description} (${occasion}. alkalom)`
+              : item.description,
+          assetIds: onSite(item.id),
+          clientOperationId:
+            occasion === 1
+              ? `${input.worksheetOperationIdPrefix}${item.id}`
+              : `${input.worksheetOperationIdPrefix}${item.id}-alkalom-${occasion}`,
+          lines: [
+            {
+              description: item.description,
+              quantity: item.quantity,
+              unit: "db",
+              kind: "OTHER",
+            },
+          ],
+        },
+        actor,
+      );
+    }
   }
 
   return { serviceJobId: serviceJob.id, skippedAssets };

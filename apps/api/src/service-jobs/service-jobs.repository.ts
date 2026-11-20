@@ -427,7 +427,7 @@ export class ServiceJobsRepository {
     return this.database.$transaction(async (transaction) => {
       const job = await transaction.serviceJob.findUnique({
         where: { id: input.serviceJobId },
-        select: { id: true },
+        select: { id: true, kind: true },
       });
       if (!job) return { ok: false, added: [] };
 
@@ -455,6 +455,42 @@ export class ServiceJobsRepository {
           })),
           skipDuplicates: true,
         });
+      }
+
+      // A KARBANTARTÁSI LAP FELELŐSEI ÁTMENNEK A MUNKALAPJAIRA, amelyek követik őket (kártya d91005e9, Luca 2026-11-19):
+      // ugyanabban a tranzakcióban, hogy a lap és a munkalapjai ne mutassanak két különböző kiosztást. Csak a követő
+      // munkalapok (a `followsJobAssignees` igaz: a nyitáskor a lap felelősei voltak, és senki nem írta át őket), a
+      // többi, köztük minden már meglévő munkalap érintetlen. Értesítést ez nem küld: a lap új felelősei a lap saját
+      // értesítését kapják, a munkalapé másodszor ugyanazt zörgetné.
+      if (job.kind === "MAINTENANCE") {
+        // SORZÁR, HOGY EGY EGYIDEJŰ KÉZI MENTÉS NE VESZHESSEN EL (barracuda, #2743 B): a munkalap kézi mentése először a
+        // `followsJobAssignees` mezőt állítja hamisra (sorzárat vesz), a követők kiválasztása pedig megvárja azt, és az
+        // ELKÖTÖTT állapotot olvassa: a már felülbírált munkalap nem követő többé, a lap nem ír a kézi kiosztás fölé.
+        const following = await transaction.$queryRaw<{ id: string }[]>`
+          SELECT "id" FROM "Worksheet"
+          WHERE "serviceJobId" = ${input.serviceJobId} AND "followsJobAssignees" = true
+          ORDER BY "id"
+          FOR UPDATE
+        `;
+        for (const worksheet of following) {
+          await transaction.worksheetAssignee.deleteMany({
+            where: {
+              worksheetId: worksheet.id,
+              ...(input.userIds.length > 0
+                ? { userId: { notIn: [...input.userIds] } }
+                : {}),
+            },
+          });
+          if (input.userIds.length > 0)
+            await transaction.worksheetAssignee.createMany({
+              data: input.userIds.map((userId) => ({
+                worksheetId: worksheet.id,
+                userId,
+                assignedById: input.actorUserId,
+              })),
+              skipDuplicates: true,
+            });
+        }
       }
 
       return {

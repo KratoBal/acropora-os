@@ -20,7 +20,11 @@ import {
   EbizError,
   type EbizInvoiceListItem,
 } from "./ebiz.client.js";
-import { invoiceNumberKey } from "../../billing/external-billing-one-row.js";
+import {
+  NAV_SOURCE,
+  invoiceNumberKey,
+  takeOverNavRow,
+} from "../../billing/external-billing-one-row.js";
 import {
   ebizListFields,
   ebizNewRow,
@@ -85,11 +89,15 @@ export interface EbizSyncStore {
   >;
   /**
    * The Számlázz.hu rows of these invoice numbers that no eBIZ id is linked to
-   * yet, keyed by `invoiceNumberKey` (one own invoice number, one row).
+   * yet, keyed by `invoiceNumberKey` (one own invoice number, one row). A row
+   * taken from NAV (card 785dfea6) is a twin too, where Számlázz.hu has none:
+   * eBIZ takes it over, so `source` says which of the two it is.
    */
   szamlazzTwins(
     invoiceNumbers: string[],
-  ): Promise<Map<string, { id: string; pdfStorageKey: string | null }>>;
+  ): Promise<
+    Map<string, { id: string; pdfStorageKey: string | null; source?: string }>
+  >;
   /** Records on a Számlázz.hu row the eBIZ id of the same invoice. */
   linkEbiz(id: string, ebizExternalId: string): Promise<void>;
   create(data: ReturnType<typeof ebizNewRow>): Promise<{ id: string }>;
@@ -171,6 +179,28 @@ export class EbizSyncService {
         const twin = row
           ? undefined
           : twins.get(invoiceNumberKey(invoice.invoiceNumber));
+        if (twin?.source === NAV_SOURCE) {
+          // a NAV row knows only that the invoice exists: eBIZ takes it over (same row id, so a paired payment stays)
+          let detail = null;
+          try {
+            detail = await this.client.getInvoice(invoice.id);
+          } catch (error) {
+            counts.failedCount++;
+            this.logger.warn(
+              `eBIZ ${invoice.invoiceNumber}: részletek nélkül (${codeOf(error, "EBIZ_DETAIL_FAILED")})`,
+            );
+          }
+          await this.store.update(
+            twin.id,
+            takeOverNavRow(ebizNewRow(invoice, detail, now())) as Record<
+              string,
+              unknown
+            >,
+          );
+          counts.updatedCount++;
+          await this.storePdf(twin.id, invoice, counts);
+          continue;
+        }
         if (twin) {
           // Számlázz.hu already has this invoice: no second row, only the PDF
           await this.store.linkEbiz(twin.id, String(invoice.id));
@@ -381,21 +411,34 @@ export class PrismaEbizSyncStore implements EbizSyncStore {
     if (invoiceNumbers.length === 0) return new Map();
     const rows = await prisma.externalBillingDocument.findMany({
       where: {
-        source: "SZAMLAZZ",
+        source: { in: ["SZAMLAZZ", NAV_SOURCE] },
         ebizExternalId: null,
         documentNumber: { in: invoiceNumbers },
       },
       orderBy: { createdAt: "asc" },
-      select: { id: true, documentNumber: true, pdfStorageKey: true },
+      select: {
+        id: true,
+        documentNumber: true,
+        pdfStorageKey: true,
+        source: true,
+      },
     });
     const twins = new Map<
       string,
-      { id: string; pdfStorageKey: string | null }
+      { id: string; pdfStorageKey: string | null; source: string }
     >();
-    for (const row of rows) {
+    // the Számlázz.hu row first: it is the row of record; a NAV row only where Számlázz.hu has none
+    for (const row of [...rows].sort(
+      (a, b) =>
+        Number(a.source === NAV_SOURCE) - Number(b.source === NAV_SOURCE),
+    )) {
       const key = invoiceNumberKey(row.documentNumber);
       if (!twins.has(key))
-        twins.set(key, { id: row.id, pdfStorageKey: row.pdfStorageKey });
+        twins.set(key, {
+          id: row.id,
+          pdfStorageKey: row.pdfStorageKey,
+          source: row.source,
+        });
     }
     return twins;
   }

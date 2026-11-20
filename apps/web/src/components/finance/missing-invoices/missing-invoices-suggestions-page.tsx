@@ -22,6 +22,10 @@ import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { missingInvoicesApi } from "@/lib/api/missing-invoices";
 import { AssignToIncomingPanel } from "./missing-invoices-assign-incoming";
 import { CollectionItemsSection } from "./missing-invoices-collection-items";
+import {
+  SupplierRulePanel,
+  SupplierRulesSection,
+} from "./missing-invoices-supplier-rules";
 import { formatAmount, formatDay } from "./missing-invoices-model";
 
 /**
@@ -47,6 +51,14 @@ export function MissingInvoicesSuggestionsPage() {
   );
   const [staleAfterDays, setStaleAfterDays] = useState(60);
   const [assigning, setAssigning] = useState<string | null>(null);
+  const [ruling, setRuling] = useState<InvoiceCollectionSuggestion | null>(
+    null,
+  );
+  const [rulesReload, setRulesReload] = useState(0);
+  const [ruleNotice, setRuleNotice] = useState<string | null>(null);
+  // a szállítói szabályok kapcsolója (INVOICE_SUPPLIER_RULES, alapból KI): kikapcsolva a lap a szabályokat nem mutatja, és a
+  // szerver is 409-cel utasítja el a szabályos elfogadást (murena 58021)
+  const [rulesLive, setRulesLive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -59,6 +71,7 @@ export function MissingInvoicesSuggestionsPage() {
         const response = await missingInvoicesApi.suggestions(token, signal);
         setItems(response.items);
         setStaleAfterDays(response.staleAfterDays);
+        setRulesLive(response.supplierRules?.live === true);
       } catch (cause) {
         if (!(cause instanceof DOMException && cause.name === "AbortError"))
           setError(
@@ -190,7 +203,7 @@ export function MissingInvoicesSuggestionsPage() {
     {
       id: "actions",
       header: <span className="sr-only">Döntés</span>,
-      width: "420px",
+      width: rulesLive ? "560px" : "420px",
       align: "right",
       cell: (item) => (
         <span className="flex justify-end gap-2">
@@ -216,6 +229,21 @@ export function MissingInvoicesSuggestionsPage() {
                   }
                 >
                   Bejövő számlához
+                </PilotButton>
+              ) : null}
+              {rulesLive ? (
+                <PilotButton
+                  variant="secondary"
+                  size="action"
+                  disabled={busy !== null}
+                  aria-label={`${item.fileName} elfogadása szállítói szabállyal`}
+                  onClick={() =>
+                    setRuling((current) =>
+                      current?.documentId === item.documentId ? null : item,
+                    )
+                  }
+                >
+                  Elfogad és szabály
                 </PilotButton>
               ) : null}
               <PilotButton
@@ -295,9 +323,33 @@ export function MissingInvoicesSuggestionsPage() {
           columns={columns}
           rows={items}
           rowKey={(item) => item.documentId}
-          minWidth={1080}
+          minWidth={rulesLive ? 1220 : 1080}
         />
       )}
+      {ruleNotice ? (
+        <Alert
+          variant="info"
+          title="Szállítói szabály"
+          description={ruleNotice}
+        />
+      ) : null}
+      {ruling && rulesLive ? (
+        <SupplierRulePanel
+          token={token}
+          item={ruling}
+          onClose={() => setRuling(null)}
+          onAccepted={(result) => {
+            setRuleNotice(
+              result.alsoAccepted > 0
+                ? `A szabály ${result.created ? "létrejött" : "már élt"}, és ${result.alsoAccepted} további függő PDF is elfogadva.`
+                : `A szabály ${result.created ? "létrejött" : "már élt"}.`,
+            );
+            setRuling(null);
+            setRulesReload((value) => value + 1);
+            void load();
+          }}
+        />
+      ) : null}
       {assigning ? (
         <AssignToIncomingPanel
           token={token}
@@ -310,6 +362,14 @@ export function MissingInvoicesSuggestionsPage() {
             );
             setAssigning(null);
           }}
+        />
+      ) : null}
+      {rulesLive ? (
+        <SupplierRulesSection
+          token={token}
+          canManage={canManage}
+          reloadKey={rulesReload}
+          onChanged={() => void load()}
         />
       ) : null}
       <CollectionItemsSection token={token} />

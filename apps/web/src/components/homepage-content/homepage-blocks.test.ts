@@ -6,6 +6,7 @@ import {
   blocksForSave,
   effectiveBlocks,
   HOMEPAGE_BLOCKS,
+  HOMEPAGE_STANDALONE_GROUPS,
   moveBlock,
 } from "./homepage-blocks";
 
@@ -22,9 +23,19 @@ describe("HOMEPAGE_BLOCKS", () => {
 
   it("shows every field group in exactly one block", () => {
     const groups = new Set(HOMEPAGE_TEXT_FIELDS.map((f) => f.group));
-    const shown = HOMEPAGE_BLOCKS.flatMap((b) => b.groups);
+    const shown = [
+      ...HOMEPAGE_BLOCKS.flatMap((b) => b.groups),
+      ...HOMEPAGE_STANDALONE_GROUPS,
+    ];
     expect(new Set(shown)).toEqual(groups);
     expect(shown).toHaveLength(groups.size);
+  });
+
+  it("the header info bar is a standalone group, not a block", () => {
+    expect(HOMEPAGE_STANDALONE_GROUPS).toEqual(["Fejléc: info-sáv"]);
+    expect(HOMEPAGE_BLOCKS.flatMap((b) => b.groups)).not.toContain(
+      "Fejléc: info-sáv",
+    );
   });
 });
 

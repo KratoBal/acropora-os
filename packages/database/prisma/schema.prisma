@@ -161,6 +161,33 @@ enum SimplePaySyncRunStatus {
   FAILED
 }
 
+/// Stripe elszámolás (A9): egy kifizetés (payout) akkor NEEDS_REVIEW, ha van
+/// feloldatlan sora.
+enum StripePayoutStatus {
+  COMPLETED
+  NEEDS_REVIEW
+}
+
+/// RESOLVED: a sor egy rendelés fizetése (vagy visszatérítése), a rendelés és a
+/// számla megvan; NEEDS_REVIEW: nem sikerült párosítani; NOT_APPLICABLE: nem
+/// rendelés fizetése (Stripe-díj, korrekció), csak az összegekben számít.
+enum StripeLineStatus {
+  RESOLVED
+  NEEDS_REVIEW
+  NOT_APPLICABLE
+}
+
+enum StripeResolutionSource {
+  PAYMENT_INTENT
+  MANUAL
+}
+
+enum StripeSyncRunStatus {
+  RUNNING
+  APPLIED
+  FAILED
+}
+
 /// GLS elszámolás: egy utánvét-jelentés akkor NEEDS_REVIEW, ha van
 /// feloldatlan sora.
 enum GlsCodReportStatus {
@@ -264,6 +291,8 @@ enum StockMovementType {
   DAMAGE
   SCRAP
   OPENING_BALANCE
+  /// a POS „Belső felhasználás”: a polcról saját célra levett termék (Balázs 2026-11-20, kártya ec51e614); nem eladás
+  INTERNAL_USE
 }
 
 enum StockMovementStatus {
@@ -459,6 +488,10 @@ enum ServiceJobEventKind {
   /// hanem ÁLLAPOTVÁLTÁSNAK. Egy „van-e esemény" alakú állítás ezért a rossz
   /// fajtára is zöld -- az állítás a `kind` ÉRTÉKÉRE menjen.
   FIELDS_EDITED
+  /// Egy MÁR LÉTEZŐ munkalap HIVATKOZÁSA a karbantartási lapon (NEM áthelyezés: a lap a helyén marad), lásd `ServiceJobLinkedWorksheet`.
+  WORKSHEET_LINKED
+  /// A hivatkozás levétele. Párja a `WORKSHEET_LINKED`-nek: enélkül egy levett kapcsolat csendben tűnne el a lapról.
+  WORKSHEET_UNLINKED
 }
 
 enum ServiceJobStatus {
@@ -1113,7 +1146,9 @@ model User {
   invoicesIssued                      Invoice[]                           @relation("InvoiceIssuedBy")
   billingMailDeliveries               BillingDocumentMailDelivery[]       @relation("BillingMailInitiatedBy")
   simplePayLinesApproved              SimplePayTransactionLine[]          @relation("SimplePayLineManualApprovedBy")
+  stripeLinesApproved                 StripeTransactionLine[]             @relation("StripeLineManualApprovedBy")
   mortalityRecordsRecorded            MortalityRecord[]                   @relation("MortalityRecordRecordedBy")
+  posInternalUses                     PosInternalUse[]                    @relation("PosInternalUsePerformedBy")
   operationsLogEntriesRecorded        OperationsLogEntry[]                @relation("OperationsLogEntryRecordedBy")
   operationsLogEntryParticipations    OperationsLogEntryParticipant[]
   operationsLogDocumentsUploaded      OperationsLogEntryDocument[]        @relation("OperationsLogEntryDocumentUploadedBy")
@@ -1656,6 +1691,7 @@ model ProductVariant {
   quoteBomItems              QuoteBomItem[]                @relation("QuoteBomVariant")
   quoteCreatedBomItems       QuoteBomItem[]                @relation("QuoteCreatedVariant")
   knowledgeFacts             ProductKnowledgeFact[]
+  posInternalUseLines        PosInternalUseLine[]
   materialRequestItems       MaterialRequestItem[]         @relation("MaterialRequestItemVariant")
 
   @@unique([productId, unasVariantKey])
@@ -2400,6 +2436,7 @@ model Warehouse {
   stockItems                 StockItem[]
   sourceMovements            StockMovement[]               @relation("MovementSourceWarehouse")
   targetMovements            StockMovement[]               @relation("MovementTargetWarehouse")
+  posInternalUses            PosInternalUse[]
   purchaseOrders             PurchaseOrder[]
   goodsReceipts              GoodsReceipt[]
   purchaseInvoices           PurchaseInvoice[]
@@ -2958,6 +2995,8 @@ enum UnasStockSyncSourceProcess {
   INVENTORY_COUNT
   PURCHASE_INVOICE
   POS_SALE
+  /// a POS „Belső felhasználás” (kártya ec51e614)
+  POS_INTERNAL_USE
   UNAS_ORDER_IMPORT
   UNAS_ORDER_UPDATE
   UNAS_ORDER_CANCEL
@@ -4189,6 +4228,8 @@ model ServiceJob {
   @@index([hiddenAt])
   /// Az üzemeltetési napló bejegyzése, amelynek a rendellenességéből ez a jegy nyílt (task os-uzemeltetesi-naplo, S3).
   operationsLogEntry OperationsLogEntry? @relation("OperationsLogEntryServiceJob")
+  /// A karbantartási laphoz hivatkozásként kapcsolt munkalapok (kártya 5b366f5d), lásd `ServiceJobLinkedWorksheet`.
+  linkedWorksheets ServiceJobLinkedWorksheet[] @relation("ServiceJobLinkedWorksheets")
 }
 
 model Contract {
@@ -5755,6 +5796,24 @@ model ServiceJobAsset {
   @@index([assetId, createdAt])
 }
 
+/// A KAPCSOLÓDÓ MUNKALAP A KARBANTARTÁSI LAPON (kártya 5b366f5d, Luca 2026-11-19): egy MÁR LÉTEZŐ, elkészült munkalap HIVATKOZÁSA, hogy az
+/// elszámolás visszakövethető legyen. NEM ÁTHELYEZÉS: a munkalap a helyén marad (hibajegy alatt is), a `serviceJobId`-ja nem változik.
+/// A `worksheetId` EGYEDI: egy munkalap egyszerre egy karbantartási laphoz kapcsolható (egyszer számolódjon). Munkaóra és ár NÉLKÜL:
+/// a kapcsolat semmilyen összegbe, elszámolásba, számlába nem számít bele. A lap vagy a munkalap törlésekor a kapcsolat megszűnik
+/// (csak hivatkozás); a felvétel és a levétel naplója a `ServiceJobEvent` (WORKSHEET_LINKED / WORKSHEET_UNLINKED).
+model ServiceJobLinkedWorksheet {
+  id           String   @id @default(cuid())
+  serviceJobId String
+  worksheetId  String   @unique
+  linkedById   String?
+  createdAt    DateTime @default(now())
+
+  serviceJob ServiceJob @relation("ServiceJobLinkedWorksheets", fields: [serviceJobId], references: [id], onDelete: Cascade)
+  worksheet  Worksheet  @relation("WorksheetLinkedToJob", fields: [worksheetId], references: [id], onDelete: Cascade)
+
+  @@index([serviceJobId, createdAt])
+}
+
 /// A MUNKALAP ALTAL ERINTETT ESZKOZOK.
 ///
 /// Balazs kerese (2026-09-15 10:11, Discord, Szerviz ticketing szal, szo
@@ -6139,6 +6198,15 @@ model Worksheet {
    */
   serviceJobId         String?
   /**
+   * A MUNKALAP A KARBANTARTÁSI LAP FELELŐSEIT KÖVETI (kártya d91005e9, Luca 2026-11-19: "amit a karbantartási lapon
+   * beállítanak, az automatikusan kerüljön rá a munkalapokra; ha változik, a munkalapon még mindig felül lehet
+   * bírálni"). IGAZ: a lap keletkezésekor a felelősei pontosan a karbantartási lapéi voltak (vagy a rendszer hozta létre
+   * a lap alá), és azóta senki nem írta át őket a munkalapon: a karbantartási lap felelőseinek változása ilyenkor
+   * átmegy rá. HAMIS (az alap): önálló lap; a már meglévő lapok mind ilyenek, a változás őket nem írja át. Bármilyen kézi
+   * felelős-mentés a munkalapon HAMISRA állítja: ez a "felülbírálás".
+   */
+  followsJobAssignees  Boolean  @default(false)
+  /**
    * AZ ÁTADÁS: A SZERELŐ VÉGZETT, ÉS A LAP A SZOLGÁLTATÓÉ.
    * KÜLÖN MEZŐ, NEM ÚJ ÁLLAPOT A `WorksheetVersionStatus` ENUMBAN, és ez a
    * megkülönböztetés fontosabb, mint amilyennek látszik: az a négy állapot az
@@ -6237,6 +6305,8 @@ model Worksheet {
   continuedBy      Worksheet[]         @relation("WorksheetContinuation")
   /// A jegy naploja, ahol EZ a lap szerepel (csatolas es levalasztas).
   serviceJobEvents ServiceJobEvent[]   @relation("ServiceJobEventWorksheet")
+  /// A karbantartási lap, amelyhez ez a munkalap hivatkozásként van kapcsolva (legfeljebb egy; kártya 5b366f5d).
+  linkedToJob      ServiceJobLinkedWorksheet? @relation("WorksheetLinkedToJob")
   /// A lap által érintett eszközök. A hibajegyből nyitott lap a jegyéivel
   /// indul; onnantól a lap saját adata.
   assets           WorksheetAsset[]
@@ -7570,6 +7640,103 @@ model SimplePaySyncRun {
   @@index([startedAt])
 }
 
+/// Egy Stripe-kifizetés (payout) a webshop háttérből (A9, kártya 6339b04c): az
+/// OS-nek nincs saját Stripe-kulcsa, a háttér csak olvasó végpontja adja
+/// (commerce #803). A kifizetés megváltoztathatatlan, a sorai nem: a
+/// feloldatlan sorokat a következő körben újra párosítjuk.
+model StripePayout {
+  id                  String             @id @default(cuid())
+  stripePayoutId      String             @unique
+  status              StripePayoutStatus
+  currency            String             @db.VarChar(3)
+  /// A bankba utalt összeg (főegységben, forint).
+  amount              Decimal            @db.Decimal(19, 4)
+  arrivalDate         DateTime           @db.Date
+  stripeCreatedAt     DateTime
+  automatic           Boolean
+  lineCount           Int
+  unresolvedLineCount Int
+  /// A sorok összegei: bruttó fizetések, visszatérítések, díjak, nettó.
+  grossTotal          Decimal            @db.Decimal(19, 4)
+  refundTotal         Decimal            @db.Decimal(19, 4)
+  feeTotal            Decimal            @db.Decimal(19, 4)
+  netTotal            Decimal            @db.Decimal(19, 4)
+  /// A webshop-oldali rendeléskeresés ennyi rendelésnél megállt (a válasz jelzése).
+  ordersTruncated     Boolean            @default(false)
+  /// A kifizetés szintű ok, ha nem a sorokon múlik: TOTAL_MISMATCH (a sorok
+  /// nettója nem a kifizetett összeg), MANUAL_PAYOUT (a Stripe kézi
+  /// kifizetésnél nem listáz tételeket), LINES_NOT_READ (a lapozás határán megállt).
+  errorCode           String?
+  processedAt         DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  lines StripeTransactionLine[]
+
+  @@index([arrivalDate])
+  @@index([status])
+}
+
+/// Egy Stripe-egyenlegtétel (balance transaction) egy kifizetésben. Nevet,
+/// címet, e-mailt NEM tárol: a háttér sem adja (azonosítók és összegek).
+model StripeTransactionLine {
+  id                     String                  @id @default(cuid())
+  payoutId               String
+  stripeTransactionId    String                  @unique
+  /// charge, payment, refund, payment_refund, stripe_fee, adjustment...
+  type                   String
+  reportingCategory      String?
+  stripeCreatedAt        DateTime
+  currency               String                  @db.VarChar(3)
+  /// Főegységben (forint): a Stripe legkisebb egységéből átváltva.
+  amount                 Decimal                 @db.Decimal(19, 4)
+  fee                    Decimal                 @db.Decimal(19, 4)
+  net                    Decimal                 @db.Decimal(19, 4)
+  paymentIntentId        String?
+  chargeId               String?
+  refundId               String?
+  /// A háttér által megnevezett rendelések (azonosító, rendelésszám); vegyes
+  /// kosárnál kettő.
+  webshopOrderIds        String[]
+  orderNumbers           String[]
+  orderTotal             Decimal?                @db.Decimal(19, 4)
+  invoiceNumbers         String[]
+  status                 StripeLineStatus
+  resolutionSource       StripeResolutionSource?
+  errorCode              String?
+  manualApprovedByUserId String?
+  manualApprovedAt       DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  payout           StripePayout @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  manualApprovedBy User?        @relation("StripeLineManualApprovedBy", fields: [manualApprovedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([payoutId])
+  @@index([paymentIntentId])
+  @@index([status])
+  @@index([stripeCreatedAt])
+}
+
+/// A Stripe-behúzás egy futása. Az `activeKey` egyedi, így egyszerre egy fut;
+/// egy elakadt futás 30 perc után feloldódik (a SimplePay mintája).
+model StripeSyncRun {
+  id                String              @id @default(cuid())
+  activeKey         String?             @unique
+  status            StripeSyncRunStatus @default(RUNNING)
+  trigger           SyncRunTrigger
+  startedAt         DateTime            @default(now())
+  completedAt       DateTime?
+  payoutsSeen       Int                 @default(0)
+  payoutsNew        Int                 @default(0)
+  payoutsReresolved Int                 @default(0)
+  failedCount       Int                 @default(0)
+  errorCode         String?
+  updatedAt         DateTime            @updatedAt
+
+  @@index([startedAt])
+}
+
 /// GLS heti utánvét-részletezője ("Utánvét részletező"): egy utalás a GLS-től,
 /// csomagonként. A forrásfájl megmarad (a címzett adataival együtt, ahogy a
 /// Foxpostnál); a sorok nevet és címet NEM tárolnak. Ugyanaz a jelentés
@@ -7726,7 +7893,7 @@ model SzamlazzFeedBackfillNumber {
   number      String    @id
   /// A sorozat: `ACRW-2026` vagy az előtag nélküli `2026`.
   series      String
-  /// WOULD_STORE, STORED, NOT_FOUND, ERROR, UNREADABLE, OTHER_NUMBER (a `FeedPullLine` kimenetei).
+  /// WOULD_STORE, STORED, NOT_FOUND (csak sikeres kontroll után), ERROR, UNREADABLE, OTHER_NUMBER (a `FeedPullLine` kimenetei), UNVERIFIED (kontroll nélkül rögzített nem).
   outcome     String
   /// A kimenet magyarázata: a fajta és az összegek, vagy a hiba kódja. Vevő nélkül.
   detail      String
@@ -9332,6 +9499,9 @@ model IncomingSupplierDocument {
   /// auditnaplóban látszik).
   reviewedAt              DateTime?
   reviewedByUserId        String?
+  /// Az ismert szállító szabálya, ami ezt a dokumentumot magától elfogadta (`IncomingSupplierRule`); NULL: ember döntött,
+  /// vagy nincs döntés. A visszavonás ebből és a `reviewedAt`-ből tudja, mit állít vissza.
+  acceptedByRuleId        String?
   /// A beszerzési számla, amihez kézzel csatolták (kártya 5ec62e35, Luca: a
   /// beszkennelt számla). Közvetlen kapcsolat: ugyanarra a számlaszámra és
   /// adószámra ez nyer a szám szerinti párosítás előtt.
@@ -9345,9 +9515,38 @@ model IncomingSupplierDocument {
 
   @@unique([gmailMessageId, fileName])
   @@index([reviewState])
+  @@index([acceptedByRuleId])
   @@index([expectedArrivalId])
   @@index([purchaseInvoiceId])
   @@index([sha256])
+}
+
+/// AZ ISMERT SZÁLLÍTÓ SZABÁLYA (PDF-javaslatok 2. útja; acrobot 57881, 57884, 2026-11-20). Egy szállítót egy ember fogad el
+/// egyszer a Javasolt számlák lapon, és a szállító következő PDF-jét a begyűjtés magától elfogadja (naplózva, visszavonhatóan).
+/// KULCS: `TAX` (a PDF-ből kiolvasott adószám/EU-adószám, normalizálva: `taxKey`) vagy `NAME` (a szállító jellemző szavai a PDF
+/// szövegében: `nameKey`); a NAME csak külső feladóval él. `senderDomain`: a feladó tartománya betűkre-számjegyekre szűrve; NULL,
+/// ha a szabály egy megbízott továbbítótól (a begyűjtött postafiókok tartománya) jött, ami csak TAX-nál lehet. Egy aktív kulcs
+/// egyszer áll (részleges egyedi index a migrációban: a Prisma nem tudja kifejezni).
+model IncomingSupplierRule {
+  id               String    @id @default(cuid())
+  /// TAX vagy NAME
+  kind             String
+  taxKey           String?
+  nameKey          String?
+  senderDomain     String?
+  /// A szállító neve a lapon: amit az ember beírt, vagy az adószám.
+  label            String
+  /// Pénznemenként a legnagyobb elfogadott bruttó, centben (`{"EUR": 12345}`): efölött a háromszorosa emberre marad.
+  grossCeilings    Json      @default("{}")
+  acceptedCount    Int       @default(0)
+  /// Az első, ember által elfogadott dokumentum.
+  sourceDocumentId String?
+  createdByUserId  String?
+  createdAt        DateTime  @default(now())
+  disabledAt       DateTime?
+  disabledByUserId String?
+
+  @@index([disabledAt])
 }
 
 enum IncomingSupplierDocumentStatus {
@@ -10729,6 +10928,50 @@ model MortalityRecord {
 /// boltonként más. A kezdő tíz nevet a migráció tölti fel; kezelőfelület még
 /// nincs. A kivezetett helyszín nem törlődik (bejegyzés mutathat rá), csak a
 /// választóból esik ki.
+/// A POS „BELSŐ FELHASZNÁLÁS” (Balázs, 2026-11-20 15:10 UTC, kártya ec51e614): a polcról saját célra levett termék. NEM eladás:
+/// nincs fizetés, nyugta, számla, és a bevétel-összesítőkbe (POS összesítő, kassza) nem kerül, ezért NEM `SalesOrder`, hanem saját
+/// rekord. A készlet ugyanazon az úton csökken, mint az eladásnál (`postInventoryMovement`, `INTERNAL_USE`, UNAS-kimenő sorral).
+/// Javítás vagy visszavétel nincs: egy tévesen rögzített tétel a leltárral áll helyre, mint minden más mozgás.
+model PosInternalUse {
+  id            String   @id @default(cuid())
+  /// ember olvasta azonosító (BFH-...)
+  number        String   @unique
+  /// miért vették ki (kötelező, a szolgáltatás őrzi, hogy ne legyen üres)
+  note          String   @db.VarChar(500)
+  warehouseId   String
+  performedById String
+  occurredAt    DateTime
+  /// a tételek beszerzési értéke (nettó HUF); null, ha valamelyik tételnek nincs beszerzési ára
+  totalCost     Decimal? @db.Decimal(19, 4)
+  createdAt     DateTime @default(now())
+
+  warehouse   Warehouse            @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  performedBy User                 @relation("PosInternalUsePerformedBy", fields: [performedById], references: [id], onDelete: Restrict)
+  lines       PosInternalUseLine[]
+
+  @@index([occurredAt])
+  @@index([performedById])
+}
+
+model PosInternalUseLine {
+  id            String   @id @default(cuid())
+  internalUseId String
+  variantId     String
+  sku           String
+  productName   String   @db.VarChar(300)
+  quantity      Decimal  @db.Decimal(19, 6)
+  unit          String
+  /// beszerzési nettó egységár HUF-ban, a rögzítés pillanatában (az árajánlat `snapshotCost` szabálya; csomagterméknél az
+  /// összetevőkből); null, ha nincs
+  unitCost      Decimal? @db.Decimal(19, 4)
+
+  internalUse PosInternalUse @relation(fields: [internalUseId], references: [id], onDelete: Cascade)
+  variant     ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([internalUseId])
+  @@index([variantId])
+}
+
 model MortalityLocation {
   id         String    @id @default(cuid())
   name       String    @unique @db.VarChar(100)

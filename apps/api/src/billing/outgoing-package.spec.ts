@@ -78,6 +78,24 @@ describe("a hónap tételei", () => {
     );
   });
 
+  it("a NAV-ból felvett sor mindenki mögött áll: ha bárki más hozza a számot, az övé kerül a csomagba (kártya 785dfea6)", () => {
+    const rows = outgoingPackageRows("2026-09", [
+      jelolt({ number: "N1", source: "NAV", customer: "nav" }),
+      jelolt({ number: "N1", source: "EBIZ", customer: "ebiz" }),
+      jelolt({ number: "N2", source: "NAV", customer: "nav2" }),
+      jelolt({ number: "N2", source: "SZAMLAZZ", customer: "feed" }),
+      jelolt({ number: "N3", source: "NAV", customer: "csak nav" }),
+    ]);
+    assert.deepEqual(
+      rows.map((r) => [r.number, r.source, r.customer]),
+      [
+        ["N1", "EBIZ", "ebiz"],
+        ["N2", "SZAMLAZZ", "feed"],
+        ["N3", "NAV", "csak nav"],
+      ],
+    );
+  });
+
   it("a Számlázz.hu-n sztornózott OS-számla sztornó jele az ikertől jön (barracuda, #1662)", () => {
     const rows = outgoingPackageRows("2026-09", [
       jelolt({ number: "A", source: "OS", cancelled: false }),

@@ -14,6 +14,7 @@ import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
 import { AttentionClosureDto } from "./dto/attention-closure.dto.js";
 import { FeedBackfillDto } from "./dto/feed-backfill.dto.js";
+import { FeedBackfillRecheckDto } from "./dto/feed-backfill-recheck.dto.js";
 import { FeedPullDto } from "./dto/feed-pull.dto.js";
 import { RunNowDto } from "./dto/run-now.dto.js";
 import { FeedBackfillService } from "./feed-backfill.service.js";
@@ -135,5 +136,19 @@ export class PaidMarksController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.backfill.start(input.apply, user.id);
+  }
+
+  /**
+   * A "NEM A MI FIÓKUNK" ÍTÉLET VISSZAVONÁSA (acrobot 58207): a sorozat ítélete törlődik, a következő ellenőrzés újra dönt. Nem kérdez a
+   * Számlázz.hu-tól, nem indít kört. A jog ugyanaz, mint az ellenőrzésé (`BILLING_ISSUE`).
+   */
+  @Post("feed-backfill/recheck")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.BILLING_ISSUE)
+  recheckSeries(
+    @Body() input: FeedBackfillRecheckDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.backfill.clearForeign(input.series, user.id);
   }
 }

@@ -10,6 +10,8 @@ import type {
   ServiceJobDocumentType,
   ServiceJobHandoverMailPreview,
   ServiceJobHandoverMailResult,
+  ServiceJobLinkableWorksheetsResponse,
+  ServiceJobLinkedWorksheetsResponse,
   ServiceJobListResponse,
   ServiceJobStatusValue,
 } from "@acropora/types";
@@ -38,10 +40,14 @@ export const serviceJobsApi = {
     kind: "REPAIR" | "MAINTENANCE" = "REPAIR",
     /** A karbantartás füle: a szerver szűr rá (f4590db6). Hiányzik: minden lap. */
     maintenanceState?: "progress" | "done",
+    /** A létrehozás napjának tól-ig szűrője (`ÉÉÉÉ-HH-NN`, Luca 2026-11-20): a szerver szűr, mindkét határnap benne van. */
+    created?: { from?: string; to?: string },
   ) {
     const query = new URLSearchParams({ scope });
     query.set("kind", kind);
     if (maintenanceState) query.set("maintenanceState", maintenanceState);
+    if (created?.from) query.set("createdFrom", created.from);
+    if (created?.to) query.set("createdTo", created.to);
     const trimmed = search?.trim();
     if (trimmed) query.set("search", trimmed);
     /**
@@ -105,6 +111,46 @@ export const serviceJobsApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ worksheetId }),
     });
+  },
+  /** The worksheets linked to a maintenance sheet (card 5b366f5d): a reference list, not the sheet's own worksheets. */
+  linkedWorksheets(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<ServiceJobLinkedWorksheetsResponse>(
+      jobPath(id, "/linked-worksheets"),
+      token,
+      { signal },
+    );
+  },
+  /** What the picker offers for linking; the search runs on the server (the customer can have thousands of worksheets). */
+  linkableWorksheets(
+    token: string,
+    id: string,
+    filter: { q?: string; createdFrom?: string; createdTo?: string },
+    signal?: AbortSignal,
+  ) {
+    const query = new URLSearchParams();
+    if (filter.q?.trim()) query.set("q", filter.q.trim());
+    if (filter.createdFrom) query.set("createdFrom", filter.createdFrom);
+    if (filter.createdTo) query.set("createdTo", filter.createdTo);
+    const suffix = query.size ? `?${query}` : "";
+    return apiRequest<ServiceJobLinkableWorksheetsResponse>(
+      jobPath(id, `/linkable-worksheets${suffix}`),
+      token,
+      { signal },
+    );
+  },
+  linkWorksheet(token: string, id: string, worksheetId: string) {
+    return apiRequest<{ ok: true }>(jobPath(id, "/linked-worksheets"), token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ worksheetId }),
+    });
+  },
+  unlinkWorksheet(token: string, id: string, worksheetId: string) {
+    return apiRequest<{ ok: true }>(
+      jobPath(id, `/linked-worksheets/${encodeURIComponent(worksheetId)}`),
+      token,
+      { method: "DELETE" },
+    );
   },
   /**
    * PARTNER EGY MEG PARTNER NELKULI JEGYRE. A valasz nyugta, tehat a hivo

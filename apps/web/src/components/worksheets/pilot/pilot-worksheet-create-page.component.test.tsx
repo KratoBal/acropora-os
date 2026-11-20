@@ -443,6 +443,123 @@ describe("PilotWorksheetCreatePage assignees", () => {
     expect(screen.getByText(/A hibajegyből nyitott lap/)).toBeTruthy();
   });
 
+  /*
+    A MUNKALAP TÁRGYA A LAP CÍME (Luca, 2026-11-20). MI PIROSÍT: ha a hibajegyből vagy a karbantartási lapról nyitott űrlap Tárgya
+    nem a lap címe; ha az előtöltés felülírja, amit a felvivő már beírt (a betöltés alatt is); ha a cím nem szerkeszthető, vagy
+    a szerkesztett érték nem megy a mentésbe; ha jegy nélkül (nincs `?hibajegy`) bármi előtöltődik; ha cím nélküli lap szöveget
+    ír a mezőbe ("undefined"); ha a szerver hossz-korlátját (500) meghaladó cím előtöltődik.
+  */
+  const cimesJegy = (over: Record<string, unknown> = {}) => ({
+    id: "job-1",
+    kind: "REPAIR",
+    jobNumber: "HJ-2026-021",
+    title: "Szivattyú zajos a kamrában",
+    customerId: "customer-42",
+    customerName: "Fankó Kft.",
+    departmentId: "department-1",
+    departmentName: "Biotóp",
+    assets: [],
+    ...over,
+  });
+  const cimPartnerek = () => {
+    worksheets.selectablePartners.mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    worksheets.departments.mockResolvedValue({
+      items: [
+        {
+          id: "department-1",
+          name: "Biotóp",
+          code: "BIO",
+          parentId: null,
+          isActive: true,
+        },
+      ],
+    });
+  };
+
+  it("a hibajegyből nyitott munkalap tárgya a jegy címe, szerkeszthetően, és a szerkesztett érték megy a mentésbe", async () => {
+    query.params = new URLSearchParams("hibajegy=job-1");
+    jobs.detail.mockResolvedValue(cimesJegy());
+    cimPartnerek();
+    const user = userEvent.setup();
+    render(<PilotWorksheetCreatePage />);
+
+    const targy = await screen.findByLabelText("Tárgy");
+    await waitFor(() =>
+      expect((targy as HTMLInputElement).value).toBe(
+        "Szivattyú zajos a kamrában",
+      ),
+    );
+    await user.type(targy, " (csere)");
+    await user.click(await screen.findByRole("button", { name: "Mentés" }));
+    await waitFor(() => expect(worksheets.create).toHaveBeenCalledTimes(1));
+    expect(worksheets.create.mock.calls[0]?.[1]?.subject).toBe(
+      "Szivattyú zajos a kamrában (csere)",
+    );
+  });
+
+  it("a karbantartási lapról nyitott munkalap tárgya is a lap címe", async () => {
+    query.params = new URLSearchParams("hibajegy=job-1");
+    jobs.detail.mockResolvedValue(
+      cimesJegy({
+        kind: "MAINTENANCE",
+        jobNumber: "KT-2026-004",
+        title: "Havi szűrőcsere",
+        assignees: [],
+      }),
+    );
+    cimPartnerek();
+    render(<PilotWorksheetCreatePage />);
+    const targy = await screen.findByLabelText("Tárgy");
+    await waitFor(() =>
+      expect((targy as HTMLInputElement).value).toBe("Havi szűrőcsere"),
+    );
+  });
+
+  it("amit a felvivő a betöltés közben már beírt, azt a cím nem írja felül", async () => {
+    query.params = new URLSearchParams("hibajegy=job-1");
+    let resolve: (value: unknown) => void = () => undefined;
+    jobs.detail.mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    cimPartnerek();
+    const user = userEvent.setup();
+    render(<PilotWorksheetCreatePage />);
+    const targy = (await screen.findByLabelText("Tárgy")) as HTMLInputElement;
+    await user.type(targy, "Saját tárgy");
+    resolve(cimesJegy());
+    await screen.findByRole("link", { name: "HJ-2026-021" });
+    expect(targy.value).toBe("Saját tárgy");
+  });
+
+  it("jegy nélkül nem töltődik elő semmi, és a cím nélküli lap nem ír szöveget a mezőbe", async () => {
+    cimPartnerek();
+    const { unmount } = render(<PilotWorksheetCreatePage />);
+    expect(
+      ((await screen.findByLabelText("Tárgy")) as HTMLInputElement).value,
+    ).toBe("");
+    unmount();
+    query.params = new URLSearchParams("hibajegy=job-1");
+    jobs.detail.mockResolvedValue(cimesJegy({ title: undefined }));
+    render(<PilotWorksheetCreatePage />);
+    await screen.findByRole("link", { name: "HJ-2026-021" });
+    expect((screen.getByLabelText("Tárgy") as HTMLInputElement).value).toBe("");
+  });
+
+  it("a szerver hossz-korlátját (500) meghaladó cím levágva töltődik elő", async () => {
+    query.params = new URLSearchParams("hibajegy=job-1");
+    jobs.detail.mockResolvedValue(cimesJegy({ title: "x".repeat(600) }));
+    cimPartnerek();
+    render(<PilotWorksheetCreatePage />);
+    const targy = (await screen.findByLabelText("Tárgy")) as HTMLInputElement;
+    await waitFor(() => expect(targy.value.length).toBe(500));
+  });
+
   function jegyHelyszinnel(
     departmentId: string | null,
     name: string | null,
@@ -916,5 +1033,133 @@ describe("PilotWorksheetCreatePage kapcsolat nélkül", () => {
     render(<PilotWorksheetCreatePage />);
 
     expect(await savotMond("form")).toBeTruthy();
+  });
+});
+
+describe("PilotWorksheetCreatePage: a karbantartási lap felelősei (kártya d91005e9)", () => {
+  /**
+   * MI PIROSÍT: ha a karbantartási lap felelősei nincsenek előre kijelölve a munkalapon; ha hibajegyből nyitott lapon is
+   * előre kijelölődnek (a hibajegy delegáltja nem feltétlenül végzi a munkalapot); ha egy kiosztható felelős nem jelölődik,
+   * vagy egy nem kiosztható (a szerepköre nem engedi) igen, vagy a kimaradása néma; ha a felvivő kijelölése felülírható az
+   * előtöltéssel (a lap betöltése a felvivő nyúlása után ér be); ha a felvivő nem tud levenni egy előre kijelölt felelőst;
+   * ha az előtöltött lista nem megy el a mentéssel.
+   */
+  const kollegak = [
+    { id: "anna", name: "Anna", role: "SERVICE" },
+    { id: "bela", name: "Béla", role: "SERVICE" },
+    { id: "cili", name: "Cili", role: "SERVICE" },
+  ];
+  const lap = (over: Record<string, unknown> = {}) => ({
+    id: "job-1",
+    kind: "MAINTENANCE",
+    jobNumber: "KT-2026-007",
+    customerId: "customer-42",
+    customerName: "Fankó Kft.",
+    departmentId: "department-1",
+    departmentName: "Biotóp",
+    assets: [],
+    assignees: [
+      { userId: "anna", name: "Anna", assignedAt: "2026-11-19T08:00:00.000Z" },
+      { userId: "bela", name: "Béla", assignedAt: "2026-11-19T08:00:00.000Z" },
+    ],
+    ...over,
+  });
+
+  beforeEach(() => {
+    auth.session = session;
+    worksheets.departments.mockReset().mockResolvedValue({
+      items: [
+        {
+          id: "department-1",
+          name: "Biotóp",
+          code: "BIO",
+          parentId: null,
+          isActive: true,
+        },
+      ],
+    });
+    worksheets.detail.mockReset();
+    worksheets.selectablePartners.mockReset().mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    worksheets.assignableUsers
+      .mockReset()
+      .mockResolvedValue({ items: kollegak });
+    worksheets.create.mockReset().mockResolvedValue({ id: "worksheet-1" });
+    assets.list.mockReset().mockResolvedValue({ items: [], total: 0 });
+    query.params = new URLSearchParams("hibajegy=job-1");
+    jobs.detail.mockReset().mockResolvedValue(lap());
+  });
+
+  const checked = async (name: string) =>
+    (await screen.findByRole("checkbox", {
+      name: new RegExp(name),
+    })) as HTMLInputElement;
+
+  it("a karbantartási lap felelősei előre ki vannak jelölve, a többi kolléga nem", async () => {
+    render(<PilotWorksheetCreatePage />);
+    await waitFor(async () =>
+      expect((await checked("Anna")).checked).toBe(true),
+    );
+    expect((await checked("Béla")).checked).toBe(true);
+    expect((await checked("Cili")).checked).toBe(false);
+    expect(screen.getByTestId("assignee-prefill-note").textContent).toMatch(
+      /előre ki vannak jelölve/,
+    );
+    expect(screen.queryByTestId("assignee-prefill-dropped")).toBeNull();
+  });
+
+  it("hibajegyből nyitott lapon a delegáltak nem jelölődnek ki", async () => {
+    jobs.detail.mockResolvedValue(lap({ kind: "REPAIR" }));
+    render(<PilotWorksheetCreatePage />);
+    await screen.findByRole("link", { name: "KT-2026-007" });
+    expect((await checked("Anna")).checked).toBe(false);
+    expect((await checked("Béla")).checked).toBe(false);
+    expect(screen.queryByTestId("assignee-prefill-note")).toBeNull();
+  });
+
+  it("aki a munkalapra nem osztható ki, kimarad, és a felvivő látja, ki maradt ki", async () => {
+    worksheets.assignableUsers.mockResolvedValue({
+      items: kollegak.filter((k) => k.id !== "bela"),
+    });
+    render(<PilotWorksheetCreatePage />);
+    await waitFor(async () =>
+      expect((await checked("Anna")).checked).toBe(true),
+    );
+    expect(
+      (await screen.findByTestId("assignee-prefill-dropped")).textContent,
+    ).toMatch(/Béla/);
+    expect(screen.queryByRole("checkbox", { name: /Béla/ })).toBeNull();
+  });
+
+  it("az előre kijelölt felelős levehető, és más hozzáadható", async () => {
+    const user = userEvent.setup();
+    render(<PilotWorksheetCreatePage />);
+    await waitFor(async () =>
+      expect((await checked("Anna")).checked).toBe(true),
+    );
+    await user.click(await checked("Anna"));
+    await user.click(await checked("Cili"));
+    expect((await checked("Anna")).checked).toBe(false);
+    expect((await checked("Cili")).checked).toBe(true);
+    expect((await checked("Béla")).checked).toBe(true);
+  });
+
+  it("amit a felvivő már kijelölt, azt a később beérkező lap nem írja felül", async () => {
+    let resolveLap: (value: unknown) => void = () => undefined;
+    jobs.detail
+      .mockReset()
+      .mockReturnValue(new Promise((resolve) => (resolveLap = resolve)));
+    const user = userEvent.setup();
+    render(<PilotWorksheetCreatePage />);
+    // a kollégák listája megvan, a lap még nem érkezett meg: a felvivő kijelöli Cilit
+    await user.click(await checked("Cili"));
+    resolveLap(lap());
+    await screen.findByRole("link", { name: "KT-2026-007" });
+    expect((await checked("Cili")).checked).toBe(true);
+    expect((await checked("Anna")).checked).toBe(false);
+    expect((await checked("Béla")).checked).toBe(false);
   });
 });

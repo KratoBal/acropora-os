@@ -36,6 +36,10 @@ function fakes(input: {
   afterwards?: MedusaCollectionRow[];
   mappings?: { brandId: string; medusaCollectionId: string }[];
   truncated?: boolean;
+  /** a handle-ok, amelyekre a letrehozas elbukik (a Medusa elutasitja) */
+  createFails?: string[];
+  /** a markak, amelyeknel a lekepezes irasa elbukik */
+  linkFails?: string[];
 }) {
   const created: MedusaCollectionInput[] = [];
   const linked: { brandId: string; medusaId: string }[] = [];
@@ -52,6 +56,10 @@ function fakes(input: {
       return { rows, truncated: input.truncated ?? false };
     },
     createProductCollection: async (payload: MedusaCollectionInput) => {
+      if (input.createFails?.includes(payload.handle))
+        throw new Error(
+          `HTTP 400 Collection with handle ${payload.handle} already exists`,
+        );
       created.push(payload);
       return {
         id: `pcol_${created.length}`,
@@ -66,6 +74,8 @@ function fakes(input: {
     all: async () =>
       (input.mappings ?? []).map((m) => ({ ...m, lastSyncedAt: null })),
     link: async (brandId: string, medusaId: string) => {
+      if (input.linkFails?.includes(brandId))
+        throw new Error("a lekepezes irasa elbukott");
       linked.push({ brandId, medusaId });
       return { brandId, medusaCollectionId: medusaId, lastSyncedAt: now };
     },
@@ -211,5 +221,264 @@ describe("MedusaBrandImportService", () => {
     assert.equal(f.listCalls(), 2);
     assert.equal(report.verification.carryingOurId, 1);
     assert.equal(report.verification.expected, 1);
+  });
+
+  /*
+    A HIBA MARKANKENT KULON (kartya ec82b629, merve a teszt kirakaton: a `fauna-marin` handle mar letezett, a letrehozas elbukott,
+    a ciklus kivetelkent kiszallt, es a tobbi marka sem kapott gyujtemenyt -- a lepes eredmenye egyetlen hibasor volt). MI PIROSIT:
+    ha egy marka hibaja leallitja a tobbit; ha a hiba nem jelenik meg a jelentesben markankent, fazissal; ha egy elbukott
+    letrehozas lekepezest ir; ha egy elbukott lekepezes mellett a gyujtemeny letrehozottkent szamolodik.
+  */
+  const harom = [
+    brand({ id: "b1", name: "Egy", slug: "egy" }),
+    brand({ id: "b2", name: "Fauna Marin", slug: "fauna-marin" }),
+    brand({ id: "b3", name: "Harom", slug: "harom" }),
+  ];
+
+  it("egy marka letrehozasi hibaja nem allitja le a tobbit, es markankent latszik", async () => {
+    const f = fakes({ createFails: ["fauna-marin"] });
+
+    const report = await f.service.run(f.client, harom, now);
+
+    assert.deepEqual(
+      f.created.map((c) => c.handle),
+      ["egy", "harom"],
+    );
+    assert.deepEqual(
+      f.linked.map((l) => l.brandId),
+      ["b1", "b3"],
+    );
+    assert.equal(report.created, 2);
+    assert.deepEqual(report.failures, [
+      {
+        ourId: "b2",
+        phase: "create",
+        message: "HTTP 400 Collection with handle fauna-marin already exists",
+      },
+    ]);
+  });
+
+  it("az elbukott letrehozas nem ir lekepezest", async () => {
+    const f = fakes({ createFails: ["fauna-marin"] });
+    await f.service.run(f.client, [harom[1]!], now);
+    assert.deepEqual(f.linked, []);
+    assert.deepEqual(f.relinked, []);
+  });
+
+  it("ha a gyujtemeny letrejott, de a lekepezes bukott, nem szamolodik letrehozottnak, a tobbi igen", async () => {
+    const f = fakes({ linkFails: ["b2"] });
+
+    const report = await f.service.run(f.client, harom, now);
+
+    assert.equal(f.created.length, 3);
+    assert.equal(report.created, 2);
+    assert.deepEqual(
+      report.failures.map((x) => [x.ourId, x.phase]),
+      [["b2", "link"]],
+    );
+  });
+
+  it("a csak-osszekoto lekepezes hibaja sem allitja le a letrehozasokat", async () => {
+    const f = fakes({
+      existing: [
+        { id: "pcol_a", title: "Egy", handle: "egy", external_id: "b1" },
+      ],
+      linkFails: ["b1"],
+    });
+
+    const report = await f.service.run(f.client, harom, now);
+
+    assert.deepEqual(
+      f.created.map((c) => c.handle),
+      ["fauna-marin", "harom"],
+    );
+    assert.deepEqual(
+      report.failures.map((x) => [x.ourId, x.phase]),
+      [["b1", "link"]],
+    );
+  });
+
+  it("a hiba szovege egy sorba esik es hatarolt", async () => {
+    const f = fakes({ createFails: ["fauna-marin"] });
+    f.client.createProductCollection = async () => {
+      throw new Error("HTTP 400\n  sok sor " + "x".repeat(400));
+    };
+    const report = await f.service.run(f.client, [harom[1]!], now);
+    const message = report.failures[0]!.message;
+    assert.ok(!message.includes("\n"));
+    assert.ok(message.length <= 160);
+  });
+
+  /*
+    A MERT ESET: a handle a Medusan mar letezik (nem a mi azonositonkkal). Ez eddig a lepest dobta; most a gyujtemenyhez kotunk, es
+    NEM hozunk letre masodikat. MI PIROSIT: ha a letrehozas meg megprobalodik (a Medusa elutasitja); ha a lekepezes nem a
+    meglevo gyujtemenyre mutat.
+  */
+  it("a mar letezo handle-hoz osszekot, nem probal letrehozni (a fauna-marin eset)", async () => {
+    const f = fakes({
+      existing: [
+        {
+          id: "pcol_fm",
+          title: "Fauna Marin",
+          handle: "fauna-marin",
+          external_id: null,
+        },
+      ],
+    });
+
+    // a gyujtemenyben csak ennek a markanak a termekei allnak (57247): osszekotheto
+    const kerdezett: { collectionId: string; brandId: string }[][] = [];
+    const report = await f.service.run(
+      f.client,
+      harom,
+      now,
+      async (jeloltek) => {
+        kerdezett.push([...jeloltek]);
+        return new Map([
+          [
+            "pcol_fm",
+            { total: 110, sameBrand: 110, otherBrand: 0, unknown: 0 },
+          ],
+        ]);
+      },
+    );
+
+    assert.deepEqual(
+      f.created.map((c) => c.handle),
+      ["egy", "harom"],
+    );
+    assert.deepEqual(
+      f.linked.filter((l) => l.brandId === "b2"),
+      [{ brandId: "b2", medusaId: "pcol_fm" }],
+    );
+    assert.equal(report.linkedOnly, 1);
+    assert.deepEqual(report.failures, []);
+    // a tartalmat CSAK a jeloltre kerdezi, es egyszer
+    assert.deepEqual(kerdezett, [[{ collectionId: "pcol_fm", brandId: "b2" }]]);
+  });
+
+  /*
+    A TARTALMI FELTETEL A SZOLGALTATASBAN (57247). MI PIROSIT: ha a vegyes tartalmu gyujtemeny osszekotodik; ha tartalom-olvaso
+    nelkul (a kezi parancs) osszekotodik; ha barmelyik esetben a tobbi marka nem jon letre.
+  */
+  it("a vegyes tartalmu, azonos handle-u gyujtemenyt nem koti ossze: foglalt handle, a tobbi letrejon", async () => {
+    const f = fakes({
+      existing: [
+        {
+          id: "pcol_fm",
+          title: "Fauna Marin",
+          handle: "fauna-marin",
+          external_id: null,
+        },
+      ],
+    });
+
+    const report = await f.service.run(
+      f.client,
+      harom,
+      now,
+      async () =>
+        new Map([
+          ["pcol_fm", { total: 12, sameBrand: 10, otherBrand: 2, unknown: 0 }],
+        ]),
+    );
+
+    assert.deepEqual(report.handleTaken, ["b2"]);
+    assert.deepEqual(
+      f.linked.filter((l) => l.brandId === "b2"),
+      [],
+    );
+    assert.deepEqual(
+      f.created.map((c) => c.handle),
+      ["egy", "harom"],
+    );
+  });
+
+  it("tartalom-olvaso nelkul (a kezi parancs) nem kot ossze: a marka nem ellenorzott, a tobbi letrejon", async () => {
+    const f = fakes({
+      existing: [
+        {
+          id: "pcol_fm",
+          title: "Fauna Marin",
+          handle: "fauna-marin",
+          external_id: null,
+        },
+      ],
+    });
+
+    const report = await f.service.run(f.client, harom, now);
+
+    assert.deepEqual(report.handleTaken, ["b2"]);
+    assert.deepEqual(
+      f.linked.filter((l) => l.brandId === "b2"),
+      [],
+    );
+    assert.deepEqual(
+      f.created.map((c) => c.handle),
+      ["egy", "harom"],
+    );
+  });
+
+  it("a masik marka azonositojat viselo handle-t nem veszi at, es nem is bukik: foglalt handle a jelentesben", async () => {
+    const f = fakes({
+      existing: [
+        {
+          id: "pcol_fm",
+          title: "Fauna Marin",
+          handle: "fauna-marin",
+          external_id: "valaki-mas",
+        },
+      ],
+    });
+
+    // a "valaki-mas" egy MAI markank (archivalt), tehat nem halott azonosito
+    const report = await f.service.run(
+      f.client,
+      [
+        ...harom,
+        brand({
+          id: "valaki-mas",
+          name: "Masik",
+          slug: "masik",
+          isActive: false,
+        }),
+      ],
+      now,
+    );
+
+    assert.deepEqual(report.handleTaken, ["b2"]);
+    assert.deepEqual(
+      f.created.map((c) => c.handle),
+      ["egy", "harom"],
+    );
+    assert.deepEqual(report.failures, []);
+    assert.equal(f.linked.filter((l) => l.brandId === "b2").length, 0);
+  });
+
+  /*
+    A MERT ESET (2026-11-19 15:51 UTC): a sajat, lekepezett gyujtemenyunk a 09-25-i OS-ujratoltes elotti, halott azonositot
+    viseli. MI PIROSIT: ha a jelentes foglalt handle-kent (utkozeskent) szamolja; ha letrehozas indul ra.
+  */
+  it("a halott azonositoju, lekepezett sajat gyujtemeny nem foglalt es nem jon letre ujra", async () => {
+    const f = fakes({
+      existing: [
+        {
+          id: "pcol_fm",
+          title: "Fauna Marin",
+          handle: "fauna-marin",
+          external_id: "cmtr15b7w0000nu8huvfrkcx2",
+        },
+      ],
+      mappings: [{ brandId: "b2", medusaCollectionId: "pcol_fm" }],
+    });
+
+    const report = await f.service.run(f.client, harom, now);
+
+    assert.deepEqual(report.handleTaken, []);
+    assert.equal(report.skipped, 1);
+    assert.deepEqual(
+      f.created.map((c) => c.handle),
+      ["egy", "harom"],
+    );
   });
 });

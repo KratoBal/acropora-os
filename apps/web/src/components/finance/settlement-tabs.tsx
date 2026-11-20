@@ -12,6 +12,7 @@ const DESCRIPTION: Record<string, string> = {
   "/penzugy/foxpost": "Heti utánvét + díjszámla egy levélben",
   "/penzugy/gls": "Utánvét, díjszámla és kompenzáció",
   "/penzugy/simplepay": "Kártyás forgalmi kimutatás",
+  "/penzugy/stripe": "Kifizetések, díjak, rendelés és számla",
   "/penzugy/atutalasok": "Egy utalás több számlára",
   "/penzugy/napi-jeloles": "Kifizetett-jelölés, futtatás most",
 };
@@ -34,7 +35,7 @@ export function SettlementTabs() {
   if (tabs.length === 0) return null;
   return (
     <nav aria-label="Elszámolások">
-      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {tabs.map((tab) => {
           const active =
             pathname === tab.href || pathname.startsWith(`${tab.href}/`);

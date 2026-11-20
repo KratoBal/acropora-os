@@ -241,6 +241,7 @@ export {
   isWebshopMailTemplate,
   parseWebshopMailFacts,
   safeOrderViewUrl,
+  safeBuyerCompany,
   safeLegalUrls,
   webshopMailContent,
   webshopMailKey,
@@ -319,6 +320,7 @@ export type {
   WebshopMailOrder,
   WebshopMailTemplate,
   WebshopPaymentRole,
+  WebshopBuyerCompany,
   WebshopLegalUrls,
   WebshopPlacedOrder,
   WebshopRefundFacts,
@@ -367,6 +369,11 @@ export type {
   ServiceJobStatusValue,
   ServiceJobTimelineEntry,
   ServiceJobWorksheetLink,
+  ServiceJobLinkedWorksheet,
+  ServiceJobLinkedWorksheetEvent,
+  ServiceJobLinkedWorksheetsResponse,
+  ServiceJobLinkableWorksheet,
+  ServiceJobLinkableWorksheetsResponse,
 } from "./service-job-management.js";
 export type { NamedPerson } from "./person-name.js";
 export type {
@@ -847,8 +854,14 @@ export type {
 } from "./purchasing.js";
 export { EXPECTED_ARRIVAL_LIST_PAGE_SIZE } from "./purchasing.js";
 export type {
+  CreatePosInternalUseInput,
   CreatePosSaleInput,
   CreatePosSaleLineInput,
+  PosInternalUseDetail,
+  PosInternalUseLineDetail,
+  PosInternalUseListItem,
+  PosInternalUseListResponse,
+  PosInternalUseResult,
   PosPaymentMethod,
   PosPaymentSummaryCell,
   PosPaymentSummaryDay,
@@ -863,7 +876,11 @@ export type {
   PosSaleStockWarning,
   SalesOrderLineSyncStatus,
 } from "./pos.js";
-export { POS_MANUAL_LINE_SKU, POS_MANUAL_VAT_RATES } from "./pos.js";
+export {
+  POS_INTERNAL_USE_NOTE_MAX,
+  POS_MANUAL_LINE_SKU,
+  POS_MANUAL_VAT_RATES,
+} from "./pos.js";
 export type {
   InventoryCountApplyResult,
   InventoryCountDetail,
@@ -1047,6 +1064,21 @@ export type {
   SimplePaySyncStatus,
   SimplePayTransactionLine,
 } from "./integrations/simplepay-settlement.js";
+export type {
+  StripeLineError,
+  StripeLineStatus,
+  StripeManualApprovalInput,
+  StripePayoutDetail,
+  StripePayoutError,
+  StripePayoutListResponse,
+  StripePayoutStatus,
+  StripePayoutSummary,
+  StripeResolutionSource,
+  StripeSyncRunSummary,
+  StripeSyncState,
+  StripeSyncStatus,
+  StripeTransactionLine,
+} from "./integrations/stripe-settlement.js";
 export {
   AI_ACCURACY_RATINGS,
   AI_LANGUAGE_RATINGS,
@@ -1164,6 +1196,7 @@ export type {
   WorksheetListItem,
   WorksheetListResponse,
   WorksheetChainLink,
+  WorksheetCopyResult,
   WorksheetSelectablePartner,
   WorksheetSelectablePartnerListResponse,
   WorksheetSignerCandidate,
@@ -1390,8 +1423,15 @@ export type {
   InvoiceCollectionItemsResponse,
   InvoiceCollectionRunRow,
   InvoiceCollectionRunsResponse,
+  AcceptWithRuleInput,
+  AcceptWithRuleResult,
+  AutoAcceptUndoResult,
+  AutoAcceptedView,
   InvoiceCollectionSuggestion,
   InvoiceCollectionSuggestionDecision,
+  SupplierRuleKind,
+  SupplierRulePreview,
+  SupplierRuleView,
   InvoiceCollectionSuggestionsResponse,
   MissingInvoiceAction,
   MissingInvoiceCandidate,
@@ -1638,6 +1678,10 @@ export {
   WEBSHOP_ORDER_STAGE_LABELS,
   WEBSHOP_ORDER_STALE_DEFAULTS,
   WEBSHOP_ORDER_STATUSES,
+  SHIPPING_GATE_SENTENCE_PREFIX,
+  SHIPPING_OVERRIDE_REASON_MIN,
+  SHIPPING_OVERRIDE_REASON_MAX,
+  PERSONAL_DELIVERY_REASON,
   WEBSHOP_ORDER_STATUS_LABELS,
   WEBSHOP_PARCEL_SIZES,
   WEBSHOP_CARD_PAYMENT_STATES,
@@ -2372,6 +2416,17 @@ export type {
   WebshopCustomerHit,
 } from "./webshop-customer-discounts.js";
 export {
+  WEBSHOP_LOYALTY_POINTS_MAX,
+  WEBSHOP_LOYALTY_REASON_MAX,
+  isLoyaltyPoints,
+} from "./webshop-order-loyalty.js";
+export type {
+  WebshopLoyaltyAdjustmentInput,
+  WebshopLoyaltyAdjustmentResult,
+  WebshopLoyaltyEntry,
+  WebshopOrderLoyalty,
+} from "./webshop-order-loyalty.js";
+export {
   impossiblePaymentReason,
   parseWebshopPaymentMatrixInput,
   parseWebshopShippingFeesInput,
@@ -2406,3 +2461,4 @@ export type {
   WebshopGiftCardTransaction,
   WebshopGiftCardTransactionKind,
 } from "./webshop-gift-cards.js";
+export type { DueInvoiceItem, DueInvoicesResponse } from "./due-invoices.js";

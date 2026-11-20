@@ -71,6 +71,7 @@ import {
   type MaintenanceBlockedAction,
 } from "./maintenance-guard.js";
 import { serviceJobSource } from "./service-job-source.js";
+import { createdDayRange } from "../worksheets/worksheet-created-range.js";
 import { ServiceJobsRepository } from "./service-jobs.repository.js";
 
 @Injectable()
@@ -1179,6 +1180,11 @@ export class ServiceJobsService {
      * A KAPCSOLOT A HATOKOR ERTELMEZI, nem a hivo (`hiddenRowsWhere`): a
      * partner portaljan a rejtett jegy soha nem ertelmezett, akarmit kuld.
      */
+    /*
+      A LÉTREHOZÁS NAPJA (Luca, 2026-11-20) UGYANEBBE AZ ÁGBA KERÜL, ugyanazért, amiért a rejtés: a lista és a számlálók egy
+      változóból kapják, tehát a csempéken álló szám a szűrt listáé, nem az egészé. Hibás vagy fordított tartomány: 400.
+    */
+    const created = createdDayRange(query.createdFrom, query.createdTo);
     const visibility: Prisma.ServiceJobWhereInput = {
       AND: [
         await this.visibilityFor(user),
@@ -1187,6 +1193,7 @@ export class ServiceJobsService {
           query.includeHidden,
           hasPermission(user, PERMISSIONS.SERVICE_HIDE),
         ),
+        ...(created ? [{ createdAt: created }] : []),
       ],
     };
     const kind = query.kind ?? "REPAIR";

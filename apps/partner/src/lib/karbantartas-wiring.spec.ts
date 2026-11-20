@@ -9,7 +9,8 @@ import { describe, it } from "node:test";
  *
  * MI PIROSÍT: ha a Hibajegyek lista újra mindent kér (`kind: "ALL"`), vagy a Karbantartás lista nem `MAINTENANCE`-et; ha nincs menüpont vagy útvonal a karbantartásnak; ha a
  * karbantartási lap adatlapján újra megjelenik a beszélgetés, a szerkesztő vagy a dokumentumcsomag-gomb; ha a másik fajta útvonalán megnyitott lap nem irányít át a sajátjára; ha a
- * partner a karbantartás listán új hibajegyet nyithat.
+ * partner a karbantartás listán új hibajegyet nyithat. A KAPCSOLÓDÓ MUNKALAPOK (kártya efe02c6f): ha a karbantartási lap nem kéri le vagy nem mutatja őket; ha a hibajegy is
+ * kérné; ha a kártya írni tudna (hozzákapcsolás, levétel) vagy kiírná, ki kapcsolta; ha a sor nem a munkalap partneri adatlapjára visz.
  */
 const GYOKER = join(process.cwd(), "src");
 const olvas = (ut: string) => readFileSync(ut, "utf8");
@@ -22,6 +23,7 @@ const KLIENS = join(GYOKER, "lib", "api.ts");
 const LISTA = join(GYOKER, "components", "ticket-list.tsx");
 const ADATLAP = join(GYOKER, "components", "ticket-detail.tsx");
 const MENU = join(GYOKER, "components", "portal-shell.tsx");
+const KAPCSOLT = join(GYOKER, "components", "linked-worksheets-card.tsx");
 const LISTA_OLDAL = join(GYOKER, "app", "(portal)", "karbantartas", "page.tsx");
 const ADATLAP_OLDAL = join(
   GYOKER,
@@ -42,7 +44,15 @@ const HIBAJEGY_ADATLAP_OLDAL = join(
 
 describe("a karbantartás menüpont bekötése a partner portálon", () => {
   it("POZITÍV KONTROLL: a fájlok olvashatók és nem üresek", () => {
-    for (const ut of [KLIENS, LISTA, ADATLAP, MENU, LISTA_OLDAL, ADATLAP_OLDAL])
+    for (const ut of [
+      KLIENS,
+      LISTA,
+      ADATLAP,
+      MENU,
+      LISTA_OLDAL,
+      ADATLAP_OLDAL,
+      KAPCSOLT,
+    ])
       assert.ok(kod(ut).length > 100, `${ut}: üres vagy gyanúsan rövid`);
   });
 
@@ -100,5 +110,23 @@ describe("a karbantartás menüpont bekötése a partner portálon", () => {
       lap,
       /router\.replace\(ticketHref\(ticket\.kind, ticket\.id\)\)/,
     );
+  });
+
+  it("a karbantartási lap mutatja a kapcsolódó munkalapokat, csak olvasásra; a hibajegy nem kéri le (kártya efe02c6f)", () => {
+    const api = kod(KLIENS);
+    assert.match(
+      api,
+      /linkedWorksheets: \(id: string\) =>\s*request<ServiceJobLinkedWorksheetsResponse>\(\s*`\/service\/jobs\/\$\{encodeURIComponent\(id\)\}\/linked-worksheets`,\s*\),/,
+    );
+    const lap = kod(ADATLAP);
+    assert.match(
+      lap,
+      /if \(route !== "karbantartas"\) return;\s*setLinkedError\(null\);\s*try \{\s*setLinked\(\(await partnerApi\.linkedWorksheets\(id\)\)\.items\);/,
+    );
+    assert.match(lap, /\{maintenance \? \(\s*<LinkedWorksheetsCard/);
+    const kartya = kod(KAPCSOLT);
+    assert.doesNotMatch(kartya, /partnerApi|linkable|unlink|method:/);
+    assert.doesNotMatch(kartya, /linkedByName/);
+    assert.match(kartya, /href=\{`\/munkalapok\/\$\{item\.worksheetId\}`\}/);
   });
 });

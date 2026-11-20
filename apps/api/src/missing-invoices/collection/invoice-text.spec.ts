@@ -1276,6 +1276,72 @@ describe("a known number when the text names no supplier tax number (Tisza 97)",
 });
 
 /*
+  A GLS SZÁMLASZÁMA NEM ADÓSZÁM (acrobot 57891, 57900; mérve élesen 2026-11-20, 13 függő GLS PDF). A GLS számlaszáma HU + 8 jegy
+  (`HU00956903`), ami egy EU-s adószám alakja is: az olvasó adószámnak vette, a fájlnév ügyfélszámát (`100031291_20261112.pdf`)
+  számlaszámnak, és a NAV-sor (szám + a GLS adószáma) soha nem találkozott a PDF-fel. MI PIROSÍT: ha az olvasat adószáma egy ISMERT
+  számlaszám (NAV, feed, beszerzés), és mégis megmarad adószámnak; ha a szám nem az ismert számot kapja; ha a szállító adószáma nem
+  a NAV-soré lesz; ha egy valódi EU-s adószám (ami nem ismert számlaszám) is elvész.
+*/
+describe("a known invoice number that looks like a tax number (GLS)", () => {
+  const GLS = [
+    "GLS General Logistics Systems Hungary Kft.",
+    "SZÁMLA / INVOICE",
+    "HU00956903",
+    "Vevő: Acropora Kft.",
+    "Customer 100031291",
+    "Fizetendő: 15 240 Ft",
+  ];
+  const KNOWN_GLS = [
+    { number: "HU00956903", supplierTaxNumber: "12369410-2-41" },
+    { number: "HU00948583", supplierTaxNumber: "12369410-2-41" },
+  ];
+  const hints = { fileName: "100031291_20261112.pdf", subject: null };
+
+  it("the plain reading takes the number for a tax number and the customer number for the invoice number (the fault)", () => {
+    const read = readInvoiceText(GLS, hints);
+    assert.equal(read.supplierTaxNumber, "HU00956903");
+    assert.equal(read.invoiceNumber, "100031291");
+  });
+
+  it("the known number is the invoice number, and the supplier's tax number is the NAV row's", () => {
+    const read = withKnownNumber(
+      readInvoiceText(GLS, hints),
+      GLS,
+      KNOWN_GLS,
+      hints,
+    );
+    assert.deepEqual(
+      [read.invoiceNumber, read.numberFrom, read.supplierTaxNumber],
+      ["HU00956903", "NAV", "12369410-2-41"],
+    );
+  });
+
+  it("a real EU tax number that is not a known invoice number stays the supplier's", () => {
+    const read = {
+      invoiceNumber: "RE-1",
+      numberFrom: "LABEL" as const,
+      supplierTaxNumber: "HU12345678",
+    };
+    assert.equal(withKnownNumber(read, GLS, KNOWN_GLS, hints), read);
+  });
+
+  it("a real tax number stays the supplier's even when a known number stands in the text and the number came from the file name", () => {
+    // the early return is the guard: only a tax number that IS a known invoice number is let through it
+    const read = {
+      invoiceNumber: "IMG_1",
+      numberFrom: "FILE_NAME" as const,
+      supplierTaxNumber: "HU12345678",
+    };
+    assert.equal(withKnownNumber(read, GLS, KNOWN_GLS, hints), read);
+  });
+
+  it("an unknown number stays what the reader made of it (nothing to correct it with)", () => {
+    const read = readInvoiceText(GLS, hints);
+    assert.equal(withKnownNumber(read, GLS, [], hints), read);
+  });
+});
+
+/*
   A CÍMKÉS VÉGÖSSZEG (kártya 37b8643d). A sorok a valódi PDF-ek alakja, mérve
   2026-10-06 élesen (KS2605898.pdf, 4934_26_szamla.pdf, KS2605848.pdf).
   MI PIROSÍT: ha az előjel elveszik (a módosító pozitív bruttót kapna); ha két

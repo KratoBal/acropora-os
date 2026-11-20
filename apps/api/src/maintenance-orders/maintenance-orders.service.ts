@@ -25,6 +25,10 @@ import {
   UploadCustomerFormDto,
 } from "./dto.js";
 import {
+  contractJobTitle,
+  separateContractJobTitle,
+} from "./contract-job-title.js";
+import {
   createJobFromContractItems,
   ensureOneSite,
   siteForContractItems,
@@ -659,7 +663,7 @@ export class MaintenanceOrdersService {
     // a kért darab- és alkalomszám (a hiányzó: a szerződés darabszáma, egy alkalom)
     const chosen = chosenOrderLines(dto, contract.items);
     const key = dto.clientOperationId?.trim() || randomUUID();
-    const title = dto.title?.trim() || contract.title;
+    const explicitTitle = dto.title?.trim() || null;
 
     if (!dto.separate || contract.items.length === 1)
       return this.createOneContractJob(
@@ -667,7 +671,11 @@ export class MaintenanceOrdersService {
         contract.items,
         chosen,
         key,
-        title,
+        contractJobTitle({
+          explicit: explicitTitle,
+          contractTitle: contract.title,
+          items: contract.items,
+        }),
         actor,
       );
 
@@ -719,7 +727,11 @@ export class MaintenanceOrdersService {
         [item],
         chosen,
         `${key}-${item.id}`,
-        `${title}: ${item.description}`,
+        separateContractJobTitle({
+          explicit: explicitTitle,
+          contractTitle: contract.title,
+          item,
+        }),
         actor,
       );
       serviceJobIds.push(serviceJobId);

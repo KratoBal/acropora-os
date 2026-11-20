@@ -83,10 +83,16 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "INCOMING_FOREIGN_READ_ENABLED",
   "INCOMING_FOREIGN_READ_INTERVAL_MINUTES",
   "INCOMING_FOREIGN_READ_SINCE",
+  // the known-supplier rules' switch and its two settings (acrobot 57884): a switch, a switch and a domain list, none a secret
+  "INVOICE_SUPPLIER_RULES",
+  "INVOICE_SUPPLIER_RULES_AMOUNTLESS",
+  "INVOICE_SUPPLIER_RULE_TRUSTED_DOMAINS",
   // the research source discovery's switch (S2): on | off, not a secret
   "KNOWLEDGE_DISCOVERY",
   "MAINTENANCE_INVOICE_ISSUE_ENABLED",
   "MISSING_INVOICES_DRIVE_FOLDER_URL",
+  // the payment intermediaries of the missing-invoices matching (acrobot 58103): a list of name patterns, not a secret
+  "MISSING_INVOICES_PAYMENT_INTERMEDIARIES",
   "MNB_API_URL",
   "NEV",
   "NEXT_PROXY_TIMEOUT_MS",
@@ -140,6 +146,9 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "RUN_DB_INTEGRATION",
   // the global search's time limit for an external group, in milliseconds: a number, not a secret
   "SEARCH_EXTERNAL_GROUP_TIMEOUT_MS",
+  // the Stripe settlement pull (A9): a switch and a minute count, not secrets (the OS holds no Stripe key)
+  "STRIPE_SETTLEMENT_SYNC_ENABLED",
+  "STRIPE_SETTLEMENT_SYNC_INTERVAL_MINUTES",
   "VIES_API_URL",
   // the webshop problem report pull (V1.2): a switch, two minute counts and a user id: not secrets
   "WEBSHOP_COMPLAINT_ASSIGNEE_ID",
