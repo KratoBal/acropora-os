@@ -261,6 +261,11 @@ export const MISSING_INVOICE_ACTIONS = [
   "PROVIDE_PREMIUM_NOTICE",
   /** Sztornózott vásárlás: a visszatérítés elmaradt, vissza kell kérni (acrobot 25933). */
   "CHASE_REFUND",
+  /**
+   * Nincs a partnertől számla, de az ÖSSZEGE egyezik néhány számláéval (a kiállító neve nem: közvetítőn át fizetés,
+   * kártyás vásárlás): előbb azokat kell megnézni, utána kérni a számlát (acrobot 58107 a).
+   */
+  "CHECK_AMOUNT_CANDIDATES",
 ] as const;
 export type MissingInvoiceAction = (typeof MISSING_INVOICE_ACTIONS)[number];
 

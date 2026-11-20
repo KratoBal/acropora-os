@@ -265,6 +265,8 @@ export function whatToDo(
     case "CHASE_REFUND":
       // acrobot 25933: a sztornózott vásárlás pénze nem jött vissza
       return "A vásárlást sztornózták, de a visszatérítés a határidőig nem jött meg: kérd vissza az eladótól, vagy kártyás vásárlásnál a banktól.";
+    case "CHECK_AMOUNT_CANDIDATES":
+      return "A partnertől nincs számla, de a javasolt számlák közül egynek az összege pontosan egyezik: ha az ennek a fizetésnek a számlája (a kiállító neve a közvetítő vagy a bolt miatt más lehet), párosítsd. Ha egyik sem, kérd el a számlát a partnertől.";
     case "PAIR_OR_UPLOAD":
       return "Van számla ettől a partnertől, de egyik sem egyezik ezzel a terheléssel: párosítsd a javasolt számlák közül, vagy töltsd fel a hiányzót.";
     case "NONE":
