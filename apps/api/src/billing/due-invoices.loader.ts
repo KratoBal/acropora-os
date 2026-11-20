@@ -6,6 +6,7 @@ import { budapestDay } from "./billing-document-list.js";
 import { buildDueInvoices } from "./due-invoices.js";
 import type { IncomingReviewService } from "./foreign-invoice/incoming-review.service.js";
 import { loadCollectedPdfIndex } from "./incoming-collected-pdf.js";
+import { loadSupplierAccountResolution } from "./supplier-bank-account-resolve.loader.js";
 import { loadSetOffPayments } from "./incoming-set-off.loader.js";
 import { attachedPdfIds } from "./incoming-pdf-attach.js";
 import { incomingHasPdf } from "./incoming-pdf-state.js";
@@ -37,9 +38,10 @@ export async function loadDueInvoices(
       loadPurchaseSubjects(database),
       attachedPdfIds(database),
     ]);
-  const [manualPaid, setOff] = await Promise.all([
+  const [manualPaid, setOff, resolved] = await Promise.all([
     loadManualPurchasePayments(database, rows),
     loadSetOffPayments(database, rows),
+    loadSupplierAccountResolution(database, rows),
   ]);
   return buildDueInvoices({
     items: incomingListItems({
@@ -51,7 +53,18 @@ export async function loadDueInvoices(
       manualPaid,
       setOff,
     }),
-    bankAccounts: new Map(rows.map((row) => [row.id, row.supplierBankAccount])),
+    // a sor saját számlaszáma, ennek hiányában a pótlás (a szállító másik számlája, a törzs, a kitöltés), a forrás jelölésével
+    bankAccounts: new Map(
+      rows.map((row) => [
+        row.id,
+        (row.supplierBankAccount ?? "").trim() !== ""
+          ? row.supplierBankAccount
+          : (resolved.get(row.id)?.account ?? null),
+      ]),
+    ),
+    bankAccountSources: new Map(
+      [...resolved].map(([id, account]) => [id, account.source]),
+    ),
     today: budapestDay(now)!,
   });
 }

@@ -7,6 +7,34 @@ import type { DecimalText } from "./billing-document-amounts.js";
  */
 
 /**
+ * HONNAN VAN A SZÁLLÍTÓ SZÁMLASZÁMA A LEJÁRÓ LISTÁN (acrobot 58654, 58655, kártya 4900497b): `OWN` a számla saját adata (a feed); a többi PÓTLÁS, és a sor jelöli, mert az utalási jegyzékbe kerülő
+ * számlaszám forrását látni kell. Soha nem találgat: egy különböző számlaszám kell, ellentmondásnál nincs adat.
+ */
+export type DueInvoiceAccountSource =
+  | "OWN"
+  /** a szállító (adószám szerint) másik bejövő számláján áll */
+  | "OTHER_INVOICE"
+  /** a szállító-törzsben áll */
+  | "MASTER"
+  /** a számla tárolt PDF-jéből kiolvasva */
+  | "INVOICE_PDF"
+  /** a szállító NAV-számlájához párosított korábbi terhelés partner-számlaszáma */
+  | "PAIRED_DEBIT"
+  /** a Pénzügy jogú felhasználó adta meg */
+  | "MANUAL";
+
+/** A sor megjegyzése a számlaszám alatt; a `OWN`-hoz nincs (az a számla saját adata). */
+export const DUE_INVOICE_ACCOUNT_SOURCE_NOTES: Readonly<
+  Record<Exclude<DueInvoiceAccountSource, "OWN">, string>
+> = {
+  OTHER_INVOICE: "a szállító másik számlájáról",
+  MASTER: "a szállító-törzsből",
+  INVOICE_PDF: "a számla PDF-jéből",
+  PAIRED_DEBIT: "korábbi utalásból",
+  MANUAL: "kézzel megadva",
+};
+
+/**
  * Egy tétel. A hiányzó adat NEM ejti ki a sort: a `missing` mondja meg, melyik mező hiányzik, és a felület „nincs adat”-ot ír
  * (Balázs jóváhagyta, 2026-11-20 14:51 UTC).
  */
@@ -22,8 +50,10 @@ export interface DueInvoiceItem {
   overdue: boolean;
   /** hány napja lejárt (csak lejártnál, különben `null`) */
   daysOverdue: number | null;
-  /** a cég bankszámlaszáma, ahogy a számlán áll; `null`: nincs adat */
+  /** a cég bankszámlaszáma, ahogy a számlán áll (vagy a `supplierBankAccountSource` szerinti forrásból); `null`: nincs adat */
   supplierBankAccount: string | null;
+  /** honnan van a számlaszám: `OWN` a számla saját adata, a többi a pótlás forrása (a sor jelöli); `null`, ha nincs számlaszám */
+  supplierBankAccountSource: DueInvoiceAccountSource | null;
   /** a HÁTRALÉK: a bruttó mínusz a kifizetett rész (a számla pénznemében) */
   outstanding: DecimalText;
   currency: string;

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  DUE_INVOICE_ACCOUNT_SOURCE_NOTES,
   formatMoney,
   hasPermission,
   PERMISSIONS,
@@ -88,7 +89,16 @@ const columns: PilotTableColumn<DueInvoiceItem>[] = [
     nowrap: true,
     cell: (row) =>
       row.supplierBankAccount ? (
-        <span className="tabular-nums">{row.supplierBankAccount}</span>
+        <>
+          <span className="tabular-nums">{row.supplierBankAccount}</span>
+          {row.supplierBankAccountSource &&
+          row.supplierBankAccountSource !== "OWN" ? (
+            // a pótolt számlaszám forrása: az utalásba kerülő számot a forrásáról kell megítélni
+            <span className="block text-xs text-pilot-grey-600">
+              {DUE_INVOICE_ACCOUNT_SOURCE_NOTES[row.supplierBankAccountSource]}
+            </span>
+          ) : null}
+        </>
       ) : (
         <NoData what="A cég bankszámlaszáma" />
       ),

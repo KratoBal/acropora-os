@@ -31,6 +31,7 @@ const item = (over: Partial<DueInvoiceItem> = {}): DueInvoiceItem => ({
   overdue: false,
   daysOverdue: null,
   supplierBankAccount: "11700000-12345678-00000000",
+  supplierBankAccountSource: "OWN",
   outstanding: "127000",
   currency: "HUF",
   reference: "SZ-2026-7",
