@@ -246,7 +246,8 @@ export function AssetList() {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-3">
+        {/* the row wraps: the search, the location and the pager ran 161 px past a 390 px screen (bug round 2026-11-20) */}
+        <div className="flex flex-wrap items-center gap-3">
           <div className="relative max-w-sm flex-1">
             <Icon
               name="search"

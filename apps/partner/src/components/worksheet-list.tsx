@@ -201,7 +201,8 @@ export function WorksheetList() {
         allapotban nem adja meg.
       */}
       <div className="flex flex-wrap items-center gap-4 border-b border-pilot-grey-100 bg-white px-8 py-4">
-        <div className="flex items-center gap-1">
+        {/* the tabs scroll in their own row, as on the asset list: at 390 px they ran 102 px past the screen (bug round 2026-11-20) */}
+        <div className="flex max-w-full items-center gap-1 overflow-x-auto">
           {TABS.map((tab) => (
             <button
               key={tab.key}
