@@ -5,6 +5,8 @@ import {
   backfillSummary,
   feedGaps,
   feedSeries,
+  foreignSeries,
+  NOT_OUR_ACCOUNT,
   SETTLED_OUTCOMES,
   type FeedControlResult,
   type FeedGapSeries,
@@ -170,9 +172,22 @@ export class FeedBackfillService {
         this.running = null;
         throw error;
       }
-      if (results.some((r) => !r.passed)) {
+      // a series the control proved to be outside our account is not a failure: it drops out of the round (and for good)
+      if (results.some((r) => !r.passed && !r.foreign)) {
         this.running = null;
         return { status: "control-failed", control: results };
+      }
+      if (results.some((r) => r.foreign)) {
+        try {
+          targets = await this.targets(apply, now);
+        } catch (error) {
+          this.running = null;
+          throw error;
+        }
+        if (targets.length === 0) {
+          this.running = null;
+          return { status: "nothing", phase };
+        }
       }
     }
     this.running.total = targets.length;
@@ -192,9 +207,11 @@ export class FeedBackfillService {
         .filter((c) => SETTLED_OUTCOMES.has(c.outcome))
         .map((c) => c.number),
     );
+    const foreign = foreignSeries(checked);
     return apply
       ? checked.filter((c) => c.outcome === "WOULD_STORE").map((c) => c.number)
       : (await this.gaps(now))
+          .filter((g) => !foreign.has(g.series))
           .flatMap((g) => g.missing)
           .filter((n) => !settled.has(n));
   }
@@ -206,7 +223,11 @@ export class FeedBackfillService {
     diagnose = false,
   ): Promise<FeedControlResult[]> {
     const results: FeedControlResult[] = [];
-    const withGap = (await this.gaps(now)).filter((g) => g.missing.length > 0);
+    // a series already judged to be outside our account is not asked again
+    const foreign = foreignSeries(await this.store.checked());
+    const withGap = (await this.gaps(now)).filter(
+      (g) => g.missing.length > 0 && !foreign.has(g.series),
+    );
     for (const [i, gap] of withGap.entries()) {
       if (i > 0 && this.delayMs > 0)
         await new Promise((r) => setTimeout(r, this.delayMs));
@@ -235,8 +256,9 @@ export class FeedBackfillService {
           : {}),
       });
     }
+    if (diagnose) await this.judgeForeignSeries(results, userId);
     this.control = { checkedAt: new Date().toISOString(), results };
-    const failed = results.filter((r) => !r.passed);
+    const failed = results.filter((r) => !r.passed && !r.foreign);
     this.logger.log(
       `Feed-visszatöltés kontroll (user ${userId}): ${results.length - failed.length}/${results.length} sorozat rendben${failed
         .map(
@@ -248,6 +270,44 @@ export class FeedBackfillService {
         .join("")}`,
     );
     return results;
+  }
+
+  /**
+   * A BUKOTT KONTROLL ÍTÉLETE (acrobot 58095): a 7-es válasz (`NOT_FOUND`) két dolgot jelenthet, és egyetlen kérdés választja
+   * szét őket: megtalálja-e UGYANEZ a kulcs az OS által kiállított számlát. Ha igen, a kérés alakja és a kulcs jó, a szám pedig
+   * nem ebben a fiókban él: a sorozat nem a mi Számlázz.hu fiókunkból való, és VÉGLEGESEN kimarad (`NOT_OUR_ACCOUNT`, a tábla
+   * őrzi, újraindítás után is). Ha nem (vagy nem tudni), a bukás marad kontroll-bukás. Egy kör egy kérdést tesz fel, nem
+   * sorozatonként egyet.
+   */
+  private async judgeForeignSeries(
+    results: FeedControlResult[],
+    userId: string,
+  ): Promise<void> {
+    const suspects = results.filter(
+      (r) => !r.passed && r.outcome === "NOT_FOUND",
+    );
+    if (
+      suspects.length === 0 ||
+      typeof this.feedPull.keyKnowsOwnNumber !== "function"
+    )
+      return;
+    if ((await this.feedPull.keyKnowsOwnNumber()) !== true) return;
+    for (const result of suspects) {
+      result.foreign = true;
+      await this.store.record({
+        number: result.number,
+        series: result.series,
+        line: {
+          outcome: NOT_OUR_ACCOUNT,
+          detail: `a kontroll szám 7-es választ kapott, az OS által kiállított számlát ugyanez a kulcs megtalálta: ${result.detail}`,
+        },
+        userId,
+        at: new Date(),
+      });
+    }
+    this.logger.log(
+      `Feed-visszatöltés: ${suspects.map((r) => r.series).join(", ")} nem a mi Számlázz.hu fiókunkból való, a sorozat kimarad`,
+    );
   }
 
   private async loop(

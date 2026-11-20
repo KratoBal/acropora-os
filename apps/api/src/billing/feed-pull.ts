@@ -245,6 +245,26 @@ export async function diagnoseQueryFailure(
   return lines;
 }
 
+/**
+ * AZ ÉN KULCSOM LÁT-E EGY SAJÁT SZÁMOT (a kontroll bukásának ítéletéhez, acrobot 58095): az OS által, ugyanezzel az ügynök-
+ * kulccsal kiállított legutóbbi számla XML-lekérdezése. `true`: a lekérdezés alakja és a kulcs jó, tehát egy feedben lévő szám
+ * 7-es válasza azt jelenti, hogy a szám NEM ebből a Számlázz.hu fiókból való. `false` vagy `null` (nincs ilyen számla, vagy a
+ * kérés elhasalt): ez nem bizonyít semmit, a kontroll bukása marad kontroll-bukás. Csak olvas.
+ */
+export async function ownNumberKnown(
+  deps: FeedPullDeps,
+): Promise<boolean | null> {
+  const own = deps.ownIssuedNumber ? await deps.ownIssuedNumber() : null;
+  if (!own) return null;
+  const body = await deps.client.queryDocument(
+    buildSzamlazzQueryXml({
+      agentKey: await deps.agentKey(),
+      key: { by: "invoiceNumber", value: own },
+    }),
+  );
+  return parseSzamlazzQueryResponse(body).outcome === "FOUND";
+}
+
 export function feedPullReport(
   lines: readonly FeedPullLine[],
   apply: boolean,

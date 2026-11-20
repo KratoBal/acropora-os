@@ -37,7 +37,7 @@ const startText = (answer: FeedBackfillStart) =>
  * felelt a Számlázz.hu, és nem hagyja, hogy a nulla ismert számla "nincs meg"-nek látsszon.
  */
 function ControlResults({ results }: { results: FeedControlResult[] }) {
-  const failed = results.filter((r) => !r.passed);
+  const failed = results.filter((r) => !r.passed && !r.foreign);
   if (failed.length === 0) return null;
   return (
     <div data-testid="feed-backfill-control-failed">
@@ -130,11 +130,19 @@ export function FeedBackfillPanel({
         description={error}
       />
     ) : null;
-  const missing = status.series.reduce((sum, s) => sum + s.missing, 0);
-  const known = Object.values(status.checked).reduce(
-    (sum, answers) => sum + count(answers, "WOULD_STORE"),
-    0,
+  // A sorozat, amelyet a kontroll a mi Számlázz.hu fiókunkon kívülinek ítélt (acrobot 58095): erre nincs visszatöltés,
+  // se szám, se gomb; a hiányzókat máshonnan töltjük
+  const foreign = new Set(
+    Object.entries(status.checked)
+      .filter(([, answers]) => count(answers, "NOT_OUR_ACCOUNT") > 0)
+      .map(([name]) => name),
   );
+  const missing = status.series
+    .filter((s) => !foreign.has(s.series))
+    .reduce((sum, s) => sum + s.missing, 0);
+  const known = Object.entries(status.checked)
+    .filter(([name]) => !foreign.has(name))
+    .reduce((sum, [, answers]) => sum + count(answers, "WOULD_STORE"), 0);
   const series = [
     ...new Set([
       ...status.series.map((s) => s.series),
@@ -178,6 +186,23 @@ export function FeedBackfillPanel({
         {series.map((name) => {
           const gap = status.series.find((s) => s.series === name);
           const answers = status.checked[name];
+          if (foreign.has(name))
+            return (
+              <li
+                key={name}
+                className="space-y-1 px-4 py-2"
+                data-testid={`feed-backfill-series-${name}`}
+              >
+                <span className="font-medium">{name}</span>
+                <span
+                  className="block text-xs text-pilot-grey-700"
+                  data-testid={`feed-backfill-foreign-${name}`}
+                >
+                  Ezeket a Cashman állítja ki, a hiányzókat a NAV-ból töltjük
+                  be.
+                </span>
+              </li>
+            );
           return (
             <li
               key={name}
