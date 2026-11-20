@@ -563,6 +563,111 @@ describe("WebshopOrderDetailPage", () => {
       );
     });
 
+    /*
+      A SZEMÉLYES KISZÁLLÍTÁS (Luca, 2026-11-20): külön választás a Kiszállítás lépésnél, nem rejtett felülbírálás. MI PIROSÍT: ha a választás nem látszik a
+      Kiszállításnál (vagy más lépésnél, vagy bolti átvételnél is látszik); ha a bejelölés nem jut el a kérésig; ha jelölés nélkül is megy; ha jog nélküli
+      kezelőnek is látszik/nem látszik (nem kell hozzá jog); ha a bejelölt választás mellett a felülbírálás indok-mezője is áll; ha a visszalépés nem törli.
+    */
+    it("the Kiszállítás step offers the personal delivery as its own choice, for a user without the override right too", async () => {
+      auth.session = session("SALES");
+      const dialog = await openDialog();
+      const box = within(dialog).getByRole("checkbox", {
+        name: /Személyes kiszállítás: a kolléga viszi ki, csomag nélkül/,
+      }) as HTMLInputElement;
+      expect(box.checked).toBe(false);
+      expect(dialog.textContent).toContain("Számla ilyenkor is kell");
+    });
+
+    it("a ticked personal delivery goes with the request; unticked, the plain four arguments", async () => {
+      api.changeStatus.mockResolvedValue({
+        order: { ...shippingDetail, nextStatuses: [] },
+        mail: { sent: false, reason: "no_mail_for_status" },
+        personalDelivery: true,
+      });
+      const dialog = await openDialog();
+      fireEvent.click(
+        within(dialog).getByRole("checkbox", {
+          name: /Személyes kiszállítás/,
+        }),
+      );
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Státusz módosítása" }),
+      );
+      await waitFor(() => expect(api.changeStatus).toHaveBeenCalledTimes(1));
+      expect(api.changeStatus).toHaveBeenLastCalledWith(
+        "token",
+        "order_38",
+        "out_for_delivery",
+        true,
+        undefined,
+        true,
+      );
+    });
+
+    it("an unticked personal delivery sends the plain request", async () => {
+      api.changeStatus.mockResolvedValue({
+        order: { ...shippingDetail, nextStatuses: [] },
+        mail: { sent: false, reason: "no_mail_for_status" },
+      });
+      const dialog = await openDialog();
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Státusz módosítása" }),
+      );
+      await waitFor(() => expect(api.changeStatus).toHaveBeenCalledTimes(1));
+      expect(api.changeStatus).toHaveBeenLastCalledWith(
+        "token",
+        "order_38",
+        "out_for_delivery",
+        true,
+      );
+    });
+
+    it("the personal choice is not offered for another step or for a store pickup", async () => {
+      api.detail.mockResolvedValue(detail);
+      render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Státusz módosítása" }),
+      );
+      const dialog = screen.getByRole("dialog", { name: "Státusz módosítása" });
+      expect(
+        within(dialog).queryByRole("checkbox", {
+          name: /Személyes kiszállítás/,
+        }),
+      ).toBeNull();
+      cleanup();
+      api.detail.mockResolvedValue({
+        ...shippingDetail,
+        shipping: { ...shippingDetail.shipping, storePickup: true },
+      } as WebshopOrderDetail);
+      render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Státusz módosítása" }),
+      );
+      expect(
+        within(
+          screen.getByRole("dialog", { name: "Státusz módosítása" }),
+        ).queryByRole("checkbox", { name: /Személyes kiszállítás/ }),
+      ).toBeNull();
+    });
+
+    it("with the personal choice ticked the override's reason field is not shown (the choice is the reason)", async () => {
+      api.changeStatus.mockRejectedValueOnce(new Error(GATE));
+      const dialog = await openDialog();
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Státusz módosítása" }),
+      );
+      await within(dialog).findByRole("alert");
+      expect(
+        within(dialog).getByLabelText("Indoklás a felülbíráláshoz"),
+      ).toBeTruthy();
+      fireEvent.click(
+        within(dialog).getByRole("checkbox", { name: /Személyes kiszállítás/ }),
+      );
+      expect(
+        within(dialog).queryByLabelText("Indoklás a felülbíráláshoz"),
+      ).toBeNull();
+    });
+
     it("a user without the right sees the gate's sentence and no way around it", async () => {
       auth.session = session("SALES");
       api.changeStatus.mockRejectedValueOnce(new Error(GATE));

@@ -58,7 +58,11 @@ describe("webshop order status change: the shipping gate override", () => {
       supplierId: null,
     }) as AuthenticatedUser;
 
-  const call = (as: AuthenticatedUser, overrideReason?: string) => {
+  const call = (
+    as: AuthenticatedUser,
+    overrideReason?: string,
+    personalDelivery?: boolean,
+  ) => {
     const seen: unknown[][] = [];
     const orders = {
       changeStatus: async (...args: unknown[]) => void seen.push(args),
@@ -71,7 +75,7 @@ describe("webshop order status change: the shipping gate override", () => {
     )(orders);
     void controller.changeStatus(
       "order_38",
-      { status: "out_for_delivery", overrideReason } as never,
+      { status: "out_for_delivery", overrideReason, personalDelivery } as never,
       as,
     );
     return seen[0]!;
@@ -93,6 +97,24 @@ describe("webshop order status change: the shipping gate override", () => {
         (args[5] as { canOverride: boolean }).canOverride,
         can,
         role,
+      );
+    }
+  });
+
+  it("the personal delivery choice reaches the service as a plain true, for every role, with no right needed", () => {
+    for (const role of ["OWNER", "ADMIN", "MANAGER", "SALES"] as const) {
+      const args = call(user(role), undefined, true);
+      assert.equal(
+        (args[5] as { personalDelivery: boolean }).personalDelivery,
+        true,
+        role,
+      );
+    }
+    for (const absent of [undefined, false]) {
+      const args = call(user("MANAGER"), undefined, absent);
+      assert.equal(
+        (args[5] as { personalDelivery: boolean }).personalDelivery,
+        false,
       );
     }
   });

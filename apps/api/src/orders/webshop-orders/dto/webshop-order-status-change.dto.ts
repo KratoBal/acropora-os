@@ -21,4 +21,12 @@ export class WebshopOrderStatusChangeDto {
   @IsOptional()
   @IsString()
   overrideReason?: string;
+
+  /**
+   * A SZEMÉLYES KISZÁLLÍTÁS (Luca, 2026-11-20): a kolléga viszi ki, csomag nélkül. Csak a Kiszállításra számít (nem bolti átvételnél); számla ilyenkor is
+   * kell. Külön választás, nem felülbírálás: nem kell hozzá külön jog és indok, de saját naplósora van. Ha mindkettő jön, ez dönt (az indok figyelmen kívül marad).
+   */
+  @IsOptional()
+  @IsBoolean()
+  personalDelivery?: boolean;
 }

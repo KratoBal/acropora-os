@@ -98,7 +98,15 @@ describe("shippingGateDecision", () => {
     overrideReason: string | undefined,
     canOverride: boolean,
     to: "out_for_delivery" | "closed" = "out_for_delivery",
-  ) => shippingGateDecision({ to, facts, overrideReason, canOverride });
+    personalDelivery = false,
+  ) =>
+    shippingGateDecision({
+      to,
+      facts,
+      overrideReason,
+      canOverride,
+      personalDelivery,
+    });
 
   it("the gate holds and there is no reason: refuse, with the sentence that names what is missing", () => {
     const out = decide(gated, undefined, true);
@@ -171,6 +179,92 @@ describe("shippingGateDecision", () => {
     assert.deepEqual(
       decide({ ...gated, storePickup: true }, "Bolti átvétel indok", true),
       { kind: "go" },
+    );
+  });
+
+  /*
+    A SZEMÉLYES KISZÁLLÍTÁS (Luca, 2026-11-20): külön választás, NEM felülbírálás. MI PIROSÍT: ha számla nélkül átmegy; ha jog vagy indok kellene hozzá; ha a
+    bolti átvételnél vagy másik lépésnél nyomot hagy (hamis nyom); ha az indok mellette felülbírálásként is naplózódik; ha a csomag nélküli esetben a hiányzó
+    csomag nem kerül a naplóba, vagy a meglévő csomagnál is hiányzónak látszik.
+  */
+  it("personal delivery with the invoice and no parcel goes: no right and no reason needed, the missing parcel is what is logged", () => {
+    assert.deepEqual(
+      shippingGateDecision({
+        to: "out_for_delivery",
+        facts: {
+          storePickup: false,
+          invoiceNumber: "ACRW-1",
+          hasParcel: false,
+        },
+        overrideReason: undefined,
+        canOverride: false,
+        personalDelivery: true,
+      }),
+      { kind: "personal", missing: ["feladott csomag"] },
+    );
+  });
+
+  it("personal delivery still needs the invoice: the refusal is its own sentence, not the gate's", () => {
+    const out = shippingGateDecision({
+      to: "out_for_delivery",
+      facts: { storePickup: false, invoiceNumber: null, hasParcel: false },
+      overrideReason: undefined,
+      canOverride: true,
+      personalDelivery: true,
+    });
+    assert.equal(out.kind, "refuse");
+    if (out.kind === "refuse") {
+      assert.match(
+        out.sentence,
+        /személyes kiszállításhoz is kell kiállított számla/,
+      );
+      assert.ok(!out.sentence.startsWith("A Kiszállítás előtt kell:"));
+    }
+  });
+
+  it("personal delivery with a parcel already there logs no missing part", () => {
+    assert.deepEqual(
+      shippingGateDecision({
+        to: "out_for_delivery",
+        facts: ready,
+        overrideReason: undefined,
+        canOverride: false,
+        personalDelivery: true,
+      }),
+      { kind: "personal", missing: [] },
+    );
+  });
+
+  it("the choice is ignored where the gate does not stand: a store pickup and another step leave no trace", () => {
+    assert.deepEqual(
+      decide(
+        { ...gated, storePickup: true },
+        undefined,
+        false,
+        "out_for_delivery",
+        true,
+      ),
+      { kind: "go" },
+    );
+    assert.deepEqual(decide(gated, undefined, false, "closed", true), {
+      kind: "go",
+    });
+  });
+
+  it("with a reason as well, the personal choice decides: the reason is not an override", () => {
+    assert.deepEqual(
+      shippingGateDecision({
+        to: "out_for_delivery",
+        facts: {
+          storePickup: false,
+          invoiceNumber: "ACRW-1",
+          hasParcel: false,
+        },
+        overrideReason: "A csomagot a GLS portálján adtuk fel kézzel",
+        canOverride: true,
+        personalDelivery: true,
+      }),
+      { kind: "personal", missing: ["feladott csomag"] },
     );
   });
 

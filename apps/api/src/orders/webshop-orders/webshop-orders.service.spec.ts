@@ -2,6 +2,7 @@ import "reflect-metadata";
 
 import assert from "node:assert/strict";
 import {
+  PERSONAL_DELIVERY_REASON,
   WEBSHOP_STALE_THRESHOLD_DEFAULTS,
   type WebshopStaleThreshold,
 } from "@acropora/types";
@@ -1046,6 +1047,167 @@ describe("WebshopOrdersService.changeStatus", () => {
       (audited[0] as { requested: { missing: string[] } }).requested.missing,
       ["feladott csomag"],
     );
+  });
+
+  /*
+    A SZEMÉLYES KISZÁLLÍTÁS (Luca, 2026-11-20; acrobot 57771): csomag nélküli Kiszállítás, ha a kolléga viszi ki; számla kell, külön naplósor (ki, mikor, ok),
+    külön választás a felületen. MI PIROSÍT: ha számla nélkül átmegy; ha jog vagy indok kellene hozzá; ha a naplósor a webshop-hívás UTÁN íródik (a Stripe-levonás
+    a Kiszállításra fut: a nyomnak előbb kell megvolnia); ha a sor felülbírálásként, nem személyes kiszállításként íródik; ha a bolti átvételnél hamis nyom marad;
+    ha egy indok mellette felülbírálássá teszi; ha a napló ok-szövege a kezelő szava (állandó); ha a válasz nem jelzi a személyes kiszállítást.
+  */
+  const PERSONAL_TRACE = {
+    kind: "personal",
+    userId: "user_1",
+    orderId: "order_38",
+    from: "stocking",
+    to: "out_for_delivery",
+    reason: PERSONAL_DELIVERY_REASON,
+    missing: ["feladott csomag"],
+  };
+
+  it("personal delivery ships with the invoice and no parcel, without any right: the trace is requested, applied, then the status row", async () => {
+    const { orders, sent, audited } = statusService({ parcel: false });
+    const result = await orders.changeStatus(
+      "order_38",
+      "out_for_delivery",
+      "user_1",
+      true,
+      NOW,
+      { personalDelivery: true, canOverride: false },
+    );
+    assert.equal(sent.length, 1);
+    assert.equal(result.personalDelivery, true);
+    assert.equal(result.shippingGateOverridden, false);
+    assert.deepEqual(audited, [
+      { requested: PERSONAL_TRACE },
+      { applied: "audit_row_1", trace: PERSONAL_TRACE },
+      {
+        userId: "user_1",
+        orderId: "order_38",
+        from: "stocking",
+        to: "out_for_delivery",
+      },
+    ]);
+  });
+
+  it("personal delivery without the invoice is a 409 with its own sentence: nothing reaches the webshop or the audit", async () => {
+    const { orders, sent, audited } = statusService({
+      invoice: false,
+      parcel: false,
+    });
+    await assert.rejects(
+      orders.changeStatus("order_38", "out_for_delivery", "user_1", true, NOW, {
+        personalDelivery: true,
+        canOverride: true,
+      }),
+      (error: unknown) => {
+        assert.equal((error as Error).constructor.name, "ConflictException");
+        assert.match(
+          (error as Error).message,
+          /személyes kiszállításhoz is kell kiállított számla/,
+        );
+        return true;
+      },
+    );
+    assert.deepEqual([sent, audited], [[], []]);
+  });
+
+  it("the personal trace is written BEFORE the webshop call: if it cannot be written nothing is sent, and a webshop refusal leaves it requested", async () => {
+    const noTrace = statusService({ parcel: false, requestError: true });
+    await assert.rejects(
+      noTrace.orders.changeStatus(
+        "order_38",
+        "out_for_delivery",
+        "user_1",
+        true,
+        NOW,
+        { personalDelivery: true },
+      ),
+      /audit write failed/,
+    );
+    assert.deepEqual([noTrace.sent, noTrace.audited], [[], []]);
+    const refused = statusService({
+      parcel: false,
+      transitionError: new MedusaAdminHttpError(
+        422,
+        JSON.stringify({ message: "A levonás nem sikerült" }),
+      ),
+    });
+    await assert.rejects(
+      refused.orders.changeStatus(
+        "order_38",
+        "out_for_delivery",
+        "user_1",
+        true,
+        NOW,
+        { personalDelivery: true },
+      ),
+      (error: unknown) =>
+        (error as Error).constructor.name === "UnprocessableEntityException",
+    );
+    assert.equal(refused.sent.length, 0);
+    assert.deepEqual(refused.audited, [{ requested: PERSONAL_TRACE }]);
+  });
+
+  it("a store pickup leaves no personal trace: the choice does not apply there", async () => {
+    const { orders, audited } = statusService({
+      storePickup: true,
+      invoice: false,
+      parcel: false,
+    });
+    const result = await orders.changeStatus(
+      "order_38",
+      "out_for_delivery",
+      "user_1",
+      true,
+      NOW,
+      { personalDelivery: true },
+    );
+    assert.equal(result.personalDelivery, false);
+    assert.deepEqual(audited, [
+      {
+        userId: "user_1",
+        orderId: "order_38",
+        from: "stocking",
+        to: "out_for_delivery",
+      },
+    ]);
+  });
+
+  it("a reason sent with the personal choice is not an override: the trace is the personal one with the constant reason", async () => {
+    const { orders, audited } = statusService({ parcel: false });
+    const result = await orders.changeStatus(
+      "order_38",
+      "out_for_delivery",
+      "user_1",
+      true,
+      NOW,
+      {
+        personalDelivery: true,
+        overrideReason: "A csomagot a GLS portálján adtuk fel kézzel",
+        canOverride: true,
+      },
+    );
+    assert.equal(result.shippingGateOverridden, false);
+    assert.equal(result.personalDelivery, true);
+    assert.deepEqual(audited[0], { requested: PERSONAL_TRACE });
+  });
+
+  it("with a parcel already there the personal trace names no missing part", async () => {
+    const { orders, audited } = statusService({ parcel: true });
+    await orders.changeStatus(
+      "order_38",
+      "out_for_delivery",
+      "user_1",
+      true,
+      NOW,
+      {
+        personalDelivery: true,
+      },
+    );
+    assert.deepEqual(audited[0], {
+      requested: { ...PERSONAL_TRACE, missing: [] },
+    });
   });
 
   it("with the invoice and the parcel, shipping goes (the default of the other tests)", async () => {

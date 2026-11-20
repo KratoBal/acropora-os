@@ -235,6 +235,7 @@ function StatusDialog({
     status: WebshopOrderStatus,
     notifyCustomer: boolean,
     overrideReason?: string,
+    personalDelivery?: boolean,
   ) => Promise<void>;
 }) {
   const [next, setNext] = useState<string>("");
@@ -245,6 +246,11 @@ function StatusDialog({
   // és a kérőnek van joga; a kötelező indok a naplóba kerül
   const [gateHeld, setGateHeld] = useState(false);
   const [overrideReason, setOverrideReason] = useState("");
+  // A SZEMÉLYES KISZÁLLÍTÁS (Luca, 2026-11-20): külön, kimondott választás a Kiszállításnál (nem rejtett felülbírálás): a kolléga viszi ki, csomag nélkül;
+  // számla ilyenkor is kell, és a lépés naplózódik (ki, mikor). Csak a Kiszállítás lépésnél látszik.
+  const [personal, setPersonal] = useState(false);
+  const personalOffered =
+    next === "out_for_delivery" && !order.shipping.storePickup;
   const reason = overrideReason.trim();
   const reasonValid =
     reason.length >= SHIPPING_OVERRIDE_REASON_MIN &&
@@ -256,6 +262,7 @@ function StatusDialog({
       setError(null);
       setGateHeld(false);
       setOverrideReason("");
+      setPersonal(false);
     }
   }, [open, order.nextStatuses]);
   const submit = async (withOverride: boolean) => {
@@ -266,7 +273,8 @@ function StatusDialog({
       await onSubmit(
         next as WebshopOrderStatus,
         notify,
-        withOverride ? reason : undefined,
+        withOverride && !personal ? reason : undefined,
+        personalOffered && personal ? true : undefined,
       );
       onClose();
     } catch (cause) {
@@ -322,6 +330,22 @@ function StatusDialog({
           />
           Vevő értesítése
         </label>
+        {personalOffered ? (
+          <div className="space-y-1 rounded-lg border border-pilot-grey-200 p-3">
+            <label className="flex items-center gap-2 text-sm text-pilot-grey-800">
+              <input
+                type="checkbox"
+                checked={personal}
+                onChange={(event) => setPersonal(event.target.checked)}
+              />
+              Személyes kiszállítás: a kolléga viszi ki, csomag nélkül
+            </label>
+            <p className="text-xs text-pilot-grey-600">
+              Számla ilyenkor is kell. A választás naplózódik: ki és mikor vitte
+              ki személyesen.
+            </p>
+          </div>
+        ) : null}
         {error ? (
           <p
             role="alert"
@@ -330,7 +354,7 @@ function StatusDialog({
             {error}
           </p>
         ) : null}
-        {gateHeld && canOverrideShipping ? (
+        {gateHeld && canOverrideShipping && !(personalOffered && personal) ? (
           <div className="space-y-2 rounded-lg border border-pilot-amber-200 bg-pilot-amber-50 p-3">
             <p className="text-sm text-pilot-grey-800">
               Felülbírálhatod a kaput, de a kártyás levonás számla és csomag
@@ -435,14 +459,32 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     status: WebshopOrderStatus,
     notifyCustomer: boolean,
     overrideReason?: string,
+    personalDelivery?: boolean,
   ) => {
-    const result = await webshopOrdersApi.changeStatus(
-      token,
-      id,
-      status,
-      notifyCustomer,
-      ...(overrideReason ? [overrideReason] : []),
-    );
+    // only what is set goes (the plain call stays the four arguments it always was)
+    const result = personalDelivery
+      ? await webshopOrdersApi.changeStatus(
+          token,
+          id,
+          status,
+          notifyCustomer,
+          overrideReason,
+          true,
+        )
+      : overrideReason
+        ? await webshopOrdersApi.changeStatus(
+            token,
+            id,
+            status,
+            notifyCustomer,
+            overrideReason,
+          )
+        : await webshopOrdersApi.changeStatus(
+            token,
+            id,
+            status,
+            notifyCustomer,
+          );
     setOrder(result.order);
     setMailNotice(statusMailText(result.mail));
     setNow(Date.now());
@@ -1998,6 +2040,7 @@ function OrderBody({
     status: WebshopOrderStatus,
     notifyCustomer: boolean,
     overrideReason?: string,
+    personalDelivery?: boolean,
   ) => Promise<void>;
   mailNotice: string | null;
   onResendStatusMail: () => Promise<void>;

@@ -48,7 +48,12 @@ const CUSTOMER_REFERENCE = {
 export const SHIPPING_OVERRIDE_ACTION =
   "webshop-order.shipping-gate-overridden";
 
+/** A személyes kiszállítás naplósora (Luca, 2026-11-20): saját `action`, hogy ne keveredjen a felülbírálással ("ki kerülte meg a kaput" kontra "ki vitte ki személyesen"). */
+export const PERSONAL_DELIVERY_ACTION = "webshop-order.personal-delivery";
+
 export type ShippingOverrideTrace = {
+  /** Melyik kivétel: a felülbírálás (alapértelmezés) vagy a személyes kiszállítás; ez dönti el a napló `action`-jét. */
+  kind?: "override" | "personal";
   userId: string;
   orderId: string;
   from: string | null;
@@ -56,6 +61,11 @@ export type ShippingOverrideTrace = {
   reason: string;
   missing: string[];
 };
+
+const shippingTraceAction = (input: ShippingOverrideTrace) =>
+  input.kind === "personal"
+    ? PERSONAL_DELIVERY_ACTION
+    : SHIPPING_OVERRIDE_ACTION;
 
 const shippingOverrideMetadata = (
   input: ShippingOverrideTrace,
@@ -103,7 +113,7 @@ export class WebshopOrdersRepository {
     const row = await prisma.auditLog.create({
       data: {
         userId: input.userId,
-        action: SHIPPING_OVERRIDE_ACTION,
+        action: shippingTraceAction(input),
         entityType: "WebshopOrder",
         entityId: input.orderId,
         metadata: shippingOverrideMetadata(input, "requested"),

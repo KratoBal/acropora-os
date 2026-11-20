@@ -16,6 +16,7 @@ import {
   unfinishedSplitOf,
 } from "./webshop-order-detail.rules.js";
 import {
+  PERSONAL_DELIVERY_REASON,
   SHIPPING_OVERRIDE_REASON_MAX,
   SHIPPING_OVERRIDE_REASON_MIN,
   WEBSHOP_ORDER_STATUS_LABELS,
@@ -412,7 +413,11 @@ export class WebshopOrdersService {
     userId: string,
     notifyCustomer = true,
     now = new Date(),
-    options: { overrideReason?: string; canOverride?: boolean } = {},
+    options: {
+      overrideReason?: string;
+      canOverride?: boolean;
+      personalDelivery?: boolean;
+    } = {},
   ): Promise<WebshopOrderStatusChangeResult> {
     const client = await this.client();
     const current = await this.fromWebshop(() =>
@@ -436,6 +441,7 @@ export class WebshopOrdersService {
         facts: await this.shippingGateFacts(id),
         overrideReason: options.overrideReason,
         canOverride: options.canOverride === true,
+        personalDelivery: options.personalDelivery === true,
       });
       /*
         A FELÜLBÍRÁLÁS (kártya 33a0d3c7, acrobot döntése: naplózott): külön jog és kötelező indok; a jog előbb, mint az indok formája.
@@ -460,6 +466,20 @@ export class WebshopOrdersService {
           from: current.status,
           to,
           reason: decision.reason,
+          missing: decision.missing,
+        };
+      /*
+        A SZEMÉLYES KISZÁLLÍTÁS (Luca, 2026-11-20): saját naplósor (`webshop-order.personal-delivery`: ki, mikor, ok), ugyanazzal a sorrenddel, mint a
+        felülbírálásnál: a sor a webshop-hívás ELŐTT íródik `requested` állapottal, és a Stripe-levonás (a Kiszállításra fut) csak utána indul.
+      */
+      if (decision.kind === "personal")
+        override = {
+          kind: "personal",
+          userId,
+          orderId: id,
+          from: current.status,
+          to,
+          reason: PERSONAL_DELIVERY_REASON,
           missing: decision.missing,
         };
     }
@@ -505,7 +525,8 @@ export class WebshopOrdersService {
     return {
       order: await this.detail(id, now),
       mail,
-      shippingGateOverridden: override !== null,
+      shippingGateOverridden: override !== null && override.kind !== "personal",
+      personalDelivery: override?.kind === "personal",
     };
   }
 

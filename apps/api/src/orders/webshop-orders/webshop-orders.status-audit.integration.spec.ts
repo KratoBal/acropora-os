@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
 import { prisma } from "@acropora/database";
+import { PERSONAL_DELIVERY_REASON } from "@acropora/types";
 
 import { integrationDatabaseGate } from "../../common/integration-database.js";
 import { nincsMaradek } from "../../common/takaritas-leltar.js";
@@ -143,6 +144,44 @@ describe(
       );
       assert.ok(
         written.every(
+          (row) => row.userId === userId && row.entityType === "WebshopOrder",
+        ),
+      );
+    });
+
+    it("a personal delivery has its own action, apart from the override: requested before the webshop call, applied after, with the constant reason", async () => {
+      const trace = {
+        kind: "personal" as const,
+        userId,
+        orderId: ORDER,
+        from: "stocking",
+        to: "out_for_delivery",
+        reason: PERSONAL_DELIVERY_REASON,
+        missing: ["feladott csomag"],
+      };
+      // the previous case leaves its two rows: this one starts from a clean order
+      await prisma.auditLog.deleteMany({ where: { entityId: ORDER } });
+      const rowId = await repository.requestShippingOverride(trace);
+      const attempt = await rows();
+      assert.equal(attempt.length, 1);
+      assert.equal(attempt[0]!.action, "webshop-order.personal-delivery");
+      assert.deepEqual(attempt[0]!.metadata, {
+        status: "requested",
+        from: "stocking",
+        to: "out_for_delivery",
+        reason: PERSONAL_DELIVERY_REASON,
+        missing: ["feladott csomag"],
+      });
+      await repository.markShippingOverrideApplied(rowId, trace);
+      const applied = await rows();
+      assert.equal(applied.length, 1);
+      assert.equal(applied[0]!.action, "webshop-order.personal-delivery");
+      assert.deepEqual(
+        (applied[0]!.metadata as { status: string }).status,
+        "applied",
+      );
+      assert.ok(
+        applied.every(
           (row) => row.userId === userId && row.entityType === "WebshopOrder",
         ),
       );

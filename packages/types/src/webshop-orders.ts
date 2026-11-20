@@ -394,11 +394,21 @@ export const SHIPPING_OVERRIDE_REASON_MIN = 10;
 export const SHIPPING_GATE_SENTENCE_PREFIX = "A Kiszállítás előtt kell:";
 export const SHIPPING_OVERRIDE_REASON_MAX = 500;
 
+/**
+ * A SZEMÉLYES KISZÁLLÍTÁS (Luca, 2026-11-20 08:17 UTC, a Kiszállítás kivétele a kapu alól; acrobot 57771): ritkán, de a kolléga viszi ki a csomagot, ilyenkor
+ * csomag nincs, SZÁMLA viszont kell. Nem felülbírálás: külön, kimondott választás a Kiszállítás gombnál, saját naplósorral (ki, mikor, ok). Az ok állandó, a
+ * kezelő nem ír indokot: a választás maga az ok.
+ */
+export const PERSONAL_DELIVERY_REASON =
+  "Személyes kiszállítás: a kolléga viszi ki, csomag nélkül.";
+
 export interface WebshopOrderStatusChangeResult {
   order: WebshopOrderDetail;
   mail: WebshopStatusMailOutcome;
   /** Igaz, ha a Kiszállítás a kapu felülbírálásával ment át (a napló az indokot tartalmazza). */
   shippingGateOverridden?: boolean;
+  /** Igaz, ha a Kiszállítás személyes kiszállításként ment át (csomag nélkül; a napló tartalmazza, ki és mikor). */
+  personalDelivery?: boolean;
 }
 
 export interface WebshopOrderDetail {

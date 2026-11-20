@@ -66,6 +66,7 @@ export function shippingGateRefusal(
  */
 export type ShippingGateDecision =
   | { kind: "go" }
+  | { kind: "personal"; missing: string[] }
   | { kind: "refuse"; sentence: string }
   | { kind: "forbidden" }
   | { kind: "bad-reason" }
@@ -77,7 +78,32 @@ export function shippingGateDecision(input: {
   /** A kérésben kapott indok; `undefined`, ha nem jött (egy üres szöveg viszont "jött, de üres"). */
   overrideReason: string | undefined;
   canOverride: boolean;
+  /** A kezelő a "személyes kiszállítás" választást jelölte (Luca, 2026-11-20): csomag nélkül, számlával. */
+  personalDelivery?: boolean;
 }): ShippingGateDecision {
+  /*
+    A SZEMÉLYES KISZÁLLÍTÁS (Luca, 2026-11-20): külön, kimondott választás, NEM felülbírálás. Nem kell hozzá jog és indok (a választás az ok), de
+    SZÁMLA ilyenkor is kell, és saját naplósora van. Csak ott számít, ahol a kapu egyáltalán áll (a bolti átvétel és a többi lépés nincs kapuzva: ott a
+    választás nem hagy nyomot, mert nem kerülte meg semmit). Ha az indok is jön, ez dönt, és az indok figyelmen kívül marad.
+      personal   a számla megvan: a lépés megy; a naplóba a csomag hiánya kerül (üres lista, ha volt csomag)
+      refuse     a számla hiányzik: a 409 mondata nevezi meg (nem a felülbírálás mondata: a személyes kiszállításhoz is kell számla)
+  */
+  if (
+    input.personalDelivery === true &&
+    input.to === "out_for_delivery" &&
+    !input.facts.storePickup
+  ) {
+    if (!input.facts.invoiceNumber)
+      return {
+        kind: "refuse",
+        sentence:
+          "A személyes kiszállításhoz is kell kiállított számla. Hiányzik: kiállított számla.",
+      };
+    return {
+      kind: "personal",
+      missing: input.facts.hasParcel ? [] : ["feladott csomag"],
+    };
+  }
   const missing = shippingGateMissing(input.to, input.facts);
   if (missing.length === 0) return { kind: "go" };
   if (input.overrideReason === undefined)

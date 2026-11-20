@@ -313,6 +313,7 @@ export class WebshopOrdersController {
       new Date(),
       {
         overrideReason: body.overrideReason,
+        personalDelivery: body.personalDelivery === true,
         // a külön jog dönti el, nem a rendelés-kezelés: a kapu felülbírálása számla és csomag nélkül mozgat pénzt (33a0d3c7)
         canOverride: hasPermission(user, PERMISSIONS.ORDERS_SHIPPING_OVERRIDE),
       },
