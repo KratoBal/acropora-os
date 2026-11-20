@@ -11,6 +11,11 @@ import type { WorksheetContentDto } from "./dto/worksheet.dto.js";
 import { normalizeWorksheetContent } from "./worksheet-content.js";
 import { worksheetYear } from "./worksheet-number.js";
 import { FIRST_LINE_STEP_NOTE } from "./first-line-ticket-step.js";
+import { lastServiceJobNumber } from "../service-jobs/service-job-last-number.js";
+import {
+  nextServiceJobNumber,
+  serviceJobNumberPrefix,
+} from "../service-jobs/service-job-number.js";
 import { WorksheetsRepository } from "./worksheets.repository.js";
 import { toWorksheetDetail } from "./worksheets.types.js";
 
@@ -164,6 +169,19 @@ describe(
           }),
         },
         {
+          nev: "a suite automatikus jegyei bent maradtak a takaritas utan",
+          darab: await prisma.serviceJob.count({
+            where: {
+              clientOperationId: { startsWith: "worksheet-auto-ticket:" },
+              department: {
+                customer: {
+                  customerNumber: { startsWith: TEST_CUSTOMER_PREFIX },
+                },
+              },
+            },
+          }),
+        },
+        {
           nev: "a suite eszkozei bent maradtak a takaritas utan",
           darab: await prisma.asset.count({
             where: { assetNumber: { startsWith: TEST_ASSET_PREFIX } },
@@ -199,6 +217,11 @@ describe(
         }
         await prisma.worksheet.deleteMany({
           where: { customerId: { in: customerIds } },
+        });
+        // AZ AUTOMATIKUS JEGYEK (worksheet-auto-ticket.ts) valodi HJ-szamot kapnak, tehat az elotag-szuro nem latja oket;
+        // a helyszinuk viszont a suite-e, es a helyszin `Restrict`: bent maradva a vevo torleset allitanak meg.
+        await prisma.serviceJob.deleteMany({
+          where: { department: { customerId: { in: customerIds } } },
         });
         /**
          * A SAJAT HIBAJEGYEK, ELOTAGRA SZURVE -- ES EZ A SOR EDDIG HIANYZOTT.
@@ -237,6 +260,13 @@ describe(
           });
           if (removed.count === 0) break;
         }
+        // a vevo portal-felhasznaloi (az automatikus jegy tesztjeinek alairoi): a `User.customer` `Restrict`, tehat a vevo elott
+        await prisma.user.deleteMany({
+          where: {
+            customerId: { in: customerIds },
+            email: { endsWith: `@${TEST_EMAIL_DOMAIN}` },
+          },
+        });
         await prisma.customer.deleteMany({
           where: { id: { in: customerIds } },
         });
@@ -867,6 +897,7 @@ describe(
           az elso, tul szeles kapum elzart volna.
         */
         requireSent: false,
+        openTicketIfMissing: true,
         now: new Date(),
       });
 
@@ -1187,6 +1218,400 @@ describe(
      * eset, mert azt egyébként semmi nem írhatja át.
      */
     /**
+     * AZ AUTOMATIKUS HIBAJEGY (Luca es Balazs, 2026-11-20; `worksheet-auto-ticket.ts`). Minden alairasi utat merunk
+     * (a vevonek kikuldott, a gepelt nevvel rogzitett, a sajat es a vevo munkatarsanak kivalasztott alairasat; a mobil
+     * ugyanezt a vegpontot hivja), es a negy esetet, amikor NEM nyilhat jegy: a partner utja, a KT-hoz kotott lap, a
+     * mar meglevo jegy, es az elbukott alairas, ami utan jegy sem maradhat.
+     */
+    describe("automatikus hibajegy alairaskor", () => {
+      async function closedSheet(subject = "Szivattyú csere a Biodómban") {
+        const id = await repository.createDraft({
+          customerId,
+          departmentId: bioDepartmentId,
+          content: content({ subject }),
+          actorUserId,
+        });
+        await repository.close(id, actorUserId, new Date());
+        return id;
+      }
+      async function expectedNumber() {
+        const y = new Date().getFullYear();
+        return nextServiceJobNumber({
+          year: y,
+          lastNumber: await lastServiceJobNumber(
+            prisma,
+            serviceJobNumberPrefix(y),
+          ),
+        });
+      }
+      async function ticketOf(worksheetId: string) {
+        const sheet = await prisma.worksheet.findUniqueOrThrow({
+          where: { id: worksheetId },
+          select: {
+            number: true,
+            serviceJob: {
+              select: {
+                id: true,
+                jobNumber: true,
+                kind: true,
+                status: true,
+                title: true,
+                customerId: true,
+                departmentId: true,
+                openedById: true,
+                events: {
+                  select: {
+                    kind: true,
+                    fromStatus: true,
+                    toStatus: true,
+                    worksheetId: true,
+                    actorUserId: true,
+                    note: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+        return sheet;
+      }
+      const sign = (
+        worksheetId: string,
+        extra: Partial<Parameters<WorksheetsRepository["sign"]>[0]> = {},
+      ) =>
+        repository.sign({
+          worksheetId,
+          decision: "ACCEPTED",
+          signerUserId: null,
+          signerSource: "TYPED" as const,
+          signerName: "Kovács Béla",
+          note: null,
+          actorUserId,
+          requireSent: false,
+          openTicketIfMissing: true,
+          now: new Date(),
+          ...extra,
+        });
+
+      it("gépelt névvel aláírva HJ-jegyet nyit: a lap adataival, a lap alatt, Folyamatban, három naplósorral", async () => {
+        const id = await closedSheet();
+        const expected = await expectedNumber();
+        const result = await sign(id);
+        const sheet = await ticketOf(id);
+        const job = sheet.serviceJob;
+        assert.ok(job);
+        const note = `Automatikusan a munkalapból (${sheet.number}), aláíráskor.`;
+        assert.deepEqual(
+          {
+            result,
+            job: { ...job, id: undefined, events: undefined },
+            events: job.events
+              .map(
+                (e) =>
+                  `${e.kind}|${e.fromStatus}|${e.toStatus}|${e.worksheetId === id}|${e.actorUserId === actorUserId}|${e.note}`,
+              )
+              .sort(),
+            version: (
+              await prisma.worksheetVersion.findFirstOrThrow({
+                where: { worksheetId: id },
+                select: { status: true },
+              })
+            ).status,
+          },
+          {
+            result: {
+              ok: true,
+              autoTicket: { id: job.id, jobNumber: expected },
+            },
+            job: {
+              id: undefined,
+              jobNumber: expected,
+              kind: "REPAIR",
+              status: "IN_PROGRESS",
+              title: "Szivattyú csere a Biodómban",
+              customerId,
+              departmentId: bioDepartmentId,
+              openedById: actorUserId,
+              events: undefined,
+            },
+            events: [
+              `STATUS_CHANGE|NEW|IN_PROGRESS|false|true|${note} A lapon már vannak tételsorok.`,
+              `STATUS_CHANGE|null|NEW|false|true|${note}`,
+              `WORKSHEET_ATTACHED|null|null|true|true|${note}`,
+            ],
+            version: "SIGNED",
+          },
+        );
+      });
+
+      it("a saját (INTERNAL) és a vevő kiválasztott munkatársának (SELECTED) aláírása is jegyet nyit", async () => {
+        const vevoMunkatars = await prisma.user.create({
+          data: {
+            email: `worksheets-signer-${suffix}@${TEST_EMAIL_DOMAIN}`,
+            displayName: "Vevő Vilma",
+            role: "PARTNER_SERVICE",
+            customerId,
+            isActive: true,
+          },
+          select: { id: true },
+        });
+        const sajat = await closedSheet();
+        const kivalasztott = await closedSheet();
+        const a = await sign(sajat, {
+          signerSource: "INTERNAL" as const,
+          signerUserId: actorUserId,
+          signerName: "Worksheets Integration Actor",
+        });
+        const b = await sign(kivalasztott, {
+          signerSource: "SELECTED" as const,
+          signerUserId: vevoMunkatars.id,
+          signerName: "Vevő Vilma",
+        });
+        assert.deepEqual(
+          [
+            a.ok && a.autoTicket !== null,
+            b.ok && b.autoTicket !== null,
+            (await ticketOf(sajat)).serviceJob?.status,
+            (await ticketOf(kivalasztott)).serviceJob?.status,
+          ],
+          [true, true, "IN_PROGRESS", "IN_PROGRESS"],
+        );
+      });
+
+      it("aláírásra küldéskor nyit jegyet, és a vevő aláírása utána már nem nyit másodikat", async () => {
+        const vevo = await prisma.user.create({
+          data: {
+            email: `worksheets-recipient-${suffix}@${TEST_EMAIL_DOMAIN}`,
+            displayName: "Vevő Viktor",
+            role: "PARTNER_SERVICE",
+            customerId,
+            isActive: true,
+          },
+          select: { id: true },
+        });
+        const id = await closedSheet();
+        const sent = await repository.sendForSignature({
+          worksheetId: id,
+          signerUserId: vevo.id,
+          actorUserId,
+          openTicketIfMissing: true,
+          now: new Date(),
+        });
+        const afterSend = await ticketOf(id);
+        // a vevo (partner) utja: kikuldes kell, jegyet nem nyithat
+        const signed = await sign(id, {
+          requireSent: true,
+          openTicketIfMissing: false,
+          actorUserId: vevo.id,
+          signerSource: "SELECTED" as const,
+          signerUserId: vevo.id,
+          signerName: "Vevő Viktor",
+        });
+        const jobs = await prisma.serviceJob.count({
+          where: {
+            clientOperationId: { startsWith: `worksheet-auto-ticket:${id}:` },
+          },
+        });
+        assert.deepEqual(
+          {
+            sent:
+              sent.ok &&
+              sent.autoTicket?.jobNumber === afterSend.serviceJob?.jobNumber,
+            sendNote: afterSend.serviceJob?.events.some(
+              (e) =>
+                e.note ===
+                `Automatikusan a munkalapból (${afterSend.number}), aláírásra küldéskor.`,
+            ),
+            signed,
+            jobs,
+          },
+          {
+            sent: true,
+            sendNote: true,
+            signed: { ok: true, autoTicket: null },
+            jobs: 1,
+          },
+        );
+      });
+
+      it("a partner útja (openTicketIfMissing: false) jegy nélkül NO_TICKET, és nem ír semmit", async () => {
+        const id = await closedSheet();
+        const result = await sign(id, { openTicketIfMissing: false });
+        assert.deepEqual(
+          {
+            result,
+            version: (
+              await prisma.worksheetVersion.findFirstOrThrow({
+                where: { worksheetId: id },
+                select: { status: true },
+              })
+            ).status,
+            signatures: await prisma.worksheetVersionSignature.count({
+              where: { worksheetVersion: { worksheetId: id } },
+            }),
+            ticket: (await ticketOf(id)).serviceJob,
+          },
+          {
+            result: { ok: false, reason: "NO_TICKET" },
+            version: "AWAITING_SIGNATURE",
+            signatures: 0,
+            ticket: null,
+          },
+        );
+      });
+
+      it("a karbantartási laphoz kötött lap nem kap jegyet: aláírásnál NO_TICKET, kiküldésnél jegy nélkül megy", async () => {
+        const kt = await prisma.serviceJob.create({
+          data: {
+            jobNumber: `${TEST_JOB_PREFIX}KT${suffix}`,
+            title: "Havi karbantartás",
+            kind: "MAINTENANCE",
+            customerId,
+            departmentId: bioDepartmentId,
+          },
+          select: { id: true },
+        });
+        const id = await closedSheet();
+        await prisma.serviceJobLinkedWorksheet.create({
+          data: {
+            serviceJobId: kt.id,
+            worksheetId: id,
+            linkedById: actorUserId,
+          },
+        });
+        const vevo = await prisma.user.create({
+          data: {
+            email: `worksheets-kt-recipient-${suffix}@${TEST_EMAIL_DOMAIN}`,
+            displayName: "Vevő Klára",
+            role: "PARTNER_SERVICE",
+            customerId,
+            isActive: true,
+          },
+          select: { id: true },
+        });
+        const signed = await sign(id);
+        const sent = await repository.sendForSignature({
+          worksheetId: id,
+          signerUserId: vevo.id,
+          actorUserId,
+          openTicketIfMissing: true,
+          now: new Date(),
+        });
+        assert.deepEqual(
+          {
+            signed,
+            sentTicket: sent.ok ? sent.autoTicket : "nem ment ki",
+            ticket: (await ticketOf(id)).serviceJob,
+          },
+          {
+            signed: { ok: false, reason: "NO_TICKET" },
+            sentTicket: null,
+            ticket: null,
+          },
+        );
+      });
+
+      it("a jegyéről leválasztott lap újra kiküldve ÚJ automatikus jegyet kap, hiba nélkül (barracuda, #2765)", async () => {
+        const vevo = await prisma.user.create({
+          data: {
+            email: `worksheets-resend-${suffix}@${TEST_EMAIL_DOMAIN}`,
+            displayName: "Vevő Vince",
+            role: "PARTNER_SERVICE",
+            customerId,
+            isActive: true,
+          },
+          select: { id: true },
+        });
+        const id = await closedSheet();
+        const send = () =>
+          repository.sendForSignature({
+            worksheetId: id,
+            signerUserId: vevo.id,
+            actorUserId,
+            openTicketIfMissing: true,
+            now: new Date(),
+          });
+        const first = await send();
+        // a leválasztás útja (`detachWorksheet`): a lap a jegy nélküli állapotba kerül vissza, a jegy megmarad
+        await prisma.worksheet.update({
+          where: { id },
+          data: { serviceJobId: null },
+        });
+        const second = await send();
+        const firstId = first.ok ? first.autoTicket?.id : null;
+        const secondId = second.ok ? second.autoTicket?.id : null;
+        assert.deepEqual(
+          {
+            ok: [first.ok, second.ok],
+            two: Boolean(firstId && secondId && firstId !== secondId),
+            sheetUnder: (await ticketOf(id)).serviceJob?.id === secondId,
+            autoJobs: await prisma.serviceJob.count({
+              where: {
+                clientOperationId: {
+                  startsWith: `worksheet-auto-ticket:${id}:`,
+                },
+              },
+            }),
+          },
+          { ok: [true, true], two: true, sheetUnder: true, autoJobs: 2 },
+        );
+      });
+
+      it("meglévő jegy alatt nem nyit újat, és elbukott aláírás után jegy sem marad", async () => {
+        const job = await prisma.serviceJob.create({
+          data: {
+            jobNumber: `${TEST_JOB_PREFIX}AT${suffix}`,
+            title: "Meglévő jegy",
+            customerId,
+            departmentId: bioDepartmentId,
+          },
+          select: { id: true },
+        });
+        const alatta = await repository.createDraft({
+          customerId,
+          departmentId: bioDepartmentId,
+          content: content(),
+          actorUserId,
+          serviceJobId: job.id,
+        });
+        await repository.close(alatta, actorUserId, new Date());
+        const meglevo = await sign(alatta);
+        // piszkozat: a feltételes írás elbukik, és a jegy-nyitás csak utána jönne
+        const piszkozat = await repository.createDraft({
+          customerId,
+          departmentId: bioDepartmentId,
+          content: content(),
+          actorUserId,
+        });
+        const elbukott = await sign(piszkozat);
+        assert.deepEqual(
+          {
+            meglevo,
+            jegyAlatt: (await ticketOf(alatta)).serviceJob?.id === job.id,
+            elbukott,
+            piszkozatJegye: (await ticketOf(piszkozat)).serviceJob,
+            autoJegyek: await prisma.serviceJob.count({
+              where: {
+                OR: [alatta, piszkozat].map((sheet) => ({
+                  clientOperationId: {
+                    startsWith: `worksheet-auto-ticket:${sheet}:`,
+                  },
+                })),
+              },
+            }),
+          },
+          {
+            meglevo: { ok: true, autoTicket: null },
+            jegyAlatt: true,
+            elbukott: { ok: false, reason: "NOT_AWAITING_SIGNATURE" },
+            piszkozatJegye: null,
+            autoJegyek: 0,
+          },
+        );
+      });
+    });
+
+    /**
      * A JEGY ALA NYITOTT LAP -- ES EZ AZ EGYETLEN HELY, AHOL A BEIRAS MERHETO.
      *
      * A service oldalan a repository DUPLA, tehat ott az allitas annyit mond,
@@ -1407,6 +1832,7 @@ describe(
         note: null,
         actorUserId,
         requireSent: false,
+        openTicketIfMissing: true,
         now: new Date(),
       });
       assert.equal(signed.ok, true);

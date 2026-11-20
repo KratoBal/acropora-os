@@ -203,7 +203,7 @@ function repository(
     replaceDraftContent: async () => true,
     close: async () => ({ ok: true }),
     amend: async () => ({ ok: true, version: 2 }),
-    sign: async () => ({ ok: true }),
+    sign: async () => ({ ok: true, autoTicket: null }),
     ...overrides,
   } as unknown as WorksheetsRepository;
 }
@@ -471,7 +471,7 @@ describe("WorksheetsService", () => {
       repository({
         sign: async () => {
           signCalled = true;
-          return { ok: true };
+          return { ok: true, autoTicket: null };
         },
       }),
     );
@@ -507,7 +507,7 @@ describe("WorksheetsService", () => {
         detail: async () => alairhatoLap(),
         sign: async (input: { note?: string | null }) => {
           received = input;
-          return { ok: true };
+          return { ok: true, autoTicket: null };
         },
       }),
     );
@@ -545,30 +545,81 @@ describe("WorksheetsService", () => {
   });
 
   /**
-   * A BEKOTES ALLITASA, NEM A SZABALYE. A szabalyt a
-   * `worksheet-signature-gate.spec.ts` meri; ez azt meri, hogy a szolgaltatas
-   * HIVJA is. A ketto kulon romolhat el: egy tiszta fuggveny, amit senki nem
-   * hiv, zolden all a keszletben, es a kapu kozben nyitva van.
+   * A BEKOTES ALLITASA, NEM A SZABALYE. A dontest a `worksheet-auto-ticket.spec.ts` meri, a tranzakciot az
+   * integracios spec; ez azt meri, hogy a szolgaltatas a ket hatokort KULON viszi tovabb.
    *
-   * A LAP ITT AZ ALAPERTELMEZETT SOR, ami jegy NELKULI -- tehat ez az allitas
-   * egyben azt is rogziti, hogy a jegy nelkuli lap a rendes kiindulas.
+   * A LAP ITT AZ ALAPERTELMEZETT SOR, ami jegy NELKULI. Luca es Balazs 2026-11-20-i kerese ota a belso kollega
+   * utjan ez nem megallas, hanem jegynyitas: a szolgaltatas engedi a tarba, es jelzi, hogy ott nyilhat jegy.
    */
-  it("jegy nelkul nem irhato ala a lap (belso kollega mondata)", async () => {
-    const service = new WorksheetsService(repository());
+  it("jegy nelkuli lapot a belso kollega alairhat: a tar nyitja a jegyet", async () => {
+    let received: { openTicketIfMissing?: boolean } | null = null;
+    const service = new WorksheetsService(
+      repository({
+        sign: async (input: { openTicketIfMissing?: boolean }) => {
+          received = input;
+          return {
+            ok: true,
+            autoTicket: { id: "job-9", jobNumber: "HJ-2026-009" },
+          };
+        },
+      }),
+    );
+    await service.sign(
+      "worksheet-1",
+      { decision: "ACCEPTED", signerName: "Kovács Béla" },
+      BELSOS_KERO,
+    );
+    assert.equal(
+      (received as { openTicketIfMissing?: boolean } | null)
+        ?.openTicketIfMissing,
+      true,
+    );
+  });
+
+  it("a partner utja valtozatlan: jegy nelkul a regi mondat, a tarig el sem jut", async () => {
+    let called = false;
+    const service = new WorksheetsService(
+      repository({
+        sign: async () => {
+          called = true;
+          return { ok: true, autoTicket: null };
+        },
+      }),
+    );
+    await assert.rejects(
+      service.sign(
+        "worksheet-1",
+        { decision: "ACCEPTED", signerName: "Kovács Béla" },
+        {
+          id: "partner-1",
+          customerId: "customer-1",
+          supplierId: null,
+        } as never,
+      ),
+      (hiba: unknown) =>
+        hiba instanceof BadRequestException &&
+        /hiányzik hozzá a hibajegy\. Szólj nekünk, és pótoljuk\./.test(
+          hiba.message,
+        ),
+    );
+    assert.equal(called, false);
+  });
+
+  it("a karbantartasi laphoz kotott lap a tarbol NO_TICKET-tel jon vissza: a belso kollega a KT-mondatot kapja", async () => {
+    const service = new WorksheetsService(
+      repository({ sign: async () => ({ ok: false, reason: "NO_TICKET" }) }),
+    );
     await assert.rejects(
       service.sign(
         "worksheet-1",
         { decision: "ACCEPTED", signerName: "Kovács Béla" },
         BELSOS_KERO,
       ),
-      (hiba: unknown) => {
-        assert.ok(hiba instanceof BadRequestException);
-        const uzenet = (hiba as BadRequestException).message;
-        assert.match(uzenet, /nincs fölötte hibajegy/);
-        // A TEENDOT IS MEGMONDJA: a belso kollega tud jegyet nyitni vagy csatolni.
-        assert.match(uzenet, /Nyiss fölé hibajegyet, vagy csatold/);
-        return true;
-      },
+      (hiba: unknown) =>
+        hiba instanceof BadRequestException &&
+        /karbantartási laphoz kapcsolódik, ezért nem nyílik hozzá automatikusan hibajegy/.test(
+          hiba.message,
+        ),
     );
   });
 
