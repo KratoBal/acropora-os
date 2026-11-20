@@ -664,6 +664,22 @@ describe("PilotServiceJobDetailPage -- redesign", () => {
     expect(draft.nextElementSibling?.textContent).toBe("Még nincs száma");
   });
 
+  /*
+    ON A PHONE THE SUBJECT GETS ITS OWN ROW (test OS, 390 px, 2026-11-20): with `flex-1` (a zero basis) the wrapping row never
+    wrapped, and a long subject broke letter by letter in a narrow column beside the state, the hours and the detach link.
+    jsdom does not lay out, so this pins the classes; the stage measurement at 390 px is the proof.
+  */
+  it("gives the sheet's subject a full row on a phone, the old shared row from sm up", async () => {
+    api.detail.mockResolvedValue(detail({ timeline: [sheet] }));
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    const cell = (await screen.findByRole("link", { name: "Tömítéscsere" }))
+      .parentElement!;
+    expect(cell.className.split(/\s+/)).toEqual(
+      expect.arrayContaining(["min-w-0", "grow", "basis-full", "sm:basis-0"]),
+    );
+    expect(cell.className.split(/\s+/)).not.toContain("flex-1");
+  });
+
   // AN EMPTY SUBJECT (barracuda, #1891 review): the number is the link, and
   // it does not stand a second time under it.
   it("links an empty-subject sheet by its number, once", async () => {
