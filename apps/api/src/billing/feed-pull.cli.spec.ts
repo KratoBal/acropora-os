@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import { main } from "./feed-pull.cli.js";
 import {
   diagnoseQueryFailure,
+  ownNumberKnown,
   pullFromSzamlazz,
   type FeedPullDeps,
 } from "./feed-pull.js";
@@ -266,5 +267,58 @@ describe("diagnoseQueryFailure", () => {
     const lines = await diagnoseQueryFailure("2026/00090", deps);
     assert.equal(lines.length, 2);
     assert.equal(lines[1], "OS által kiállított számlaszám: nincs ilyen sor");
+  });
+});
+
+/*
+  A KULCS LÁTJA-E A SAJÁT SZÁMÁT (acrobot 58095: a kontroll 7-esét csak ez teszi "nem a mi fiókunk"-ká). MI PIROSÍT: ha a
+  megtalált saját számra nem igaz jön; ha a 7-es válaszra igaz jön (a kulcs hibája is 7-et adna); ha nincs saját számla, és
+  mégis ítél (null a helyes: nem tudni); ha a hálózati hiba kivétel lesz, vagy ha a kérés NEM a saját számot kérdezi.
+*/
+describe("ownNumberKnown", () => {
+  const code7 = `<?xml version="1.0" encoding="UTF-8"?><xmlszamlavalasz xmlns="http://www.szamlazz.hu/xmlszamlavalasz"><sikeres>false</sikeres><hibakod>7</hibakod><hibauzenet>Hiányzó adat: számla xml</hibauzenet></xmlszamlavalasz>`;
+  const deps = (
+    answer: (number: string) => string | Error,
+    own: string | null,
+  ): { deps: FeedPullDeps; asked: string[] } => {
+    const asked: string[] = [];
+    return {
+      asked,
+      deps: {
+        agentKey: async () => "kulcs-teszt",
+        client: {
+          queryDocument: async (xml: string) => {
+            const number =
+              /<szamlaszam>([^<]*)<\/szamlaszam>/.exec(xml)?.[1] ?? "";
+            asked.push(number);
+            const result = answer(number);
+            if (result instanceof Error) throw result;
+            return result;
+          },
+        },
+        ownIssuedNumber: async () => own,
+        store: async () => "NEW",
+        project: async () => "PROJECTED",
+      },
+    };
+  };
+
+  it("true when the key finds the invoice the OS issued, and it asks that number, nothing else", async () => {
+    const { deps: d, asked } = deps((number) => szamla(number), "E-2026-5");
+    assert.equal(await ownNumberKnown(d), true);
+    assert.deepEqual(asked, ["E-2026-5"]);
+  });
+
+  it("false when even the OS's own invoice answers 7 (a broken key proves nothing about the other numbers)", async () => {
+    const { deps: d } = deps(() => code7, "E-2026-5");
+    assert.equal(await ownNumberKnown(d), false);
+  });
+
+  it("null when there is no OS-issued invoice to ask, and a network error is thrown to the caller (the service turns it into null)", async () => {
+    const none = deps(() => code7, null);
+    assert.equal(await ownNumberKnown(none.deps), null);
+    assert.deepEqual(none.asked, []);
+    const broken = deps(() => new TypeError("network"), "E-2026-5");
+    await assert.rejects(ownNumberKnown(broken.deps), TypeError);
   });
 });

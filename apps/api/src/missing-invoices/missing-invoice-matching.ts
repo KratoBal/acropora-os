@@ -1707,7 +1707,7 @@ const DOUBLE_PAYMENT_REFUND_DAYS = 90;
  *   3. a jóváírás közleménye megnevezi a két terhelés valamelyik dokumentumának számát (tömörített alak, legalább 5 jel).
  *
  * A KÉSŐBBI terhelés NO_INVOICE_NEEDED lesz, és az indoklása KIMONDJA, hogy ez megállapodás: a két utalás megkülönböztethetetlen,
- * a későbbit tekintjük feleslegesnek. A KORÁBBI érintetlen marad (a számlája és a párosítása). Részleges vagy más összegű
+ * a későbbit tekintjük feleslegesnek. A KORÁBBI érintetlen marad (a számlája és a párosítása), kivéve ha a fájlján osztozó, beolvasott számlát a későbbi hordozta: azt a korábbi kapja meg (lásd lent). Részleges vagy más összegű
  * visszautalás, más partner, szám nélküli közlemény, korábbi jóváírás: nem old fel, marad DOUBLE_PAID. Egy jóváírás egy párt zár.
  */
 function resolveRefundedDoublePayments(
@@ -1774,6 +1774,39 @@ function resolveRefundedDoublePayments(
     const outcome = outcomes.get(later.id);
     if (!refund || !outcome) continue;
     usedCredits.add(refund.id);
+    /*
+      A KORÁBBI TERHELÉS A SAJÁT FÁJLJA HELYETT A BEOLVASOTT SZÁMLÁT KAPJA (acrobot 58155, éles: a Sopro 09-28-i terhelése). A két
+      terhelés ugyanazon fájlon osztozott (azonos lenyomat), de a korábbi egy OLVASATLAN feltöltést hordozott (vevő ismeretlen:
+      Nem párosodott, nulla jelölt), a későbbi pedig ugyanannak a fájlnak a beolvasott, összevont számláját (a NAV- és a feed-sorral,
+      a cégre szóló vevővel). A későbbit most feleslegesnek tekintjük, tehát a számlája nem veszhet el: a korábbi kapja meg, azzal
+      a fájllal együtt, amelyiken osztoztak. Csak az a dokumentum cserélődik, amelyik azonosságon osztozik, a többi marad; ugyanaz a
+      dokumentum (a megszokott eset: mindkettő ugyanahhoz van kötve) nem változik.
+    */
+    const earlierOutcome = outcomes.get(earlier.id);
+    if (earlierOutcome) {
+      const identitiesOf = (d: CandidateDocument) => d.identities ?? [];
+      const shares = (a: CandidateDocument, b: CandidateDocument) =>
+        identitiesOf(a).some((identity) => identitiesOf(b).includes(identity));
+      const takeover = outcome.documents.filter(
+        (d) =>
+          !earlierOutcome.documents.some((e) => e.id === d.id) &&
+          earlierOutcome.documents.some((e) => shares(e, d)),
+      );
+      if (takeover.length > 0) {
+        const documents = [
+          ...earlierOutcome.documents.filter(
+            (e) => !takeover.some((d) => shares(e, d)),
+          ),
+          ...takeover,
+        ];
+        outcomes.set(earlier.id, {
+          ...earlierOutcome,
+          documents,
+          state: stateOf(documents),
+          reason: `${earlierOutcome.reason}; a visszautalt későbbi utalás ugyanazon fájlja a beolvasott számlával (${takeover.map((d) => d.number).join(", ")}) ide kerül`,
+        });
+      }
+    }
     outcomes.set(later.id, {
       ...outcome,
       state: "NO_INVOICE_NEEDED",

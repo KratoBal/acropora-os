@@ -25,6 +25,8 @@ function setup(options: {
   breakAfterAsks?: number;
   /** the detail line for a number that is not found (the Számlázz.hu's own wording) */
   notFoundDetail?: string;
+  /** does the key find the invoice the OS issued itself: true, false, or null (not known); absent: the method does not exist */
+  ownKnown?: boolean | null;
 }) {
   const checked = new Map(
     (options.checked ?? []).map((c) => [c.number, { ...c }]),
@@ -43,6 +45,9 @@ function setup(options: {
   };
   const diagnosed: string[] = [];
   const feedPull = {
+    ...("ownKnown" in options
+      ? { keyKnowsOwnNumber: async () => options.ownKnown ?? null }
+      : {}),
     diagnose: async (number: string) => {
       diagnosed.push(number);
       return [`diag ${number}`];
@@ -345,5 +350,110 @@ describe("the feed backfill", () => {
     await service.start(false, "u-1", NOW);
     await service.settled();
     assert.deepEqual(diagnosed, []);
+  });
+  /*
+    A MI FIÓKUNKON KÍVÜLI SOROZAT (acrobot 58095, Balázs 2026-11-20: a 2026/ és az ACRW-2026/ számlák a másik számlázó
+    programból jönnek a push-végponton, a Számlázz.hu-ból soha nem tölthetők vissza). MI PIROSÍT: ha a 7-es kontroll mellett
+    is megáll a kör, holott az OS saját számlája megvan (a kulcs jó); ha a kimarad-ítélet nem rögzül (újraindítás után
+    újra kérdezné); ha a kimaradt sorozat hiányzó számait mégis megkérdezi; ha a másik sorozat köre ettől nem indul; ha
+    az ítélet a saját számla ismerete nélkül is megszületik (a kulcs hibája is 7-et ad); ha egy hibás (nem 7-es) válasz is
+    kimaradást jelent.
+  */
+  it("a series whose control gets a 7 while the key finds the OS's own invoice is judged foreign, recorded, and the other series goes on", async () => {
+    const { service, asked, checked } = setup({
+      stored: ["ACRW-2026/00004", "2026/00003"],
+      knows: { "ACRW-2026/00004": "NOT_FOUND" },
+      ownKnown: true,
+    });
+    assert.deepEqual(await service.start(false, "u-1", NOW), {
+      status: "started",
+      phase: "dry",
+      total: 2,
+    });
+    // the control as the press saw it (the control at the end of the round no longer asks the foreign series)
+    const control = (await service.status(NOW)).control!.results;
+    await service.settled();
+    // the foreign series is never asked beyond the control: only the 2026 gaps are
+    assert.ok(
+      !asked.some((a) => a.includes("ACRW-2026/0000") && !a.includes("00004")),
+    );
+    assert.ok(asked.includes("dry 2026/00001"));
+    assert.equal(checked.get("ACRW-2026/00004")?.outcome, "NOT_OUR_ACCOUNT");
+    const status = await service.status(NOW);
+    assert.equal(status.checked["ACRW-2026"]?.NOT_OUR_ACCOUNT, 1);
+    assert.deepEqual(
+      control.map((r) => [r.series, r.passed, r.foreign]),
+      [
+        ["2026", true, undefined],
+        ["ACRW-2026", false, true],
+      ],
+    );
+  });
+
+  it("the judgement stays: the next round neither controls nor asks the foreign series, and a round with only foreign series has nothing to ask", async () => {
+    const { service, asked, diagnosed } = setup({
+      stored: ["ACRW-2026/00004"],
+      knows: { "ACRW-2026/00004": "NOT_FOUND" },
+      ownKnown: true,
+    });
+    assert.deepEqual(await service.start(false, "u-1", NOW), {
+      status: "nothing",
+      phase: "dry",
+    });
+    assert.deepEqual(asked, ["dry ACRW-2026/00004"]);
+    assert.deepEqual(diagnosed, ["ACRW-2026/00004"]);
+    // a second press asks nothing at all: the verdict is in the table
+    asked.length = 0;
+    assert.deepEqual(await service.start(false, "u-1", NOW), {
+      status: "nothing",
+      phase: "dry",
+    });
+    assert.deepEqual(asked, []);
+  });
+
+  it("a persisted verdict keeps the series out of the targets without any new question", async () => {
+    const { service, asked } = setup({
+      stored: ["ACRW-2026/00004", "2026/00003"],
+      checked: [
+        {
+          number: "ACRW-2026/00004",
+          series: "ACRW-2026",
+          outcome: "NOT_OUR_ACCOUNT",
+        },
+      ],
+      knows: {},
+      ownKnown: true,
+    });
+    assert.deepEqual(await service.start(false, "u-1", NOW), {
+      status: "started",
+      phase: "dry",
+      total: 2,
+    });
+    await service.settled();
+    assert.ok(!asked.some((a) => a.includes("ACRW")));
+  });
+
+  it("without the proof that the key finds the OS's own invoice (false, unknown, or no such method) a 7 stays a control failure", async () => {
+    for (const ownKnown of [false, null, undefined] as const) {
+      const { service, checked } = setup({
+        stored: ["ACRW-2026/00004", "2026/00003"],
+        knows: { "ACRW-2026/00004": "NOT_FOUND" },
+        ...(ownKnown === undefined ? {} : { ownKnown }),
+      });
+      const answer = await service.start(false, "u-1", NOW);
+      assert.equal(answer.status, "control-failed");
+      assert.equal(checked.get("ACRW-2026/00004")?.outcome, undefined);
+    }
+  });
+
+  it("only a 7 (not found) can be a foreign series: an error answer on the control stays a control failure even if the key is fine", async () => {
+    const { service, checked } = setup({
+      stored: ["ACRW-2026/00004", "2026/00003"],
+      knows: { "ACRW-2026/00004": "ERROR" },
+      ownKnown: true,
+    });
+    const answer = await service.start(false, "u-1", NOW);
+    assert.equal(answer.status, "control-failed");
+    assert.equal(checked.get("ACRW-2026/00004")?.outcome, undefined);
   });
 });

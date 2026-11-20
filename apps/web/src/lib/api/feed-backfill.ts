@@ -8,6 +8,8 @@ export interface FeedControlResult {
   /** a Számlázz.hu hibakódja és üzenete, vagy a hiba alakja */
   detail: string;
   passed: boolean;
+  /** a sorozat nem a mi Számlázz.hu fiókunkból való (a kontroll 7-et kapott, az OS saját számlája viszont megvan): nem kontroll-bukás */
+  foreign?: boolean;
   /** a bukott kontroll diagnosztikája, soronként egy mondat */
   diagnostics?: string[];
 }
@@ -30,7 +32,7 @@ export interface FeedBackfillStatus {
   year: number;
   /** sorozatonként a feedből hiányzó számok darabja, és a tárolt legnagyobb szám */
   series: { series: string; highest: string; missing: number }[];
-  /** sorozatonként kimenetenként, ahogy a Számlázz.hu felelt: WOULD_STORE, STORED, NOT_FOUND (csak sikeres kontroll után), UNVERIFIED, ERROR, ... */
+  /** sorozatonként kimenetenként, ahogy a Számlázz.hu felelt: WOULD_STORE, STORED, NOT_FOUND (csak sikeres kontroll után), UNVERIFIED, ERROR, ...; NOT_OUR_ACCOUNT: a sorozat nem a mi fiókunkból való */
   checked: Record<string, Record<string, number>>;
 }
 

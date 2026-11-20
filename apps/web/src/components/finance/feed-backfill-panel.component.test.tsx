@@ -63,6 +63,83 @@ describe("FeedBackfillPanel", () => {
     );
   });
 
+  /*
+    A MI FIÓKUNKON KÍVÜLI SOROZAT (acrobot 58095). MI PIROSÍT: ha a kimaradt sorozat hiányszámot, "ismeri" számlálót vagy
+    bármi, a Számlázz.hu-s visszatöltésre utaló szöveget mutat; ha nem a kért mondat áll ott; ha a gombok darabszáma a
+    kimaradt sorozatot is viszi; ha minden sorozat kimaradt, és a gomb mégis él; ha a kimaradt sorozat kontroll-bukásként
+    riasztást ad.
+  */
+  const foreignStatus = (all = false) =>
+    status({
+      series: [
+        { series: "2026", highest: "2026/00120", missing: 70 },
+        { series: "ACRW-2026", highest: "ACRW-2026/00508", missing: 405 },
+      ],
+      checked: {
+        // an older "known" answer of a series later judged foreign must not count in the pull button either
+        "ACRW-2026": { NOT_OUR_ACCOUNT: 1, WOULD_STORE: 3 },
+        "2026": all
+          ? { NOT_OUR_ACCOUNT: 1 }
+          : { WOULD_STORE: 2, NOT_FOUND: 68 },
+      },
+    });
+
+  it("a series outside our Számlázz.hu account shows one sentence, no counters, and is not in the buttons' counts", async () => {
+    api.status.mockResolvedValue(foreignStatus());
+    render(<FeedBackfillPanel token="t" canRun />);
+    const acrw = await screen.findByTestId("feed-backfill-series-ACRW-2026");
+    expect(
+      within(acrw).getByText(
+        "Ezeket a Cashman állítja ki, a hiányzókat a NAV-ból töltjük be.",
+      ),
+    ).toBeInTheDocument();
+    expect(acrw).not.toHaveTextContent("hiányzik");
+    expect(acrw).not.toHaveTextContent("a Számlázz.hu ismeri");
+    // the other series keeps its counters and the button counts only it
+    expect(screen.getByTestId("feed-backfill-series-2026")).toHaveTextContent(
+      "a Számlázz.hu ismeri: 2",
+    );
+    expect(
+      screen.getByRole("button", { name: "Behúzás (2 számla)" }),
+    ).toBeEnabled();
+  });
+
+  it("when every series is outside the account, both buttons are off", async () => {
+    api.status.mockResolvedValue(foreignStatus(true));
+    render(<FeedBackfillPanel token="t" canRun />);
+    await screen.findByTestId("feed-backfill-foreign-2026");
+    expect(
+      screen.getByRole("button", { name: "Ellenőrzés a Számlázz.hu-nál" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Behúzás (0 számla)" }),
+    ).toBeDisabled();
+  });
+
+  it("a foreign control result is not a control failure alert", async () => {
+    api.status.mockResolvedValue({
+      ...foreignStatus(),
+      control: {
+        checkedAt: "2026-11-20T12:00:00Z",
+        results: [
+          {
+            series: "ACRW-2026",
+            number: "ACRW-2026/00508",
+            outcome: "NOT_FOUND",
+            detail: "7",
+            passed: false,
+            foreign: true,
+          },
+        ],
+      },
+    });
+    render(<FeedBackfillPanel token="t" canRun />);
+    await screen.findByTestId("feed-backfill-series-ACRW-2026");
+    expect(
+      screen.queryByTestId("feed-backfill-control-failed"),
+    ).not.toBeInTheDocument();
+  });
+
   it("the pull asks first, names how many, and only then pulls", async () => {
     render(<FeedBackfillPanel token="t" canRun />);
     fireEvent.click(
