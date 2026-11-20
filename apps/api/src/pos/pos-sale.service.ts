@@ -43,10 +43,11 @@ export class PosSaleService {
   /** Longest range one summary call answers (about three months). */
   static readonly SUMMARY_MAX_DAYS = 93;
 
-  paymentSummary(
+  /** The Budapest days a summary query asks for (both default to today), checked; the internal-use summary uses it too. */
+  static summaryRange(
     query: PosPaymentSummaryQueryDto,
     now: Date = new Date(),
-  ): Promise<PosPaymentSummaryResponse> {
+  ): { from: string; to: string } {
     const today = budapestDay(now);
     const to = query.to ?? today;
     const from = query.from ?? to;
@@ -64,6 +65,14 @@ export class PosSaleService {
         `Legfeljebb ${PosSaleService.SUMMARY_MAX_DAYS} nap kérdezhető le egyszerre.`,
       );
     }
+    return { from, to };
+  }
+
+  paymentSummary(
+    query: PosPaymentSummaryQueryDto,
+    now: Date = new Date(),
+  ): Promise<PosPaymentSummaryResponse> {
+    const { from, to } = PosSaleService.summaryRange(query, now);
     return this.sales.paymentSummary(from, to);
   }
 

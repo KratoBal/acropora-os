@@ -3,6 +3,7 @@ import type {
   CreatePosSaleInput,
   PosInternalUseListResponse,
   PosInternalUseResult,
+  PosInternalUseSummaryResponse,
   PosProductSearchResult,
   PosPaymentSummaryResponse,
   PosSaleDetail,
@@ -68,6 +69,14 @@ export const posApi = {
   listInternalUses(token: string, query: PosSaleListQuery) {
     return apiRequest<PosInternalUseListResponse>(
       `/pos/internal-uses?${listQueryString(query)}`,
+      token,
+    );
+  },
+  // a budapesti napok belső felhasználása beszerzési értéken, az ár nélküli tételek külön (kártya ada14a7c)
+  internalUseSummary(token: string, query: { from: string; to: string }) {
+    const params = new URLSearchParams({ from: query.from, to: query.to });
+    return apiRequest<PosInternalUseSummaryResponse>(
+      `/pos/internal-uses/summary?${params.toString()}`,
       token,
     );
   },

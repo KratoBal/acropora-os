@@ -12,6 +12,7 @@ import {
   PosInternalUseRepository,
 } from "./pos-internal-use.repository.js";
 import { PosInternalUseService } from "./pos-internal-use.service.js";
+import { budapestDay } from "./pos-payment-summary.js";
 import { PosSaleRepository } from "./pos-sale.repository.js";
 
 /*
@@ -272,6 +273,40 @@ describe(
       );
       const detail = await service.getDetail(mine[1]!.id);
       assert.equal(detail.lines.length, 1);
+    });
+
+    // kártya ada14a7c: az időszakos összesítő a valódi adatbázison; a két nap a futás éjféli átfordulása miatt
+    it("az időszakos összesítő a rögzítéseket és az ár nélküli tételt adja, az ismert értékben csak az árazott tételek", async () => {
+      const now = new Date();
+      const summary = await service.summary(
+        {
+          from: budapestDay(new Date(now.getTime() - 86_400_000)),
+          to: budapestDay(now),
+        },
+        now,
+      );
+      const mine = summary.records.filter((record) =>
+        record.note.startsWith(`BFH-${suffix}`),
+      );
+      assert.deepEqual(
+        mine.map((record) => [
+          record.note,
+          record.totalCost,
+          record.unpricedLineCount,
+        ]),
+        [
+          [`BFH-${suffix} kirakat`, null, 1],
+          [`BFH-${suffix} műhely, szivattyú-próba`, "2000.00", 0],
+        ],
+      );
+      assert.deepEqual(
+        summary.unpricedLines
+          .filter((line) => line.sku.startsWith(`BFH-${suffix}`))
+          .map((line) => [line.sku, line.quantity]),
+        [[`BFH-${suffix}-unpriced`, "1"]],
+      );
+      // a saját három árazott tételünk (2 + 1 db, 1000 Ft) benne van; a többi teszt sorai is lehetnek mellette
+      assert.ok(Number(summary.knownCost) >= 3000, summary.knownCost);
     });
   },
 );

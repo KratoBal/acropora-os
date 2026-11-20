@@ -861,6 +861,7 @@ export type {
   PosInternalUseLineDetail,
   PosInternalUseListItem,
   PosInternalUseListResponse,
+  PosInternalUseSummaryResponse,
   PosInternalUseResult,
   PosPaymentMethod,
   PosPaymentSummaryCell,

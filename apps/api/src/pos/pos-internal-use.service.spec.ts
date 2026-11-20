@@ -50,6 +50,7 @@ function fake(
   costs: Record<string, number | null>,
 ) {
   const created: CreatePosInternalUseParams[] = [];
+  const summaryReads: [string, string][] = [];
   const sales = {
     currentStock: async () => ({
       warehouseId: "wh-1",
@@ -63,10 +64,15 @@ function fake(
       created.push(params);
       return { detail: { number: params.number } as never, stockWarnings: [] };
     },
+    summaryRows: async (from: string, to: string) => {
+      summaryReads.push([from, to]);
+      return [];
+    },
   } as unknown as PosInternalUseRepository;
   return {
     service: new PosInternalUseService(sales, internalUses),
     created,
+    summaryReads,
   };
 }
 
@@ -157,5 +163,36 @@ describe("a belső felhasználás szabályai", () => {
       [missing.created[0]!.lines[0]!.unitCost, missing.created[0]!.totalCost],
       [null, null],
     );
+  });
+});
+
+// card ada14a7c: the period summary checks its days the way the sales summary does, before it reads anything
+describe("a belső felhasználás időszakos összesítője", () => {
+  const NOW = new Date("2026-11-20T23:30:00Z"); // 2026-11-21 00:30 in Budapest
+
+  it("reads the asked Budapest days, and today by default", async () => {
+    const { service, summaryReads } = fake([], {});
+    await service.summary({ from: "2026-11-01", to: "2026-11-30" }, NOW);
+    await service.summary({}, NOW);
+    assert.deepEqual(summaryReads, [
+      ["2026-11-01", "2026-11-30"],
+      ["2026-11-21", "2026-11-21"],
+    ]);
+  });
+
+  it("refuses a reversed, an impossible or a too long range, and reads nothing", async () => {
+    const { service, summaryReads } = fake([], {});
+    for (const query of [
+      { from: "2026-11-30", to: "2026-11-01" },
+      { from: "2026-02-31", to: "2026-03-01" },
+      { from: "2026-01-01", to: "2026-12-31" },
+    ]) {
+      await assert.rejects(
+        service.summary(query, NOW),
+        BadRequestException,
+        JSON.stringify(query),
+      );
+    }
+    assert.deepEqual(summaryReads, []);
   });
 });

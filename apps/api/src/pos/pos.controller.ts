@@ -63,6 +63,14 @@ export class PosController {
     return this.internalUses.list(query);
   }
 
+  // a budapesti napok (from..to, alapból a mai) rögzítései beszerzési értéken, az ár nélküli tételek külön (kártya ada14a7c);
+  // a `:id` előtt, hogy a "summary" ne azonosítóként illeszkedjen
+  @Get("internal-uses/summary")
+  @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
+  internalUseSummary(@Query() query: PosPaymentSummaryQueryDto) {
+    return this.internalUses.summary(query);
+  }
+
   @Get("internal-uses/:id")
   @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
   getInternalUse(@Param("id") id: string) {

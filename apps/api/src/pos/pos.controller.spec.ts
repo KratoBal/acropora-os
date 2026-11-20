@@ -47,6 +47,19 @@ describe("PosController permissions", () => {
       ],
     );
   });
+
+  // card ada14a7c: the monthly view reads with the right to read; it is declared before `:id`, or "summary" would match as an id
+  it("the internal-use summary needs orders.view and comes before the :id route", () => {
+    assert.deepEqual(
+      permissionsFor(PosController.prototype.internalUseSummary),
+      [PERMISSIONS.ORDERS_VIEW],
+    );
+    const order = Object.getOwnPropertyNames(PosController.prototype);
+    assert.ok(
+      order.indexOf("internalUseSummary") < order.indexOf("getInternalUse"),
+      order.join(", "),
+    );
+  });
 });
 
 describe("PosController delegation", () => {
