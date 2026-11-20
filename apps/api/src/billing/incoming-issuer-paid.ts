@@ -9,6 +9,7 @@
  *
  * SZABÁLY, SZŰKEN: a fizetési mód PONTOSAN „Fizetve” (ékezet, kisbetű, szóköz és írásjel nélkül mérve), a Számlázz.hu NEM ismer fizetést (`paymentsKnown` hamis), és a
  * sor feed-sor (a postafiókos és a beszerzésből jött soré nem). Ha a Számlázz.hu ismer fizetést (akár nullát), az ő nyilvántartása nyer, mint a többi jelölésnél.
+ * `paymentsKnown` NULL (a típus megengedi: a másik, kimenő tábla oszlopa nullable; ezen a bejövő táblán a `Boolean` nem nullable) UGYANÚGY „nem ismert fizetés”: a régi, még nem újravetített sor sem mond ellent a „Fizetve” módnak (barracuda, #2794).
  * A kifizetés NAPJA nem ismert, ezért nincs: nem találgatunk.
  */
 export interface IssuerPaidRow {
