@@ -1649,3 +1649,76 @@ describe("InvoiceCollectionService keeps what nothing ties (UNASSIGNED)", () => 
     });
   });
 });
+
+/*
+  A GLS SZÁMLASZÁMA NEM ADÓSZÁM, A TELJES ÚTON (acrobot 57891, 57900): az olvasó a `HU00956903` GLS-számlaszámot adószámnak, a fájlnév
+  ügyfélszámát számlaszámnak vette, ezért a NAV-sor (szám + a GLS adószáma) nem találkozott a PDF-fel, és 13 PDF kötetlen maradt.
+  MI PIROSÍT: ha a PDF a GLS-számmal ÉS a NAV-sor adószámával kötetlenül marad; ha a második jel (összeg) hiányában mégis köt.
+*/
+describe("InvoiceCollectionService ties a GLS PDF whose number looked like a tax number", () => {
+  const lines = [
+    "GLS General Logistics Systems Hungary Kft.",
+    "SZÁMLA / INVOICE",
+    "HU00956903",
+    "Vevő: Acropora Kft.",
+    "Customer 100031291",
+    "Fizetendő: 15 240 Ft",
+  ];
+  const known = [
+    { number: "HU00956903", supplierTaxNumber: "12369410-2-41" },
+    { number: "HU00948583", supplierTaxNumber: "12369410-2-41" },
+  ];
+
+  it("ties it to the NAV row: the known number is the invoice number, the NAV row's supplier is the supplier", async () => {
+    const { collection, stored } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [
+          { fileName: "100031291_20261112.pdf", buffer: await pdf(lines) },
+        ],
+      },
+      knownInvoices: known,
+      facts: {
+        grossCents: [1524000],
+        supplierNames: ["GLS General Logistics Systems Hungary Kft."],
+      },
+      sender: "szamla@gls-hungary.com",
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(untied(stored), []);
+    assert.deepEqual(
+      tied(stored).map((d) => d.textReading),
+      [
+        {
+          invoiceNumber: "HU00956903",
+          numberFrom: "NAV",
+          supplierTaxNumber: "12369410-2-41",
+          gross: "15240",
+          currency: "HUF",
+        },
+      ],
+    );
+  });
+
+  it("keeps it for a person when nothing corroborates the number (no amount, name or sender)", async () => {
+    const { collection, stored } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [
+          {
+            fileName: "100031291_20261112.pdf",
+            buffer: await pdf(["Hello", "HU00956903", "Customer 100031291"]),
+          },
+        ],
+      },
+      knownInvoices: known,
+      facts: {
+        grossCents: [1524000],
+        supplierNames: ["GLS General Logistics Systems Hungary Kft."],
+      },
+      sender: "valaki@mas-domain.example",
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(tied(stored), []);
+  });
+});
