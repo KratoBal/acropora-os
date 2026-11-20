@@ -2488,6 +2488,8 @@ describe("a double payment the partner paid back", () => {
       source: "UPLOAD",
       gross: null,
       number: "",
+      // the live shape: a scanned file whose buyer could not be read
+      payee: "UNKNOWN",
       identities: ["sha:dp-1"],
     });
   const read = (id: string, number = "KB-7777/2026") =>
@@ -2535,6 +2537,81 @@ describe("a double payment the partner paid back", () => {
       [without.a?.state, without.b?.state],
       ["DOUBLE_PAID", "DOUBLE_PAID"],
     );
+  });
+
+  /*
+    A KORÁBBI KAPJA A BEOLVASOTT SZÁMLÁT (acrobot 58155, éles: a Sopro 09-28-i terhelése Nem párosodott maradt, 0 jelölttel). MI
+    PIROSÍT: ha a korábbi terhelés a visszautalás után is az olvasatlan feltöltésnél marad (a számla a feleslegesnek mondott
+    későbbinél veszik el); ha a csere a fájlon NEM osztozó dokumentumot is viszi; ha a csere visszautalás nélkül is megtörténik;
+    ha ugyanahhoz a dokumentumhoz kötött pár (a megszokott eset) megváltozik; ha a későbbi tétel a számlát megtartja.
+  */
+  it("the earlier payment takes the read invoice its file print shares, and the later one lets go of it", () => {
+    const { a, b } = settle([refund()]);
+    assert.equal(b?.state, "NO_INVOICE_NEEDED");
+    assert.deepEqual(b?.documents, []);
+    assert.deepEqual(
+      a?.documents.map((d) => d.id),
+      ["dp-d2"],
+    );
+    // the unread upload left the earlier payment as Not matched (buyer unknown); the read invoice makes it Found
+    assert.equal(a?.state, "FOUND");
+    assert.match(a?.reason ?? "", /ide kerül/);
+    assert.match(a?.reason ?? "", /KB-7777\/2026/);
+  });
+
+  it("only the document that shares the file print is replaced: another document of the earlier payment stays", () => {
+    const a = payment("dp-a", "2026-09-28");
+    const b = payment("dp-b", "2026-09-29");
+    const other = doc({ id: "dp-other", number: "SZ-OTHER-1", gross: D(10) });
+    // a document of the LATER payment that shares no print with the earlier one: it is not handed over
+    const lateOnly = doc({ id: "dp-late", number: "SZ-LATE-1", gross: D(20) });
+    const out = matchMonth({
+      debits: [a, b],
+      documents: [unread("dp-d1"), read("dp-d2"), other, lateOnly],
+      manual: new Map([
+        [a.id, ["dp-d1", "dp-other"]],
+        [b.id, ["dp-d2", "dp-late"]],
+      ]),
+      credits: [refund()],
+    });
+    assert.equal(out.get("dp-b")?.state, "NO_INVOICE_NEEDED");
+    assert.deepEqual(
+      out
+        .get("dp-a")
+        ?.documents.map((d) => d.id)
+        .sort(),
+      ["dp-d2", "dp-other"],
+    );
+  });
+
+  it("without the refund nothing is exchanged: the pair stays double paid and the earlier keeps its own document", () => {
+    const { a } = settle([]);
+    assert.equal(a?.state, "DOUBLE_PAID");
+    assert.deepEqual(
+      a?.documents.map((d) => d.id),
+      ["dp-d1"],
+    );
+  });
+
+  it("a pair bound to the same document is not changed by the exchange (the usual case)", () => {
+    const a = payment("dp-a", "2026-09-28");
+    const b = payment("dp-b", "2026-09-29");
+    const out = matchMonth({
+      debits: [a, b],
+      documents: [read("dp-d2")],
+      manual: new Map([
+        [a.id, ["dp-d2"]],
+        [b.id, ["dp-d2"]],
+      ]),
+      credits: [refund()],
+    });
+    const earlier = out.get("dp-a");
+    assert.deepEqual(
+      earlier?.documents.map((d) => d.id),
+      ["dp-d2"],
+    );
+    assert.doesNotMatch(earlier?.reason ?? "", /ide kerül/);
+    assert.equal(out.get("dp-b")?.state, "NO_INVOICE_NEEDED");
   });
 
   it("a refund that is not exactly this one resolves nothing", () => {
