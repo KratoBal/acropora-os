@@ -1,5 +1,7 @@
 import {
+  BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -14,6 +16,9 @@ import {
   unfinishedSplitOf,
 } from "./webshop-order-detail.rules.js";
 import {
+  PERSONAL_DELIVERY_REASON,
+  SHIPPING_OVERRIDE_REASON_MAX,
+  SHIPPING_OVERRIDE_REASON_MIN,
   WEBSHOP_ORDER_STATUS_LABELS,
   staleHoursOf,
   type WebshopOrderStatus,
@@ -60,7 +65,14 @@ import {
   proformaOf,
 } from "./webshop-order-invoice.rules.js";
 import { parcelOf } from "./webshop-order-parcel.rules.js";
-import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
+import {
+  shippingGateDecision,
+  type ShippingGateFacts,
+} from "./webshop-order-shipping-gate.rules.js";
+import {
+  WebshopOrdersRepository,
+  type ShippingOverrideTrace,
+} from "./webshop-orders.repository.js";
 
 /** A webshop hibaüzenete a törzsből (`{type, message}`); ha nem olvasható, `null`. */
 export function webshopErrorMessage(body: string): string | null {
@@ -401,6 +413,11 @@ export class WebshopOrdersService {
     userId: string,
     notifyCustomer = true,
     now = new Date(),
+    options: {
+      overrideReason?: string;
+      canOverride?: boolean;
+      personalDelivery?: boolean;
+    } = {},
   ): Promise<WebshopOrderStatusChangeResult> {
     const client = await this.client();
     const current = await this.fromWebshop(() =>
@@ -412,6 +429,63 @@ export class WebshopOrdersService {
       throw new ConflictException(
         `A rendelés „${current.label}” állapotból nem léptethető „${WEBSHOP_ORDER_STATUS_LABELS[to]}” állapotba. Frissítsd az oldalt.`,
       );
+    /*
+      A KISZÁLLÍTÁS KAPUJA (kártya 33a0d3c7): számla és csomag nélkül nem lép, mert a kártyás levonás erre az állapotra fut. A
+      táblázat-ellenőrzés UTÁN áll, hogy egy elavult lapról küldött kérés előbb a „frissítsd az oldalt” mondatot kapja. Csak a
+      Kiszállításnál olvas (nem bolti átvételnél): a többi lépés költsége nem változik.
+    */
+    let override: ShippingOverrideTrace | null = null;
+    if (to === "out_for_delivery") {
+      const decision = shippingGateDecision({
+        to,
+        facts: await this.shippingGateFacts(id),
+        overrideReason: options.overrideReason,
+        canOverride: options.canOverride === true,
+        personalDelivery: options.personalDelivery === true,
+      });
+      /*
+        A FELÜLBÍRÁLÁS (kártya 33a0d3c7, acrobot döntése: naplózott): külön jog és kötelező indok; a jog előbb, mint az indok formája.
+        A naplósor a webshop-hívás ELŐTT íródik `requested` állapottal (barracuda #2724): ha nem íródik meg, a lépés nem indul, mert a
+        megkerült kapu nyoma nem maradhat el egy már lefutott levonás mellől. Egy elutasított váltás után a sor `requested` marad, ami
+        igaz: egy kísérlet nyoma. Sikeres váltás után `applied` lesz.
+      */
+      if (decision.kind === "refuse")
+        throw new ConflictException(decision.sentence);
+      if (decision.kind === "forbidden")
+        throw new ForbiddenException(
+          "A kiszállítási kapu felülbírálásához külön jog kell. Kérd egy adminisztrátortól, vagy állítsd ki a számlát és add fel a csomagot.",
+        );
+      if (decision.kind === "bad-reason")
+        throw new BadRequestException(
+          `A felülbíráláshoz indoklás kell (${SHIPPING_OVERRIDE_REASON_MIN}-${SHIPPING_OVERRIDE_REASON_MAX} karakter): a napló az indokért van.`,
+        );
+      if (decision.kind === "override")
+        override = {
+          userId,
+          orderId: id,
+          from: current.status,
+          to,
+          reason: decision.reason,
+          missing: decision.missing,
+        };
+      /*
+        A SZEMÉLYES KISZÁLLÍTÁS (Luca, 2026-11-20): saját naplósor (`webshop-order.personal-delivery`: ki, mikor, ok), ugyanazzal a sorrenddel, mint a
+        felülbírálásnál: a sor a webshop-hívás ELŐTT íródik `requested` állapottal, és a Stripe-levonás (a Kiszállításra fut) csak utána indul.
+      */
+      if (decision.kind === "personal")
+        override = {
+          kind: "personal",
+          userId,
+          orderId: id,
+          from: current.status,
+          to,
+          reason: PERSONAL_DELIVERY_REASON,
+          missing: decision.missing,
+        };
+    }
+    const overrideRowId = override
+      ? await this.repository.requestShippingOverride(override)
+      : null;
     let mail: WebshopStatusMailOutcome;
     try {
       mail = await client.transitionBusinessStatus(id, to, notifyCustomer);
@@ -430,13 +504,58 @@ export class WebshopOrdersService {
         );
       throw error;
     }
+    if (override && overrideRowId)
+      try {
+        await this.repository.markShippingOverrideApplied(
+          overrideRowId,
+          override,
+        );
+      } catch (error) {
+        // the shipping already happened: the `requested` row (who, why, what was missing) stays as the trace, and the failure is only logged
+        this.logger.error(
+          `Order ${id} shipped by user ${userId} with the gate overridden, but audit row ${overrideRowId} was not marked applied: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     await this.repository.recordStatusChange({
       userId,
       orderId: id,
       from: current.status,
       to,
     });
-    return { order: await this.detail(id, now), mail };
+    return {
+      order: await this.detail(id, now),
+      mail,
+      shippingGateOverridden: override !== null && override.kind !== "personal",
+      personalDelivery: override?.kind === "personal",
+    };
+  }
+
+  /** A kapu tényei egy rendelésről: bolti átvétel-e, a kiállított számla és az aktív, csomagszámos csomag (ugyanaz, mint a lépéssoré). */
+  private async shippingGateFacts(id: string): Promise<ShippingGateFacts> {
+    const client = await this.client();
+    const order = await this.fromWebshop(() => client.order(id));
+    if (!order)
+      throw new NotFoundException("A rendelés nem található a webshopban.");
+    const storePickup = shippingOf(order.shipping_methods ?? []).storePickup;
+    if (storePickup)
+      return { storePickup, invoiceNumber: null, hasParcel: false };
+    const [invoices, parcels, externals] = await Promise.all([
+      this.repository.invoices([id]),
+      this.parcels.activeParcelsFor([id]),
+      this.repository.externalInvoices([id]),
+    ]);
+    const facts = factsOf(
+      invoices.get(id),
+      parcelOf(parcels[id]),
+      false,
+      false,
+      externals.get(id)?.number ?? null,
+    );
+    return {
+      storePickup,
+      invoiceNumber: facts.invoiceNumber,
+      hasParcel: facts.hasParcel,
+    };
   }
 
   /**

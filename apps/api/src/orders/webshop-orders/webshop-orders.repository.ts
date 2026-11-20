@@ -44,6 +44,40 @@ const CUSTOMER_REFERENCE = {
   entityType: "Customer",
 } as const;
 
+/** A kapu felülbírálásának naplósora: külön `action`, hogy külön szűrhető legyen. */
+export const SHIPPING_OVERRIDE_ACTION =
+  "webshop-order.shipping-gate-overridden";
+
+/** A személyes kiszállítás naplósora (Luca, 2026-11-20): saját `action`, hogy ne keveredjen a felülbírálással ("ki kerülte meg a kaput" kontra "ki vitte ki személyesen"). */
+export const PERSONAL_DELIVERY_ACTION = "webshop-order.personal-delivery";
+
+export type ShippingOverrideTrace = {
+  /** Melyik kivétel: a felülbírálás (alapértelmezés) vagy a személyes kiszállítás; ez dönti el a napló `action`-jét. */
+  kind?: "override" | "personal";
+  userId: string;
+  orderId: string;
+  from: string | null;
+  to: string;
+  reason: string;
+  missing: string[];
+};
+
+const shippingTraceAction = (input: ShippingOverrideTrace) =>
+  input.kind === "personal"
+    ? PERSONAL_DELIVERY_ACTION
+    : SHIPPING_OVERRIDE_ACTION;
+
+const shippingOverrideMetadata = (
+  input: ShippingOverrideTrace,
+  status: "requested" | "applied",
+) => ({
+  status,
+  from: input.from,
+  to: input.to,
+  reason: input.reason,
+  missing: input.missing,
+});
+
 /**
  * AZ OS SAJÁT NYOMA A WEBSHOP RENDELÉSEKEN. A státuszváltást a webshop
  * `admin` szereplőként rögzíti, név nélkül; KI nyomta meg, azt csak az OS
@@ -51,6 +85,7 @@ const CUSTOMER_REFERENCE = {
  */
 @Injectable()
 export class WebshopOrdersRepository {
+  /** A STÁTUSZVÁLTÁS NAPLÓJA: egy sor, `webshop-order.status-changed`, a váltás UTÁN. */
   async recordStatusChange(input: {
     userId: string;
     orderId: string;
@@ -65,6 +100,37 @@ export class WebshopOrdersRepository {
         entityId: input.orderId,
         metadata: { from: input.from, to: input.to },
       },
+    });
+  }
+
+  /**
+   * A KISZÁLLÍTÁSI KAPU FELÜLBÍRÁLÁSÁNAK NYOMA (kártya 33a0d3c7, barracuda #2724; a minta az ajándékkártya-kiadás, #2739). A sor a
+   * webshop-hívás ELŐTT íródik `requested` állapottal (ki, honnan hová, az indok, mi hiányzott), és ha nem íródik meg, a lépés nem
+   * indul: egy megkerült kapu nem maradhat név és indok nélkül (a levonás lefuthat, és az újrapróbálás már más ágra futna). Külön
+   * `action`, hogy szűrhető legyen ("ki kerülte meg a kaput és miért"). Visszaadja a sor azonosítóját az `applied`-re állításhoz.
+   */
+  async requestShippingOverride(input: ShippingOverrideTrace): Promise<string> {
+    const row = await prisma.auditLog.create({
+      data: {
+        userId: input.userId,
+        action: shippingTraceAction(input),
+        entityType: "WebshopOrder",
+        entityId: input.orderId,
+        metadata: shippingOverrideMetadata(input, "requested"),
+      },
+      select: { id: true },
+    });
+    return row.id;
+  }
+
+  /** A webshop elfogadta a váltást: a `requested` sor `applied` lesz (a tartalma ugyanaz). Ha ez bukik, a hívó csak naplózza. */
+  async markShippingOverrideApplied(
+    rowId: string,
+    input: ShippingOverrideTrace,
+  ): Promise<void> {
+    await prisma.auditLog.update({
+      where: { id: rowId },
+      data: { metadata: shippingOverrideMetadata(input, "applied") },
     });
   }
 
