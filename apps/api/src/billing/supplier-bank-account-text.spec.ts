@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { normalizeAccount } from "../missing-invoices/missing-invoices.repository.js";
 import {
+  accountFromBankText,
   formatSupplierAccount,
   hungarianPartValid,
   ibanValid,
@@ -227,5 +228,39 @@ describe("a normalizálás és a megjelenítés", () => {
       formatSupplierAccount("DE89370400440532013000"),
       "DE89 3704 0044 0532 0130 00",
     );
+  });
+});
+
+describe("a banki terhelés partner-számlaszáma", () => {
+  it("az ellenőrzött hazai és IBAN alak normalizált; a 24 jegyű, nullára végződő a 16 jegyű", () => {
+    assert.equal(accountFromBankText("11773016-11111018-00000000"), OTP16);
+    assert.equal(accountFromBankText(" 11773016 11111018 "), OTP16);
+    assert.equal(accountFromBankText(OTP16), OTP16);
+    assert.equal(accountFromBankText(OTP_IBAN), OTP16);
+    assert.equal(
+      accountFromBankText("de89 3704 0044 0532 0130 00"),
+      "DE89370400440532013000",
+    );
+    assert.equal(
+      accountFromBankText("11773016-11111013-10000006"),
+      "117730161111101310000006",
+    );
+  });
+
+  it("ami nem ellenőrzött számlaszám, null: elírt blokk, elrontott 3. blokk, kártyaszám, név, üres, hiányos, a szám körüli szöveg", () => {
+    for (const raw of [
+      "11773016-11111019-00000000",
+      "11773016-11111018-12345678",
+      "4929123456781234",
+      "Példa Kft.",
+      "",
+      "   ",
+      null,
+      undefined,
+      "11773016",
+      "Számla: 11773016-11111018",
+      "DE89370400440532013001",
+    ])
+      assert.equal(accountFromBankText(raw), null, String(raw));
   });
 });
