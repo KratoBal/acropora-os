@@ -4,6 +4,7 @@ import { prisma } from "@acropora/database";
 
 import {
   diagnoseQueryFailure,
+  ownNumberKnown,
   pullFromSzamlazz,
   type FeedPullDeps,
   type FeedPullLine,
@@ -53,6 +54,15 @@ export class FeedPullService {
       return [
         `a diagnosztika nem futott le (${error instanceof Error ? error.name : "UNKNOWN"})`,
       ];
+    }
+  }
+
+  /** Látja-e a kulcs az OS által kiállított számlát (`ownNumberKnown`); `null`, ha nem tudni (a hiba itt sem állítja meg a kört). */
+  async keyKnowsOwnNumber(): Promise<boolean | null> {
+    try {
+      return await ownNumberKnown(this.deps ?? this.live());
+    } catch {
+      return null;
     }
   }
 

@@ -82,7 +82,8 @@ export type FeedBackfillOutcome =
   | "ERROR"
   | "UNREADABLE"
   | "OTHER_NUMBER"
-  | "UNVERIFIED";
+  | "UNVERIFIED"
+  | "NOT_OUR_ACCOUNT";
 
 /**
  * A száraz kör ezeket nem kérdezi újra (folytatható): a válasz végleges. A hibás és az olvashatatlan válasz újra megy.
@@ -100,6 +101,24 @@ export const SETTLED_OUTCOMES: ReadonlySet<string> = new Set([
   "OTHER_NUMBER",
 ]);
 
+/**
+ * A SOROZAT NEM A MI SZÁMLÁZZ.HU FIÓKUNKBÓL VALÓ (acrobot 58095, Balázs 2026-11-20): a feedben lévő szám a kontrollon 7-es
+ * választ kapott, MIKÖZBEN az OS által ugyanezzel a kulccsal kiállított számla megvan, vagyis a kérés alakja és a kulcs jó,
+ * a szám nem ebben a fiókban él (a push-végponton jött, másik számlázó programból). A sorozat legnagyobb száma kapja ezt a
+ * kimenetet a visszatöltés táblájában: a sorozat VÉGLEGESEN kimarad a Számlázz.hu-s visszatöltésből, és a lap erre nem
+ * kínál gombot. Nem cégadat és nem konfig: a Számlázz.hu válasza dönti el, sorozatonként, és a tábla őrzi.
+ */
+export const NOT_OUR_ACCOUNT = "NOT_OUR_ACCOUNT" as const;
+
+/** A sorozatok, amelyeket a kontroll a mi fiókunkon kívülinek ítélt. */
+export function foreignSeries(
+  checked: readonly { series: string; outcome: string }[],
+): ReadonlySet<string> {
+  return new Set(
+    checked.filter((c) => c.outcome === NOT_OUR_ACCOUNT).map((c) => c.series),
+  );
+}
+
 /** A kontroll-kérdés: a sorozat legnagyobb tárolt száma, ami a feedben van, tehát a Számlázz.hu-ban is létezik. */
 export interface FeedControlResult {
   series: string;
@@ -109,6 +128,11 @@ export interface FeedControlResult {
   /** a Számlázz.hu hibakódja és üzenete, vagy a hiba alakja (a válasz XML-je és vevő nélkül) */
   detail: string;
   passed: boolean;
+  /**
+   * Igaz, ha a kontroll 7-et kapott, és az OS által kiállított számlát ugyanez a kulcs megtalálta: a sorozat nem a mi fiókunkból
+   * való (`NOT_OUR_ACCOUNT`). Ez NEM kontroll-bukás: a kör nem áll le miatta, a sorozat kimarad.
+   */
+  foreign?: boolean;
   /** a bukott kontroll diagnosztikája: ugyanaz a szám más kérés-alakkal, a PDF-lekéréssel, és egy OS-ben kiállított számmal */
   diagnostics?: string[];
 }
