@@ -151,8 +151,8 @@ describe("decideResolution: a DRAFT-hoz minden feltétel kell", () => {
   it("időtúllépés, más hibakód, érthetetlen válasz -> nem tudjuk, sosem DRAFT", () => {
     for (const lookup of [
       { outcome: "UNAVAILABLE" },
-      { outcome: "ERROR", errorCode: "3" },
-      { outcome: "ERROR", errorCode: null },
+      { outcome: "ERROR", errorCode: "3", errorMessage: null },
+      { outcome: "ERROR", errorCode: null, errorMessage: null },
     ] as const) {
       const decision = decideResolution(facts({ lookup }));
       assert.equal(decision.action, "NONE");

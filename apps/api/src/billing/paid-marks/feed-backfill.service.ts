@@ -21,7 +21,7 @@ export interface FeedBackfillStore {
   record(input: {
     number: string;
     series: string;
-    line: FeedPullLine;
+    line: { outcome: string; detail: string };
     userId: string;
     at: Date;
   }): Promise<void>;
@@ -245,6 +245,7 @@ export class FeedBackfillService {
     userId: string,
   ): Promise<void> {
     const outcomes: Record<string, number> = {};
+    const noes: { number: string; series: string; detail: string }[] = [];
     try {
       for (const [i, number] of numbers.entries()) {
         if (i > 0 && this.delayMs > 0)
@@ -263,16 +264,28 @@ export class FeedBackfillService {
             detail: `a lekérdezés nem futott le (${error instanceof Error ? error.name : "UNKNOWN"})`,
           };
         }
+        const series = feedSeries(number) ?? "?";
+        // the BEHÚZÁS round runs no control: a 7 there is no proof of an unknown number, so it is not a final no
+        const recorded =
+          phase === "apply" && line.outcome === "NOT_FOUND"
+            ? {
+                outcome: "UNVERIFIED",
+                detail: `ellenőrzésre vár: a behúzó kör kontroll nélkül kapta (${line.detail})`,
+              }
+            : line;
         await this.store.record({
           number,
-          series: feedSeries(number) ?? "?",
-          line,
+          series,
+          line: recorded,
           userId,
           at: new Date(),
         });
-        outcomes[line.outcome] = (outcomes[line.outcome] ?? 0) + 1;
+        if (phase === "dry" && line.outcome === "NOT_FOUND")
+          noes.push({ number, series, detail: line.detail });
+        outcomes[recorded.outcome] = (outcomes[recorded.outcome] ?? 0) + 1;
         this.running!.done = i + 1;
       }
+      if (noes.length > 0) await this.revokeNoesIfBroken(noes, userId);
       this.logger.log(
         `Feed-visszatöltés ${phase === "apply" ? "BEHÚZÁS" : "száraz"} (user ${userId}): ${numbers.length} szám, ${Object.entries(
           outcomes,
@@ -289,5 +302,31 @@ export class FeedBackfillService {
         done,
       };
     }
+  }
+  /**
+   * The control measures the question's soundness at the start of the round, not during it. A key change or a fault on
+   * the Számlázz.hu side in the middle would still answer 7 and leave final noes. So the control is asked once more at
+   * the end, and if it fails, this round's noes lose their finality (UNVERIFIED) and the failure shows on the page.
+   */
+  private async revokeNoesIfBroken(
+    noes: readonly { number: string; series: string; detail: string }[],
+    userId: string,
+  ): Promise<void> {
+    const results = await this.controlRound(userId, new Date());
+    if (results.every((r) => r.passed)) return;
+    for (const no of noes)
+      await this.store.record({
+        number: no.number,
+        series: no.series,
+        line: {
+          outcome: "UNVERIFIED",
+          detail: `ellenőrzésre vár: a kör végi kontroll nem sikerült (${no.detail})`,
+        },
+        userId,
+        at: new Date(),
+      });
+    this.logger.warn(
+      `Feed-visszatöltés: a kör végi kontroll nem sikerült, ${noes.length} nem ellenőrzésre vár lett`,
+    );
   }
 }

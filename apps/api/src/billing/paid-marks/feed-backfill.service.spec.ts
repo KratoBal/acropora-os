@@ -21,6 +21,8 @@ function setup(options: {
   checked?: { number: string; series: string; outcome: string }[];
   /** what Számlázz.hu answers per number; a number in the feed that is not listed is KNOWN (it is in Számlázz.hu) */
   knows: Record<string, FeedPullLine["outcome"]>;
+  /** after this many asks the feed's own numbers stop being found (a key change or a fault in the middle of a round) */
+  breakAfterAsks?: number;
   /** the detail line for a number that is not found (the Számlázz.hu's own wording) */
   notFoundDetail?: string;
 }) {
@@ -28,6 +30,7 @@ function setup(options: {
     (options.checked ?? []).map((c) => [c.number, { ...c }]),
   );
   const asked: string[] = [];
+  let asks = 0;
   const store: FeedBackfillStore = {
     storedNumbers: async () =>
       options.stored.map((documentNumber) => ({
@@ -41,10 +44,15 @@ function setup(options: {
   const feedPull = {
     pull: async (numbers: string[], apply: boolean) => {
       asked.push(`${apply ? "apply" : "dry"} ${numbers.join(",")}`);
+      asks += numbers.length;
       return numbers.map((number) => {
+        const broken =
+          options.breakAfterAsks !== undefined && asks > options.breakAfterAsks;
         const known =
           options.knows[number] ??
-          (options.stored.includes(number) ? "WOULD_STORE" : "NOT_FOUND");
+          (options.stored.includes(number) && !broken
+            ? "WOULD_STORE"
+            : "NOT_FOUND");
         return {
           number,
           outcome: known === "WOULD_STORE" && apply ? "STORED" : known,
@@ -80,6 +88,9 @@ describe("the feed backfill", () => {
       "dry ACRW-2026/00001",
       "dry ACRW-2026/00002",
       "dry ACRW-2026/00003",
+      // the control once more at the end of the round (it had noes)
+      "dry 2026/00003",
+      "dry ACRW-2026/00004",
     ]);
     const status = await service.status(NOW);
     assert.deepEqual(status.checked, {
@@ -110,7 +121,11 @@ describe("the feed backfill", () => {
     });
     await service.start(false, "u-1", NOW);
     await service.settled();
-    assert.deepEqual(asked, ["dry ACRW-2026/00004", "dry ACRW-2026/00003"]);
+    assert.deepEqual(asked, [
+      "dry ACRW-2026/00004",
+      "dry ACRW-2026/00003",
+      "dry ACRW-2026/00004",
+    ]);
   });
 
   it("the pull takes only what Számlázz.hu knows", async () => {
@@ -266,6 +281,35 @@ describe("the feed backfill", () => {
       "dry ACRW-2026/00004",
       "dry ACRW-2026/00001",
       "dry ACRW-2026/00003",
+      "dry ACRW-2026/00004",
     ]);
+  });
+
+  it("a round that breaks in the middle: the control asked at the end fails, and this round's noes are not final", async () => {
+    // 1 control + 2 gaps pass, then the feed's own number is not found any more
+    const { service, checked } = setup({
+      stored: ["2026/00003"],
+      knows: {},
+      breakAfterAsks: 3,
+    });
+    await service.start(false, "u-1", NOW);
+    await service.settled();
+    assert.equal(checked.get("2026/00001")?.outcome, "UNVERIFIED");
+    assert.equal(checked.get("2026/00002")?.outcome, "UNVERIFIED");
+    const status = await service.status(NOW);
+    assert.equal(status.control?.results[0]?.passed, false);
+  });
+
+  it("the behúzás round runs no control, so a 7 there is not a final no", async () => {
+    const { service, checked } = setup({
+      stored: ["2026/00003"],
+      checked: [
+        { number: "2026/00001", series: "2026", outcome: "WOULD_STORE" },
+      ],
+      knows: { "2026/00001": "NOT_FOUND" },
+    });
+    await service.start(true, "u-1", NOW);
+    await service.settled();
+    assert.equal(checked.get("2026/00001")?.outcome, "UNVERIFIED");
   });
 });
