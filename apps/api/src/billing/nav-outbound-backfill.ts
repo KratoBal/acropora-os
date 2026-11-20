@@ -1,21 +1,27 @@
-import { prisma } from "@acropora/database";
+import { Prisma, prisma } from "@acropora/database";
 
 import type {
   NavInvoiceDigestItem,
   NavOnlineInvoiceClient,
 } from "../integrations/nav/nav-online-invoice.client.js";
 import type { NavCredentialsService } from "../integrations/nav/nav-credentials.service.js";
-import { invoiceNumberKey } from "./external-billing-one-row.js";
+import { NAV_SOURCE, invoiceNumberKey } from "./external-billing-one-row.js";
 
 /**
  * A KIMENŐ SZÁMLÁK A NAV-BÓL, SZÁRAZON (kártya 785dfea6; terv: agents/nautilus/megosztas/nav-kimeno-terv-2026-11-20.md, acrobot 58077,
  * 58082). A CASHMAN számlái (2026/, ACRW-2026/) a mi adószámunkon mennek a NAV-ba, de a Számlázz.hu feed csak 2026-10-01 óta hozza őket,
  * az Agent pedig sosem látja őket: 01-01 és 09-30 között a NAV az egyetlen forrás.
  *
- * EZ A RÉSZ CSAK OLVAS. A NAV OUTBOUND digestjét (kiállítói oldal; interfész-specifikáció v3.0, 2026.02.12, 35-36. o.) kelt szerinti,
+ * ALAPBÓL CSAK OLVAS (a PR 1 óta). A NAV OUTBOUND digestjét (kiállítói oldal; interfész-specifikáció v3.0, 2026.02.12, 35-36. o.) kelt szerinti,
  * legfeljebb 30 napos ablakokban kérdezi (a NAV határa 35 nap, 56. o.), és megszámolja, mi van már meg nálunk (külső számla vagy
  * az OS saját számlája, egy szám egy sor: `invoiceNumberKey`), és mi hiányzik. Nem ír semmit. A kimenet nem hordoz vevőnevet, adószámot
  * és összeget: sorozatonkénti darabszámot ad, és a hiányzók SZÁMÁT (a szám a számla azonosítója, nem személyes adat).
+ *
+ * `--apply` (a PR 2): a hiányzókat `ExternalBillingDocument`-sorként felveszi, `source` = `NAV`, migráció nélkül (acrobot 58082):
+ * a feed-mezőket az eBIZ mintájára tölti (`NAV:<tranzakció>:<index>`, a befogadás). A sor csak a LÉTEZÉST hordozza (szám, kelt,
+ * összeg, vevő): fizetést nem (a NAV nem adja; a saját banki jelölésünk igen), tételt nem (acrobot 58082), PDF-et nem
+ * (`NAV_NO_PDF`). Egy szám egy sor: a NAV csak ott ír, ahol egyik forrásnál sincs meg a szám, és a Számlázz.hu meg az eBIZ
+ * átveszi a sorát (`takeOverNavRow`).
  */
 
 /** Egy számla sorozata: a szám a záró számjegyek nélkül („2026/00090” → „2026/”, „ACRW-2026/00571” → „ACRW-2026/”). */
@@ -151,24 +157,171 @@ export const prismaNavOutboundPresent: NavOutboundPresentLookup = {
   },
 };
 
+/** A NAV a lapméretet maga dönti el (specifikáció 56. o.); ennél több oldal egy ablakban hiba, nem csendes vágás (barracuda, #2774). */
+export class NavOutboundPageLimitError extends Error {
+  constructor(window: { start: Date; end: Date }, availablePage: number) {
+    super(
+      `A NAV a(z) ${window.start.toISOString().slice(0, 10)} .. ${window.end.toISOString().slice(0, 10)} ablakban ${availablePage} oldalt adna, ` +
+        `a határ ${MAX_PAGES}: az ablak számai csonkák lennének. Szűkebb ablak kell.`,
+    );
+  }
+}
+
+const KIND_CODE: Record<NavInvoiceDigestItem["invoiceOperation"], string> = {
+  CREATE: "SZ",
+  STORNO: "SS",
+  MODIFY: "HS",
+};
+
+/** A NAV `PaymentMethodType` értékei, ahogy a lapon olvasható (a zárt `paymentMethodUnified` a Számlázz.hu-é, itt üres). */
+const PAYMENT_METHOD: Record<string, string> = {
+  TRANSFER: "átutalás",
+  CASH: "készpénz",
+  CARD: "bankkártya",
+  VOUCHER: "utalvány",
+  OTHER: "egyéb",
+};
+
+/** A vevő neve, ha a NAV nem adja (nem adóalany magánszemély; specifikáció 95., 108. o.). */
+export const NAV_PRIVATE_PERSON_NAME = "Magánszemély (a NAV nem adja a nevét)";
+
+const calendarDay = (text: string) =>
+  new Date(`${text.slice(0, 10)}T00:00:00.000Z`);
+
+/**
+ * EGY NAV DIGEST-TÉTEL A KÜLSŐ SZÁMLÁK KÖZÉ. Tiszta függvény. `null`, ha a digestben nincs nettó vagy áfa: összeg nélküli sort
+ * nem veszünk fel (a lista és a párosítás összegre épül), a futás megszámolja.
+ */
+export function navOutboundRow(
+  item: NavInvoiceDigestItem,
+): Prisma.ExternalBillingDocumentCreateManyInput | null {
+  if (
+    item.invoiceNetAmount === undefined ||
+    item.invoiceVatAmount === undefined
+  )
+    return null;
+  const net = new Prisma.Decimal(item.invoiceNetAmount);
+  const vat = new Prisma.Decimal(item.invoiceVatAmount);
+  return {
+    source: NAV_SOURCE,
+    externalId: invoiceNumberKey(item.invoiceNumber),
+    feedMessageId: `NAV:${item.transactionId ?? "-"}:${item.index ?? 0}`,
+    feedReceivedAt: new Date(item.insDate),
+    kindCode: KIND_CODE[item.invoiceOperation],
+    documentNumber: item.invoiceNumber.trim(),
+    electronic:
+      item.invoiceAppearance === "ELECTRONIC" ||
+      item.invoiceAppearance === "EDI",
+    issueDate: calendarDay(item.invoiceIssueDate),
+    fulfillmentDate: item.invoiceDeliveryDate
+      ? calendarDay(item.invoiceDeliveryDate)
+      : null,
+    dueDate: item.paymentDate ? calendarDay(item.paymentDate) : null,
+    paymentMethod: item.paymentMethod
+      ? (PAYMENT_METHOD[item.paymentMethod] ?? item.paymentMethod)
+      : null,
+    paymentMethodUnified: null,
+    currency: (item.currency ?? "HUF").toUpperCase(),
+    customerName: item.customerName ?? NAV_PRIVATE_PERSON_NAME,
+    customerTaxNumber: item.customerTaxNumber ?? null,
+    netAmount: net.toFixed(2),
+    vatAmount: vat.toFixed(2),
+    grossAmount: net.plus(vat).toFixed(2),
+    lines: [],
+    paymentsKnown: null,
+    pdfMissingReason: "NAV_NO_PDF",
+  };
+}
+
+export interface NavOutboundWriteResult {
+  created: number;
+  /** a NAV-ból felvett eredeti, amit egy sztornó most érvénytelenített */
+  cancelled: number;
+  /** összeg nélküli tétel: nem vettük fel */
+  skippedNoAmount: number;
+}
+
+export interface NavOutboundWriter {
+  write(
+    items: readonly NavInvoiceDigestItem[],
+  ): Promise<NavOutboundWriteResult>;
+}
+
+/**
+ * A HIÁNYZÓK FELVÉTELE. Egy ablak egy tranzakció. Előbb a sorok, utána a sztornó: így egy ugyanebben az ablakban felvett eredetit is
+ * érvénytelenít. Csak a NAV-ból felvett eredetihez nyúl: a Számlázz.hu sor sztornóját a feed hozza. A `skipDuplicates` miatt egy
+ * újrafuttatás (vagy két egyidejű) nem ad második sort.
+ */
+export const prismaNavOutboundWriter: NavOutboundWriter = {
+  async write(items) {
+    const rows = items.flatMap((item) => {
+      const row = navOutboundRow(item);
+      return row ? [row] : [];
+    });
+    const originals = items
+      .filter(
+        (item) =>
+          item.invoiceOperation === "STORNO" && item.originalInvoiceNumber,
+      )
+      .map((item) => invoiceNumberKey(item.originalInvoiceNumber!));
+    return prisma.$transaction(async (transaction) => {
+      const created = rows.length
+        ? await transaction.externalBillingDocument.createMany({
+            data: rows,
+            skipDuplicates: true,
+          })
+        : { count: 0 };
+      const cancelled = originals.length
+        ? await transaction.externalBillingDocument.updateMany({
+            where: {
+              source: NAV_SOURCE,
+              externalId: { in: originals },
+              cancelled: false,
+            },
+            data: { cancelled: true },
+          })
+        : { count: 0 };
+      return {
+        created: created.count,
+        cancelled: cancelled.count,
+        skippedNoAmount: items.length - rows.length,
+      };
+    });
+  },
+};
+
+export type NavOutboundRunResult = NavOutboundWindowResult &
+  Partial<NavOutboundWriteResult>;
+
 export class NavOutboundBackfill {
   constructor(
     private readonly client: Pick<NavOnlineInvoiceClient, "queryInvoiceDigest">,
     private readonly credentials: Pick<NavCredentialsService, "resolve">,
     private readonly lookup: NavOutboundPresentLookup = prismaNavOutboundPresent,
+    private readonly writer: NavOutboundWriter = prismaNavOutboundWriter,
   ) {}
 
   /** Szárazon, ablakonként; a NAV hibája (például a 9-es: nincs jogosultság) a hívóhoz jut, megnevezve. */
-  async dryRun(options: {
+  dryRun(options: {
     from: Date;
     to: Date;
-    onWindow?: (result: NavOutboundWindowResult) => void;
-  }): Promise<NavOutboundWindowResult[]> {
+    onWindow?: (result: NavOutboundRunResult) => void;
+  }): Promise<NavOutboundRunResult[]> {
+    return this.run({ ...options, apply: false });
+  }
+
+  async run(options: {
+    from: Date;
+    to: Date;
+    apply: boolean;
+    onWindow?: (result: NavOutboundRunResult) => void;
+  }): Promise<NavOutboundRunResult[]> {
     const credentials = await this.credentials.resolve();
-    const results: NavOutboundWindowResult[] = [];
+    const results: NavOutboundRunResult[] = [];
     for (const window of issueDateWindows(options.from, options.to)) {
       const items: NavInvoiceDigestItem[] = [];
-      for (let page = 1; page <= MAX_PAGES; page += 1) {
+      let page = 1;
+      for (; ; page += 1) {
         const result = await this.client.queryInvoiceDigest(
           page,
           "OUTBOUND",
@@ -180,11 +333,26 @@ export class NavOutboundBackfill {
         );
         items.push(...result.items);
         if (page >= result.availablePage) break;
+        if (page >= MAX_PAGES)
+          throw new NavOutboundPageLimitError(window, result.availablePage);
       }
       const present = await this.lookup.present(
         items.map((item) => item.invoiceNumber),
       );
-      const result = classifyNavOutbound(items, present, window);
+      const result: NavOutboundRunResult = classifyNavOutbound(
+        items,
+        present,
+        window,
+      );
+      if (options.apply) {
+        const missing = new Set(result.missingNumbers);
+        Object.assign(
+          result,
+          await this.writer.write(
+            items.filter((item) => missing.has(item.invoiceNumber)),
+          ),
+        );
+      }
       options.onWindow?.(result);
       results.push(result);
     }
@@ -192,11 +360,11 @@ export class NavOutboundBackfill {
   }
 }
 
-/** `--from=ÉÉÉÉ-HH-NN` (kötelező) és `--to=ÉÉÉÉ-HH-NN` (alapból ma). Írni nem tud: `--apply` nincs. */
+/** `--from=ÉÉÉÉ-HH-NN` (kötelező), `--to=ÉÉÉÉ-HH-NN` (alapból ma), `--apply` (ír; nélküle száraz). */
 export function parseNavOutboundArgs(
   argv: readonly string[],
   now: Date = new Date(),
-): { from: Date; to: Date } {
+): { from: Date; to: Date; apply: boolean } {
   const value = (name: string) =>
     argv.find((arg) => arg.startsWith(`--${name}=`))?.split("=")[1];
   const day = (text: string | undefined, name: string) => {
@@ -208,10 +376,6 @@ export function parseNavOutboundArgs(
       throw new Error(`A --${name} alakja ÉÉÉÉ-HH-NN, nem ${text}.`);
     return new Date(`${text}T00:00:00.000Z`);
   };
-  if (argv.includes("--apply"))
-    throw new Error(
-      "Ez a parancs csak olvas: --apply nincs (a visszatöltés írása külön lépés, a terv 2. PR-ja).",
-    );
   const from = day(value("from"), "from");
   if (!from) throw new Error("Kötelező: --from=ÉÉÉÉ-HH-NN.");
   const to =
@@ -219,5 +383,5 @@ export function parseNavOutboundArgs(
     new Date(`${now.toISOString().slice(0, 10)}T00:00:00.000Z`);
   if (from.getTime() > to.getTime())
     throw new Error("A --from a --to utáni nap.");
-  return { from, to };
+  return { from, to, apply: argv.includes("--apply") };
 }

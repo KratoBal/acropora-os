@@ -16,6 +16,13 @@ import {
 import { SzamlazzFeedsRepository } from "../missing-invoices/szamlazz-feeds.repository.js";
 import { BillingDocumentListRepository } from "./billing-document-list.repository.js";
 import { mergeExternalDuplicates } from "./external-billing-merge.cli.js";
+import type { NavInvoiceDigestItem } from "../integrations/nav/nav-online-invoice.client.js";
+import {
+  prismaNavOutboundPresent,
+  prismaNavOutboundWriter,
+} from "./nav-outbound-backfill.js";
+import { prismaFeedBackfillStore } from "./paid-marks/feed-backfill.service.js";
+import { mailPdfCandidates } from "./external-invoice-mail-pdf.js";
 
 /**
  * ONE OWN INVOICE NUMBER, ONE ROW, ON THE REAL DATABASE (acrobot 26208), in
@@ -23,6 +30,9 @@ import { mergeExternalDuplicates } from "./external-billing-merge.cli.js";
  * the row not being Számlázz.hu's (its payments) once Számlázz.hu knows it;
  * the eBIZ PDF lost in the takeover; a later eBIZ run creating a row again
  * or overwriting Számlázz.hu's data; the one-off merge leaving both rows.
+ * NAV, THE THIRD SOURCE (card 785dfea6): a rerun of the NAV writer adding a
+ * row; a storno cancelling anything but a NAV original; Számlázz.hu or eBIZ
+ * adding a second row beside a NAV row instead of taking it over (same id).
  */
 const gate = integrationDatabaseGate(process.env);
 const PREFIX = "egy-sor-it-";
@@ -79,6 +89,24 @@ function ebiz(invoices: EbizInvoiceListItem[]) {
     return result;
   };
 }
+
+const navItem = (
+  invoiceNumber: string,
+  over: Partial<NavInvoiceDigestItem> = {},
+): NavInvoiceDigestItem => ({
+  invoiceNumber,
+  invoiceOperation: "CREATE",
+  invoiceIssueDate: "2026-05-04",
+  insDate: "2026-05-05T08:00:00.000Z",
+  currency: "HUF",
+  invoiceNetAmount: "100",
+  invoiceVatAmount: "27",
+  customerName: "Teszt Vevő Kft.",
+  invoiceAppearance: "ELECTRONIC",
+  transactionId: "IT",
+  index: 1,
+  ...over,
+});
 
 const feeds = new SzamlazzFeedsRepository();
 async function szamlazz(externalId: string, documentNumber: string) {
@@ -229,6 +257,166 @@ describe(
         `${NUMBER}A`,
         `${NUMBER}B`,
       ]);
+    });
+
+    it("NAV writer: the missing rows once, a rerun adds none, a storno cancels only a NAV original", async () => {
+      // a Számlázz.hu original: its storno is the feed's, the NAV writer leaves it alone. Its externalId is the number's key ON
+      // PURPOSE (a feed id never is): so only the source condition keeps the writer off it, and the test sees that condition
+      await prisma.externalBillingDocument.create({
+        data: {
+          source: "SZAMLAZZ",
+          externalId: `${NUMBER}F`,
+          feedMessageId: "x",
+          feedReceivedAt: new Date(),
+          kindCode: "SZ",
+          documentNumber: `${NUMBER}F`,
+          electronic: true,
+          issueDate: new Date("2026-05-01T00:00:00Z"),
+          currency: "HUF",
+          customerName: "Teszt Vevő Kft.",
+          netAmount: "100",
+          vatAmount: "27",
+          grossAmount: "127",
+          lines: [],
+          payments: [],
+          paymentsKnown: true,
+          paidAmount: "127.00",
+        },
+      });
+      const batch = [
+        navItem(`${NUMBER}N1`),
+        navItem(`${NUMBER}N2`, { invoiceNetAmount: undefined }),
+        navItem(`${NUMBER}N3`, {
+          invoiceOperation: "STORNO",
+          originalInvoiceNumber: ` ${NUMBER.toLowerCase()}n1`,
+          invoiceNetAmount: "-100",
+          invoiceVatAmount: "-27",
+        }),
+        navItem(`${NUMBER}N4`, {
+          invoiceOperation: "STORNO",
+          originalInvoiceNumber: `${NUMBER}F`,
+          invoiceNetAmount: "-100",
+          invoiceVatAmount: "-27",
+        }),
+      ];
+      assert.deepEqual(await prismaNavOutboundWriter.write(batch), {
+        created: 3,
+        cancelled: 1,
+        skippedNoAmount: 1,
+      });
+      assert.deepEqual(await prismaNavOutboundWriter.write(batch), {
+        created: 0,
+        cancelled: 0,
+        skippedNoAmount: 1,
+      });
+      const rows = await prisma.externalBillingDocument.findMany({
+        where: {
+          documentNumber: {
+            in: [`${NUMBER}N1`, `${NUMBER}N3`, `${NUMBER}N4`, `${NUMBER}F`],
+          },
+        },
+        orderBy: { documentNumber: "asc" },
+        select: {
+          documentNumber: true,
+          source: true,
+          kindCode: true,
+          cancelled: true,
+          grossAmount: true,
+        },
+      });
+      assert.deepEqual(
+        rows.map((r) => [
+          r.documentNumber,
+          r.source,
+          r.kindCode,
+          r.cancelled,
+          r.grossAmount.toFixed(2),
+        ]),
+        [
+          [`${NUMBER}F`, "SZAMLAZZ", "SZ", false, "127.00"],
+          [`${NUMBER}N1`, "NAV", "SZ", true, "127.00"],
+          [`${NUMBER}N3`, "NAV", "SS", false, "-127.00"],
+          [`${NUMBER}N4`, "NAV", "SS", false, "-127.00"],
+        ],
+      );
+      // the NAV rows count as present from now on, and the feed backfill does not ask Számlázz.hu for them again
+      const present = await prismaNavOutboundPresent.present([
+        `${NUMBER}N1`,
+        `${NUMBER}N2`,
+      ]);
+      assert.deepEqual([...present.external], [`${NUMBER}N1`]);
+    });
+
+    it("NAV first: Számlázz.hu takes the NAV row over, the same row, and its PDF reason goes", async () => {
+      await prismaNavOutboundWriter.write([navItem(`${NUMBER}D`)]);
+      const [navRow] = await rowsOf(`${NUMBER}D`);
+      assert.equal(navRow!.source, "NAV");
+      assert.equal(await szamlazz(`${PREFIX}d`, `${NUMBER}D`), "PROJECTED");
+      // the feed again (a resend): still the one row below
+      await szamlazz(`${PREFIX}d`, `${NUMBER}D`);
+      const rows = await prisma.externalBillingDocument.findMany({
+        where: { documentNumber: `${NUMBER}D` },
+        select: {
+          id: true,
+          source: true,
+          externalId: true,
+          pdfMissingReason: true,
+          paymentsKnown: true,
+          feedMessageId: true,
+        },
+      });
+      assert.deepEqual(rows, [
+        {
+          id: navRow!.id,
+          source: "SZAMLAZZ",
+          externalId: `${PREFIX}d`,
+          pdfMissingReason: null,
+          paymentsKnown: true,
+          feedMessageId: rows[0]!.feedMessageId,
+        },
+      ]);
+      assert.doesNotMatch(rows[0]!.feedMessageId, /^NAV:/);
+    });
+
+    it("NAV first: eBIZ takes the NAV row over, the same row, and the next eBIZ run adds none", async () => {
+      await prismaNavOutboundWriter.write([navItem(`${NUMBER}E`)]);
+      const [navRow] = await rowsOf(`${NUMBER}E`);
+      const sync = ebiz([item(990005, `${NUMBER}E`)]);
+      await sync();
+      await sync();
+      const rows = await rowsOf(`${NUMBER}E`);
+      assert.deepEqual(
+        rows.map((r) => [r.id, r.source, r.externalId, r.pdfStorageKey]),
+        [
+          [
+            navRow!.id,
+            "EBIZ",
+            "990005",
+            `external-invoices/${navRow!.id}/ebiz.pdf`,
+          ],
+        ],
+      );
+    });
+
+    it("the feed backfill counts a NAV row as stored", async () => {
+      await prismaNavOutboundWriter.write([navItem(`${NUMBER}2026/00077`)]);
+      const stored = await prismaFeedBackfillStore.storedNumbers(2026);
+      assert.ok(
+        stored.some((row) => row.documentNumber === `${NUMBER}2026/00077`),
+      );
+    });
+
+    it("a NAV row without a PDF is a candidate of the cmfx letter fill, with its gross", async () => {
+      await prismaNavOutboundWriter.write([
+        navItem(`${NUMBER}M1`, { invoiceIssueDate: "2026-03-10" }),
+      ]);
+      const candidates = (await mailPdfCandidates("2026-03")).filter((row) =>
+        row.documentNumber.startsWith(NUMBER),
+      );
+      assert.deepEqual(
+        candidates.map((row) => [row.documentNumber, row.grossAmount]),
+        [[`${NUMBER}M1`, "127"]],
+      );
     });
 
     it("the one-off merge folds an existing pair into the eBIZ row, dry run first", async () => {

@@ -11,6 +11,7 @@ import {
 } from "../feed-backfill.js";
 import type { FeedPullLine } from "../feed-pull.js";
 import { FeedPullService } from "./feed-pull.service.js";
+import { NAV_SOURCE } from "../external-billing-one-row.js";
 
 /** A tárolt számla száma és fajtája, a hézagokhoz; a teszt cseréli. */
 export interface FeedBackfillStore {
@@ -28,9 +29,14 @@ export interface FeedBackfillStore {
 }
 
 export const prismaFeedBackfillStore: FeedBackfillStore = {
+  // a NAV-ból felvett számla is megvan (kártya 785dfea6): a CASHMAN számláit a Számlázz.hu soha nem adja ki (7-es kód), tehát a
+  // visszatöltés nem kérdezi őket újra; a sorozat legnagyobb száma is a NAV-val együtt értendő
   storedNumbers: (year) =>
     prisma.externalBillingDocument.findMany({
-      where: { source: "SZAMLAZZ", documentNumber: { contains: `${year}/` } },
+      where: {
+        source: { in: ["SZAMLAZZ", NAV_SOURCE] },
+        documentNumber: { contains: `${year}/` },
+      },
       select: { documentNumber: true, kindCode: true },
     }),
   checked: () =>

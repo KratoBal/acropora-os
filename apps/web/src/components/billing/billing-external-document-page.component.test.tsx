@@ -385,6 +385,42 @@ describe("BillingExternalDocumentPage", () => {
     }
   });
 
+  /**
+   * A NAV-BÓL FELVETT SOR (kártya 785dfea6). MI PIROSÍT: ha a lap Számlázz.hu-s továbbításnak mondaná; ha kézi kifizetést
+   * kínálna (a Számlázz.hu ezt a számlát nem látja); ha a PDF hiányát nem a NAV-val indokolná.
+   */
+  it("a row taken from NAV: named so, no manual payment, and why there is no PDF", async () => {
+    api.externalDetail.mockResolvedValue(
+      detail({
+        source: "NAV",
+        pdfMissingReason: "NAV_NO_PDF",
+        lines: [],
+        // an open state on purpose: the manual payment form shows on an open Számlázz.hu invoice, so only the NAV check hides it
+        paymentState: "UNPAID",
+        paymentsKnown: false,
+        versionCount: 1,
+      }),
+    );
+    render(<BillingExternalDocumentPage documentId="ext-1" />);
+    expect(
+      await screen.findByRole("heading", { name: "ACRW-2026/00508" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Külső · NAV")).toBeInTheDocument();
+    expect(
+      screen.getByText(/a NAV Online Számla adataiból vettük fel/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/a Számlázz.hu továbbította/)).toBeNull();
+    expect(screen.getByText("A NAV lekérdezés adatai.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /A NAV nem ad PDF-et: a számla PDF-je a kiállító programban van./,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Kifizetés rögzítése" }),
+    ).toBeNull();
+  });
+
   it("says when Számlázz.hu marks it cancelled", async () => {
     api.externalDetail.mockResolvedValue(detail({ cancelled: true }));
     render(<BillingExternalDocumentPage documentId="ext-1" />);

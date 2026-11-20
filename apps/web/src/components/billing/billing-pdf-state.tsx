@@ -19,6 +19,8 @@ const FIXED: Record<string, string> = {
   SZAMLAZZ_PDF_EMPTY: "A Számlázz.hu üres választ adott.",
   SZAMLAZZ_PDF_NOT_PDF: "A Számlázz.hu válasza nem PDF volt.",
   SZAMLAZZ_PDF_STORE_FAILED: "Letöltve, de a tárolás nem sikerült.",
+  // a NAV kimenő lekérdezése csak a számla adatait adja (kártya 785dfea6): a PDF a kiállító programban van
+  NAV_NO_PDF: "A NAV nem ad PDF-et: a számla PDF-je a kiállító programban van.",
 };
 
 export function pdfMissingText(
