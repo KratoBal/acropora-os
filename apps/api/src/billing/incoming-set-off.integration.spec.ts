@@ -178,7 +178,8 @@ describe(
           contentKey: `${MARK}-report`,
           content: new Uint8Array(Buffer.from("xlsx")),
           transferDate: at(GLS_DAY),
-          total: D(160880),
+          // a részletező a BESZEDETT utánvétet adja (a levél cod mezője), nem az átutalt összeget
+          total: D(166880),
           lineCount: 1,
           status: "COMPLETED",
         },
