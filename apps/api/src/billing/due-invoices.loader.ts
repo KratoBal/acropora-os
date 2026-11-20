@@ -6,6 +6,7 @@ import { budapestDay } from "./billing-document-list.js";
 import { buildDueInvoices } from "./due-invoices.js";
 import type { IncomingReviewService } from "./foreign-invoice/incoming-review.service.js";
 import { loadCollectedPdfIndex } from "./incoming-collected-pdf.js";
+import { loadSetOffPayments } from "./incoming-set-off.loader.js";
 import { attachedPdfIds } from "./incoming-pdf-attach.js";
 import { incomingHasPdf } from "./incoming-pdf-state.js";
 import {
@@ -36,7 +37,10 @@ export async function loadDueInvoices(
       loadPurchaseSubjects(database),
       attachedPdfIds(database),
     ]);
-  const manualPaid = await loadManualPurchasePayments(database, rows);
+  const [manualPaid, setOff] = await Promise.all([
+    loadManualPurchasePayments(database, rows),
+    loadSetOffPayments(rows),
+  ]);
   return buildDueInvoices({
     items: incomingListItems({
       rows,
@@ -45,6 +49,7 @@ export async function loadDueInvoices(
       readings,
       purchases,
       manualPaid,
+      setOff,
     }),
     bankAccounts: new Map(rows.map((row) => [row.id, row.supplierBankAccount])),
     today: budapestDay(now)!,

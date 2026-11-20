@@ -723,9 +723,11 @@ export function BillingIncomingDocumentPage({
                   ? purchase
                     ? "Beszerzésből jött számla: a fizetés a banki párosításból ismert (a terhelések lent), ha a képe párosodott."
                     : "Postafiókos számla: a fizetés a banki párosításból ismert (a terhelések lent)."
-                  : detail.paymentSource === "BANK_PAIRING"
-                    ? "A Számlázz.hu ehhez a számlához nem küldött kifizetési adatot; nálunk fizetett a banki párosítás alapján (a terhelések lent)."
-                    : "Nincs adat: a Számlázz.hu ehhez a számlához nem küldött kifizetési adatot. Ez nem azt jelenti, hogy nincs kifizetve."}
+                  : detail.paymentSource === "CARRIER_SETOFF"
+                    ? "A futár a díjszámlát levonta az utánvét-utalásból (a jóváírás napja a fizetés napja), ezért nincs hozzá banki terhelés."
+                    : detail.paymentSource === "BANK_PAIRING"
+                      ? "A Számlázz.hu ehhez a számlához nem küldött kifizetési adatot; nálunk fizetett a banki párosítás alapján (a terhelések lent)."
+                      : "Nincs adat: a Számlázz.hu ehhez a számlához nem küldött kifizetési adatot. Ez nem azt jelenti, hogy nincs kifizetve."}
               </p>
             )}
           </PilotSection>

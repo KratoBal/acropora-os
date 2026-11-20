@@ -52,6 +52,7 @@ import {
   setIncomingNotBookable,
 } from "./incoming-not-bookable.js";
 import { setIncomingPaperOriginal } from "./incoming-paper-original.js";
+import { loadSetOffPayments } from "./incoming-set-off.loader.js";
 import { loadRelatedDocuments } from "./incoming-related-documents.js";
 import {
   incomingListResponse,
@@ -113,7 +114,10 @@ export class IncomingBillingDocumentsController {
         loadPurchaseSubjects(this.database),
         attachedPdfIds(this.database),
       ]);
-    const manualPaid = await loadManualPurchasePayments(this.database, rows);
+    const [manualPaid, setOff] = await Promise.all([
+      loadManualPurchasePayments(this.database, rows),
+      loadSetOffPayments(rows),
+    ]);
     return incomingListResponse(
       incomingListItems({
         rows,
@@ -122,6 +126,7 @@ export class IncomingBillingDocumentsController {
         readings,
         purchases,
         manualPaid,
+        setOff,
       }),
       query,
     );
@@ -175,13 +180,14 @@ export class IncomingBillingDocumentsController {
       where: { id },
     });
     if (!row) throw new NotFoundException("Nincs ilyen bejövő számla.");
-    const [pairings, collected, manualPaid, attached, related] =
+    const [pairings, collected, manualPaid, attached, related, setOff] =
       await Promise.all([
         this.missing.documentPairings(),
         this.collectedIndex(),
         loadManualPurchasePayments(this.database, [row]),
         attachedPdfIds(this.database, [row.id]),
         loadRelatedDocuments(this.database, row.sourceDocumentId),
+        loadSetOffPayments([row]),
       ]);
     return toIncomingDetail(
       row,
@@ -189,6 +195,7 @@ export class IncomingBillingDocumentsController {
       incomingHasPdf(row, { attached, collected }),
       manualPaid.get(row.externalId) ?? null,
       related,
+      setOff.get(row.documentNumber) ?? null,
     );
   }
 
