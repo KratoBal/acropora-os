@@ -312,12 +312,20 @@ export function beforeEbizCutoff(
   );
 }
 
+/**
+ * LASSAN (Balázs, 2026-11-20 13:21 UTC, acrobot 58122: a NAV ne tiltson le a terhelés miatt): két digest-hívás között legalább
+ * ennyi szünet, ablakon és oldalon át is. Egy év visszatöltése így is néhány perc (13 ablak, ablakonként egy-két oldal).
+ */
+export const NAV_PAUSE_MS = 2000;
+
 export class NavOutboundBackfill {
   constructor(
     private readonly client: Pick<NavOnlineInvoiceClient, "queryInvoiceDigest">,
     private readonly credentials: Pick<NavCredentialsService, "resolve">,
     private readonly lookup: NavOutboundPresentLookup = prismaNavOutboundPresent,
     private readonly writer: NavOutboundWriter = prismaNavOutboundWriter,
+    private readonly sleep: (ms: number) => Promise<void> = (ms) =>
+      new Promise((resolve) => setTimeout(resolve, ms)),
   ) {}
 
   /** Szárazon, ablakonként; a NAV hibája (például a 9-es: nincs jogosultság) a hívóhoz jut, megnevezve. */
@@ -335,15 +343,20 @@ export class NavOutboundBackfill {
     apply: boolean;
     /** az eBIZ határnapja (`ebizSince`, ÉÉÉÉ-HH-NN); alapból Balázs napja */
     ebizSince?: string;
+    /** szünet két NAV-hívás között, ezredmásodperc (alapból `NAV_PAUSE_MS`) */
+    pauseMs?: number;
     onWindow?: (result: NavOutboundRunResult) => void;
   }): Promise<NavOutboundRunResult[]> {
     const ebizSince = options.ebizSince ?? EBIZ_DEFAULT_SINCE;
+    const pauseMs = options.pauseMs ?? NAV_PAUSE_MS;
     const credentials = await this.credentials.resolve();
     const results: NavOutboundRunResult[] = [];
+    let calls = 0;
     for (const window of issueDateWindows(options.from, options.to)) {
       const items: NavInvoiceDigestItem[] = [];
       let page = 1;
       for (; ; page += 1) {
+        if (calls++ > 0) await this.sleep(pauseMs);
         const result = await this.client.queryInvoiceDigest(
           page,
           "OUTBOUND",

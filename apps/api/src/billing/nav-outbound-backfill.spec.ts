@@ -25,6 +25,8 @@ import {
   felvenné.
 */
 
+/** a szünet a saját tesztjében mérve; máshol azonnali, hogy az ötven oldal ne száz másodperc legyen */
+const instant = async () => undefined;
 const day = (text: string) => new Date(`${text}T00:00:00.000Z`);
 const item = (
   invoiceNumber: string,
@@ -256,9 +258,13 @@ describe("NavOutboundBackfill.dryRun", () => {
         return { external: new Set(["2026/00002"]), own: new Set<string>() };
       },
     };
-    const results = await new NavOutboundBackfill(client, credentials, lookup, {
-      write: async () => assert.fail("a száraz futás nem ír"),
-    }).dryRun({ from: day("2026-01-01"), to: day("2026-01-10") });
+    const results = await new NavOutboundBackfill(
+      client,
+      credentials,
+      lookup,
+      { write: async () => assert.fail("a száraz futás nem ír") },
+      instant,
+    ).dryRun({ from: day("2026-01-01"), to: day("2026-01-10") });
     assert.deepEqual(
       {
         calls: calls.map((c) => [
@@ -347,6 +353,7 @@ describe("NavOutboundBackfill.run", () => {
       credentials,
       lookup,
       writer,
+      instant,
     ).run({ from: day("2026-01-01"), to: day("2026-02-05"), apply: true });
     assert.deepEqual(written, [["2026/00001"], ["2026/00003"]]);
     assert.deepEqual(
@@ -399,6 +406,34 @@ describe("NavOutboundBackfill.run", () => {
     );
   });
 
+  it("két NAV-hívás között szünet, oldalon és ablakon át is; az első hívás előtt nincs", async () => {
+    const order: string[] = [];
+    const client = {
+      queryInvoiceDigest: async (page: number, _d: string, from: Date) => {
+        order.push(`hívás ${from.toISOString().slice(0, 10)} ${page}`);
+        return { currentPage: page, availablePage: 2, items: [] };
+      },
+    } as never;
+    await new NavOutboundBackfill(
+      client,
+      credentials,
+      none,
+      undefined,
+      async (ms) => {
+        order.push(`szünet ${ms}`);
+      },
+    ).dryRun({ from: day("2026-01-01"), to: day("2026-02-05") });
+    assert.deepEqual(order, [
+      "hívás 2026-01-01 1",
+      "szünet 2000",
+      "hívás 2026-01-01 2",
+      "szünet 2000",
+      "hívás 2026-01-31 1",
+      "szünet 2000",
+      "hívás 2026-01-31 2",
+    ]);
+  });
+
   it("az ötvenedik oldal után hiba, az ablak megnevezésével; írás nincs", async () => {
     let calls = 0;
     const client = {
@@ -412,9 +447,13 @@ describe("NavOutboundBackfill.run", () => {
       },
     } as never;
     await assert.rejects(
-      new NavOutboundBackfill(client, credentials, none, {
-        write: async () => assert.fail("csonka ablakot nem írunk"),
-      }).run({ from: day("2026-03-02"), to: day("2026-03-05"), apply: true }),
+      new NavOutboundBackfill(
+        client,
+        credentials,
+        none,
+        { write: async () => assert.fail("csonka ablakot nem írunk") },
+        instant,
+      ).run({ from: day("2026-03-02"), to: day("2026-03-05"), apply: true }),
       (error: unknown) =>
         error instanceof NavOutboundPageLimitError &&
         /2026-03-02 \.\. 2026-03-05/.test(error.message) &&
@@ -435,6 +474,8 @@ describe("NavOutboundBackfill.run", () => {
       client,
       credentials,
       none,
+      undefined,
+      instant,
     ).dryRun({
       from: day("2026-03-02"),
       to: day("2026-03-05"),
