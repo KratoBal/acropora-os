@@ -2217,3 +2217,153 @@ describe("Az ajánlat címe: a másolat átnevezhető (quote-masolat-cim)", () =
     ).toBeInTheDocument();
   });
 });
+
+/*
+  A PARTNER CSERÉJE A PISZKOZAT AJÁNLATON (Luca, 2026-11-20, Discord: a "Másolat új ajánlatként" másolat címe átírható, a partnere nem).
+  Az API (PATCH /quotes/:id, customerId) már tudta; a felületen csak kiírás volt. MI PIROSÍT: ha a gomb nem látszik egy soha nem
+  publikált piszkozaton; ha látszik elküldött vagy publikált verziós ajánlaton, vagy jog nélkül; ha a mentés nem csak a partner
+  azonosítóját küldi; ha a találat kiválasztása mentés nélkül is cserélne; ha ugyanaz a partner is menthető; ha az API elutasítása
+  nem látszik; ha a csere után a régi partner neve marad a lapon; ha a keresés nem ugyanaz, mint az új ajánlat oldalán.
+*/
+describe("Az ajánlat partnere: a piszkozaton cserélhető", () => {
+  const draftOnly = () =>
+    quote([version({ id: "v1", versionNumber: 1, status: "DRAFT" })], {
+      status: "DRAFT",
+      customerId: "c1",
+      customerName: "Blue Office Kft.",
+    });
+  const searchFor = async (text: string) => {
+    fireEvent.change(await screen.findByLabelText("Partner keresése"), {
+      target: { value: text },
+    });
+  };
+
+  it("swaps the partner: the search is the new-quote page's, only the pick plus the button saves, and the page shows the new partner", async () => {
+    api.detail.mockResolvedValue(draftOnly());
+    customers.list.mockResolvedValue({
+      items: [{ id: "c2", displayName: "Állatkert Zrt.", partnerMirror: true }],
+    });
+    api.updateHeader.mockResolvedValue({
+      ...LIST.items[0]!,
+      customerId: "c2",
+      customerName: "Állatkert Zrt.",
+    });
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Partner cseréje" }),
+    );
+    await searchFor("Állat");
+    // the same search as on the new-quote page: the partners' mirrors are included
+    await waitFor(() => expect(customers.list).toHaveBeenCalled());
+    expect(customers.list.mock.calls[0]![1].get("includePartnerMirrors")).toBe(
+      "true",
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Állatkert Zrt\./ }),
+    );
+    // a pick alone saves nothing
+    expect(api.updateHeader).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Partner mentése" }));
+    await waitFor(() =>
+      expect(api.updateHeader).toHaveBeenCalledWith("token-1", "q1", {
+        customerId: "c2",
+      }),
+    );
+    expect(await screen.findByText("Állatkert Zrt.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Partner keresése")).toBeNull();
+  });
+
+  it("is offered only on a draft that was never published, and only with the manage right", async () => {
+    api.detail.mockResolvedValue(quote([version({ status: "PUBLISHED" })]));
+    const first = render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByText("Aktuális verzió: v2", { exact: false });
+    expect(
+      screen.queryByRole("button", { name: "Partner cseréje" }),
+    ).toBeNull();
+    first.unmount();
+
+    api.detail.mockResolvedValue(
+      quote(
+        [
+          version({ id: "v1", versionNumber: 1, status: "PUBLISHED" }),
+          version({ id: "v2", versionNumber: 2, status: "DRAFT" }),
+        ],
+        { status: "DRAFT" },
+      ),
+    );
+    const second = render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByText("Aktuális verzió: v2", { exact: false });
+    expect(
+      screen.queryByRole("button", { name: "Partner cseréje" }),
+    ).toBeNull();
+    second.unmount();
+
+    auth.permissions = ["quotes.view"];
+    api.detail.mockResolvedValue(draftOnly());
+    render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByText("AJ-2026-0042 · Blue Office Kft.");
+    expect(
+      screen.queryByRole("button", { name: "Partner cseréje" }),
+    ).toBeNull();
+  });
+
+  it("does not save the partner it already has", async () => {
+    api.detail.mockResolvedValue(draftOnly());
+    customers.list.mockResolvedValue({
+      items: [{ id: "c1", displayName: "Blue Office Kft." }],
+    });
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Partner cseréje" }),
+    );
+    await searchFor("Blue");
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Blue Office Kft." }),
+    );
+    expect(
+      await screen.findByText("Ez már az ajánlat partnere."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Partner mentése" }),
+    ).toBeDisabled();
+  });
+
+  it("shows the API's refusal and keeps the old partner", async () => {
+    api.detail.mockResolvedValue(draftOnly());
+    customers.list.mockResolvedValue({
+      items: [{ id: "c2", displayName: "Állatkert Zrt." }],
+    });
+    api.updateHeader.mockRejectedValue(
+      new ApiError(
+        "P0-ban csak publikálás előtti DRAFT ajánlat fej-adatai módosíthatók.",
+        409,
+      ),
+    );
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Partner cseréje" }),
+    );
+    await searchFor("Állat");
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Állatkert Zrt\./ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Partner mentése" }));
+    expect(
+      await screen.findByText(/csak publikálás előtti DRAFT ajánlat/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Jelenlegi partner: Blue Office Kft\./),
+    ).toBeInTheDocument();
+  });
+
+  it("Mégse closes the editor without saving", async () => {
+    api.detail.mockResolvedValue(draftOnly());
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Partner cseréje" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Mégse" }));
+    expect(screen.queryByLabelText("Partner keresése")).toBeNull();
+    expect(api.updateHeader).not.toHaveBeenCalled();
+  });
+});
