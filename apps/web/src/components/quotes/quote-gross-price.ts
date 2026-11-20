@@ -63,3 +63,38 @@ export function netFromGross(gross: string, vatPercent: string): string | null {
   // nettó * 10^4 = bruttó * 100 / (100 + áfa) * 10^4
   return format(divideRounded(g * 100n * 10n ** 4n, divisor), 4);
 }
+
+/** Egy tétel sora nettóban és bruttóban, fillérben (BigInt), vagy `null`, ha a mennyiség, az ár vagy a kulcs nem szám. */
+export interface ItemLineAmounts {
+  /** a sor nettója fillérben, fél felfelé */
+  netCents: bigint;
+  /** a sor bruttója fillérben: a sor nettójából, egyszer kerekítve (nem az egységár bruttójának többszöröse) */
+  grossCents: bigint;
+}
+
+/**
+ * EGY TÉTEL SORÁNAK NETTÓJA ÉS BRUTTÓJA (Luca, 2026-11-20: a szerkesztőben a tétel felvitele után csak egy "1x nettó" összeg látszott, a bruttó
+ * nem, és a hibák elkerülése miatt mindkettő kell). A mennyiség és az egységár szorzata egész számokkal; a bruttó a SOR nettójából megy az
+ * ÁFA-kulccsal, egyszer kerekítve, ahogy a nyomtatott ajánlat összegzése is a sorokból épül.
+ */
+export function itemLineAmounts(
+  quantity: string,
+  unitNetPrice: string,
+  vatPercent: string,
+): ItemLineAmounts | null {
+  const q = parseScaled(quantity);
+  const u = parseScaled(unitNetPrice);
+  const v = parseScaled(vatPercent);
+  if (q === null || u === null || v === null) return null;
+  // a sor nettója hat tizedessel (ONE-skálán)
+  const netScaled = (u * q) / ONE;
+  return {
+    netCents: divideRounded(netScaled * 100n, ONE),
+    grossCents: divideRounded(netScaled * (100n * ONE + v), ONE * ONE),
+  };
+}
+
+/** Fillérből tizedes szöveg (`1270050` -> `12700.5`), a `formatQuoteMoney` bemenete. */
+export function centsToDecimal(cents: bigint): string {
+  return format(cents, 2);
+}
