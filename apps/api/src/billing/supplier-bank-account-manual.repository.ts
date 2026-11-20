@@ -192,27 +192,42 @@ async function contextOf(
       select: { account: true, source: true },
     }),
   ]);
-  const otherInvoice = siblings.some(
-    (s) =>
-      !blank(s.supplierBankAccount) &&
-      normalizeSupplierAccount(s.supplierBankAccount!) !== "" &&
-      supplierAccountKey(
-        s.supplierTaxNumber,
-        s.supplierEuTaxNumber,
-        s.supplierName,
-      ) === key,
+  const distinct = (values: readonly (string | null)[]) =>
+    new Set(
+      values
+        .filter((value) => !blank(value))
+        .map((value) => normalizeSupplierAccount(value!))
+        .filter((value) => value !== ""),
+    );
+  const otherInvoice = distinct(
+    siblings
+      .filter(
+        (s) =>
+          supplierAccountKey(
+            s.supplierTaxNumber,
+            s.supplierEuTaxNumber,
+            s.supplierName,
+          ) === key,
+      )
+      .map((s) => s.supplierBankAccount),
   );
-  const master = masters.some(
-    (m) =>
-      supplierAccountKey(m.taxNumber, m.taxNumber, m.name) === key &&
-      [m.bankAccountNumber, m.iban].some(
-        (value) => !blank(value) && normalizeSupplierAccount(value!) !== "",
-      ),
+  const master = distinct(
+    masters
+      .filter(
+        (m) => supplierAccountKey(m.taxNumber, m.taxNumber, m.name) === key,
+      )
+      .flatMap((m) => [m.bankAccountNumber, m.iban]),
   );
   return {
     key,
     rowHasOwnAccount,
-    shadowedBy: otherInvoice ? "OTHER_INVOICE" : master ? "MASTER" : null,
+    shadowedBy:
+      otherInvoice.size > 0
+        ? "OTHER_INVOICE"
+        : master.size > 0
+          ? "MASTER"
+          : null,
+    shadowDistinct: otherInvoice.size > 0 ? otherInvoice.size : master.size,
     fill: fill
       ? {
           account: fill.account,

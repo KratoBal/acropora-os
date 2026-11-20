@@ -72,10 +72,20 @@ describe("a kézi megadás döntése", () => {
     assert.deepEqual(decide({ shadowedBy: "OTHER_INVOICE" }), {
       kind: "SHADOWED",
       by: "OTHER_INVOICE",
+      conflicting: false,
     });
     assert.deepEqual(
       decide({ shadowedBy: "MASTER", fill: { account: B, source: "MANUAL" } }),
-      { kind: "SHADOWED", by: "MASTER" },
+      { kind: "SHADOWED", by: "MASTER", conflicting: false },
+    );
+    // két különböző számlaszám az előbbre való szinten: a szállító adatai ellentmondanak (barracuda #2802)
+    assert.deepEqual(
+      decide({ shadowedBy: "OTHER_INVOICE", shadowDistinct: 2 }),
+      {
+        kind: "SHADOWED",
+        by: "OTHER_INVOICE",
+        conflicting: true,
+      },
     );
   });
 
@@ -200,6 +210,58 @@ describe("a kézi megadás végpontja", () => {
       tx({ fill: { account: B, source: "INVOICE_PDF" } }).tx,
       "11773016-11111018",
       ConflictException,
+    );
+  });
+
+  it("két egyidejű első megadás (az egyedi szállító-kulcs ütközése, P2002) 409 érthető mondattal, nem 500", async () => {
+    const { tx: t } = tx({});
+    (t.supplierBankAccountFill as { create: unknown }).create = async () => {
+      throw Object.assign(new Error("Unique constraint failed"), {
+        code: "P2002",
+      });
+    };
+    await assert.rejects(
+      controllerWith(t).set("r1", { account: "11773016-11111018" }, user),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        /közben megadták/.test(error.message),
+    );
+    // más hiba nem nyelődik el
+    (t.supplierBankAccountFill as { create: unknown }).create = async () => {
+      throw new Error("kapcsolat megszakadt");
+    };
+    await assert.rejects(
+      controllerWith(t).set("r1", { account: "11773016-11111018" }, user),
+      /kapcsolat megszakadt/,
+    );
+  });
+
+  it("ha a szállító másik számláin két különböző számlaszám áll, a 422 mondata kimondja az ellentmondást (barracuda #2802)", async () => {
+    const sibling = (account: string) => ({
+      supplierName: "Példa Kft.",
+      supplierTaxNumber: "12345678-2-13",
+      supplierEuTaxNumber: null,
+      supplierBankAccount: account,
+    });
+    await assert.rejects(
+      controllerWith(
+        tx({ siblings: [sibling("11773016-11111018"), sibling(B)] }).tx,
+      ).set("r1", { account: "10918001-00000017" }, user),
+      (error: unknown) =>
+        error instanceof UnprocessableEntityException &&
+        /ellentmondanak/.test(error.message),
+    );
+    // egy számlaszám mellett a szokásos mondat áll, nem az ellentmondás
+    await assert.rejects(
+      controllerWith(tx({ siblings: [sibling("11773016-11111018")] }).tx).set(
+        "r1",
+        { account: "10918001-00000017" },
+        user,
+      ),
+      (error: unknown) =>
+        error instanceof UnprocessableEntityException &&
+        !/ellentmondanak/.test(error.message) &&
+        /másik számláján/.test(error.message),
     );
   });
 

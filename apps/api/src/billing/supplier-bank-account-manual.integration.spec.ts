@@ -215,7 +215,11 @@ describe(
         by: "OTHER_INVOICE",
       });
       const master = await enter("d1", "10918001-00000017");
-      assert.deepEqual(master.outcome, { kind: "SHADOWED", by: "MASTER" });
+      assert.deepEqual(master.outcome, {
+        kind: "SHADOWED",
+        by: "MASTER",
+        conflicting: false,
+      });
       assert.equal(
         (await enter("e1", "10918001-00000017")).outcome.kind,
         "NO_STRONG_KEY",

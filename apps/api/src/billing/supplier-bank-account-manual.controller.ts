@@ -67,6 +67,15 @@ export class ManualSupplierAccountController {
     } catch (cause) {
       if (cause instanceof ManualRowNotFoundError)
         throw new NotFoundException(cause.message);
+      // két egyidejű első megadás ugyanarra a szállítóra (vagy egy kézi megadás a kitöltő `--apply`-ja közben) az egyedi szállító-kulcson ütközik: a második értse meg, mi történt
+      if (
+        typeof cause === "object" &&
+        cause !== null &&
+        (cause as { code?: unknown }).code === "P2002"
+      )
+        throw new ConflictException(
+          "A szállító számlaszámát közben megadták. Töltsd újra a listát, és nézd meg, mi áll most a soron.",
+        );
       throw cause;
     }
     const { outcome } = result;
@@ -85,9 +94,11 @@ export class ManualSupplierAccountController {
         );
       case "SHADOWED":
         throw new UnprocessableEntityException(
-          outcome.by === "OTHER_INVOICE"
-            ? "A szállítónak van számlaszáma egy másik számláján: az előbbre való, ezért a megadás hatástalan lenne. Ott javítható."
-            : "A szállítónak van számlaszáma a szállító-törzsben: az előbbre való, ezért a megadás hatástalan lenne. A törzsben javítható.",
+          outcome.conflicting
+            ? `A szállító ${outcome.by === "OTHER_INVOICE" ? "számlái" : "törzsadata"} ellentmondanak egymásnak (több különböző számlaszám áll rajtuk): a lista emiatt nem ad számlaszámot, és a megadás hatástalan lenne. A javítás ${outcome.by === "OTHER_INVOICE" ? "a szállító számlái között" : "a szállító-törzsben"} van.`
+            : outcome.by === "OTHER_INVOICE"
+              ? "A szállítónak van számlaszáma egy másik számláján: az előbbre való, ezért a megadás hatástalan lenne. Ott javítható."
+              : "A szállítónak van számlaszáma a szállító-törzsben: az előbbre való, ezért a megadás hatástalan lenne. A törzsben javítható.",
         );
       case "REPLACE_REQUIRED":
         throw new ConflictException(

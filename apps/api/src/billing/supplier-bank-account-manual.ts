@@ -19,6 +19,8 @@ export interface ManualContext {
   readonly rowHasOwnAccount: boolean;
   /** a szállítónak a másik számláján vagy a törzsben álló számlaszáma (a kitöltésnél előbbre való) */
   readonly shadowedBy: "OTHER_INVOICE" | "MASTER" | null;
+  /** hány KÜLÖNBÖZŐ számlaszám áll azon a szinten, ami előbbre való (a lista két különbözőnél „nincs adat”-ot ad, tehát a sor ma senkinek nem tölthető: a mondat ezt mondja ki) */
+  readonly shadowDistinct?: number;
   readonly fill: {
     readonly account: string;
     readonly source: Exclude<
@@ -32,7 +34,12 @@ export type ManualOutcome =
   | { readonly kind: "INVALID_ACCOUNT" }
   | { readonly kind: "NO_STRONG_KEY" }
   | { readonly kind: "HAS_OWN_ACCOUNT" }
-  | { readonly kind: "SHADOWED"; readonly by: "OTHER_INVOICE" | "MASTER" }
+  | {
+      readonly kind: "SHADOWED";
+      readonly by: "OTHER_INVOICE" | "MASTER";
+      /** igaz, ha az előbbre való szinten KÉT KÜLÖNBÖZŐ számlaszám áll: a szállító adatai ellentmondanak, a javítás ott van */
+      readonly conflicting: boolean;
+    }
   | { readonly kind: "UNCHANGED" }
   | {
       readonly kind: "REPLACE_REQUIRED";
@@ -64,7 +71,12 @@ export function decideManualAccount(input: {
   )
     return { kind: "NO_STRONG_KEY" };
   if (context.rowHasOwnAccount) return { kind: "HAS_OWN_ACCOUNT" };
-  if (context.shadowedBy) return { kind: "SHADOWED", by: context.shadowedBy };
+  if (context.shadowedBy)
+    return {
+      kind: "SHADOWED",
+      by: context.shadowedBy,
+      conflicting: (context.shadowDistinct ?? 1) > 1,
+    };
   if (!context.fill) return { kind: "CREATE" };
   if (context.fill.account === account) return { kind: "UNCHANGED" };
   return input.confirmReplace
