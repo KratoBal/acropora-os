@@ -50,6 +50,11 @@ import {
   QUOTE_PRICE_DISPLAY,
 } from "./quote-format";
 import { QuoteItemDrawer } from "./quote-item-drawer";
+import {
+  centsToDecimal,
+  grossFromNet,
+  itemLineAmounts,
+} from "./quote-gross-price";
 import { QUOTES_PATH } from "./quote-list-page";
 import { canEditQuoteTitle, QuoteTitleEditor } from "./quote-title-editor";
 
@@ -733,6 +738,15 @@ function BlockCard({
   const subtotal = block.items
     .filter((i) => !i.isOptional)
     .reduce((sum, i) => sum + Number(i.quantity) * Number(i.unitNetPrice), 0);
+  // the block's gross: the sum of the lines' grosses (each rounded once), null when a line cannot be read
+  const grossLines = block.items
+    .filter((i) => !i.isOptional)
+    .map((i) => itemLineAmounts(i.quantity, i.unitNetPrice, i.vatRatePercent));
+  const subtotalGross = grossLines.every((line) => line !== null)
+    ? centsToDecimal(
+        grossLines.reduce((sum, line) => sum + line!.grossCents, 0n),
+      )
+    : null;
 
   return (
     <PilotCard>
@@ -832,8 +846,10 @@ function BlockCard({
                     {formatQuantity(item.quantity)} {item.unit} ×{" "}
                     {formatQuoteMoney(item.unitNetPrice, currency, {
                       fractionDigits: 2,
-                    })}
+                    })}{" "}
+                    nettó
                   </p>
+                  <ItemGrossLines item={item} currency={currency} />
                   <div className="mt-2 flex flex-wrap justify-end gap-1">
                     <PilotButton
                       variant="ghost"
@@ -875,7 +891,11 @@ function BlockCard({
                 <p className="text-sm font-semibold text-pilot-aqua-700">
                   {block.kind === "OPTIONS"
                     ? "Az opcionális tételek alapból nem számítanak bele a főösszegbe."
-                    : `Részösszeg: ${formatQuoteMoney(String(subtotal), currency)}`}
+                    : `Részösszeg: ${formatQuoteMoney(String(subtotal), currency)} nettó${
+                        subtotalGross
+                          ? ` · ${formatQuoteMoney(subtotalGross, currency)} bruttó`
+                          : ""
+                      }`}
                 </p>
               ) : null}
             </div>
@@ -961,6 +981,49 @@ function MilestonesCard({
         </div>
       </div>
     </PilotCard>
+  );
+}
+
+/**
+ * A TÉTEL BRUTTÓJA A SZERKESZTŐBEN (Luca, 2026-11-20: a tétel felvitelekor a nettó ÉS a bruttó beírható, de utána a sorban csak egy "1x
+ * nettó" összeg látszott; a hibák elkerülése miatt a szerkesztés alatt is mindkettő kell). Az egységár bruttója az ÁFA-kulccsal, és ha a
+ * mennyiség nem 1, a sor összesen nettó és bruttó. A bruttó csak MUTAT: a tétel továbbra is nettó egységárat tárol.
+ */
+function ItemGrossLines({
+  item,
+  currency,
+}: {
+  item: QuoteInternalVersion["blocks"][number]["items"][number];
+  currency: string;
+}) {
+  const unitGross = grossFromNet(item.unitNetPrice, item.vatRatePercent);
+  const line = itemLineAmounts(
+    item.quantity,
+    item.unitNetPrice,
+    item.vatRatePercent,
+  );
+  const single = Number(item.quantity) === 1;
+  return (
+    <>
+      <p className="text-sm text-pilot-grey-700">
+        {unitGross !== null
+          ? `${formatQuoteMoney(unitGross, currency, { fractionDigits: 2 })} bruttó · ÁFA ${formatQuantity(item.vatRatePercent)}%`
+          : `ÁFA ${formatQuantity(item.vatRatePercent)}%`}
+      </p>
+      {line && !single ? (
+        <p className="text-xs text-pilot-grey-600">
+          Összesen:{" "}
+          {formatQuoteMoney(centsToDecimal(line.netCents), currency, {
+            fractionDigits: 2,
+          })}{" "}
+          nettó ·{" "}
+          {formatQuoteMoney(centsToDecimal(line.grossCents), currency, {
+            fractionDigits: 2,
+          })}{" "}
+          bruttó
+        </p>
+      ) : null}
+    </>
   );
 }
 

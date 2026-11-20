@@ -1317,6 +1317,67 @@ describe("Ajánlat szerkesztő (569:171)", () => {
     expect(api.costing).not.toHaveBeenCalled();
   });
 
+  // LUCA 2026-11-20: a tétel felvitelekor a nettó ÉS a bruttó beírható, a sorban viszont csak egy "1x nettó" összeg látszott
+  it("a tételsor a nettó ÉS a bruttó egységárat mutatja, több darabnál a sor összesen nettóját és bruttóját, a blokk részösszege mindkettőt", async () => {
+    const item = (
+      id: string,
+      name: string,
+      quantity: string,
+      unitNetPrice: string,
+      vatRatePercent = "27",
+    ) => ({
+      id,
+      position: 0,
+      name,
+      description: null,
+      quantity,
+      unit: "db",
+      unitNetPrice,
+      vatRatePercent,
+      isOptional: false,
+      source: "STANDALONE" as const,
+      variantId: null,
+      variantLabel: null,
+    });
+    const base = version();
+    api.detail.mockResolvedValue(
+      quote([
+        {
+          ...base,
+          blocks: [
+            {
+              ...base.blocks[0]!,
+              items: [
+                item("i1", "Egy darab", "1", "50000"),
+                item("i2", "Három darab", "3", "10000"),
+                item("i3", "Kedvezményes ÁFA", "1", "1000", "5"),
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    render(<QuoteEditorPage quoteId="q1" />);
+    await screen.findByText("Egy darab");
+    const text = document.body.textContent ?? "";
+    const flat = text.replace(/[\s\u00a0]+/g, " ");
+    // egy darab: egységár nettó és bruttó, nincs külön "Összesen" sor
+    expect(flat).toMatch(/1 db × 50 000(,00)? Ft nettó/);
+    expect(flat).toMatch(/63 500(,00)? Ft bruttó · ÁFA 27%/);
+    // három darab: az egységár és a sor összesen is mindkét alakban
+    expect(flat).toMatch(/3 db × 10 000(,00)? Ft nettó/);
+    expect(flat).toMatch(/12 700(,00)? Ft bruttó · ÁFA 27%/);
+    expect(flat).toMatch(
+      /Összesen: 30 000(,00)? Ft nettó · 38 100(,00)? Ft bruttó/,
+    );
+    // más ÁFA-kulcs: a bruttó a tétel saját kulcsával
+    expect(flat).toMatch(/1 ?050(,00)? Ft bruttó · ÁFA 5%/);
+    // a blokk részösszege: nettó 81 000, bruttó 63 500 + 38 100 + 1 050 = 102 650
+    expect(flat).toMatch(
+      /Részösszeg: 81 000(,00)? Ft nettó · 102 650(,00)? Ft bruttó/,
+    );
+  });
+
   it("költségjoggal a belső kalkuláció látszik, anélkül le sem kéri", async () => {
     api.detail.mockResolvedValue(quote([version()]));
     const { unmount } = render(<QuoteEditorPage quoteId="q1" />);
