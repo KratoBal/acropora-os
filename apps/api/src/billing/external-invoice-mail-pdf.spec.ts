@@ -16,6 +16,7 @@ import {
   pdfAddressesIn,
 } from "./external-invoice-mail-pdf.cli.js";
 import {
+  authVerdictLine,
   cmfxMailAuthenticated,
   cmfxMailQuery,
   fillExternalPdfsFromMail,
@@ -1123,6 +1124,12 @@ describe("one named mail of our own domain (--mail-id)", () => {
       dry.out,
       /^A 19c20725a72c042a levél \(2026-01\): 1 PDF, hiteles acropora\.hu feladó; PDF nélküli feed-sor: 1$/m,
     );
+    // the verdict line: what Gmail's top header says, domains only (acrobot 59099)
+    assert.match(
+      dry.out,
+      /^Ítélet: feladó-domain acropora\.hu; Authentication-Results 1 db; legfelső: mx\.google\.com; dkim=pass \(acropora\.hu\); spf=pass \(acropora\.hu\); dmarc=pass \(acropora\.hu\)$/m,
+    );
+    assert.doesNotMatch(dry.out, /luca/);
     assert.match(
       dry.out,
       /^FAJL E-2026-00002-1048133\.pdf \d+ bájt sha256:[0-9a-f]{16}$/m,
@@ -1166,5 +1173,50 @@ describe("one named mail of our own domain (--mail-id)", () => {
       const refused = await go(argv, luca);
       assert.deepEqual([refused.code, refused.r.puts], [2, []], argv.join(" "));
     }
+  });
+});
+
+/*
+  THE VERDICT LINE (785dfea6, acrobot 59099: the first live dry run said "NEM hiteles" for all three of Luca's mails, and nothing said why).
+  WHAT TURNS IT RED: a missing header read as present, or a top header without verdicts printed as one; a local part (an address) printed;
+  a forged top header's text printed unfiltered.
+*/
+describe("the mail's verdict line", () => {
+  it("names the count, the top header's service and each method with its domain, never an address", () => {
+    const line = authVerdictLine(
+      [
+        "mx.google.com; dkim=pass header.i=@acropora.hu header.s=google; spf=pass (google.com: domain of luca@acropora.hu designates 192.0.2.1 as permitted sender) smtp.mailfrom=luca@acropora.hu; dmarc=pass (p=NONE) header.from=acropora.hu",
+        "other.example; dkim=fail",
+      ],
+      "luca@acropora.hu",
+    );
+    assert.equal(
+      line,
+      "Ítélet: feladó-domain acropora.hu; Authentication-Results 2 db; legfelső: mx.google.com; dkim=pass (acropora.hu); spf=pass (acropora.hu); dmarc=pass (acropora.hu)",
+    );
+    assert.doesNotMatch(line, /luca/);
+  });
+
+  it("no header at all, and a top header with no verdict in it, are told apart", () => {
+    assert.equal(
+      authVerdictLine([], "luca@acropora.hu"),
+      "Ítélet: feladó-domain acropora.hu; Authentication-Results 0 db; legfelső: nincs",
+    );
+    assert.equal(
+      authVerdictLine(["mx.google.com"], null),
+      "Ítélet: feladó-domain -; Authentication-Results 1 db; legfelső: mx.google.com; nincs benne ítélet",
+    );
+  });
+
+  it("a forged top header's text is narrowed to plain domain characters", () => {
+    const line = authVerdictLine(
+      ["evil<b>\u001b[31m; dkim=pass header.d=acro<x>pora.hu\u001b[0m"],
+      "x@acropora.hu",
+    );
+    assert.equal(
+      line,
+      "Ítélet: feladó-domain acropora.hu; Authentication-Results 1 db; legfelső: evilb31m; dkim=pass (acroxpora.hu0m)",
+    );
+    assert.doesNotMatch(line, /[<>\u001b]/);
   });
 });
