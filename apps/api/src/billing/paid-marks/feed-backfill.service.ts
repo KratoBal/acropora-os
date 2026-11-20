@@ -6,6 +6,7 @@ import {
   feedGaps,
   feedSeries,
   SETTLED_OUTCOMES,
+  type FeedControlResult,
   type FeedGapSeries,
 } from "../feed-backfill.js";
 import type { FeedPullLine } from "../feed-pull.js";
@@ -20,7 +21,7 @@ export interface FeedBackfillStore {
   record(input: {
     number: string;
     series: string;
-    line: FeedPullLine;
+    line: { outcome: string; detail: string };
     userId: string;
     at: Date;
   }): Promise<void>;
@@ -56,7 +57,9 @@ export const prismaFeedBackfillStore: FeedBackfillStore = {
 export type FeedBackfillStart =
   | { status: "started"; phase: "dry" | "apply"; total: number }
   | { status: "running" }
-  | { status: "nothing"; phase: "dry" | "apply" };
+  | { status: "nothing"; phase: "dry" | "apply" }
+  /** the control numbers (known to exist) were not found: nothing was asked or recorded, the reason is in `control` */
+  | { status: "control-failed"; control: FeedControlResult[] };
 
 /** Ahogy a lap látja: fut-e, hol tart, sorozatonként a hézag és a Számlázz.hu válaszai. */
 export interface FeedBackfillStatus {
@@ -72,6 +75,8 @@ export interface FeedBackfillStatus {
     finishedAt: string;
     done: number;
   } | null;
+  /** a legutóbbi száraz kör kontrollja (a feedben lévő legnagyobb számok); `null`, amíg nem futott (újraindulás után is) */
+  control: { checkedAt: string; results: FeedControlResult[] } | null;
   year: number;
   series: { series: string; highest: string; missing: number }[];
   /** sorozatonként kimenetenként: WOULD_STORE, STORED, NOT_FOUND, ERROR, ... */
@@ -102,6 +107,7 @@ export class FeedBackfillService {
   private readonly logger = new Logger(FeedBackfillService.name);
   private running: FeedBackfillStatus["running"] = null;
   private last: FeedBackfillStatus["last"] = null;
+  private control: FeedBackfillStatus["control"] = null;
   /** a teszt cseréli */
   store: FeedBackfillStore = prismaFeedBackfillStore;
   delayMs = feedBackfillDelayMs();
@@ -119,6 +125,7 @@ export class FeedBackfillService {
     return {
       running: this.running,
       last: this.last,
+      control: this.control,
       year: now.getFullYear(),
       series: gaps.map((g) => ({
         series: g.series,
@@ -154,6 +161,20 @@ export class FeedBackfillService {
       this.running = null;
       return { status: "nothing", phase };
     }
+    if (phase === "dry") {
+      // a check that cannot fail proves nothing: ask the numbers that EXIST first, and ask nothing else if they are not found
+      let results: FeedControlResult[];
+      try {
+        results = await this.controlRound(userId, now);
+      } catch (error) {
+        this.running = null;
+        throw error;
+      }
+      if (results.some((r) => !r.passed)) {
+        this.running = null;
+        return { status: "control-failed", control: results };
+      }
+    }
     this.running.total = targets.length;
     this.current = this.loop(phase, targets, userId).catch((error: unknown) =>
       this.logger.error(
@@ -178,12 +199,53 @@ export class FeedBackfillService {
           .filter((n) => !settled.has(n));
   }
 
+  /** One question per payable series: its highest stored number, which the feed holds, so Számlázz.hu has it. */
+  private async controlRound(
+    userId: string,
+    now: Date,
+  ): Promise<FeedControlResult[]> {
+    const results: FeedControlResult[] = [];
+    const withGap = (await this.gaps(now)).filter((g) => g.missing.length > 0);
+    for (const [i, gap] of withGap.entries()) {
+      if (i > 0 && this.delayMs > 0)
+        await new Promise((r) => setTimeout(r, this.delayMs));
+      let line: FeedPullLine;
+      try {
+        [line] = (await this.feedPull.pull([gap.highest], false, userId)) as [
+          FeedPullLine,
+        ];
+      } catch (error) {
+        line = {
+          number: gap.highest,
+          outcome: "ERROR",
+          detail: `a lekérdezés nem futott le (${error instanceof Error ? error.name : "UNKNOWN"})`,
+        };
+      }
+      results.push({
+        series: gap.series,
+        number: gap.highest,
+        outcome: line.outcome,
+        detail: line.detail,
+        passed: line.outcome === "WOULD_STORE",
+      });
+    }
+    this.control = { checkedAt: new Date().toISOString(), results };
+    const failed = results.filter((r) => !r.passed);
+    this.logger.log(
+      `Feed-visszatöltés kontroll (user ${userId}): ${results.length - failed.length}/${results.length} sorozat rendben${failed
+        .map((r) => `; ${r.number} ${r.outcome} ${r.detail}`)
+        .join("")}`,
+    );
+    return results;
+  }
+
   private async loop(
     phase: "dry" | "apply",
     numbers: readonly string[],
     userId: string,
   ): Promise<void> {
     const outcomes: Record<string, number> = {};
+    const noes: { number: string; series: string; detail: string }[] = [];
     try {
       for (const [i, number] of numbers.entries()) {
         if (i > 0 && this.delayMs > 0)
@@ -202,16 +264,28 @@ export class FeedBackfillService {
             detail: `a lekérdezés nem futott le (${error instanceof Error ? error.name : "UNKNOWN"})`,
           };
         }
+        const series = feedSeries(number) ?? "?";
+        // the BEHÚZÁS round runs no control: a 7 there is no proof of an unknown number, so it is not a final no
+        const recorded =
+          phase === "apply" && line.outcome === "NOT_FOUND"
+            ? {
+                outcome: "UNVERIFIED",
+                detail: `ellenőrzésre vár: a behúzó kör kontroll nélkül kapta (${line.detail})`,
+              }
+            : line;
         await this.store.record({
           number,
-          series: feedSeries(number) ?? "?",
-          line,
+          series,
+          line: recorded,
           userId,
           at: new Date(),
         });
-        outcomes[line.outcome] = (outcomes[line.outcome] ?? 0) + 1;
+        if (phase === "dry" && line.outcome === "NOT_FOUND")
+          noes.push({ number, series, detail: line.detail });
+        outcomes[recorded.outcome] = (outcomes[recorded.outcome] ?? 0) + 1;
         this.running!.done = i + 1;
       }
+      if (noes.length > 0) await this.revokeNoesIfBroken(noes, userId);
       this.logger.log(
         `Feed-visszatöltés ${phase === "apply" ? "BEHÚZÁS" : "száraz"} (user ${userId}): ${numbers.length} szám, ${Object.entries(
           outcomes,
@@ -228,5 +302,31 @@ export class FeedBackfillService {
         done,
       };
     }
+  }
+  /**
+   * The control measures the question's soundness at the start of the round, not during it. A key change or a fault on
+   * the Számlázz.hu side in the middle would still answer 7 and leave final noes. So the control is asked once more at
+   * the end, and if it fails, this round's noes lose their finality (UNVERIFIED) and the failure shows on the page.
+   */
+  private async revokeNoesIfBroken(
+    noes: readonly { number: string; series: string; detail: string }[],
+    userId: string,
+  ): Promise<void> {
+    const results = await this.controlRound(userId, new Date());
+    if (results.every((r) => r.passed)) return;
+    for (const no of noes)
+      await this.store.record({
+        number: no.number,
+        series: no.series,
+        line: {
+          outcome: "UNVERIFIED",
+          detail: `ellenőrzésre vár: a kör végi kontroll nem sikerült (${no.detail})`,
+        },
+        userId,
+        at: new Date(),
+      });
+    this.logger.warn(
+      `Feed-visszatöltés: a kör végi kontroll nem sikerült, ${noes.length} nem ellenőrzésre vár lett`,
+    );
   }
 }

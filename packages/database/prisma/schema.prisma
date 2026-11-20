@@ -7886,7 +7886,7 @@ model SzamlazzFeedBackfillNumber {
   number      String    @id
   /// A sorozat: `ACRW-2026` vagy az előtag nélküli `2026`.
   series      String
-  /// WOULD_STORE, STORED, NOT_FOUND, ERROR, UNREADABLE, OTHER_NUMBER (a `FeedPullLine` kimenetei).
+  /// WOULD_STORE, STORED, NOT_FOUND (csak sikeres kontroll után), ERROR, UNREADABLE, OTHER_NUMBER (a `FeedPullLine` kimenetei), UNVERIFIED (kontroll nélkül rögzített nem).
   outcome     String
   /// A kimenet magyarázata: a fajta és az összegek, vagy a hiba kódja. Vevő nélkül.
   detail      String

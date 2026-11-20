@@ -68,8 +68,12 @@ export type SzamlazzQueryResult =
       netTotal: string | null;
       grossTotal: string | null;
     }
-  | { outcome: "NOT_FOUND" }
-  | { outcome: "ERROR"; errorCode: string | null };
+  | { outcome: "NOT_FOUND"; errorMessage: string | null }
+  | {
+      outcome: "ERROR";
+      errorCode: string | null;
+      errorMessage: string | null;
+    };
 
 /**
  * A válasz értelmezése. Ismeretlen gyökérelem vagy hibás XML hibát dob
@@ -86,9 +90,12 @@ export function parseSzamlazzQueryResponse(body: string): SzamlazzQueryResult {
         "xmlszamlavalasz siker, de nem szamla dokumentum",
       );
     const errorCode = textAt(root, "hibakod");
+    // the message is the Számlázz.hu's own wording of WHY (it never carries the invoice's customer data); a 7 also covers
+    // "the request XML was not understood", so the text is what tells a real unknown number from a request it did not read
+    const errorMessage = textAt(root, "hibauzenet");
     return errorCode === SZAMLAZZ_NOT_FOUND_CODE
-      ? { outcome: "NOT_FOUND" }
-      : { outcome: "ERROR", errorCode };
+      ? { outcome: "NOT_FOUND", errorMessage }
+      : { outcome: "ERROR", errorCode, errorMessage };
   }
   if (root.name !== "szamla")
     throw new SzamlazzFeedParseError("ismeretlen gyökérelem");

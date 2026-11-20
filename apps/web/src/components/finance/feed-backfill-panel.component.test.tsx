@@ -28,6 +28,7 @@ const status = (
 ): FeedBackfillStatus => ({
   running: null,
   last: null,
+  control: null,
   year: 2026,
   series: [
     { series: "2026", highest: "2026/00120", missing: 70 },
@@ -100,5 +101,91 @@ describe("FeedBackfillPanel", () => {
     expect(await screen.findByRole("dialog")).toHaveTextContent(
       "nem indul magától",
     );
+  });
+
+  // acrobot 57804: 542 "nem ismeri" válasz mellett 0 hiba látszott, miközben a kérdezés alakja rossz volt
+  it("a failed control is shown with the Számlázz.hu's own words, and the old unchecked answers are not counted as unknown", async () => {
+    api.status.mockResolvedValue(
+      status({
+        checked: { "ACRW-2026": { UNVERIFIED: 469 } },
+        control: {
+          checkedAt: "2026-11-20T09:00:00Z",
+          results: [
+            {
+              series: "ACRW-2026",
+              number: "ACRW-2026/00571",
+              outcome: "NOT_FOUND",
+              detail: "a Számlázz.hu 7-es hibakóddal felelt: Hiányzó adat",
+              passed: false,
+            },
+          ],
+        },
+      }),
+    );
+    render(<FeedBackfillPanel token="t" canRun />);
+    const failed = await screen.findByTestId("feed-backfill-control-failed");
+    expect(failed).toHaveTextContent("ACRW-2026/00571");
+    expect(failed).toHaveTextContent("7-es hibakóddal felelt: Hiányzó adat");
+    const acrw = screen.getByTestId("feed-backfill-series-ACRW-2026");
+    expect(acrw).toHaveTextContent("nem ismeri: 0");
+    expect(acrw).toHaveTextContent("ellenőrzésre vár");
+    expect(acrw).toHaveTextContent("469");
+    expect(screen.queryByTestId("feed-backfill-control-ok")).toBeNull();
+  });
+
+  it("a control that stopped the round on the press is named in the notice and in the failed list", async () => {
+    api.start.mockResolvedValue({
+      status: "control-failed",
+      control: [
+        {
+          series: "2026",
+          number: "2026/00090",
+          outcome: "ERROR",
+          detail: "a Számlázz.hu hibát jelzett (hibakód 3): Hibás kulcs",
+          passed: false,
+        },
+      ],
+    });
+    render(<FeedBackfillPanel token="t" canRun />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Ellenőrzés a Számlázz.hu-nál",
+      }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Ellenőrzés",
+      }),
+    );
+    expect(
+      await screen.findByTestId("feed-backfill-control-failed"),
+    ).toHaveTextContent("2026/00090: a Számlázz.hu hibát jelzett");
+    expect(
+      screen.getByText(/A kontroll nem sikerült: a kör nem kérdezett tovább/),
+    ).toBeInTheDocument();
+  });
+
+  it("a passed control is reported and shows no failure", async () => {
+    api.status.mockResolvedValue(
+      status({
+        control: {
+          checkedAt: "2026-11-20T09:00:00Z",
+          results: [
+            {
+              series: "2026",
+              number: "2026/00090",
+              outcome: "WOULD_STORE",
+              detail: "SZ",
+              passed: true,
+            },
+          ],
+        },
+      }),
+    );
+    render(<FeedBackfillPanel token="t" canRun />);
+    expect(
+      await screen.findByTestId("feed-backfill-control-ok"),
+    ).toHaveTextContent("2026/00090 megvan a Számlázz.hu-ban");
+    expect(screen.queryByTestId("feed-backfill-control-failed")).toBeNull();
   });
 });

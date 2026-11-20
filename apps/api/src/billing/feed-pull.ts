@@ -61,6 +61,12 @@ export type FeedPullLine =
       projected?: string;
     };
 
+/** The Számlázz.hu's own error wording for the detail column: one line, cut, no control characters. */
+function answerText(message: string | null): string {
+  const text = (message ?? "").replace(/\s+/g, " ").trim().slice(0, 240);
+  return text ? `: ${text}` : " (üzenet nélkül)";
+}
+
 export async function pullFromSzamlazz(
   numbers: readonly string[],
   apply: boolean,
@@ -100,7 +106,7 @@ export async function pullFromSzamlazz(
       lines.push({
         number,
         outcome: "NOT_FOUND",
-        detail: "a Számlázz.hu-ban nincs ilyen szám",
+        detail: `a Számlázz.hu 7-es hibakóddal felelt${answerText(found.errorMessage)}`,
       });
       continue;
     }
@@ -108,7 +114,7 @@ export async function pullFromSzamlazz(
       lines.push({
         number,
         outcome: "ERROR",
-        detail: `hibakód ${found.errorCode ?? "?"}`,
+        detail: `a Számlázz.hu hibát jelzett (hibakód ${found.errorCode ?? "?"})${answerText(found.errorMessage)}`,
       });
       continue;
     }

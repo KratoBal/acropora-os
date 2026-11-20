@@ -8,6 +8,7 @@ import {
   feedBackfillApi,
   type FeedBackfillStart,
   type FeedBackfillStatus,
+  type FeedControlResult,
 } from "@/lib/api/feed-backfill";
 import { formatDateTimeHu } from "@/lib/format/date";
 
@@ -24,9 +25,33 @@ const startText = (answer: FeedBackfillStart) =>
     ? `Elindult: ${answer.total} szám. A lap magától frissül.`
     : answer.status === "running"
       ? "Egy kör már fut: megvárjuk."
-      : answer.phase === "apply"
-        ? "Nincs behúzható szám: előbb az ellenőrzés kell."
-        : "Nincs megkérdezendő szám.";
+      : answer.status === "control-failed"
+        ? "A kontroll nem sikerült: a kör nem kérdezett tovább, és semmit nem rögzített."
+        : answer.phase === "apply"
+          ? "Nincs behúzható szám: előbb az ellenőrzés kell."
+          : "Nincs megkérdezendő szám.";
+
+/**
+ * A KONTROLL EREDMÉNYE (acrobot 57804). A kör először a sorozat legnagyobb tárolt számát kérdezi, ami a feedben van, tehát
+ * a Számlázz.hu-ban is létezik. Ha arra nem jön számla, a "nem ismeri" válaszok sem jelentenek semmit: a lap kiírja, mit
+ * felelt a Számlázz.hu, és nem hagyja, hogy a nulla ismert számla "nincs meg"-nek látsszon.
+ */
+function ControlResults({ results }: { results: FeedControlResult[] }) {
+  const failed = results.filter((r) => !r.passed);
+  if (failed.length === 0) return null;
+  return (
+    <div data-testid="feed-backfill-control-failed">
+      <Alert
+        variant="danger"
+        title="A Számlázz.hu a kontroll számot sem találta meg"
+        description={
+          "A feedben lévő, tehát biztosan létező számra sem jött számla, ezért a kérdezés alakja nem megbízható, és a „nem ismeri” válasz nem bizonyít semmit. A kör nem rögzített választ.\n" +
+          failed.map((r) => `${r.number}: ${r.detail}`).join("\n")
+        }
+      />
+    </div>
+  );
+}
 
 /**
  * A TÁROLT SZÁMLÁZZ.HU FEED VISSZATÖLTÉSE AZ ÉV ELEJÉIG (6fd8c574; acrobot 43766, 43768, 43776). A feed csak a push
@@ -46,6 +71,9 @@ export function FeedBackfillPanel({
   const [status, setStatus] = useState<FeedBackfillStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [controlFailure, setControlFailure] = useState<
+    FeedControlResult[] | null
+  >(null);
   const [confirm, setConfirm] = useState<"dry" | "apply" | null>(null);
   const [busy, setBusy] = useState(false);
   const poll = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -72,7 +100,11 @@ export function FeedBackfillPanel({
     setBusy(true);
     setError(null);
     try {
-      setNotice(startText(await feedBackfillApi.start(token, apply)));
+      const answer = await feedBackfillApi.start(token, apply);
+      setNotice(startText(answer));
+      setControlFailure(
+        answer.status === "control-failed" ? answer.control : null,
+      );
       setConfirm(null);
       await load();
     } catch (cause) {
@@ -153,6 +185,9 @@ export function FeedBackfillPanel({
                 {count(answers, "STORED")} · nem ismeri:{" "}
                 {count(answers, "NOT_FOUND")} · hiba:{" "}
                 {count(answers, "ERROR", "UNREADABLE", "OTHER_NUMBER")}
+                {count(answers, "UNVERIFIED") > 0
+                  ? ` · ellenőrzésre vár (kontroll nélkül rögzített, nem végleges): ${count(answers, "UNVERIFIED")}`
+                  : ""}
               </span>
             </li>
           );
@@ -172,6 +207,19 @@ export function FeedBackfillPanel({
           ): {formatDateTimeHu(status.last.finishedAt)}, {status.last.done} szám
         </p>
       ) : null}
+      <ControlResults
+        results={controlFailure ?? status.control?.results ?? []}
+      />
+      {status.control && status.control.results.every((r) => r.passed) ? (
+        <p
+          className="text-xs text-pilot-grey-600"
+          data-testid="feed-backfill-control-ok"
+        >
+          Kontroll rendben ({formatDateTimeHu(status.control.checkedAt)}):{" "}
+          {status.control.results.map((r) => r.number).join(", ")} megvan a
+          Számlázz.hu-ban.
+        </p>
+      ) : null}
       {notice ? (
         <Alert variant="info" title="Visszatöltés" description={notice} />
       ) : null}
@@ -182,7 +230,7 @@ export function FeedBackfillPanel({
         open={confirm === "dry"}
         title="Megkérdezed a Számlázz.hu-t a feedből hiányzó számokról?"
         consequence={`Legfeljebb ${missing} lekérdezés, számonként, lassítva. A Számlázz.hu-n csak olvas, a feedbe nem ír; a lap sorozatonként mutatja, mit ismer.`}
-        recovery="A választ adó számot a következő kör nem kérdezi újra; a hibásat igen."
+        recovery="Előbb a feedben lévő legnagyobb számot kérdezi meg sorozatonként: ha arra nem jön számla, megáll, és nem rögzít semmit. A választ adó számot a következő kör nem kérdezi újra; a hibásat és az ellenőrzésre vártat igen."
         confirmLabel="Ellenőrzés"
         busy={busy}
         onConfirm={() => void start(false)}

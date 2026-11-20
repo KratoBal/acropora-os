@@ -112,6 +112,42 @@ describe("feed-pull", () => {
     assert.deepEqual(stored, []);
   });
 
+  // acrobot 57804: a 2026-11-19-i kör mind az 542 számra "nincs ilyen szám"-ot rögzített, és az ok nem látszott
+  it("the detail names the Számlázz.hu's own error code and wording, and a number that exists is WOULD_STORE", async () => {
+    const { deps } = fake({
+      "2026/00058": szamla("2026/00058"),
+      "2026/00001": notFound,
+      "2026/00002": `<xmlszamlavalasz><sikeres>false</sikeres><hibakod>3</hibakod><hibauzenet>Hibás\n  kulcs</hibauzenet></xmlszamlavalasz>`,
+      "2026/00003": `<xmlszamlavalasz><sikeres>false</sikeres><hibakod>7</hibakod></xmlszamlavalasz>`,
+    });
+    const lines = await pullFromSzamlazz(
+      ["2026/00058", "2026/00001", "2026/00002", "2026/00003"],
+      false,
+      deps,
+    );
+    assert.deepEqual(
+      lines.map((l) => [l.number, l.outcome]),
+      [
+        ["2026/00058", "WOULD_STORE"],
+        ["2026/00001", "NOT_FOUND"],
+        ["2026/00002", "ERROR"],
+        ["2026/00003", "NOT_FOUND"],
+      ],
+    );
+    assert.equal(
+      lines[1]!.detail,
+      "a Számlázz.hu 7-es hibakóddal felelt: nincs",
+    );
+    assert.equal(
+      lines[2]!.detail,
+      "a Számlázz.hu hibát jelzett (hibakód 3): Hibás kulcs",
+    );
+    assert.equal(
+      lines[3]!.detail,
+      "a Számlázz.hu 7-es hibakóddal felelt (üzenet nélkül)",
+    );
+  });
+
   it("the report carries no buyer, and a malformed number is not queried", async () => {
     const { deps, queries } = fake({
       "ACRW-2026/00469": szamla("ACRW-2026/00469"),
