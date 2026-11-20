@@ -309,9 +309,16 @@ export async function readUnasLinkPdfs(
         url = next;
       }
     } catch (error) {
-      report(
-        `LINK ${link.number} hiba: ${String((error as Error)?.message ?? error).slice(0, 80)}\n`,
-      );
+      // only the error's name and code: a message may carry the requested URL, and with it the token (barracuda, #2787)
+      const failure = error as { name?: unknown; code?: unknown } | null;
+      const name =
+        typeof failure?.name === "string" ? failure.name : "ismeretlen";
+      const code =
+        typeof failure?.code === "string" &&
+        /^[A-Z0-9_]{1,40}$/.test(failure.code)
+          ? ` ${failure.code}`
+          : "";
+      report(`LINK ${link.number} hiba: ${name}${code}\n`);
       continue;
     }
     if (!response) continue;
