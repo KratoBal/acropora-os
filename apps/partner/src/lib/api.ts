@@ -18,6 +18,7 @@ import type {
   PartnerConversationMessage,
   PartnerConversationPage,
   ServiceJobPartnerDetail,
+  ServiceJobLinkedWorksheetsResponse,
   ServiceJobDocumentSummary,
   ServiceJobListResponse,
   WorksheetDetail,
@@ -172,6 +173,11 @@ export const partnerApi = {
     request<PartnerConversationMessage>(
       `/service/jobs/${encodeURIComponent(id)}/partner-conversation/messages`,
       { method: "POST", body: JSON.stringify({ text, clientMessageId }) },
+    ),
+  // a karbantartási laphoz kapcsolt munkalapok (kártya efe02c6f): a szerver a partnert a saját egységeire szűkíti, rejtett nélkül
+  linkedWorksheets: (id: string) =>
+    request<ServiceJobLinkedWorksheetsResponse>(
+      `/service/jobs/${encodeURIComponent(id)}/linked-worksheets`,
     ),
   ticketDocuments: (id: string) =>
     request<{ items: ServiceJobDocumentSummary[] }>(

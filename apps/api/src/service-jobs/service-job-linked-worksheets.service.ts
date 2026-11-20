@@ -12,11 +12,11 @@ import type {
 } from "@acropora/types";
 
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
-import { worksheetUnitWhere } from "../worksheets/worksheet-unit-scope.js";
 import { worksheetCreatedRange } from "../worksheets/worksheet-created-range.js";
 import {
   LINK_WORKSHEET_REFUSAL_MESSAGE,
   linkEventNote,
+  linkedWorksheetReadWhere,
   linkWorksheetRefusal,
   type LinkWorksheetRefusal,
 } from "./service-job-linked-worksheets.rules.js";
@@ -31,8 +31,8 @@ const NOT_FOUND = "A karbantartási lap nem található.";
  * where it is, and nothing of it counts into the sheet's hours, price, settlement or invoice. The link only makes the
  * settlement traceable ("which worksheets did the work for this month belong to").
  *
- * READING follows the sheet's visibility and, for a partner, the same unit rule as the worksheet list and PDF
- * (`worksheetUnitWhere`). WRITING is internal only and answers 404 to anyone else (`mayWriteServiceJob`), the same as the
+ * READING follows the sheet's visibility and, for a partner, the same unit rule as the worksheet list and PDF, without the
+ * hidden worksheets (`linkedWorksheetReadWhere`). WRITING is internal only and answers 404 to anyone else (`mayWriteServiceJob`), the same as the
  * other writes of this module: the worksheets are our internal data.
  */
 @Injectable()
@@ -61,7 +61,7 @@ export class ServiceJobLinkedWorksheetsService {
     const rows = await this.repository.listLinked(
       job.id,
       job.customerId,
-      worksheetUnitWhere(scope, unitIds),
+      linkedWorksheetReadWhere(scope, unitIds),
     );
     // The history is the internal log (who linked), a partner gets the list only.
     const history =

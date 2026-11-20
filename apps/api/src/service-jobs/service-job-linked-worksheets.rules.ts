@@ -1,5 +1,9 @@
 import type { Prisma } from "@acropora/database";
 
+import type { PartnerScope } from "../auth/partner-scope.util.js";
+import { NOT_HIDDEN } from "../common/hidden-rows.js";
+import { worksheetUnitWhere } from "../worksheets/worksheet-unit-scope.js";
+
 /**
  * WHEN A WORKSHEET MAY BE LINKED TO A MAINTENANCE SHEET (card 5b366f5d). A LINK IS A REFERENCE: the worksheet stays where it
  * is, and it counts into no hours, price, settlement or invoice of the maintenance sheet. One pure function, so each refusal
@@ -55,6 +59,22 @@ export const LINK_WORKSHEET_REFUSAL_MESSAGE: Record<
   "linked-elsewhere":
     "Ez a munkalap már egy másik karbantartási laphoz van kapcsolva.",
 };
+
+/**
+ * WHICH LINKED WORKSHEETS A READER SEES (card efe02c6f): everything for an internal user; for a partner, only the worksheets of
+ * their own units (`worksheetUnitWhere`) and never a hidden one. A worksheet hidden since it was linked stays linked, and the
+ * sheet's PDF and package already leave it out for a partner (`visibleLinkedWorksheets`); the list follows the same rule as
+ * every other partner list (`hidden-rows.ts`: "a rejtett sor a portálon soha nem értelmezett"), so the portal card, the PDF
+ * and the zip name the same worksheets.
+ */
+export function linkedWorksheetReadWhere(
+  scope: PartnerScope,
+  assignedUnitIds: readonly string[],
+): Prisma.WorksheetWhereInput {
+  return scope.kind === "internal"
+    ? {}
+    : { AND: [worksheetUnitWhere(scope, assignedUnitIds), NOT_HIDDEN] };
+}
 
 /**
  * WHICH WORKSHEETS THE PICKER OFFERS (the filter half of the same rules, so the list and the endpoint cannot drift apart):

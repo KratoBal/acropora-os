@@ -15,6 +15,7 @@ import {
   linkEventNote,
   linkWorksheetRefusal,
   linkableWorksheetWhere,
+  linkedWorksheetReadWhere,
 } from "./service-job-linked-worksheets.rules.js";
 import { ServiceJobLinkedWorksheetsController } from "./service-job-linked-worksheets.controller.js";
 import type { ServiceJobLinkedWorksheetsRepository } from "./service-job-linked-worksheets.repository.js";
@@ -25,7 +26,8 @@ import { ServiceJobsModule } from "./service-jobs.module.js";
   WHAT TURNS THIS RED (card 5b366f5d): the rules losing one of the six refusals (a worksheet of another customer, one that lives
   under this very sheet, one linked here or to another sheet, a repair ticket as target, a sheet without a partner); the picker
   filter offering hidden worksheets, worksheets already linked anywhere, or the sheet's own; a partner being able to write or to
-  see who linked; the unit rule (`worksheetUnitWhere`) not reaching the list query; a link or unlink without its log entry;
+  see who linked; the unit rule (`worksheetUnitWhere`) not reaching the list query, or a partner's list showing a worksheet hidden
+  since it was linked (card efe02c6f: the PDF and the zip leave it out); a link or unlink without its log entry;
   the unlink refusing after the worksheet changed customer; the module forgetting to register the controller or its providers.
 */
 
@@ -96,6 +98,21 @@ describe("a munkalap hozzákapcsolásának szabályai", () => {
     const messages = Object.values(LINK_WORKSHEET_REFUSAL_MESSAGE);
     assert.equal(messages.length, 6);
     assert.equal(new Set(messages).size, 6);
+  });
+});
+
+describe("a hozzákapcsolt lista olvasói szűrője (kártya efe02c6f)", () => {
+  it("belső felhasználónak minden kapcsolt munkalap, rejtett is", () => {
+    assert.deepEqual(linkedWorksheetReadWhere({ kind: "internal" }, []), {});
+  });
+
+  it("partnernek a saját egységei, és rejtett munkalap soha", () => {
+    assert.deepEqual(
+      linkedWorksheetReadWhere({ kind: "customer", customerId: "customer-1" }, [
+        "unit-1",
+      ]),
+      { AND: [{ departmentId: { in: ["unit-1"] } }, { hiddenAt: null }] },
+    );
   });
 });
 
@@ -263,11 +280,11 @@ describe("a kapcsolódó munkalapok listája", () => {
     assert.equal(calls.history.length, 0);
   });
 
-  it("a partner listájára ugyanaz az egység-szabály megy, mint a munkalap-listára", async () => {
+  it("a partner listájára ugyanaz az egység-szabály megy, mint a munkalap-listára, és rejtett munkalap nélkül (kártya efe02c6f)", async () => {
     const { service, calls } = fake();
     await service.list("job-1", PARTNER);
     assert.deepEqual(calls.listLinked[0]?.[2], {
-      departmentId: { in: ["unit-1"] },
+      AND: [{ departmentId: { in: ["unit-1"] } }, { hiddenAt: null }],
     });
   });
 
