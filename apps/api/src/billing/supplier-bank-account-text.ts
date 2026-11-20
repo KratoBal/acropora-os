@@ -6,9 +6,9 @@
  * 2026-11-20), a begyűjtött PDF viszont 35 sornál megvan, és a számlaszám szinte mindig ott áll.
  *
  * NEM TALÁLGAT. Egy szám csak akkor jelölt, ha MINDHÁROM igaz:
- *   1. ALAKJA számlaszám: magyar 8-8 vagy 8-8-8 számjegyű (a harmadik blokk csak akkor számít, ha az is érvényes), vagy a saját országa
- *      hosszával megegyező IBAN;
- *   2. ELLENŐRZŐ ÖSSZEGE érvényes: a magyar blokkok 9-7-3-1 súlyozású összege 10-zel osztható (blokkonként), az IBAN mod 97 szerint 1.
+ *   1. ALAKJA számlaszám: magyar 8-8 vagy 8-8-8 számjegyű, vagy a saját országa hosszával megegyező IBAN;
+ *   2. ELLENŐRZŐ ÖSSZEGE érvényes: a hazai szám első 8 jegye önmagában, a második része (8 vagy 16 jegy) EGYBEN 9-7-3-1 súlyozású, 10-zel osztható
+ *      (`hungarianPartValid`); egy 8-8-8 alakú találat vagy teljes egészében érvényes, vagy NEM jelölt (soha nem csonkul 16 jegyűre); az IBAN mod 97 szerint 1.
  *      Egy tetszőleges 16 jegyű szám (számlaszám, rendelésszám, vonalkód) 1% eséllyel megy át, ezért ez NEM elég önmagában;
  *   3. CÍMKE áll mellette, ugyanabban a sorban vagy az előzőben (a táblázatos számlán a címke a cella fölött áll): bankszámla, IBAN,
  *      bank account, Kontonummer, Bankverbindung. A „számlaszám” címke ÖNMAGÁBAN gyengébb (a számla száma is „számlaszám”), ezért
@@ -31,14 +31,19 @@ export interface SupplierAccountCandidate {
   readonly line: number;
 }
 
-const WEIGHTS = [9, 7, 3, 1, 9, 7, 3, 1] as const;
+const WEIGHTS = [9, 7, 3, 1] as const;
 
-/** A hazai 8 jegyű blokk ellenőrző összege: a 9-7-3-1 súlyozott számjegyösszeg 10-zel osztható. */
-export function hungarianBlockValid(block: string): boolean {
-  if (!/^\d{8}$/.test(block)) return false;
+/**
+ * A HAZAI (GIRO) SZÁMLASZÁM RÉSZEINEK ELLENŐRZÉSE (barracuda, #2791 review). A szám két részből áll: az ELSŐ 8 jegy (pénzforgalmi jelzőszám) ellenőrző jeggyel, önmagában;
+ * a MÁSODIK RÉSZ 8 vagy 16 jegy, EGYBEN ellenőrzött: a 9-7-3-1 súlyok a teljes részen végigfutnak (négyesével ismétlődnek), az utolsó jegy az ellenőrző jegy. Tehát
+ * a 8-8-8 alak 2. és 3. blokkja akkor érvényes, ha a két blokk súlyozott összegének ÖSSZEGE osztható 10-zel, nem külön-külön.
+ * Ez a függvény egy 8 vagy 16 jegyű részre mond igent vagy nemet.
+ */
+export function hungarianPartValid(part: string): boolean {
+  if (!/^(?:\d{8}|\d{16})$/.test(part)) return false;
   let sum = 0;
-  for (let index = 0; index < 8; index += 1)
-    sum += Number(block[index]) * WEIGHTS[index]!;
+  for (let index = 0; index < part.length; index += 1)
+    sum += Number(part[index]) * WEIGHTS[index % 4]!;
   return sum % 10 === 0;
 }
 
@@ -148,15 +153,16 @@ export function supplierAccountCandidates(
 
     for (const match of line.matchAll(HU_ACCOUNT_PATTERN)) {
       const [, first, separator, second, thirdSeparator, third] = match;
-      if (!hungarianBlockValid(first!) || !hungarianBlockValid(second!))
-        continue;
-      // a harmadik blokk csak akkor tartozik hozzá, ha az is érvényes; különben egy másik szám kezdete
-      const withThird = third !== undefined && hungarianBlockValid(third);
+      // az első 8 jegy önmagában, a második rész (8 vagy 16 jegy) EGYBEN; ha van harmadik blokk, vagy a teljes 24 jegyű szám érvényes, vagy a találat NEM
+      // jelölt: soha nem esik vissza az első két blokkra (egy elírt vagy rosszul olvasott 3. blokkból idegen, rövidebb számlaszám lenne)
+      const rest = third === undefined ? second! : `${second}${third}`;
+      if (!hungarianPartValid(first!) || !hungarianPartValid(rest)) continue;
       const tagolt =
-        separator !== "" || (withThird && (thirdSeparator ?? "") !== "");
+        separator !== "" ||
+        (third !== undefined && (thirdSeparator ?? "") !== "");
       // a „számlaszám” címkével csak a tagolt alak elég: a tagolatlan 16 jegyű a számla száma is lehet
       if (label === "GENERIC" && !tagolt) continue;
-      const raw = withThird ? `${first}${second}${third}` : `${first}${second}`;
+      const raw = `${first}${rest}`;
       keep({
         account: normalizeSupplierAccount(raw),
         kind: "HU_ACCOUNT",

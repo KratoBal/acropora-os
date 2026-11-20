@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { normalizeAccount } from "../missing-invoices/missing-invoices.repository.js";
 import {
   formatSupplierAccount,
-  hungarianBlockValid,
+  hungarianPartValid,
   ibanValid,
   normalizeSupplierAccount,
   supplierAccountCandidates,
@@ -25,12 +25,20 @@ const OTP_IBAN = "HU42117730161111101800000000";
 const accounts = (lines: string[], own: string[] = []) =>
   supplierAccountCandidates(lines, own).map((c) => c.account);
 
-describe("a hazai bankszámlaszám blokk-ellenőrzése", () => {
-  it("a 9-7-3-1 súlyozott összeg 10-zel osztható: az éles minták érvényesek, egy elütött számjegy nem", () => {
-    for (const block of ["11773016", "11111018", "10918001", "00000000"])
-      assert.equal(hungarianBlockValid(block), true, block);
-    for (const block of ["11773017", "11111019", "1177301", "117730160"])
-      assert.equal(hungarianBlockValid(block), false, block);
+describe("a hazai bankszámlaszám részeinek ellenőrzése", () => {
+  it("az első 8 jegy önmagában, a második rész (8 vagy 16 jegy) EGYBEN: a 9-7-3-1 súlyok végigfutnak", () => {
+    for (const part of ["11773016", "11111018", "10918001", "00000000"])
+      assert.equal(hungarianPartValid(part), true, part);
+    for (const part of ["11773017", "11111019", "1177301", "117730160"])
+      assert.equal(hungarianPartValid(part), false, part);
+    // 16 jegy egyben: a két blokk külön-külön NEM érvényes (az összeg 5 és 5), együtt igen
+    assert.equal(hungarianPartValid("11111013"), false);
+    assert.equal(hungarianPartValid("10000006"), false);
+    assert.equal(hungarianPartValid("1111101310000006"), true);
+    assert.equal(hungarianPartValid("1111101310000007"), false);
+    // a tizenhat jegy akkor is érvényes, ha mindkét fele külön az (a nulla harmadik blokk)
+    assert.equal(hungarianPartValid("1111101800000000"), true);
+    assert.equal(hungarianPartValid("111110181111111"), false);
   });
 });
 
@@ -95,12 +103,32 @@ describe("a bankszámlaszám jelöltjei a PDF soraiból", () => {
     assert.deepEqual(accounts([`Bankszámlaszám: ${OTP16}`]), [OTP16]);
   });
 
-  it("a harmadik, érvénytelen blokk nem viszi el a számot (egy másik szám kezdete), az érvényes, nem nulla marad 24 jegyűnek", () => {
-    assert.deepEqual(accounts(["Bankszámlaszám: 11773016-11111018 12345678"]), [
-      OTP16,
+  it("a 24 jegyű szám a 2. és 3. blokkal EGYBEN érvényes: a külön-külön érvénytelen blokkok együtt elfogadva (barracuda #2791)", () => {
+    assert.deepEqual(accounts(["Bankszámlaszám: 11773016-11111013-10000006"]), [
+      "117730161111101310000006",
     ]);
     assert.deepEqual(accounts(["Bankszámlaszám: 11773016-11111018-12345676"]), [
       "117730161111101812345676",
+    ]);
+  });
+
+  it("a 8-8-8 alakból soha nem lesz 16 jegyű: elrontott 3. blokknál nincs jelölt (idegen, rövidebb számlaszám lenne)", () => {
+    // az első két blokk önmagában érvényes 16 jegyű szám, a harmadik elrontva
+    assert.deepEqual(
+      accounts(["Bankszámlaszám: 11773016-11111018-12345678"]),
+      [],
+    );
+    assert.deepEqual(
+      accounts(["Bankszámlaszám: 11773016-11111018 12345678"]),
+      [],
+    );
+    assert.deepEqual(
+      accounts(["Bankszámlaszám: 11773016-11111013-10000007"]),
+      [],
+    );
+    // a nulla harmadik blokk a 16 jegyű számot nem változtatja
+    assert.deepEqual(accounts(["Bankszámlaszám: 11773016-11111018-00000000"]), [
+      OTP16,
     ]);
   });
 
