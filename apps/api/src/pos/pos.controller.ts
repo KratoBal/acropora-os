@@ -3,10 +3,12 @@ import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
+import { CreatePosInternalUseDto } from "./dto/create-pos-internal-use.dto.js";
 import { CreatePosSaleDto } from "./dto/create-pos-sale.dto.js";
 import { PosPaymentSummaryQueryDto } from "./dto/pos-payment-summary-query.dto.js";
 import { PosProductSearchQueryDto } from "./dto/pos-product-search-query.dto.js";
 import { PosSaleListQueryDto } from "./dto/pos-sale-list-query.dto.js";
+import { PosInternalUseService } from "./pos-internal-use.service.js";
 import { PosProductSearchService } from "./pos-product-search.service.js";
 import { PosSaleService } from "./pos-sale.service.js";
 
@@ -15,6 +17,7 @@ export class PosController {
   constructor(
     private readonly search: PosProductSearchService,
     private readonly sales: PosSaleService,
+    private readonly internalUses: PosInternalUseService,
   ) {}
 
   @Get("products")
@@ -48,5 +51,30 @@ export class PosController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.sales.createSale(dto, user.id);
+  }
+
+  /*
+    A BELSŐ FELHASZNÁLÁS (kártya ec51e614): ugyanazok a jogok, mint az eladásnál (aki a POS-t használhatja). Saját útvonal és
+    saját rekord, nem `sales`: a bevétel-összesítők a `sales` sorait olvassák.
+  */
+  @Get("internal-uses")
+  @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
+  listInternalUses(@Query() query: PosSaleListQueryDto) {
+    return this.internalUses.list(query);
+  }
+
+  @Get("internal-uses/:id")
+  @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
+  getInternalUse(@Param("id") id: string) {
+    return this.internalUses.getDetail(id);
+  }
+
+  @Post("internal-uses")
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  createInternalUse(
+    @Body() dto: CreatePosInternalUseDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.internalUses.create(dto, user.id);
   }
 }

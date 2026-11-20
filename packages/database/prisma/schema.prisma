@@ -291,6 +291,8 @@ enum StockMovementType {
   DAMAGE
   SCRAP
   OPENING_BALANCE
+  /// a POS „Belső felhasználás”: a polcról saját célra levett termék (Balázs 2026-11-20, kártya ec51e614); nem eladás
+  INTERNAL_USE
 }
 
 enum StockMovementStatus {
@@ -1146,6 +1148,7 @@ model User {
   simplePayLinesApproved              SimplePayTransactionLine[]          @relation("SimplePayLineManualApprovedBy")
   stripeLinesApproved                 StripeTransactionLine[]             @relation("StripeLineManualApprovedBy")
   mortalityRecordsRecorded            MortalityRecord[]                   @relation("MortalityRecordRecordedBy")
+  posInternalUses                     PosInternalUse[]                    @relation("PosInternalUsePerformedBy")
   operationsLogEntriesRecorded        OperationsLogEntry[]                @relation("OperationsLogEntryRecordedBy")
   operationsLogEntryParticipations    OperationsLogEntryParticipant[]
   operationsLogDocumentsUploaded      OperationsLogEntryDocument[]        @relation("OperationsLogEntryDocumentUploadedBy")
@@ -1688,6 +1691,7 @@ model ProductVariant {
   quoteBomItems              QuoteBomItem[]                @relation("QuoteBomVariant")
   quoteCreatedBomItems       QuoteBomItem[]                @relation("QuoteCreatedVariant")
   knowledgeFacts             ProductKnowledgeFact[]
+  posInternalUseLines        PosInternalUseLine[]
   materialRequestItems       MaterialRequestItem[]         @relation("MaterialRequestItemVariant")
 
   @@unique([productId, unasVariantKey])
@@ -2432,6 +2436,7 @@ model Warehouse {
   stockItems                 StockItem[]
   sourceMovements            StockMovement[]               @relation("MovementSourceWarehouse")
   targetMovements            StockMovement[]               @relation("MovementTargetWarehouse")
+  posInternalUses            PosInternalUse[]
   purchaseOrders             PurchaseOrder[]
   goodsReceipts              GoodsReceipt[]
   purchaseInvoices           PurchaseInvoice[]
@@ -2990,6 +2995,8 @@ enum UnasStockSyncSourceProcess {
   INVENTORY_COUNT
   PURCHASE_INVOICE
   POS_SALE
+  /// a POS „Belső felhasználás” (kártya ec51e614)
+  POS_INTERNAL_USE
   UNAS_ORDER_IMPORT
   UNAS_ORDER_UPDATE
   UNAS_ORDER_CANCEL
@@ -10921,6 +10928,50 @@ model MortalityRecord {
 /// boltonként más. A kezdő tíz nevet a migráció tölti fel; kezelőfelület még
 /// nincs. A kivezetett helyszín nem törlődik (bejegyzés mutathat rá), csak a
 /// választóból esik ki.
+/// A POS „BELSŐ FELHASZNÁLÁS” (Balázs, 2026-11-20 15:10 UTC, kártya ec51e614): a polcról saját célra levett termék. NEM eladás:
+/// nincs fizetés, nyugta, számla, és a bevétel-összesítőkbe (POS összesítő, kassza) nem kerül, ezért NEM `SalesOrder`, hanem saját
+/// rekord. A készlet ugyanazon az úton csökken, mint az eladásnál (`postInventoryMovement`, `INTERNAL_USE`, UNAS-kimenő sorral).
+/// Javítás vagy visszavétel nincs: egy tévesen rögzített tétel a leltárral áll helyre, mint minden más mozgás.
+model PosInternalUse {
+  id            String   @id @default(cuid())
+  /// ember olvasta azonosító (BFH-...)
+  number        String   @unique
+  /// miért vették ki (kötelező, a szolgáltatás őrzi, hogy ne legyen üres)
+  note          String   @db.VarChar(500)
+  warehouseId   String
+  performedById String
+  occurredAt    DateTime
+  /// a tételek beszerzési értéke (nettó HUF); null, ha valamelyik tételnek nincs beszerzési ára
+  totalCost     Decimal? @db.Decimal(19, 4)
+  createdAt     DateTime @default(now())
+
+  warehouse   Warehouse            @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  performedBy User                 @relation("PosInternalUsePerformedBy", fields: [performedById], references: [id], onDelete: Restrict)
+  lines       PosInternalUseLine[]
+
+  @@index([occurredAt])
+  @@index([performedById])
+}
+
+model PosInternalUseLine {
+  id            String   @id @default(cuid())
+  internalUseId String
+  variantId     String
+  sku           String
+  productName   String   @db.VarChar(300)
+  quantity      Decimal  @db.Decimal(19, 6)
+  unit          String
+  /// beszerzési nettó egységár HUF-ban, a rögzítés pillanatában (az árajánlat `snapshotCost` szabálya; csomagterméknél az
+  /// összetevőkből); null, ha nincs
+  unitCost      Decimal? @db.Decimal(19, 4)
+
+  internalUse PosInternalUse @relation(fields: [internalUseId], references: [id], onDelete: Cascade)
+  variant     ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([internalUseId])
+  @@index([variantId])
+}
+
 model MortalityLocation {
   id         String    @id @default(cuid())
   name       String    @unique @db.VarChar(100)
