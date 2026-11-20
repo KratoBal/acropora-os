@@ -75,6 +75,8 @@ const AT_ORDER: Record<string, string> = {
   MARK_BANK_TRANSFER: OWN_MARK_SOURCE_LABELS.BANK_TRANSFER,
   // bejövő számla: a Hiányzó számlák banki párosítása (acrobot 25988)
   BANK_PAIRING: "banki párosítás",
+  // bejövő számla: a futár levonta a díját az utánvét-utalásból (acrobot 58315, 58343)
+  CARRIER_SETOFF: "levonva az utánvét-utalásból",
 };
 
 export function PaymentBadge({

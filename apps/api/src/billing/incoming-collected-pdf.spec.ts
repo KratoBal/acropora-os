@@ -146,6 +146,9 @@ function controller(input: {
     // the list also asks for the recorded purchase invoices (card 83f31a95)
     purchaseInvoice: { findMany: async () => [] },
     navIncomingInvoice: { findMany: async () => [] },
+    // the carriers' set-off lookup (`incoming-set-off.loader.ts`): no settlement, no letter
+    foxpostSettlement: { findMany: async () => [] },
+    glsCompensationLetter: { findMany: async () => [] },
   };
   const subject = new IncomingBillingDocumentsController(
     {

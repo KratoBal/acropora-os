@@ -227,7 +227,12 @@ export type BillingPaymentSource =
   /** egy banki jóváírás több saját számlára, a közleményből (kártya aeddb2c3) */
   | "MARK_BANK_TRANSFER"
   /** Bejövő számla: a Hiányzó számlák banki párosítása (acrobot 25988). */
-  | "BANK_PAIRING";
+  | "BANK_PAIRING"
+  /**
+   * Bejövő számla: a futár (Foxpost, GLS) levonta a díjszámláját az utánvét-utalásból (acrobot 58315, 58343): a díjszámlához nincs banki terhelés,
+   * a kifizetettséget az elszámolás és a hozzá tartozó jóváírás adja.
+   */
+  | "CARRIER_SETOFF";
 
 /**
  * EGY SAJÁT KIFIZETETT-JELÖLÉS, AMIT A SZÁMLÁZZ.HU ELFOGADOTT (acrobot 26027).

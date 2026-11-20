@@ -12,6 +12,7 @@ import type {
 
 import type { DocumentPairing } from "../missing-invoices/missing-invoices.service.js";
 import { incomingKey } from "./billing-duplicates.js";
+import { setOffKeyOf, type SetOffPayment } from "./incoming-set-off.js";
 import { invoiceNumberKey } from "./external-billing-one-row.js";
 import {
   mailboxOnlyPaidItems,
@@ -783,6 +784,8 @@ export function incomingListItems(input: {
    * szerint (`loadManualPurchasePayments`). Hiányzó = nincs ilyen jelölés.
    */
   manualPaid?: ReadonlyMap<string, ManualPurchasePayment>;
+  /** A futár által az utánvét-utalásból levont díjszámlák, a számlaszám szerint (`loadSetOffPayments`). */
+  setOff?: ReadonlyMap<string, SetOffPayment>;
 }): IncomingDocumentListItem[] {
   const { rows, pairings, readings, purchases } = input;
   const manualPaid = input.manualPaid ?? new Map();
@@ -804,6 +807,7 @@ export function incomingListItems(input: {
         row.source === PURCHASE_SOURCE
           ? (manualPaid.get(row.externalId) ?? null)
           : null,
+        input.setOff?.get(setOffKeyOf(row)) ?? null,
       ),
     ),
     // a feedben nem szereplő, csak postafiókból ismert, fizetett számlák
