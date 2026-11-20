@@ -5,6 +5,11 @@ import {
 } from "./worksheet-unit-scope.js";
 import { advanceTicketOnFirstLine } from "./first-line-ticket-step.js";
 import {
+  AutoTicketLost,
+  autoTicketDecision,
+  openTicketForWorksheet,
+} from "./worksheet-auto-ticket.js";
+import {
   rowBelongsToScope,
   scopeOwnWhereForAndBranch,
   scopeWhereForAndBranch,
@@ -97,8 +102,11 @@ export type WorksheetAmendResult =
       reason: "NOT_FOUND" | "NOT_CLOSED" | "SIGNED" | "CONCURRENT_VERSION";
     };
 
+/** Az aláíráskor vagy kiküldéskor automatikusan nyitott jegy (`worksheet-auto-ticket.ts`), vagy `null`. */
+export type AutoOpenedTicket = { id: string; jobNumber: string } | null;
+
 export type WorksheetSignResult =
-  | { ok: true }
+  | { ok: true; autoTicket: AutoOpenedTicket }
   | {
       ok: false;
       /**
@@ -112,7 +120,8 @@ export type WorksheetSignResult =
        * Amig csak az elso letezett, a lezaras MAGA tette alairhatova a lapot --
        * es a portalon MINDEN lezart lap alairhatonak latszott.
        */
-      reason: "NOT_FOUND" | "NOT_AWAITING_SIGNATURE" | "NOT_SENT";
+      /** `NO_TICKET`: a lapnak nincs jegye, és ezen az úton nem nyílhat (a partner útja, vagy KT-hoz kötött lap). */
+      reason: "NOT_FOUND" | "NOT_AWAITING_SIGNATURE" | "NOT_SENT" | "NO_TICKET";
     };
 
 /**
@@ -122,11 +131,37 @@ export type WorksheetSignResult =
  * neve kerulne.
  */
 export type WorksheetSendForSignatureResult =
-  | { ok: true; signerName: string; signerEmail: string }
+  | {
+      ok: true;
+      signerName: string;
+      signerEmail: string;
+      autoTicket: AutoOpenedTicket;
+    }
   | {
       ok: false;
       reason: "NOT_FOUND" | "NOT_AWAITING_SIGNATURE" | "SIGNER_NOT_IN_PARTNER";
     };
+
+/**
+ * AZ AUTOMATIKUS JEGY ÚJRAPRÓBÁJA. Két ütközés ad újrapróbát, és mindkettő a tranzakció visszagörgetésével jár: egy
+ * egyidejű jegynyitás ugyanarra a számra (egyedi index), és egy közben kézzel csatolt jegy (`AutoTicketLost`). A
+ * második próba a már meglévő jegyet látja, és nem nyit újat. Más hiba nem nyelődik el.
+ */
+async function withAutoTicketRetry<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await run();
+    } catch (error) {
+      const retriable =
+        error instanceof AutoTicketLost ||
+        (error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002" &&
+          (isPrismaUniqueConstraintViolation(error, "jobNumber") ||
+            isPrismaUniqueConstraintViolation(error, "clientOperationId")));
+      if (!retriable || attempt >= 3) throw error;
+    }
+  }
+}
 
 type TransactionClient = Prisma.TransactionClient;
 
@@ -1384,54 +1419,81 @@ export class WorksheetsRepository extends Repository {
     worksheetId: string;
     signerUserId: string;
     actorUserId: string;
+    /** Belső kolléga útja: a hiányzó jegyet a rendszer nyitja meg (`worksheet-auto-ticket.ts`). */
+    openTicketIfMissing: boolean;
     now: Date;
   }): Promise<WorksheetSendForSignatureResult> {
-    return this.database.$transaction(async (transaction) => {
-      const worksheet = await transaction.worksheet.findUnique({
-        where: { id: input.worksheetId },
-        select: { customerId: true },
-      });
-      if (!worksheet) return { ok: false, reason: "NOT_FOUND" } as const;
+    return withAutoTicketRetry(() =>
+      this.database.$transaction(async (transaction) => {
+        const worksheet = await transaction.worksheet.findUnique({
+          where: { id: input.worksheetId },
+          select: {
+            customerId: true,
+            serviceJobId: true,
+            linkedToJob: { select: { serviceJobId: true } },
+          },
+        });
+        if (!worksheet) return { ok: false, reason: "NOT_FOUND" } as const;
 
-      const signer = await transaction.user.findFirst({
-        where: {
-          id: input.signerUserId,
-          customerId: worksheet.customerId,
-          isActive: true,
-        },
-        select: { displayName: true, email: true },
-      });
-      if (!signer)
-        return { ok: false, reason: "SIGNER_NOT_IN_PARTNER" } as const;
+        const signer = await transaction.user.findFirst({
+          where: {
+            id: input.signerUserId,
+            customerId: worksheet.customerId,
+            isActive: true,
+          },
+          select: { displayName: true, email: true },
+        });
+        if (!signer)
+          return { ok: false, reason: "SIGNER_NOT_IN_PARTNER" } as const;
 
-      const current = await transaction.worksheetVersion.findFirst({
-        where: { worksheetId: input.worksheetId },
-        orderBy: { version: "desc" },
-        select: { id: true },
-      });
-      if (!current) return { ok: false, reason: "NOT_FOUND" } as const;
+        const current = await transaction.worksheetVersion.findFirst({
+          where: { worksheetId: input.worksheetId },
+          orderBy: { version: "desc" },
+          select: { id: true },
+        });
+        if (!current) return { ok: false, reason: "NOT_FOUND" } as const;
 
-      /*
+        /*
         FELTETELES IRAS, ugyanugy, mint a lezarasnal es az alairasnal: az
         allapotot a LEKERDEZES zarja le, nem egy elotte allo olvasas. Ket kulon
         lepes kozott a lapot alairhatnak vagy visszavehetnek piszkozatba.
       */
-      const claimed = await transaction.worksheetVersion.updateMany({
-        where: { id: current.id, status: "AWAITING_SIGNATURE" },
-        data: {
-          sentForSignatureAt: input.now,
-          sentForSignatureToUserId: input.signerUserId,
-        },
-      });
-      if (claimed.count !== 1)
-        return { ok: false, reason: "NOT_AWAITING_SIGNATURE" } as const;
+        const claimed = await transaction.worksheetVersion.updateMany({
+          where: { id: current.id, status: "AWAITING_SIGNATURE" },
+          data: {
+            sentForSignatureAt: input.now,
+            sentForSignatureToUserId: input.signerUserId,
+          },
+        });
+        if (claimed.count !== 1)
+          return { ok: false, reason: "NOT_AWAITING_SIGNATURE" } as const;
 
-      return {
-        ok: true,
-        signerName: signer.displayName,
-        signerEmail: signer.email,
-      } as const;
-    });
+        // A KIKÜLDÉS UTÁN, ugyanebben a tranzakcióban: ha a feltételes írás elbukott, jegy sem keletkezett. A KT-hoz
+        // kötött lap kiküldése változatlan (jegy nélkül megy, ahogy eddig).
+        const autoTicket =
+          input.openTicketIfMissing &&
+          autoTicketDecision({
+            serviceJobId: worksheet.serviceJobId,
+            linkedJobId: worksheet.linkedToJob?.serviceJobId ?? null,
+          }) === "open"
+            ? await openTicketForWorksheet(transaction, {
+                worksheetId: input.worksheetId,
+                actorUserId: input.actorUserId,
+                trigger: "send",
+                now: input.now,
+              })
+            : null;
+
+        return {
+          ok: true,
+          signerName: signer.displayName,
+          signerEmail: signer.email,
+          autoTicket: autoTicket
+            ? { id: autoTicket.id, jobNumber: autoTicket.jobNumber }
+            : null,
+        } as const;
+      }),
+    );
   }
 
   /**
@@ -2011,17 +2073,42 @@ export class WorksheetsRepository extends Repository {
      * KIMARAD, tehat a helyi zold errol semmit nem allitott.
      */
     requireSent: boolean;
+    /** Belső kolléga útja (gépelt név, saját aláírás, mobil): a hiányzó jegyet a rendszer nyitja meg. */
+    openTicketIfMissing: boolean;
     now: Date;
   }): Promise<WorksheetSignResult> {
-    return this.database.$transaction(async (transaction) => {
-      const current = await transaction.worksheetVersion.findFirst({
-        where: { worksheetId: input.worksheetId },
-        orderBy: { version: "desc" },
-        select: { id: true, status: true },
-      });
-      if (!current) return { ok: false, reason: "NOT_FOUND" } as const;
+    return withAutoTicketRetry(() =>
+      this.database.$transaction(async (transaction) => {
+        const current = await transaction.worksheetVersion.findFirst({
+          where: { worksheetId: input.worksheetId },
+          orderBy: { version: "desc" },
+          select: { id: true, status: true },
+        });
+        if (!current) return { ok: false, reason: "NOT_FOUND" } as const;
 
-      /*
+        /*
+        A JEGY-KAPU A TRANZAKCIÓBAN IS, MINDEN ÍRÁS ELŐTT. A szolgáltatás a partnert már a kérés elején megállítja;
+        itt a döntés a tranzakció saját olvasásán áll, és egy visszaadott (nem dobott) `NO_TICKET` így nem hagy maga
+        után aláírt, jegy nélküli lapot.
+      */
+        const sheet = await transaction.worksheet.findUniqueOrThrow({
+          where: { id: input.worksheetId },
+          select: {
+            serviceJobId: true,
+            linkedToJob: { select: { serviceJobId: true } },
+          },
+        });
+        const decision = autoTicketDecision({
+          serviceJobId: sheet.serviceJobId,
+          linkedJobId: sheet.linkedToJob?.serviceJobId ?? null,
+        });
+        if (
+          decision === "maintenance-link" ||
+          (decision === "open" && !input.openTicketIfMissing)
+        )
+          return { ok: false, reason: "NO_TICKET" } as const;
+
+        /*
         KET FELTETEL, ES A MASODIK 2026-09-21 OTA ALL ITT: a lap legyen
         KIALLITVA (`AWAITING_SIGNATURE`) ES KI IS KULDVE alairasra.
 
@@ -2034,44 +2121,55 @@ export class WorksheetsRepository extends Repository {
         sort a bukas utan -- nem azert, hogy "szebb" legyen az uzenet, hanem mert
         egy "nem irhato ala" mondat a ket esetre MAST jelent.
       */
-      const claimed = await transaction.worksheetVersion.updateMany({
-        where: {
-          id: current.id,
-          status: "AWAITING_SIGNATURE",
-          ...(input.requireSent ? { sentForSignatureAt: { not: null } } : {}),
-        },
-        data: {
-          status: input.decision === "ACCEPTED" ? "SIGNED" : "REJECTED",
-        },
-      });
-      if (claimed.count !== 1) {
-        const allapot = await transaction.worksheetVersion.findUnique({
-          where: { id: current.id },
-          select: { status: true, sentForSignatureAt: true },
+        const claimed = await transaction.worksheetVersion.updateMany({
+          where: {
+            id: current.id,
+            status: "AWAITING_SIGNATURE",
+            ...(input.requireSent ? { sentForSignatureAt: { not: null } } : {}),
+          },
+          data: {
+            status: input.decision === "ACCEPTED" ? "SIGNED" : "REJECTED",
+          },
         });
-        return {
-          ok: false,
-          reason:
-            input.requireSent && allapot?.status === "AWAITING_SIGNATURE"
-              ? "NOT_SENT"
-              : "NOT_AWAITING_SIGNATURE",
-        } as const;
-      }
+        if (claimed.count !== 1) {
+          const allapot = await transaction.worksheetVersion.findUnique({
+            where: { id: current.id },
+            select: { status: true, sentForSignatureAt: true },
+          });
+          return {
+            ok: false,
+            reason:
+              input.requireSent && allapot?.status === "AWAITING_SIGNATURE"
+                ? "NOT_SENT"
+                : "NOT_AWAITING_SIGNATURE",
+          } as const;
+        }
 
-      await transaction.worksheetVersionSignature.create({
-        data: {
-          worksheetVersionId: current.id,
-          decision: input.decision,
-          signerName: input.signerName,
-          signerUserId: input.signerUserId,
-          signerSource: input.signerSource,
-          signedByUserId: input.actorUserId,
-          signedAt: input.now,
-          note: input.note,
-        },
-      });
+        // A JEGY AZ ALÁÍRÁS SORA ÉS A VÉGLEGES LAP ELŐTT: a lap a jegy számával készül el.
+        const autoTicket =
+          decision === "open"
+            ? await openTicketForWorksheet(transaction, {
+                worksheetId: input.worksheetId,
+                actorUserId: input.actorUserId,
+                trigger: "sign",
+                now: input.now,
+              })
+            : null;
 
-      /*
+        await transaction.worksheetVersionSignature.create({
+          data: {
+            worksheetVersionId: current.id,
+            decision: input.decision,
+            signerName: input.signerName,
+            signerUserId: input.signerUserId,
+            signerSource: input.signerSource,
+            signedByUserId: input.actorUserId,
+            signedAt: input.now,
+            note: input.note,
+          },
+        });
+
+        /*
         A VEGLEGES LAP ITT KESZUL EL -- ES A SORREND A LENYEG, NEM A HELY.
 
         A lap tartalmat ugyanaz a fuggveny allitja elo, mint a lezaraskor. A
@@ -2092,18 +2190,24 @@ export class WorksheetsRepository extends Repository {
         ez a tetel lezar. Es tartalmilag sem vegleges: elutasitas utan a munka
         folytatodik, uj lappal.
       */
-      const vegleges = signedSheetTypeFor(input.decision);
-      if (vegleges)
-        await this.writeGeneratedSheet(
-          transaction,
-          input.worksheetId,
-          current.id,
-          input.actorUserId,
-          vegleges,
-        );
+        const vegleges = signedSheetTypeFor(input.decision);
+        if (vegleges)
+          await this.writeGeneratedSheet(
+            transaction,
+            input.worksheetId,
+            current.id,
+            input.actorUserId,
+            vegleges,
+          );
 
-      return { ok: true } as const;
-    });
+        return {
+          ok: true,
+          autoTicket: autoTicket
+            ? { id: autoTicket.id, jobNumber: autoTicket.jobNumber }
+            : null,
+        } as const;
+      }),
+    );
   }
 
   private async writeLines(

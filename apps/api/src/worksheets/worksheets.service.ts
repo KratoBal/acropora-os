@@ -156,6 +156,10 @@ function closeFailure(reason: WorksheetCloseFailure) {
   return new ConflictException("A munkalap lezárása nem sikerült.");
 }
 
+/** A partner (portál) mondata, ha a lapnak nincs jegye: neki nem nyílik jegy, és nincs mit tennie, csak szólni. */
+const PARTNER_NO_TICKET_MESSAGE =
+  "Ez a munkalap még nem írható alá: hiányzik hozzá a hibajegy. Szólj nekünk, és pótoljuk.";
+
 @Injectable()
 export class WorksheetsService {
   /**
@@ -1181,6 +1185,8 @@ export class WorksheetsService {
       worksheetId: id,
       signerUserId,
       actorUserId: actor.id,
+      // belsős lépés (a hatókört fent már megnéztük): a hiányzó jegyet a rendszer nyitja meg (Luca és Balázs, 2026-11-20)
+      openTicketIfMissing: true,
       now,
     });
     if (!result.ok) {
@@ -1201,9 +1207,11 @@ export class WorksheetsService {
     */
     this.ticketMail?.notifyWorksheetSendForSignature({
       worksheetId: id,
-      serviceJobId: worksheet.serviceJob?.id ?? null,
+      // a most nyitott jegy is jegy: a levél a számát viszi, nem a kérés előtti `null`-t
+      serviceJobId: result.autoTicket?.id ?? worksheet.serviceJob?.id ?? null,
       worksheetNumber: worksheet.number,
-      jobNumber: worksheet.serviceJob?.jobNumber ?? null,
+      jobNumber:
+        result.autoTicket?.jobNumber ?? worksheet.serviceJob?.jobNumber ?? null,
       partnerName: worksheet.customer.displayName,
       signerName: result.signerName,
       signerEmail: result.signerEmail,
@@ -1276,20 +1284,16 @@ export class WorksheetsService {
      * A HIVÁS INGYEN VAN: a részletlap már hordozza a hibajegyet
      * (`worksheetDetailInclude`), tehát ez nem új lekérdezés.
      *
-     * A KÉT MONDAT AZÉRT KÉT MONDAT, mert a két hívó MÁST tud tenni. A belső
-     * kolléga fölé tud hibajegyet nyitni vagy csatolni; a partner nem -- neki
-     * egy „nyiss hibajegyet" mondat olyan teendőt adna, amihez nincs jogosultsága,
-     * és a képernyőn úgy nézne ki, mintha ő rontott volna el valamit.
+     * A BELSŐ KOLLÉGA ÚTJÁN A JEGYET A RENDSZER NYITJA MEG (Luca és Balázs, 2026-11-20; `worksheet-auto-ticket.ts`):
+     * a gépelt névvel rögzített, a saját és a mobilról jövő aláírás is ide fut. A kapu ott a tranzakcióban áll, és
+     * csak a karbantartási laphoz kötött lapnál állít meg (`NO_TICKET`, lent). A PARTNER útja változatlan: neki egy
+     * „nyiss hibajegyet" mondat olyan teendőt adna, amihez nincs jogosultsága, és jegyet sem nyit.
      */
     const gate = mayWorksheetBeSigned({
       serviceJobId: worksheet.serviceJob?.id ?? null,
     });
-    if (!gate.ok)
-      throw new BadRequestException(
-        scope.kind === "internal"
-          ? "Ez a munkalap nem írható alá, amíg nincs fölötte hibajegy. Nyiss fölé hibajegyet, vagy csatold egy meglévőhöz, és utána írasd alá."
-          : "Ez a munkalap még nem írható alá: hiányzik hozzá a hibajegy. Szólj nekünk, és pótoljuk.",
-      );
+    if (!gate.ok && scope.kind !== "internal")
+      throw new BadRequestException(PARTNER_NO_TICKET_MESSAGE);
 
     /**
      * AZ ELUTASÍTÁS OKA KÖTELEZŐ (Balázs döntése, 2026-08-26).
@@ -1329,11 +1333,18 @@ export class WorksheetsService {
         munkatarsa, portal-felhasznalo nelkuli vevonel pedig ilyen nincs.
       */
       requireSent: scope.kind !== "internal",
+      openTicketIfMissing: scope.kind === "internal",
       now,
     });
     if (!result.ok) {
       if (result.reason === "NOT_FOUND")
         throw new NotFoundException("A munkalap nem található.");
+      if (result.reason === "NO_TICKET")
+        throw new BadRequestException(
+          scope.kind === "internal"
+            ? "Ez a munkalap egy karbantartási laphoz kapcsolódik, ezért nem nyílik hozzá automatikusan hibajegy, és jegy nélkül nem írható alá. Csatold egy hibajegyhez, és utána írasd alá."
+            : PARTNER_NO_TICKET_MESSAGE,
+        );
       /*
         KET OK, KET MONDAT, MERT KET KULONBOZO TEENDOT AD.
 
@@ -1369,8 +1380,8 @@ export class WorksheetsService {
      * ertesitenenk, a nyito egy olyan lepesrol kapna levelet, ami meg nem
      * eredmeny. Ha kell, az KULON dontes es egy sor.
      *
-     * A JEGY AZONOSITOJA BIZTOSAN MEGVAN: a fenti `mayWorksheetBeSigned` kapu
-     * nelkule el sem engedte volna idaig a kerest.
+     * A KERES ELOTTI JEGY ERTESIT: a most, automatikusan nyitott jegy nyitoja
+     * maga az alairo kollega, neki nincs mirol levelet kapnia.
      *
      * FIRE AND FORGET, a haz mintaja szerint: az alairas valasza NEM fugghet
      * attol, hogy a levelezo eppen elerheto-e.
