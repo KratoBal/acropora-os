@@ -27,6 +27,7 @@ import {
   CMFX_SENDER,
   cmfxMailAuthenticated,
   cmfxMailQuery,
+  authVerdictLine,
   fillExternalPdfsFromMail,
   mailAuthenticatedFor,
   mailPdfCandidates,
@@ -194,7 +195,7 @@ export async function main(
       });
     mail =
       mailId !== null
-        ? () => readOwnMail(google, user, mailId)
+        ? () => readOwnMail(google, user, mailId, io.out)
         : (m) => readCmfxMail(google, user, m);
   }
 
@@ -684,8 +685,12 @@ export async function readOwnMail(
   google: Pick<GoogleReadonlyClient, "gmailPdfMessage">,
   user: string,
   messageId: string,
+  report: (line: string) => void = () => undefined,
 ): Promise<MailPdf[]> {
   const message = await google.gmailPdfMessage(user, messageId);
+  report(
+    `${authVerdictLine(message.authenticationResults ?? [], message.sender)}\n`,
+  );
   const authenticated =
     message.sender?.split("@")[1] === OWN_MAIL_DOMAIN &&
     mailAuthenticatedFor(message.authenticationResults ?? [], OWN_MAIL_DOMAIN);

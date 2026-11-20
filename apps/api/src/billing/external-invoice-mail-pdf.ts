@@ -122,6 +122,46 @@ export function mailAuthenticatedFor(
 }
 
 /**
+ * A LEVÉL ÍTÉLETE EGY SORBAN, CÍM NÉLKÜL (785dfea6, acrobot 59099): az első éles száraz futás Luca mindhárom levelére „NEM hiteles"
+ * ítéletet adott, és a kimenetből nem derült ki, miért: hiányzik-e a Gmail sora, más-e a fogadó, vagy más a DKIM-domain. Ez a sor
+ * megmondja: hány `Authentication-Results` fejléc jött, a legfelső kié, és benne módszerenként az eredmény a domainnel. Csak a domain
+ * kerül ki (a feladóé és a `header.d`/`header.i`/`header.from`/`smtp.mailfrom` értéké), a cím helyi része soha; a legfelső fejléc
+ * nem a Gmailé is lehet, ezért minden kiírt token a [a-z0-9.-] karakterekre és 64 karakterre szűkül.
+ */
+export function authVerdictLine(
+  results: readonly string[],
+  sender: string | null,
+): string {
+  const clean = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9.-]/g, "")
+      .slice(0, 64) || "-";
+  const domainOf = (value: string | null | undefined) =>
+    value ? clean(value.includes("@") ? value.split("@").at(-1)! : value) : "-";
+  const top = results[0]?.trim() ?? "";
+  const parts = top.split(";").map((part) => part.trim());
+  const verdicts = parts
+    .slice(1)
+    .map((part) => {
+      const method = /^([a-z-]+)=([a-z]+)\b/i.exec(part);
+      if (!method) return null;
+      const domain =
+        /\bheader\.(?:d|from)=([^\s;]+)/i.exec(part)?.[1] ??
+        /\bheader\.i=([^\s;]+)/i.exec(part)?.[1] ??
+        /\bsmtp\.mailfrom=([^\s;]+)/i.exec(part)?.[1];
+      return `${clean(method[1]!)}=${clean(method[2]!)} (${domainOf(domain)})`;
+    })
+    .filter(Boolean);
+  return (
+    `Ítélet: feladó-domain ${domainOf(sender)}; Authentication-Results ${results.length} db; ` +
+    (top
+      ? `legfelső: ${clean(parts[0]!)}${verdicts.length ? `; ${verdicts.join("; ")}` : "; nincs benne ítélet"}`
+      : "legfelső: nincs")
+  );
+}
+
+/**
  * A számlaszám a PDF szövegében, HATÁROLVA (barracuda, #1777): az ACRW-2026/00536 ne találjon rá az
  * ACRW-2026/005360-ra, és egy betű vagy számjegy se álljon előtte.
  */
