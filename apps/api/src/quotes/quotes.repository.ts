@@ -1,5 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
+
+import { customerSnapshot } from "./quote-publish.service.js";
 import type {
   CreateQuoteInput,
   QuoteCloseReasonValue,
@@ -291,14 +293,43 @@ export class QuotesRepository {
         })
       )
         throw new QuoteWriteConflict();
+      const before =
+        input.customerId !== undefined
+          ? await tx.quote.findUniqueOrThrow({
+              where: { id },
+              select: { customerId: true },
+            })
+          : null;
       await tx.quote.update({ where: { id }, data: input });
+      const changedPartner =
+        before !== null && before.customerId !== (input.customerId ?? null);
+      if (changedPartner)
+        // A COPY CARRIES THE SOURCE'S PARTNER SNAPSHOT (`quote-lifecycle.service.ts`, "Másolat új ajánlatként"; Luca 2026-11-20: the
+        // partner could not be changed on a copy). The version's snapshot is what the PDF prints, so a swap rebuilds it for the new
+        // partner at once (publication rebuilds it again from the quote's partner); no draft version keeps the old partner's data.
+        await tx.quoteVersion.updateMany({
+          where: { quoteId: id, status: "DRAFT" },
+          data: {
+            customerSnapshot:
+              (await customerSnapshot(tx, input.customerId ?? null)) ??
+              Prisma.DbNull,
+          },
+        });
       await tx.auditLog.create({
         data: {
           action: "quote.header_updated",
           entityType: "Quote",
           entityId: id,
           userId: actorUserId,
-          metadata: { fields: Object.keys(input) },
+          metadata: {
+            fields: Object.keys(input),
+            ...(changedPartner
+              ? {
+                  customerFrom: before!.customerId,
+                  customerTo: input.customerId ?? null,
+                }
+              : {}),
+          },
         },
       });
       return tx.quote.findUniqueOrThrow({
