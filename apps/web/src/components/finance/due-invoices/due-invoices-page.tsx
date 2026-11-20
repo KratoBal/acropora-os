@@ -277,9 +277,10 @@ export function DueInvoicesPage() {
               Valószínűleg nem utalandó
             </h2>
             <p className="text-sm text-pilot-grey-700">
-              A fizetési mód hiányzik a számláról, és a szállító másik számláit
-              kártyával fizettük. Nem kerültek ki a listából: ha a szállító
-              mégis utalást kér, itt látszik.{" "}
+              A fizetési mód hiányzik a számláról, és a szállító múltja szerint
+              valószínűleg nem utalással fizetjük: másik számláit kártyával
+              fizettük, vagy a bank a saját díját levonta. Nem kerültek ki a
+              listából: ha a szállító mégis utalást kér, itt látszik.{" "}
               {data.summary.probablyNotTransfer.count} számla, hátralék:{" "}
               {data.summary.probablyNotTransfer.totals
                 .map((total) => formatMoney(total.outstanding, total.currency))

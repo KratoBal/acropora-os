@@ -1064,3 +1064,50 @@ describe("MissingInvoicesService: the month says what waits for a summary invoic
     assert.deepEqual(september.awaitingCollector, []);
   });
 });
+
+/*
+  A LEJÁRÓ SZÁMLÁK BANKI BEMENETE (acrobot 58915). MI PIROSÍT: ha a bemenet más párosítást ad, mint a `documentPairings`; ha a kártyás terhelés nem kártyás jelet kap, vagy az átutalás kap; ha a bank
+  díj-levonásai közé a bank-díj besorolásúnál más terhelés kerül (egy átutalás, egy kártyás vásárlás), vagy a díj-levonás kimarad; ha a díj összege vagy napja torzul.
+*/
+describe("MissingInvoicesService.dueInvoicesBankData", () => {
+  it("gives the same pairings as documentPairings, a card flag per debit, and ONLY the bank-fee debits as deductions", async () => {
+    const exact = nav("2026-08-01", 1000, "Alfa Kft.");
+    const card = {
+      ...nav("2026-08-12", -85000, "Tesla Hungary Kft."),
+      source: "SZAMLAZZ" as const,
+    };
+    const { missing } = service({
+      debits: [
+        debit("2026-08-03", 1000, "Alfa Kft."),
+        debit("2026-08-11", 85000, "Tesla Inc", {
+          bankAccountId: CARD.id,
+          transactionType: "KÁRTYÁS VÁSÁRLÁS",
+          narrative: "2026.08.10 7413124583 Tesla Inc -APPLE",
+        }),
+        // a bank saját díja: nincs partner, a típus díj
+        debit("2026-08-05", 9525, "", {
+          transactionType: "SZÁMLAVEZETÉSI DÍJ",
+        }),
+      ],
+      documents: [exact, card],
+      coverage: [`${MAIN.id}:2026-08`, `${CARD.id}:2026-08`],
+    });
+    const data = await missing.dueInvoicesBankData();
+    const direct = await missing.documentPairings();
+    assert.deepEqual(
+      [...data.pairings.keys()].sort(),
+      [...direct.keys()].sort(),
+    );
+    assert.deepEqual(
+      data.pairings.get(exact.id)?.debits.map((d) => d.card),
+      [false],
+    );
+    assert.deepEqual(
+      data.pairings.get(card.id)?.debits.map((d) => d.card),
+      [true],
+    );
+    assert.deepEqual(data.bankFeeDebits, [
+      { bookingDate: "2026-08-05", amount: "9525", currency: "HUF" },
+    ]);
+  });
+});

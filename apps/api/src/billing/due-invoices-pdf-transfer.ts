@@ -12,15 +12,15 @@ import {
  * KONZERVATÍV OLDALRA ESIK: az `UTALAS` ítélet ÉS az `ELTERO` (két PDF más-mást mond) is kiveszi a sort a szakaszból. Az olvashatatlan, a mező nélküli és a más módú PDF nem dönt, azokon az előzmény marad
  * (a PDF-olvasás hibája nem húzhat vissza és nem ejthet ki semmit magától). Ha a PDF-ek betöltése magában hibázik, MINDEN jelölt a főlistán marad: egy olvasási hiba nem küldhet utalandó tételt a „nem utalandók” közé.
  *
- * Csak a JELÖLTEKET olvassuk (a kártyás múltú, fizetési mód nélküli sorokat), nem az egész listát: a szakasz ma egy kézen megszámolható sor.
+ * Csak a JELÖLTEKET olvassuk (a szakaszba kerülő, fizetési mód nélküli sorokat: a kártyás múltút és a bank díj-levonásút egyaránt), nem az egész listát: a szakasz ma egy kézen megszámolható sor.
  */
-export async function withoutPdfTransfer(input: {
-  evidence: ReadonlyMap<string, { cardInvoices: number }>;
+export async function withoutPdfTransfer<T>(input: {
+  evidence: ReadonlyMap<string, T>;
   rows: readonly IncomingBillingDocument[];
   pdfIdsOf: (row: IncomingBillingDocument) => readonly string[];
   content: PaymentMethodDeps["content"];
   lines: PaymentMethodDeps["lines"];
-}): Promise<ReadonlyMap<string, { cardInvoices: number }>> {
+}): Promise<ReadonlyMap<string, T>> {
   const candidates = input.rows.filter((row) => input.evidence.has(row.id));
   if (candidates.length === 0) return input.evidence;
   let verdicts;

@@ -74,21 +74,37 @@ export interface DueInvoiceItem {
 }
 
 /**
- * A „VALÓSZÍNŰLEG NEM UTALANDÓ” SZAKASZ SORA (acrobot 58830, nautilus 58712 javaslata): a fizetési mód NÉLKÜLI sor, amelynek szállítójánál a MÁSIK számláit KÁRTYÁVAL fizettük (a számlához párosított banki
- * terhelés kártyás), és egyiket sem utalással. A sor NEM esik ki: külön szakaszban áll az okkal, hogy ha egy kártyás szállító mégis utalást kér, látszik. Ez a szállító múltjából következtetett VALÓSZÍNŰSÉG,
+ * A „VALÓSZÍNŰLEG NEM UTALANDÓ” SZAKASZ SORA (acrobot 58830, 58915; nautilus 58712 javaslata): a fizetési mód NÉLKÜLI sor, amelynek szállítójánál a MÁSIK számláit KÁRTYÁVAL fizettük (a számlához párosított banki
+ * terhelés kártyás), és egyiket sem utalással, vagy amelyet a számlavezető bank maga állított ki, és a díját levonta. A sor NEM esik ki: külön szakaszban áll az okkal, hogy ha egy kártyás szállító mégis utalást kér, látszik. Ez a szállító múltjából következtetett VALÓSZÍNŰSÉG,
  * nem a számla szava (a számla PDF-jének fizetési módja erősebb jel, az külön lépés).
  */
 export interface ProbablyNotTransferItem extends DueInvoiceItem {
-  evidence: {
-    /** hány MÁSIK számláját fizettük a szállítónak kártyával (a számlához párosított terhelés kártyás) */
-    cardInvoices: number;
-  };
+  evidence: ProbablyNotTransferEvidence;
 }
+
+/**
+ * MIÉRT KERÜLT A SZAKASZBA (két ok, mindkettő valószínűség, nem tény):
+ * `CARD`: a szállító MÁSIK számláit kártyával fizettük (a számlához párosított terhelés kártyás), és egyiket sem utalással;
+ * `BANK_DEDUCTION`: a számla kiállítója a számlavezető bank maga, és a bruttó összeggel azonos díj-levonás áll a kivonaton (acrobot 58915): a bank a saját díját levonta.
+ */
+export type ProbablyNotTransferEvidence =
+  | {
+      kind: "CARD";
+      /** hány MÁSIK számláját fizettük a szállítónak kártyával */
+      cardInvoices: number;
+    }
+  | {
+      kind: "BANK_DEDUCTION";
+      /** a levonás könyvelési napja, `ÉÉÉÉ-HH-NN` */
+      bookingDate: string;
+    };
 
 /** A sor mellé írt ok, egy mondatban; a lista és a PDF ugyanezt mutatja. */
 export function probablyNotTransferNote(
-  evidence: ProbablyNotTransferItem["evidence"],
+  evidence: ProbablyNotTransferEvidence,
 ): string {
+  if (evidence.kind === "BANK_DEDUCTION")
+    return `a bank a saját díját valószínűleg levonta (${evidence.bookingDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$1. $2. $3.")})`;
   return evidence.cardInvoices === 1
     ? "a szállító másik számláját kártyával fizettük"
     : `a szállító másik ${evidence.cardInvoices} számláját kártyával fizettük`;

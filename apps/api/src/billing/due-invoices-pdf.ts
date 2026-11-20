@@ -40,7 +40,7 @@ const NO_DATA = "nincs adat";
 /** A második szakasz címe és magyarázata (acrobot 58830): a sor NEM esett ki, csak nem az utalandó összegben áll. */
 export const PROBABLY_NOT_TRANSFER_TITLE = "Valószínűleg nem utalandó";
 export const PROBABLY_NOT_TRANSFER_EXPLANATION =
-  "A fizetési mód hiányzik a számláról, és a szállító másik számláit kártyával fizettük. Nem kerültek ki a jegyzékből: ha a szállító mégis utalást kér, itt látszik. Az összegük nincs benne a fenti hátralékban.";
+  "A fizetési mód hiányzik a számláról, és a szállító múltja szerint valószínűleg nem utalással fizetjük: másik számláit kártyával fizettük, vagy a bank a saját díját levonta. Nem kerültek ki a jegyzékből: ha a szállító mégis utalást kér, itt látszik. Az összegük nincs benne a fenti hátralékban.";
 
 /** Ezres tagolás sima szóközzel (a beágyazott betűben nincs keskeny szóköz). */
 export function pdfAmount(amount: string, currency: string): string {

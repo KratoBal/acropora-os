@@ -2474,5 +2474,6 @@ export type {
   DueInvoicesMailSettingsInput,
   DueInvoicesMailSettingsView,
   DueInvoicesResponse,
+  ProbablyNotTransferEvidence,
   ProbablyNotTransferItem,
 } from "./due-invoices.js";
