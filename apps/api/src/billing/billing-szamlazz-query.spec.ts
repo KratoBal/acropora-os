@@ -67,6 +67,18 @@ describe("buildSzamlazzQueryXml", () => {
     );
   });
 
+  it("külső azonosítónál a pdf elem az azonosító ELŐTT áll (sémabeli sorrend: szamlaszam, rendelesSzam, pdf, szamlaKulsoAzon)", () => {
+    const xml = buildSzamlazzQueryXml({
+      agentKey: "k",
+      key: { by: "externalId", value: "X-1" },
+      pdfFlag: false,
+    });
+    assert.match(
+      xml,
+      /<szamlaagentkulcs>k<\/szamlaagentkulcs><pdf>false<\/pdf><szamlaKulsoAzon>X-1<\/szamlaKulsoAzon><\/xmlszamlaxml>$/,
+    );
+  });
+
   it("az azonosító és a kulcs XML-védett", () => {
     const xml = buildSzamlazzQueryXml({
       agentKey: "a&b",

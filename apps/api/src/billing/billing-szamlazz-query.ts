@@ -45,6 +45,7 @@ export function buildSzamlazzQueryXml(input: {
   pdfFlag?: boolean;
 }): string {
   const value = escapeXml(input.key.value);
+  const pdf = input.pdfFlag === undefined ? "" : `<pdf>${input.pdfFlag}</pdf>`;
   const identifier =
     input.key.by === "invoiceNumber"
       ? `<szamlaszam>${value}</szamlaszam>`
@@ -55,8 +56,8 @@ export function buildSzamlazzQueryXml(input: {
     'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ' +
     'xsi:schemaLocation="http://www.szamlazz.hu/xmlszamlaxml https://www.szamlazz.hu/szamla/docs/xsds/agentxml/xmlszamlaxml.xsd">' +
     `<szamlaagentkulcs>${escapeXml(input.agentKey)}</szamlaagentkulcs>` +
-    identifier +
-    (input.pdfFlag === undefined ? "" : `<pdf>${input.pdfFlag}</pdf>`) +
+    // the schema order: szamlaszam, rendelesSzam, pdf, szamlaKulsoAzon (barracuda #2768): the flag follows a number, precedes an external id
+    (input.key.by === "invoiceNumber" ? identifier + pdf : pdf + identifier) +
     "</xmlszamlaxml>"
   );
 }
