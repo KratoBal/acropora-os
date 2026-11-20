@@ -11,7 +11,7 @@ import {
 } from "./due-invoices-payment-method.js";
 import { loadCollectedPdfIndex } from "./incoming-collected-pdf.js";
 import { attachedPdfIds } from "./incoming-pdf-attach.js";
-import { incomingPdfIds } from "./incoming-pdf-state.js";
+import { pdfIdsToRead } from "./supplier-bank-account-extract.js";
 
 /**
  * A LEJÁRÓ SZÁMLÁK FIZETÉSI MÓD NÉLKÜLI SORAINAK PDF-ES MÉRÉSE, CSAK OLVASVA (acrobot 58710, 58713, 58718):
@@ -21,7 +21,7 @@ import { incomingPdfIds } from "./incoming-pdf-state.js";
  * SEMMIT NEM ÍR: nincs `--apply`, a kimenet a standard kimenetre megy. A célsorok a Lejáró számlák szűrőit követik (fizetendő
  * típus, nem sztornó, nem „nem könyvelendő”, a hátralék pozitív), és csak az ÜRES fizetési módúak; a banki párosítást nem nézi,
  * tehát a célhalmaz a lista ilyen sorainál nagyobb lehet. A PDF-eket ugyanaz a szabály adja, mint a lista PDF-jelzését
- * (`incomingPdfIds`), ugyanaz az olvasó, mint a #2791 bankszámla-kinyerését (`supplier-bank-account-extract.cli.ts`).
+ * (`pdfIdsToRead`: az `incomingPdfIds`, a nem PDF feed-dokumentum nélkül), ugyanaz az olvasó, mint a #2791 bankszámla-kinyerését (`supplier-bank-account-extract.cli.ts`).
  * A webes végpont (`/billing/incoming-documents/:id/pdf`) `billing.view` jogot kér, a flotta fiók nem hordja (acrobot 58718):
  * ezért fut a konténerben, az adatbázisból.
  *
@@ -52,7 +52,9 @@ async function main(): Promise<number> {
       id: row.id,
       supplierName: row.supplierName,
       documentNumber: row.documentNumber,
-      pdfIds: incomingPdfIds(row, { attached, collected }),
+      // the feed's own document only when it IS a PDF (`hasPdf`): the same rule as the #2800 fix of the #2791 reader. Without it
+      // every row whose feed document is XML read as "unreadable" (live 2026-11-20: 24 of 52, acrobot 58843)
+      pdfIds: pdfIdsToRead(row, { attached, collected }),
     }));
   const report = await readPaymentMethods({
     targets: async () => targets,
