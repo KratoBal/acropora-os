@@ -5,7 +5,10 @@ import { pathToFileURL } from "node:url";
 
 import { prisma } from "@acropora/database";
 
-import { GoogleReadonlyClient } from "../integrations/google/google-readonly.client.js";
+import {
+  GoogleReadonlyClient,
+  GoogleReadonlyError,
+} from "../integrations/google/google-readonly.client.js";
 import { supplierInvoiceMailCredentials } from "../purchasing/expected-arrivals/supplier-invoice-mail.config.js";
 import { pdfTextLines } from "../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
@@ -122,7 +125,8 @@ export async function main(
       environment.INVOICE_COLLECTION_INFO_USER?.trim() || "info@acropora.hu";
     const google = new GoogleReadonlyClient({
       credentials,
-      requestGapMs: REQUEST_GAP_MS,
+      requestGapMs: cliRequestGapMs(environment),
+      rateLimitDelaysMs: CLI_RATE_LIMIT_DELAYS_MS,
     });
     mail = (m) => readCmfxMail(google, user, m);
   }
@@ -243,6 +247,22 @@ async function prismaRowsByNumber(
 export const REQUEST_GAP_MS = 250;
 
 /**
+ * A KÉZI, HÓNAPONKÉNTI FUTÁS LASSABB, ÉS TOVÁBB VÁR A RATE LIMIT UTÁN (785dfea6, acrobot 58342 és 58354: a 2026-03 --apply
+ * kétszer GOOGLE_RATE_LIMITED-del állt meg, a száraz futás után közvetlenül; Balázs 2026-11-20 13:21 UTC: a kiolvasás
+ * lassan menjen). A kliens alapja (1, 2, 4 mp) a napi ütemezett futásé, ott a következő nap folytatja; egy kézi visszatöltés
+ * viszont hónapnyi levelet olvas egyben, és egy megszakadt futás újra elölről kezdi. Ezért itt: két kérés között alapból 1 mp
+ * (`MAIL_PDF_REQUEST_GAP_MS` felülírja, 250 alá nem), és a rate limit után 10, 30, 60, 120 és 300 mp várakozás, mielőtt a
+ * hiba továbbmegy (a Google `Retry-After`-je, ha hosszabb, ennél is nyer, a kliens felső határáig).
+ */
+export const CLI_RATE_LIMIT_DELAYS_MS: readonly number[] = [
+  10_000, 30_000, 60_000, 120_000, 300_000,
+];
+export function cliRequestGapMs(environment: NodeJS.ProcessEnv): number {
+  const raw = Number(environment.MAIL_PDF_REQUEST_GAP_MS);
+  return Number.isFinite(raw) && raw >= REQUEST_GAP_MS ? raw : 1_000;
+}
+
+/**
  * A hónap cmfx-levelei és PDF-mellékletei, mindegyik a levél hitelesítési ítéletével. Exportálva, hogy
  * a teszt hamis Gmail-klienssel mérje: a hitelesítés bekötése nem maradhat bizonyítatlan (#1777).
  */
@@ -278,7 +298,13 @@ if (
       process.exitCode = code;
     })
     .catch((error: unknown) => {
-      process.stderr.write(`${String(error)}\n`);
+      // the Google error's measured facts (status, reason, Retry-After) go with it: without them a rate limit says nothing
+      // about how long to wait (acrobot 58354)
+      const detail =
+        error instanceof GoogleReadonlyError && error.detail
+          ? ` (${error.detail})`
+          : "";
+      process.stderr.write(`${String(error)}${detail}\n`);
       process.exitCode = 2;
     })
     .finally(() => void prisma.$disconnect());

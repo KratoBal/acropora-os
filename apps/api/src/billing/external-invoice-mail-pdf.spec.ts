@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
-import { main, readCmfxMail } from "./external-invoice-mail-pdf.cli.js";
+import {
+  CLI_RATE_LIMIT_DELAYS_MS,
+  REQUEST_GAP_MS,
+  cliRequestGapMs,
+  main,
+  readCmfxMail,
+} from "./external-invoice-mail-pdf.cli.js";
 import {
   cmfxMailAuthenticated,
   cmfxMailQuery,
@@ -334,6 +340,28 @@ describe("the letter really came from cmfx", () => {
         textCarriesNumber("(ACRW-2026/00536)", "ACRW-2026/00536"),
       ],
       [true, false, false, true],
+    );
+  });
+});
+
+describe("the manual run's pace (785dfea6, acrobot 58354: the 2026-03 --apply hit GOOGLE_RATE_LIMITED twice)", () => {
+  it("one second between requests by default; MAIL_PDF_REQUEST_GAP_MS sets it, never below the daily job's gap", () => {
+    assert.deepEqual(
+      [
+        cliRequestGapMs({}),
+        cliRequestGapMs({ MAIL_PDF_REQUEST_GAP_MS: "3000" }),
+        cliRequestGapMs({ MAIL_PDF_REQUEST_GAP_MS: "100" }),
+        cliRequestGapMs({ MAIL_PDF_REQUEST_GAP_MS: "lassan" }),
+      ],
+      [1_000, 3_000, 1_000, 1_000],
+    );
+    assert.ok(cliRequestGapMs({}) >= REQUEST_GAP_MS);
+  });
+
+  it("waits up to five times after a rate limit, the last one five minutes", () => {
+    assert.deepEqual(
+      CLI_RATE_LIMIT_DELAYS_MS,
+      [10_000, 30_000, 60_000, 120_000, 300_000],
     );
   });
 });
