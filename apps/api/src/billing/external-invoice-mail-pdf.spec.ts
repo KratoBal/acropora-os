@@ -4,13 +4,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
-import { main, readCmfxMail } from "./external-invoice-mail-pdf.cli.js";
+import {
+  CLI_RATE_LIMIT_DELAYS_MS,
+  CLI_REQUEST_GAP_MS,
+  REQUEST_GAP_MS,
+  main,
+  readCmfxMail,
+  readUnasLinkPdfs,
+} from "./external-invoice-mail-pdf.cli.js";
 import {
   cmfxMailAuthenticated,
   cmfxMailQuery,
   fillExternalPdfsFromMail,
   numberFromCmfxFileName,
   textCarriesNumber,
+  pdfPayableAmount,
   pdfPayableMatches,
   textCarriesOurTaxNumber,
   type MailPdf,
@@ -311,6 +319,17 @@ describe("the letter really came from cmfx", () => {
       [report.outcomes.map((o) => `${o.kind} ${o.documentNumber}`), r.puts],
       [["AMOUNT_MISMATCH ACRW-2026/00536"], []],
     );
+    // both amounts come out, so a person can tell rounding from a wrong invoice (acrobot 58326)
+    assert.deepEqual(report.outcomes[0], {
+      kind: "AMOUNT_MISMATCH",
+      documentNumber: "ACRW-2026/00536",
+      expected: "45000.00",
+      found: "29210",
+    });
+    assert.deepEqual(
+      [pdfPayableAmount(PAYABLE), pdfPayableAmount("Számla ACRW-2026/00536")],
+      ["29210", null],
+    );
   });
 
   it("the number in the PDF text is bounded: no longer number, no letter or digit before it", () => {
@@ -323,6 +342,152 @@ describe("the letter really came from cmfx", () => {
       ],
       [true, false, false, true],
     );
+  });
+});
+
+describe("the manual run's pace (785dfea6, acrobot 58354: the 2026-03 --apply hit GOOGLE_RATE_LIMITED twice)", () => {
+  it("one second between requests, four times the daily job's gap", () => {
+    assert.deepEqual([CLI_REQUEST_GAP_MS, REQUEST_GAP_MS], [1_000, 250]);
+  });
+
+  it("waits up to five times after a rate limit, the last one five minutes", () => {
+    assert.deepEqual(
+      CLI_RATE_LIMIT_DELAYS_MS,
+      [10_000, 30_000, 60_000, 120_000, 300_000],
+    );
+  });
+});
+
+/*
+  THE UNAS ORDER'S CMFX LINK (785dfea6, acrobot 58359). WHAT TURNS IT RED: a link that is not https://www.cmfx.hu fetched;
+  a redirect to another host followed; the link itself printed (it may carry a token); no pause between two fetches; a
+  non-PDF answer silently dropped instead of reaching the checks (it must come out as NOT_PDF).
+*/
+describe("the PDF from the UNAS order's cmfx link", () => {
+  const PDF_BYTES = Buffer.from(
+    `%PDF-1.4\nEladó adószáma: 23916229-2-42\nACRW-2026/00536\n${PAYABLE}\n`,
+  );
+  const fetcher = (answers: Record<string, () => Response>) => {
+    const calls: string[] = [];
+    return {
+      calls,
+      fetch: async (url: string) => {
+        calls.push(url);
+        const answer = answers[url];
+        if (!answer) throw new Error(`unexpected ${url}`);
+        return answer();
+      },
+    };
+  };
+
+  it("fetches only https://www.cmfx.hu, follows a redirect only on that host, pauses between fetches, never prints the link", async () => {
+    const f = fetcher({
+      "https://www.cmfx.hu/sz/abc?t=SECRET": () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: "/sz/abc.pdf?t=SECRET" },
+        }),
+      "https://www.cmfx.hu/sz/abc.pdf?t=SECRET": () =>
+        new Response(PDF_BYTES, {
+          status: 200,
+          headers: { "content-type": "application/pdf" },
+        }),
+      "https://www.cmfx.hu/sz/off": () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: "https://evil.example/x.pdf" },
+        }),
+      "https://www.cmfx.hu/sz/html": () =>
+        new Response("<html>bejelentkezés</html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        }),
+    });
+    const sleeps: number[] = [];
+    let out = "";
+    const pdfs = await readUnasLinkPdfs(
+      [
+        {
+          number: "ACRW-2026/00536",
+          url: "https://www.cmfx.hu/sz/abc?t=SECRET",
+        },
+        { number: "ACRW-2026/00537", url: "http://www.cmfx.hu/sz/plain" },
+        { number: "ACRW-2026/00538", url: "https://cmfx.hu.evil.example/x" },
+        { number: "ACRW-2026/00539", url: "https://www.cmfx.hu/sz/off" },
+        { number: "ACRW-2026/00540", url: "https://www.cmfx.hu/sz/html" },
+      ],
+      f.fetch as never,
+      (line) => (out += line),
+      async (ms) => {
+        sleeps.push(ms);
+      },
+    );
+    assert.deepEqual(f.calls, [
+      "https://www.cmfx.hu/sz/abc?t=SECRET",
+      "https://www.cmfx.hu/sz/abc.pdf?t=SECRET",
+      "https://www.cmfx.hu/sz/off",
+      "https://www.cmfx.hu/sz/html",
+    ]);
+    assert.deepEqual(sleeps, [2_000, 2_000]);
+    assert.deepEqual(
+      pdfs.map((p) => [p.fileName, p.authenticated, p.buffer.length]),
+      [
+        ["E-ACRW-2026-00536-0.pdf", true, PDF_BYTES.length],
+        ["E-ACRW-2026-00540-0.pdf", true, 27],
+      ],
+    );
+    assert.equal(numberFromCmfxFileName(pdfs[0]!.fileName), "ACRW-2026/00536");
+    assert.doesNotMatch(out, /SECRET|sz\/|evil/);
+    assert.match(
+      out,
+      /^LINK ACRW-2026\/00536 HTTP 200 application\/pdf \d+ bájt PDF$/m,
+    );
+    assert.match(
+      out,
+      /^LINK ACRW-2026\/00537 nem cmfx https-cím, nem kértem le$/m,
+    );
+    assert.match(out, /^LINK ACRW-2026\/00539 átirányítás nem cmfx-címre/m);
+    assert.match(
+      out,
+      /^LINK ACRW-2026\/00540 HTTP 200 text\/html 27 bájt nem PDF$/m,
+    );
+  });
+
+  it("main --unas-link: the rows' links, the same checks, WOULD_STORE on a dry run; not together with --dir", async () => {
+    let out = "";
+    const linksAsked: string[][] = [];
+    const code = await main(
+      ["--month", "2026-01", "--unas-link"],
+      { out: (t) => (out += t), err: () => undefined },
+      {
+        candidates: async () => [candidate("row-1", "ACRW-2026/00536")],
+        unasLinks: async (numbers) => {
+          linksAsked.push([...numbers]);
+          return [{ number: "ACRW-2026/00536", url: "https://www.cmfx.hu/a" }];
+        },
+        fetchPdf: (async () =>
+          new Response(PDF_BYTES, { status: 200 })) as never,
+        sleep: async () => undefined,
+        rowsByNumber: async () => [],
+        textOf,
+      },
+      {},
+    );
+    assert.equal(code, 1);
+    assert.deepEqual(linksAsked, [["ACRW-2026/00536"]]);
+    assert.match(out, /^Link az UNAS-rendelésekből \(2026-01\): 1 PDF/m);
+    assert.match(out, /^WOULD_STORE\s+ACRW-2026\/00536 \(\d+ bájt\)$/m);
+    let err = "";
+    assert.equal(
+      await main(
+        ["--month", "2026-01", "--unas-link", "--dir", "/x"],
+        { out: () => undefined, err: (t) => (err += t) },
+        {},
+        {},
+      ),
+      2,
+    );
+    assert.match(err, /egyszerre csak az egyik/);
   });
 });
 
