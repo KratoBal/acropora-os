@@ -77,6 +77,8 @@ const AT_ORDER: Record<string, string> = {
   BANK_PAIRING: "banki párosítás",
   // bejövő számla: a futár levonta a díját az utánvét-utalásból (acrobot 58315, 58343)
   CARRIER_SETOFF: "levonva az utánvét-utalásból",
+  // bejövő számla: a számlán álló „Fizetve” (a kiállító állítása; ma a SimplePay díjszámlái)
+  ISSUER_PAID: "a számlán: Fizetve",
 };
 
 export function PaymentBadge({

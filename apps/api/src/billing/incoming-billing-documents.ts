@@ -25,6 +25,7 @@ import {
   invoiceIdentity,
 } from "./invoice-identity.js";
 import { externalKindLabel as feedKindLabel } from "./billing-document-list.js";
+import { isIssuerPaid } from "./incoming-issuer-paid.js";
 import type { SetOffPayment } from "./incoming-set-off.js";
 
 /**
@@ -207,6 +208,8 @@ export function incomingPaymentOf(
     | "grossAmount"
     | "currency"
     | "lastPaymentDate"
+    | "source"
+    | "paymentMethod"
   >,
   bankMatch: IncomingBankMatch,
   /** A párosított terhelések a teljes számlát fizetik (`DocumentPairing.paidInFull`). */
@@ -255,6 +258,15 @@ export function incomingPaymentOf(
       paidAmount: money(row.grossAmount, row.currency),
       lastPaymentDate: setOff.day,
       paymentSource: "CARRIER_SETOFF",
+      paymentConflict: false,
+    };
+  // a számlán álló „Fizetve” (a kiállító állítása; a Számlázz.hu nem ismer fizetést): a nap nem ismert, ezért nincs
+  if (isIssuerPaid(row))
+    return {
+      paymentState: "PAID",
+      paidAmount: money(row.grossAmount, row.currency),
+      lastPaymentDate: null,
+      paymentSource: "ISSUER_PAID",
       paymentConflict: false,
     };
   if (manualPaid)

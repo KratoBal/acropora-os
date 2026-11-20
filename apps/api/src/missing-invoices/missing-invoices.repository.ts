@@ -482,6 +482,10 @@ export interface PackageBillingRow {
   issueDate: Date;
   /** A soron álló „Papíron megvan” jelölés (a párosított terhelésen álló külön). */
   paperOriginalAt: Date | null;
+  /** a sor forrása, a számlán álló fizetési mód és hogy a Számlázz.hu ismer-e fizetést: a „Fizetve” módú számla rendezett (`isIssuerPaid`, acrobot 58530) */
+  source: string;
+  paymentMethod: string | null;
+  paymentsKnown: boolean | null;
   /** A PDF-et hordozhatő dokumentumok azonosítói, a használat sorrendjében. */
   pdfIds: string[];
 }
@@ -1422,6 +1426,9 @@ export class MissingInvoicesRepository {
           currency: true,
           issueDate: true,
           paperOriginalAt: true,
+          source: true,
+          paymentMethod: true,
+          paymentsKnown: true,
         },
         orderBy: [{ issueDate: "asc" }, { documentNumber: "asc" }],
       }),

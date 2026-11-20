@@ -79,6 +79,7 @@ import {
   paperOriginalOfRow,
   pairingNumberKeys,
 } from "../billing/incoming-billing-documents.js";
+import { isIssuerPaid } from "../billing/incoming-issuer-paid.js";
 import {
   type DebitAmount,
   identityCandidateMatch,
@@ -1436,11 +1437,12 @@ export class MissingInvoicesService {
           ],
           source: { kind: "ROW" as const, id: row.id },
           // a nulla összegű számlát (Telekom, Pólus, október) terhelés nem fizethet, tehát nem „kifizetetlen”; és amit az utánvét-elszámolás
-          // levon (Foxpost, GLS), azt sem bankból fizetik (settledByDeduction)
+          // levon (Foxpost, GLS), azt sem bankból fizetik (settledByDeduction); és amit a kiállító a számlán „Fizetve”-nek ír (SimplePay díjszámla)
           paid:
             itemId !== undefined ||
             row.grossAmount.isZero() ||
-            settledByDeduction(row),
+            settledByDeduction(row) ||
+            isIssuerPaid(row),
           itemIds: itemId ? [itemId] : [],
         };
       }),
