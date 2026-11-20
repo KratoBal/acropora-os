@@ -5,6 +5,7 @@ import { foxpostNarrativeMark } from "../integrations/foxpost/foxpost-paid-marks
 import { codNarrativePrefix } from "../integrations/gls/gls-cod-paid-marks.dry-run.js";
 import {
   incomingSetOffPayments,
+  setOffKeyOf,
   type SetOffPayment,
 } from "./incoming-set-off.js";
 
@@ -25,7 +26,7 @@ export async function loadSetOffPayments(
   >,
   rows: readonly Pick<
     IncomingBillingDocument,
-    "documentNumber" | "grossAmount" | "currency"
+    "documentNumber" | "supplierTaxNumber" | "grossAmount" | "currency"
   >[],
 ): Promise<Map<string, SetOffPayment>> {
   const numbers = [...new Set(rows.map((row) => row.documentNumber))];
@@ -138,7 +139,7 @@ export async function loadSetOffPayments(
     }),
     invoices: new Map(
       rows.map((row) => [
-        row.documentNumber,
+        setOffKeyOf(row),
         { gross: row.grossAmount, currency: row.currency },
       ]),
     ),

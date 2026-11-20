@@ -53,6 +53,7 @@ import {
 } from "./incoming-not-bookable.js";
 import { setIncomingPaperOriginal } from "./incoming-paper-original.js";
 import { loadSetOffPayments } from "./incoming-set-off.loader.js";
+import { setOffKeyOf } from "./incoming-set-off.js";
 import { loadRelatedDocuments } from "./incoming-related-documents.js";
 import {
   incomingListResponse,
@@ -195,7 +196,7 @@ export class IncomingBillingDocumentsController {
       incomingHasPdf(row, { attached, collected }),
       manualPaid.get(row.externalId) ?? null,
       related,
-      setOff.get(row.documentNumber) ?? null,
+      setOff.get(setOffKeyOf(row)) ?? null,
     );
   }
 

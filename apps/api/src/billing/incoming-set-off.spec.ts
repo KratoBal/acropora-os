@@ -4,7 +4,15 @@ import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 
 import {
+  FOXPOST_TAX_BASE,
+  GLS_TAX_BASE,
+} from "../missing-invoices/missing-invoices.repository.js";
+
+import {
+  FOXPOST_SUPPLIER_BASE,
+  GLS_SUPPLIER_BASE,
   incomingSetOffPayments,
+  setOffKey,
   type FoxpostSetOffInput,
   type GlsSetOffInput,
   type SetOffInvoice,
@@ -20,12 +28,27 @@ import {
   napja (GLS); ha egy elszámolás egy másik számlát jelöl.
 */
 const D = (v: string | number) => new Prisma.Decimal(v);
-const invoices = (entries: [string, string | number, string?][]) =>
+/** A szállító alapértelmezése a szám alakjából: HU + 8 számjegy a GLS, minden más a Foxpost; a negyedik elem felülírja. */
+const invoices = (
+  entries: [string, string | number, string?, (string | null)?][],
+) =>
   new Map<string, SetOffInvoice>(
-    entries.map(([number, gross, currency]) => [
-      number,
+    entries.map(([number, gross, currency, supplier]) => [
+      setOffKey(
+        supplier === undefined
+          ? /^HU\d{8}$/.test(number)
+            ? GLS_SUPPLIER_BASE
+            : FOXPOST_SUPPLIER_BASE
+          : supplier,
+        number,
+      ),
       { gross: D(gross), currency: currency ?? "HUF" },
     ]),
+  );
+const keyOf = (number: string) =>
+  setOffKey(
+    /^HU\d{8}$/.test(number) ? GLS_SUPPLIER_BASE : FOXPOST_SUPPLIER_BASE,
+    number,
   );
 
 const foxpost = (
@@ -60,7 +83,7 @@ describe("a Foxpost fee invoice set off in the weekly transfer", () => {
       [...run()],
       [
         [
-          "FX01034668",
+          keyOf("FX01034668"),
           { day: "2026-09-03", carrier: "FOXPOST", reference: "26H35" },
         ],
       ],
@@ -170,7 +193,7 @@ describe("a GLS fee invoice set off by the compensation letter", () => {
       [...run()],
       [
         [
-          "HU00912382",
+          keyOf("HU00912382"),
           { day: "2026-09-03", carrier: "GLS", reference: "2026-09-03" },
         ],
       ],
@@ -190,7 +213,10 @@ describe("a GLS fee invoice set off by the compensation letter", () => {
         ["HU00912383", 11987],
       ],
     );
-    assert.deepEqual([...out.keys()].sort(), ["HU00912382", "HU00912383"]);
+    assert.deepEqual(
+      [...out.keys()].sort(),
+      [keyOf("HU00912382"), keyOf("HU00912383")].sort(),
+    );
   });
 
   it("is not paid when a reference is not a GLS invoice number (a parcel number may be the buyer's money)", () => {
@@ -252,6 +278,75 @@ describe("a GLS fee invoice set off by the compensation letter", () => {
         ["HU00912382", 8013],
       ]),
     });
-    assert.deepEqual([...out.keys()].sort(), ["FX01034668", "HU00912382"]);
+    assert.deepEqual(
+      [...out.keys()].sort(),
+      [keyOf("FX01034668"), keyOf("HU00912382")].sort(),
+    );
+  });
+});
+
+/*
+  A SZÁMLA A SZÁLLÍTÓJÁVAL KÖTŐDIK (barracuda, #2788 review). MI PIROSÍT: ha egy MÁSIK szállító azonos számú és összegű számlája is kifizetett lenne (a Lejáró
+  számlák listából egy valóban fizetendő számla esne ki); ha az a sor felülírná a futár sorát a térképben; ha a szállító nélküli vagy külföldi adószámú sor a
+  futáréval egyezne; ha a két törzsszám elcsúszna a Hiányzó számlák elszámolás-levonásáétól.
+*/
+describe("the set-off binds an invoice to its supplier, not to its number alone", () => {
+  const OTHER = "99999999";
+  const both = (number: string, other: string | null) =>
+    [
+      [number, number.startsWith("HU") ? 8013 : 7803],
+      [number, number.startsWith("HU") ? 8013 : 7803, "HUF", other],
+    ] as [string, number, string?, (string | null)?][];
+
+  it("another supplier's invoice with the same Foxpost number and gross is not marked, and does not displace the carrier's", () => {
+    const out = incomingSetOffPayments({
+      foxpost: [foxpost()],
+      gls: [],
+      invoices: invoices(both("FX01034668", OTHER)),
+    });
+    assert.deepEqual([...out.keys()], [keyOf("FX01034668")]);
+    assert.equal(out.has(setOffKey(OTHER, "FX01034668")), false);
+  });
+
+  it("the same for a GLS number: only the GLS supplier's row is marked", () => {
+    const out = incomingSetOffPayments({
+      foxpost: [],
+      gls: [gls()],
+      invoices: invoices(both("HU00912382", OTHER)),
+    });
+    assert.deepEqual([...out.keys()], [keyOf("HU00912382")]);
+    assert.equal(out.has(setOffKey(OTHER, "HU00912382")), false);
+  });
+
+  it("a row of another supplier with the carrier's number is not the carrier's invoice even when it is the only row", () => {
+    for (const supplier of [OTHER, null, "DE123456789"]) {
+      const foxpostOut = incomingSetOffPayments({
+        foxpost: [foxpost()],
+        gls: [],
+        invoices: invoices([["FX01034668", 7803, "HUF", supplier]]),
+      });
+      const glsOut = incomingSetOffPayments({
+        foxpost: [],
+        gls: [gls()],
+        invoices: invoices([["HU00912382", 8013, "HUF", supplier]]),
+      });
+      assert.equal(foxpostOut.size, 0, String(supplier));
+      assert.equal(glsOut.size, 0, String(supplier));
+    }
+  });
+
+  it("the carrier's supplier is recognised in every written form of the tax number", () => {
+    for (const written of ["32435119", "32435119-2-13", "HU32435119"]) {
+      assert.equal(
+        setOffKey(written, "FX1"),
+        setOffKey(FOXPOST_SUPPLIER_BASE, "FX1"),
+        written,
+      );
+    }
+  });
+
+  it("the two tax bases are the ones the missing-invoices set-off deduction uses", () => {
+    assert.equal(FOXPOST_SUPPLIER_BASE, FOXPOST_TAX_BASE);
+    assert.equal(GLS_SUPPLIER_BASE, GLS_TAX_BASE);
   });
 });

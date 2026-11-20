@@ -25,6 +25,8 @@ import {
   toIncomingListItem,
 } from "./incoming-billing-documents.js";
 import { supplierTaxBase } from "./billing-duplicates.js";
+import { setOffKeyOf } from "./incoming-set-off.js";
+import { incomingListItems } from "./purchase-incoming.js";
 import { identityTaxNumber, invoiceIdentity } from "./invoice-identity.js";
 
 const D = (value: string | number) => new Prisma.Decimal(value);
@@ -1347,5 +1349,46 @@ describe("a futár által levont díjszámla kifizetettsége", () => {
     );
     assert.equal(feed.paymentState, "PAID");
     assert.equal(feed.paymentSource, "CARRIER_SETOFF");
+  });
+});
+
+/*
+  A LISTA A SZÁLLÍTÓJA SZERINT KERESI A LEVONÁST (barracuda, #2788 review): két szállító azonos számú számlája közül csak a futáré kapja a jelölést. MI PIROSÍT:
+  ha a lista a számot a szállító nélkül keresné vissza (a másik szállító számlája is „levonva” lenne, banki terhelés nélkül).
+*/
+describe("az bejövő lista a levonást szállító és szám szerint keresi vissza", () => {
+  it("a futár számlája fizetett, egy másik szállító azonos számú számlája nem", () => {
+    const glsRow = row({
+      externalId: "gls-1",
+      documentNumber: "HU00912382",
+      supplierTaxNumber: "12369410-2-44",
+      paymentsKnown: false,
+    });
+    const otherRow = row({
+      externalId: "other-1",
+      documentNumber: "HU00912382",
+      supplierTaxNumber: "99999999-2-13",
+      paymentsKnown: false,
+    });
+    const items = incomingListItems({
+      rows: [glsRow, otherRow],
+      pairings: new Map(),
+      hasCollectedPdf: () => false,
+      readings: new Map(),
+      purchases: [],
+      setOff: new Map([
+        [
+          setOffKeyOf(glsRow),
+          { day: "2026-09-03", carrier: "GLS", reference: "2026-09-03" },
+        ],
+      ]),
+    });
+    assert.deepEqual(
+      items.map((item) => [item.id, item.paymentSource ?? null]),
+      [
+        [glsRow.id, "CARRIER_SETOFF"],
+        [otherRow.id, null],
+      ],
+    );
   });
 });

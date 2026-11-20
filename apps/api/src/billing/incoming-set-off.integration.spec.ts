@@ -4,6 +4,7 @@ import { after, before, describe, it } from "node:test";
 import { Prisma, prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
+import { setOffKeyOf } from "./incoming-set-off.js";
 import { loadSetOffPayments } from "./incoming-set-off.loader.js";
 
 const gate = integrationDatabaseGate(process.env);
@@ -30,8 +31,15 @@ async function removeLeftovers() {
   await prisma.glsCodReport.deleteMany({ where: { fileName: MARK } });
 }
 
-const row = (documentNumber: string, gross: number) => ({
+const row = (
+  documentNumber: string,
+  gross: number,
+  supplierTaxNumber: string | null = documentNumber.startsWith("HU")
+    ? "12369410-2-44"
+    : "32435119-2-13",
+) => ({
   documentNumber,
+  supplierTaxNumber,
   grossAmount: D(gross),
   currency: "HUF",
 });
@@ -198,7 +206,7 @@ describe(
 
     it("marks the Foxpost fee invoice paid on the day of the credit named by the settlement code", async () => {
       const found = await loadSetOffPayments(prisma, [row("IT-FX-0001", 7803)]);
-      assert.deepEqual(found.get("IT-FX-0001"), {
+      assert.deepEqual(found.get(setOffKeyOf(row("IT-FX-0001", 0))), {
         day: FX_DAY,
         carrier: "FOXPOST",
         reference: FX_CODE,
@@ -216,15 +224,36 @@ describe(
         row("HU99000002", 4000),
         row("HU99000003", 1000),
       ]);
-      assert.deepEqual([...found.keys()].sort(), ["HU99000001", "HU99000002"]);
-      assert.equal(found.get("HU99000001")?.day, GLS_DAY);
-      assert.equal(found.get("HU99000001")?.carrier, "GLS");
+      assert.deepEqual(
+        [...found.keys()].sort(),
+        [
+          setOffKeyOf(row("HU99000001", 0)),
+          setOffKeyOf(row("HU99000002", 0)),
+        ].sort(),
+      );
+      assert.equal(found.get(setOffKeyOf(row("HU99000001", 0)))?.day, GLS_DAY);
+      assert.equal(
+        found.get(setOffKeyOf(row("HU99000001", 0)))?.carrier,
+        "GLS",
+      );
     });
 
     it("leaves the letter alone when one referenced invoice is not among the given rows", async () => {
       // a levél két számlát nevez meg, a másik ismeretlen: a beszámítás nem bizonyított
       const found = await loadSetOffPayments(prisma, [row("HU99000001", 2000)]);
       assert.equal(found.size, 0);
+    });
+
+    it("does not mark another supplier's invoice that carries the carrier's number, and still marks the carrier's", async () => {
+      const found = await loadSetOffPayments(prisma, [
+        row("IT-FX-0001", 7803, "99999999-2-13"),
+        row("IT-FX-0001", 7803),
+        row("IT-FX-0001", 7803, null),
+      ]);
+      assert.deepEqual(
+        [...found.keys()],
+        [setOffKeyOf(row("IT-FX-0001", 7803))],
+      );
     });
 
     it("reads nothing for numbers no settlement names", async () => {
