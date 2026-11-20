@@ -615,6 +615,58 @@ describe("HomepageContentEditorPage", () => {
     });
   });
 
+  /*
+    THE HEADER INFO BAR (card 409ba396). What turns it red: the bar missing from the editor, or shown as a block with a
+    switch and a place in the order; the opening hours or the phone editable here (their one source is the shop's company
+    record, like the footer's); a starting value tagged as a sample; an untouched save claiming a starting value; an edit,
+    or an EMPTY text, not saved as the editor's own value (an empty one hides its line on the shop).
+  */
+  it("HP-ED-HEADER: the info bar has its own panel with the two marketing lines, no block switch, no hours or phone; its texts are saved, an empty one too", async () => {
+    render(<HomepageContentEditorPage />);
+    await open("Fejléc info-sáv");
+    expect(
+      ((await field("Fejléc: info-sáv: Bal oldal, első")) as HTMLInputElement)
+        .value,
+    ).toBe("Élőállat kizárólag személyes átvétellel, a budapesti boltban");
+    expect(
+      (
+        (await field(
+          "Fejléc: info-sáv: Bal oldal, második",
+        )) as HTMLInputElement
+      ).value,
+    ).toBe("Technika és vegyszer: Foxpost csomagpont és GLS házhozszállítás");
+    // the opening hours and the phone come from the company record: no field for them
+    expect(
+      screen.queryByLabelText("Fejléc: info-sáv: Jobb oldal, első"),
+    ).toBeNull();
+    expect(
+      screen.queryByLabelText("Fejléc: info-sáv: Jobb oldal, második"),
+    ).toBeNull();
+    expect(
+      screen.getByText(/nyitvatartás és a telefonszám a bolt céges adatából/i),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("switch", { name: /Fejléc info-sáv: látszik/ }),
+    ).toBeNull();
+    save();
+    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
+    expect(sent()).toEqual(UNTOUCHED);
+
+    api.save.mockClear();
+    fireEvent.change(await field("Fejléc: info-sáv: Bal oldal, első"), {
+      target: { value: "Ma zárva" },
+    });
+    fireEvent.change(await field("Fejléc: info-sáv: Bal oldal, második"), {
+      target: { value: "" },
+    });
+    save();
+    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
+    expect(sent().texts).toEqual({
+      "fejlec.sav.1": "Ma zárva",
+      "fejlec.sav.2": "",
+    });
+  });
+
   it("HP-ED-UPLOAD-OFF: with the shop projection off no upload is offered, and the page says why", async () => {
     render(<HomepageContentEditorPage />);
     await open("Mit keresel ma?");
