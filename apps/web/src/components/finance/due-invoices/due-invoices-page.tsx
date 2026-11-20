@@ -20,6 +20,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { dueInvoicesApi } from "@/lib/api/due-invoices";
+import {
+  SupplierAccountEditor,
+  supplierAccountEditable,
+} from "./supplier-account-editor";
 import { formatDayHu } from "@/lib/format/date";
 
 /**
@@ -43,100 +47,123 @@ function NoData({ what }: { what: string }) {
   );
 }
 
-const columns: PilotTableColumn<DueInvoiceItem>[] = [
-  {
-    id: "supplier",
-    header: "Cég",
-    cell: (row) => (
-      <span className="block min-w-0">
-        <span className="block truncate font-semibold text-pilot-grey-900">
-          {row.supplierName}
-        </span>
-        {row.missing.paymentMethod ? (
-          <span className="block text-xs text-pilot-amber-700">
-            fizetési mód: {NO_DATA}
+function buildColumns(options: {
+  canManage: boolean;
+  token: string;
+  onSaved: () => void;
+}): PilotTableColumn<DueInvoiceItem>[] {
+  return [
+    {
+      id: "supplier",
+      header: "Cég",
+      cell: (row) => (
+        <span className="block min-w-0">
+          <span className="block truncate font-semibold text-pilot-grey-900">
+            {row.supplierName}
           </span>
-        ) : null}
-      </span>
-    ),
-  },
-  {
-    id: "dueDate",
-    header: "Fizetési határidő",
-    width: "170px",
-    nowrap: true,
-    cell: (row) => (
-      <span className="block">
-        {row.dueDate ? (
-          <span className="tabular-nums">{formatDayHu(row.dueDate)}</span>
-        ) : (
-          <NoData what="Fizetési határidő" />
-        )}
-        {row.overdue ? (
-          <span className="mt-1 block">
-            <PilotBadge variant="danger">
-              Lejárt ({row.daysOverdue} napja)
-            </PilotBadge>
-          </span>
-        ) : null}
-      </span>
-    ),
-  },
-  {
-    id: "bankAccount",
-    header: "Bankszámlaszám",
-    width: "230px",
-    nowrap: true,
-    cell: (row) =>
-      row.supplierBankAccount ? (
-        <>
-          <span className="tabular-nums">{row.supplierBankAccount}</span>
-          {row.supplierBankAccountSource &&
-          row.supplierBankAccountSource !== "OWN" ? (
-            // a pótolt számlaszám forrása: az utalásba kerülő számot a forrásáról kell megítélni
-            <span className="block text-xs text-pilot-grey-600">
-              {DUE_INVOICE_ACCOUNT_SOURCE_NOTES[row.supplierBankAccountSource]}
+          {row.missing.paymentMethod ? (
+            <span className="block text-xs text-pilot-amber-700">
+              fizetési mód: {NO_DATA}
             </span>
           ) : null}
-        </>
-      ) : (
-        <NoData what="A cég bankszámlaszáma" />
+        </span>
       ),
-  },
-  {
-    id: "amount",
-    header: "Összeg (hátralék)",
-    width: "150px",
-    align: "right",
-    nowrap: true,
-    cell: (row) => (
-      <span className="font-semibold tabular-nums text-pilot-grey-900">
-        {formatMoney(row.outstanding, row.currency)}
-      </span>
-    ),
-  },
-  {
-    id: "reference",
-    header: "Közlemény",
-    width: "200px",
-    cell: (row) => (
-      <span className="block min-w-0">
-        <span className="block truncate">{row.reference}</span>
-        {row.referenceIsDefault ? (
-          <span className="block text-xs text-pilot-grey-500">
-            a számla száma (alapértelmezés)
-          </span>
-        ) : null}
-      </span>
-    ),
-  },
-];
+    },
+    {
+      id: "dueDate",
+      header: "Fizetési határidő",
+      width: "170px",
+      nowrap: true,
+      cell: (row) => (
+        <span className="block">
+          {row.dueDate ? (
+            <span className="tabular-nums">{formatDayHu(row.dueDate)}</span>
+          ) : (
+            <NoData what="Fizetési határidő" />
+          )}
+          {row.overdue ? (
+            <span className="mt-1 block">
+              <PilotBadge variant="danger">
+                Lejárt ({row.daysOverdue} napja)
+              </PilotBadge>
+            </span>
+          ) : null}
+        </span>
+      ),
+    },
+    {
+      id: "bankAccount",
+      header: "Bankszámlaszám",
+      width: "230px",
+      nowrap: true,
+      cell: (row) => (
+        <>
+          {row.supplierBankAccount ? (
+            <>
+              <span className="tabular-nums">{row.supplierBankAccount}</span>
+              {row.supplierBankAccountSource &&
+              row.supplierBankAccountSource !== "OWN" ? (
+                // a pótolt számlaszám forrása: az utalásba kerülő számot a forrásáról kell megítélni
+                <span className="block text-xs text-pilot-grey-600">
+                  {
+                    DUE_INVOICE_ACCOUNT_SOURCE_NOTES[
+                      row.supplierBankAccountSource
+                    ]
+                  }
+                </span>
+              ) : null}
+            </>
+          ) : (
+            <NoData what="A cég bankszámlaszáma" />
+          )}
+          {options.canManage && supplierAccountEditable(row) ? (
+            <SupplierAccountEditor
+              row={row}
+              token={options.token}
+              onSaved={options.onSaved}
+            />
+          ) : null}
+        </>
+      ),
+    },
+    {
+      id: "amount",
+      header: "Összeg (hátralék)",
+      width: "150px",
+      align: "right",
+      nowrap: true,
+      cell: (row) => (
+        <span className="font-semibold tabular-nums text-pilot-grey-900">
+          {formatMoney(row.outstanding, row.currency)}
+        </span>
+      ),
+    },
+    {
+      id: "reference",
+      header: "Közlemény",
+      width: "200px",
+      cell: (row) => (
+        <span className="block min-w-0">
+          <span className="block truncate">{row.reference}</span>
+          {row.referenceIsDefault ? (
+            <span className="block text-xs text-pilot-grey-500">
+              a számla száma (alapértelmezés)
+            </span>
+          ) : null}
+        </span>
+      ),
+    },
+  ];
+}
 
 export function DueInvoicesPage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.FINANCE_VIEW),
+  );
+  const canManage = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.FINANCE_MANAGE),
   );
   const [data, setData] = useState<DueInvoicesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -220,7 +247,11 @@ export function DueInvoicesPage() {
           </p>
         ) : (
           <PilotDataTable
-            columns={columns}
+            columns={buildColumns({
+              canManage,
+              token,
+              onSaved: () => void load(),
+            })}
             rows={data.items}
             rowKey={(row) => row.id}
             rowLabel={(row) => `${row.supplierName} ${row.documentNumber}`}

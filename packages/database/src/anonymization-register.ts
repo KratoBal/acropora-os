@@ -1650,6 +1650,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
     supplierEuTaxNumber: "partyTaxNumber",
     account: "bankAccount",
     evidenceIds: "identifier",
+    enteredByUserId: "identifier",
   },
   BankTransactionSourceKey: {
     key: "identifier",
