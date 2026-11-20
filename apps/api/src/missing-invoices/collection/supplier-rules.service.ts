@@ -27,6 +27,7 @@ import {
   decideSupplierRule,
   grossCentsOf,
   nameKeyOf,
+  supplierRulesLive,
   raisedCeilings,
   strictSenderDomain,
   taxMatchKey,
@@ -181,6 +182,10 @@ export class SupplierRulesService {
       senderDomain: own.senderDomain,
       taxLooksUnstable: external && taxKeys.size >= 2,
       pendingCount: { TAX: count("TAX"), NAME: count("NAME") },
+      canCreate: {
+        TAX: taxKey !== null && own.senderDomain !== null,
+        NAME: external,
+      },
     };
   }
 
@@ -230,6 +235,9 @@ export class SupplierRulesService {
     input: AcceptWithRuleInput,
     user: AuthenticatedUser,
   ): Promise<AcceptWithRuleResult> {
+    // a kikapcsolt szolgáltatás ugyanazt mondja, amit a rejtett felület (nautilus 58009): szabály nem vehető fel
+    if (!supplierRulesLive(this.environment))
+      throw new ConflictException("A szállítói szabályok ki vannak kapcsolva.");
     const documents = await this.pending();
     const own = documents.find((d) => d.id === id);
     if (!own)

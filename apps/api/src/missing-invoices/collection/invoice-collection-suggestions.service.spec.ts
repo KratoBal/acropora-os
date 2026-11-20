@@ -108,4 +108,30 @@ describe("InvoiceCollectionSuggestionsService.list", () => {
     ).list(NOW);
     assert.equal(result.staleCount, 0);
   });
+
+  // nautilus 58009: the page shows the supplier-rule surface only when the server says the rules run
+  it("tells the page whether the supplier rules run, and whether an amountless PDF is accepted", async () => {
+    const repository = {
+      list: async () => [],
+    } as unknown as InvoiceCollectionSuggestionsRepository;
+    const list = (environment: NodeJS.ProcessEnv) =>
+      new InvoiceCollectionSuggestionsService(repository, environment)
+        .list(NOW)
+        .then((r) => r.supplierRules);
+    assert.deepEqual(await list({}), {
+      live: false,
+      amountlessAccepted: false,
+    });
+    assert.deepEqual(await list({ INVOICE_SUPPLIER_RULES: "live" }), {
+      live: true,
+      amountlessAccepted: false,
+    });
+    assert.deepEqual(
+      await list({
+        INVOICE_SUPPLIER_RULES: "live",
+        INVOICE_SUPPLIER_RULES_AMOUNTLESS: "accept",
+      }),
+      { live: true, amountlessAccepted: true },
+    );
+  });
 });

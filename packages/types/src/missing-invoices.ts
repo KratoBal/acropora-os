@@ -645,6 +645,11 @@ export interface InvoiceCollectionSuggestionsResponse {
   staleAfterDays: number;
   /** Hány `UNASSIGNED` fájl vár a határnál régebben döntésre (a napi számla-ellenőrzés ezt olvassa). */
   staleCount: number;
+  /**
+   * AZ ISMERT SZÁLLÍTÓ SZABÁLYAINAK KAPCSOLÓJA A FELÜLETNEK (nautilus 58009): a lap a szabály-felületet csak `live` mellett mutatja.
+   * `live`: az `INVOICE_SUPPLIER_RULES=live` fut; `amountlessAccepted`: az összeg nélküli PDF-et is elfogadja a szabály.
+   */
+  supplierRules: { live: boolean; amountlessAccepted: boolean };
 }
 
 /**
@@ -683,6 +688,11 @@ export interface SupplierRulePreview {
   taxLooksUnstable: boolean;
   /** hány MÁSIK függő PDF fogadódna el azonnal, ha a szabály létrejönne (a mai szabály-egyeztetéssel) */
   pendingCount: Record<SupplierRuleKind, number>;
+  /**
+   * Melyik szabály hozható létre ebből a PDF-ből (a szerver döntése, a kliens nem számolja újra): TAX kell hozzá olvasható adószám ÉS
+   * ismert, szabályos feladó-tartomány; NAME csak külső feladóval él (saját továbbítótól érkezett PDF-hez csak adószám-szabály lehet).
+   */
+  canCreate: Record<SupplierRuleKind, boolean>;
 }
 
 export interface AcceptWithRuleInput {

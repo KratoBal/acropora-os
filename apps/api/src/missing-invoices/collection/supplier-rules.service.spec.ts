@@ -33,6 +33,7 @@ function pdf(lines: string[]): Promise<Buffer> {
 const USER = { id: "user-1" } as unknown as AuthenticatedUser;
 const ENV = {
   INVOICE_COLLECTION_ENABLED: "true",
+  INVOICE_SUPPLIER_RULES: "live",
   // the info@ mailbox (the collection's first source): its domain is a trusted forwarder
   GMAIL_FOXPOST_CLIENT_ID: "c",
   GMAIL_FOXPOST_CLIENT_SECRET: "s",
@@ -265,6 +266,42 @@ describe("SupplierRulesService: accept with a rule", () => {
       service.acceptWithRule("nope", { kind: "TAX" }, USER),
       /Nincs ilyen döntésre váró/,
     );
+  });
+});
+
+describe("SupplierRulesService: the switch and what a PDF allows", () => {
+  it("with the rules off, accepting with a rule is a conflict and accepts nothing (the hidden page and the server say the same)", async () => {
+    const made = await setup([vendor("d1")]);
+    const off = new SupplierRulesService(
+      (made.service as unknown as { rules: SupplierRulesRepository }).rules,
+      (
+        made.service as unknown as {
+          suggestions: InvoiceCollectionSuggestionsRepository;
+        }
+      ).suggestions,
+      { ...ENV, INVOICE_SUPPLIER_RULES: "off" },
+    );
+    await assert.rejects(
+      off.acceptWithRule("d1", { kind: "TAX" }, USER),
+      /ki vannak kapcsolva/,
+    );
+    assert.deepEqual(made.accepted, []);
+  });
+
+  it("canCreate: a TAX rule needs a tax number and a known sender, a NAME rule an external sender", async () => {
+    const { service } = await setup([
+      vendor("ext"),
+      vendor("fwd", { sender: "luca@acropora.hu" }),
+      vendor("fwdNoTax", { sender: "luca@acropora.hu", tax: null }),
+      vendor("extNoTax", { tax: null }),
+      vendor("noSender", { sender: "nobody" }),
+    ]);
+    const can = async (id: string) => (await service.preview(id)).canCreate;
+    assert.deepEqual(await can("ext"), { TAX: true, NAME: true });
+    assert.deepEqual(await can("fwd"), { TAX: true, NAME: false });
+    assert.deepEqual(await can("fwdNoTax"), { TAX: false, NAME: false });
+    assert.deepEqual(await can("extNoTax"), { TAX: false, NAME: true });
+    assert.deepEqual(await can("noSender"), { TAX: false, NAME: false });
   });
 });
 
