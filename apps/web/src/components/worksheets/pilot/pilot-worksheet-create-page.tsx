@@ -121,6 +121,9 @@ interface HeaderDraft {
   dueDate: string;
 }
 
+/** A munkalap tárgyának hossz-korlátja (a szerver `MaxLength(500)`-ja): az előtöltött cím nem lehet hosszabb. */
+const SUBJECT_MAX_LENGTH = 500;
+
 function emptyHeader(): HeaderDraft {
   return {
     subject: "",
@@ -282,6 +285,16 @@ export function PilotWorksheetCreatePage() {
         setTicketError(null);
         setTicketJobNumber(job.jobNumber);
         setTicketKind(job.kind === "MAINTENANCE" ? "MAINTENANCE" : "REPAIR");
+        // A MUNKALAP TÁRGYA A LAP CÍME (Luca, 2026-11-20): a hibajegyből és a karbantartási lapról nyitott munkalap tárgya
+        // előre a lap címe, szerkeszthetően. CSAK ÜRES mezőt tölt: amit a felvivő már beírt, azt nem írja felül (a betöltés
+        // alatt is gépelhet), és a mező jogos kiürítése után sem tér vissza (az előtöltés a betöltéskor fut, egyszer).
+        const title = typeof job.title === "string" ? job.title.trim() : "";
+        if (title)
+          setHeader((current) =>
+            current.subject.trim()
+              ? current
+              : { ...current, subject: title.slice(0, SUBJECT_MAX_LENGTH) },
+          );
         if (job.kind === "MAINTENANCE")
           setJobAssignees(
             (job.assignees ?? []).map((assignee) => ({

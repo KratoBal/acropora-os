@@ -443,6 +443,123 @@ describe("PilotWorksheetCreatePage assignees", () => {
     expect(screen.getByText(/A hibajegyből nyitott lap/)).toBeTruthy();
   });
 
+  /*
+    A MUNKALAP TÁRGYA A LAP CÍME (Luca, 2026-11-20). MI PIROSÍT: ha a hibajegyből vagy a karbantartási lapról nyitott űrlap Tárgya
+    nem a lap címe; ha az előtöltés felülírja, amit a felvivő már beírt (a betöltés alatt is); ha a cím nem szerkeszthető, vagy
+    a szerkesztett érték nem megy a mentésbe; ha jegy nélkül (nincs `?hibajegy`) bármi előtöltődik; ha cím nélküli lap szöveget
+    ír a mezőbe ("undefined"); ha a szerver hossz-korlátját (500) meghaladó cím előtöltődik.
+  */
+  const cimesJegy = (over: Record<string, unknown> = {}) => ({
+    id: "job-1",
+    kind: "REPAIR",
+    jobNumber: "HJ-2026-021",
+    title: "Szivattyú zajos a kamrában",
+    customerId: "customer-42",
+    customerName: "Fankó Kft.",
+    departmentId: "department-1",
+    departmentName: "Biotóp",
+    assets: [],
+    ...over,
+  });
+  const cimPartnerek = () => {
+    worksheets.selectablePartners.mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    worksheets.departments.mockResolvedValue({
+      items: [
+        {
+          id: "department-1",
+          name: "Biotóp",
+          code: "BIO",
+          parentId: null,
+          isActive: true,
+        },
+      ],
+    });
+  };
+
+  it("a hibajegyből nyitott munkalap tárgya a jegy címe, szerkeszthetően, és a szerkesztett érték megy a mentésbe", async () => {
+    query.params = new URLSearchParams("hibajegy=job-1");
+    jobs.detail.mockResolvedValue(cimesJegy());
+    cimPartnerek();
+    const user = userEvent.setup();
+    render(<PilotWorksheetCreatePage />);
+
+    const targy = await screen.findByLabelText("Tárgy");
+    await waitFor(() =>
+      expect((targy as HTMLInputElement).value).toBe(
+        "Szivattyú zajos a kamrában",
+      ),
+    );
+    await user.type(targy, " (csere)");
+    await user.click(await screen.findByRole("button", { name: "Mentés" }));
+    await waitFor(() => expect(worksheets.create).toHaveBeenCalledTimes(1));
+    expect(worksheets.create.mock.calls[0]?.[1]?.subject).toBe(
+      "Szivattyú zajos a kamrában (csere)",
+    );
+  });
+
+  it("a karbantartási lapról nyitott munkalap tárgya is a lap címe", async () => {
+    query.params = new URLSearchParams("hibajegy=job-1");
+    jobs.detail.mockResolvedValue(
+      cimesJegy({
+        kind: "MAINTENANCE",
+        jobNumber: "KT-2026-004",
+        title: "Havi szűrőcsere",
+        assignees: [],
+      }),
+    );
+    cimPartnerek();
+    render(<PilotWorksheetCreatePage />);
+    const targy = await screen.findByLabelText("Tárgy");
+    await waitFor(() =>
+      expect((targy as HTMLInputElement).value).toBe("Havi szűrőcsere"),
+    );
+  });
+
+  it("amit a felvivő a betöltés közben már beírt, azt a cím nem írja felül", async () => {
+    query.params = new URLSearchParams("hibajegy=job-1");
+    let resolve: (value: unknown) => void = () => undefined;
+    jobs.detail.mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    cimPartnerek();
+    const user = userEvent.setup();
+    render(<PilotWorksheetCreatePage />);
+    const targy = (await screen.findByLabelText("Tárgy")) as HTMLInputElement;
+    await user.type(targy, "Saját tárgy");
+    resolve(cimesJegy());
+    await screen.findByRole("link", { name: "HJ-2026-021" });
+    expect(targy.value).toBe("Saját tárgy");
+  });
+
+  it("jegy nélkül nem töltődik elő semmi, és a cím nélküli lap nem ír szöveget a mezőbe", async () => {
+    cimPartnerek();
+    const { unmount } = render(<PilotWorksheetCreatePage />);
+    expect(
+      ((await screen.findByLabelText("Tárgy")) as HTMLInputElement).value,
+    ).toBe("");
+    unmount();
+    query.params = new URLSearchParams("hibajegy=job-1");
+    jobs.detail.mockResolvedValue(cimesJegy({ title: undefined }));
+    render(<PilotWorksheetCreatePage />);
+    await screen.findByRole("link", { name: "HJ-2026-021" });
+    expect((screen.getByLabelText("Tárgy") as HTMLInputElement).value).toBe("");
+  });
+
+  it("a szerver hossz-korlátját (500) meghaladó cím levágva töltődik elő", async () => {
+    query.params = new URLSearchParams("hibajegy=job-1");
+    jobs.detail.mockResolvedValue(cimesJegy({ title: "x".repeat(600) }));
+    cimPartnerek();
+    render(<PilotWorksheetCreatePage />);
+    const targy = (await screen.findByLabelText("Tárgy")) as HTMLInputElement;
+    await waitFor(() => expect(targy.value.length).toBe(500));
+  });
+
   function jegyHelyszinnel(
     departmentId: string | null,
     name: string | null,
