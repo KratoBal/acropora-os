@@ -41,6 +41,7 @@ import type { ExternalInvoicePayment } from "./external-szamlazz-invoice.js";
 import { assertStorageKeyMatches } from "../service-assets/document-store/document-storage-key.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
+import { externalSourceOf } from "./external-billing-one-row.js";
 
 /** A lista alakjából az adatlap vevő-blokkjának neve és jelzője. */
 const customerFromOrder = (name: {
@@ -83,7 +84,7 @@ export class ExternalBillingDocumentsController {
       ) ?? [];
     return {
       id: row.id,
-      source: row.source === "EBIZ" ? "EBIZ" : "SZAMLAZZ",
+      source: externalSourceOf(row.source),
       pdfAvailable: row.pdfStorageKey !== null,
       pdfMissingReason: row.pdfStorageKey ? null : row.pdfMissingReason,
       paperOriginal: Boolean(row.paperOriginalAt),

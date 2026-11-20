@@ -142,6 +142,12 @@ class FakeStore implements EbizSyncStore {
     this.updates.push(id);
     const row = this.any(id);
     Object.assign(row, data);
+    // a taken-over row (NAV, card 785dfea6) is eBIZ's own from now on: found by its eBIZ id, no longer a twin
+    for (const [number, twin] of this.szamlazz)
+      if (twin.id === id && data.source === "EBIZ") {
+        this.szamlazz.delete(number);
+        this.rows.set(String(data.externalId), twin);
+      }
   }
   async setPdf(id: string, key: string | null, reason: string | null) {
     const row = this.any(id);
@@ -372,6 +378,58 @@ describe("the October 1 cutoff (owner, 2026-10-02 19:44 UTC)", () => {
       store.szamlazz.get("EINV000000812")!.externalPaymentStatus,
       null,
     );
+    assert.deepEqual(
+      second.state === "APPLIED" && [second.createdCount, second.updatedCount],
+      [0, 0],
+    );
+  });
+
+  /**
+   * A NAV-BÓL FELVETT SOR (kártya 785dfea6): az eBIZ ÁTVESZI, ugyanazzal a sor-azonosítóval, nem csak a PDF-et köti rá. MI PIROSÍT:
+   * ha második sor keletkezne; ha a NAV sor Számlázz.hu-s ikerként csak az eBIZ-azonosítót kapná (a NAV-forrás maradna); ha a NAV
+   * „nincs PDF” oka a sorban maradna; ha a következő futás újra átvenné.
+   */
+  it("a row taken from NAV is taken over by eBIZ, same row, and the next run adds none", async () => {
+    const store = new FakeStore();
+    store.szamlazz.set("EINV000000813", {
+      id: "nav-row",
+      source: "NAV",
+      pdfStorageKey: null,
+      pdfMissingReason: "NAV_NO_PDF",
+      cancelled: false,
+      externalPaymentStatus: null,
+      grossAmount: "127.00",
+    });
+    const documents = new FakeDocuments();
+    const invoice = ebizItem({ id: 6121423, invoiceNumber: "EINV000000813" });
+    const first = await service(
+      new FakeClient([invoice]),
+      store,
+      documents,
+    ).run("SCHEDULED");
+    const row = store.rows.get("6121423")!;
+    assert.deepEqual(
+      [
+        store.szamlazz.size,
+        store.rows.size,
+        row.id,
+        row.source,
+        row.pdfStorageKey,
+        row.pdfMissingReason,
+      ],
+      [0, 1, "nav-row", "EBIZ", "external-invoices/nav-row/ebiz.pdf", null],
+    );
+    assert.deepEqual(
+      first.state === "APPLIED" && [first.createdCount, first.updatedCount],
+      [0, 1],
+    );
+    store.updates.length = 0;
+    const second = await service(
+      new FakeClient([invoice]),
+      store,
+      documents,
+    ).run("SCHEDULED");
+    assert.equal(store.rows.size, 1);
     assert.deepEqual(
       second.state === "APPLIED" && [second.createdCount, second.updatedCount],
       [0, 0],

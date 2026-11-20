@@ -45,6 +45,7 @@ const vatRateText = (rate: string) =>
 export const EXTERNAL_SOURCE_NAME: Record<ExternalBillingSource, string> = {
   SZAMLAZZ: "Számlázz.hu",
   EBIZ: "OTP eBIZ",
+  NAV: "NAV Online Számla",
 };
 
 /** Miért nincs PDF, egy mondatban (a hibakód a lap alján marad). */
@@ -153,6 +154,8 @@ export function BillingExternalDocumentPage({
 
   const sourceName = EXTERNAL_SOURCE_NAME[detail.source];
   const ebiz = detail.source === "EBIZ";
+  // a NAV-ból felvett sor (kártya 785dfea6) a Számlázz.hu-ban nincs: oda kifizetés nem írható
+  const nav = detail.source === "NAV";
 
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
@@ -206,9 +209,11 @@ export function BillingExternalDocumentPage({
         description={
           ebiz
             ? "Ez a számla az OTP eBIZ-ben készült, a napi szinkron hozta át. Itt nem szerkeszthető, nem sztornózható és nem küldhető újra."
-            : // the PDF clause follows the stored PDF (the same pdfStorageKey the monthly outgoing
-              // package reads); stated unconditionally, it denied a PDF the package carried (ACRW-2026/00547)
-              `Ez a számla egy másik számlázóban készült, a Számlázz.hu továbbította. Itt nem szerkeszthető, nem sztornózható és nem küldhető újra${detail.pdfAvailable ? "." : ", és PDF sincs hozzá."}`
+            : nav
+              ? "Ez a számla egy másik számlázóban készült; a NAV Online Számla adataiból vettük fel, ezért csak a fejadatai vannak meg, tételsor, PDF és fizetési állapot nincs. Itt nem szerkeszthető, nem sztornózható és nem küldhető újra."
+              : // the PDF clause follows the stored PDF (the same pdfStorageKey the monthly outgoing
+                // package reads); stated unconditionally, it denied a PDF the package carried (ACRW-2026/00547)
+                `Ez a számla egy másik számlázóban készült, a Számlázz.hu továbbította. Itt nem szerkeszthető, nem sztornózható és nem küldhető újra${detail.pdfAvailable ? "." : ", és PDF sincs hozzá."}`
         }
       />
 
@@ -322,7 +327,9 @@ export function BillingExternalDocumentPage({
             subtitle={
               ebiz
                 ? "Ahogy az OTP eBIZ nyilvántartja."
-                : "Ahogy a Számlázz.hu nyilvántartja, a saját banki párosításával együtt."
+                : nav
+                  ? "A NAV fizetési állapotot nem ad, ezért itt ismeretlen."
+                  : "Ahogy a Számlázz.hu nyilvántartja, a saját banki párosításával együtt."
             }
           >
             <PaymentBadge
@@ -377,7 +384,7 @@ export function BillingExternalDocumentPage({
                 </ul>
               </div>
             ) : null}
-            {canRecordPayment && !ebiz && detail.documentNumber ? (
+            {canRecordPayment && !ebiz && !nav && detail.documentNumber ? (
               <PendingPaymentMarks
                 token={token}
                 invoiceNumber={detail.documentNumber}
@@ -388,6 +395,7 @@ export function BillingExternalDocumentPage({
             ) : null}
             {canRecordPayment &&
             !ebiz &&
+            !nav &&
             !detail.cancelled &&
             detail.documentNumber &&
             (detail.paymentState === "UNPAID" ||
@@ -407,7 +415,13 @@ export function BillingExternalDocumentPage({
           </PilotSection>
           <PilotSection
             title={sourceName}
-            subtitle={ebiz ? "A szinkron adatai." : "A továbbítás adatai."}
+            subtitle={
+              ebiz
+                ? "A szinkron adatai."
+                : nav
+                  ? "A NAV lekérdezés adatai."
+                  : "A továbbítás adatai."
+            }
           >
             <PilotDataGrid>
               <PilotDataItem label="Bizonylatszám">
@@ -433,7 +447,7 @@ export function BillingExternalDocumentPage({
                   pdfMissingText(detail.pdfMissingReason, detail.source)
                 )}
               </PilotDataItem>
-              {ebiz ? null : (
+              {ebiz || nav ? null : (
                 <PilotDataItem label="Változat">
                   {detail.versionCount > 1
                     ? `a legutóbbi a ${detail.versionCount} közül`
@@ -464,7 +478,11 @@ export function ExternalBadge({
 }) {
   return (
     <span className="inline-flex items-center rounded-full bg-pilot-grey-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-pilot-grey-700">
-      {source === "EBIZ" ? "Külső · eBIZ" : "Külső"}
+      {source === "EBIZ"
+        ? "Külső · eBIZ"
+        : source === "NAV"
+          ? "Külső · NAV"
+          : "Külső"}
     </span>
   );
 }

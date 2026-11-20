@@ -4,6 +4,7 @@ import { ACROPORA_COMPANY } from "@acropora/types";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import { storageKeyFor } from "../service-assets/document-store/document-storage-key.js";
 import { monthRange } from "./external-invoice-pdf-fill.js";
+import { NAV_SOURCE } from "./external-billing-one-row.js";
 
 /**
  * A KIMENŐ SZÁMLA PDF-JE A VEVŐNEK KÜLDÖTT LEVÉLBŐL (kártya 07ec8219, Balázs 2026-10-21: „a számlák nem
@@ -294,7 +295,7 @@ export async function fillExternalPdfsFromMail(input: {
 }
 
 /**
- * A hónap PDF nélküli feed-sorai. Az ok (`pdfMissingReason`) nem zár ki: egy Számlázz.hu-s 7-es
+ * A hónap PDF nélküli feed-sorai (és a NAV-ból felvettek). Az ok (`pdfMissingReason`) nem zár ki: egy Számlázz.hu-s 7-es
  * hibájú sor (a Számlázz.hu nem ismeri, mert a cmfx állította ki) épp az, amit a levél pótolhat.
  */
 export async function mailPdfCandidates(
@@ -304,7 +305,9 @@ export async function mailPdfCandidates(
   // (unas-prisma-select-mezok.spec.ts) reads `prisma.<model>.findMany({`
   const rows = await prisma.externalBillingDocument.findMany({
     where: {
-      source: "SZAMLAZZ",
+      // a NAV-ból felvett sor is (kártya 785dfea6): a 01-01 és 09-30 közötti cmfx-számlának más sora nincs, a PDF-je
+      // a levélből vagy a cmfx-letöltőből (`--dir`) ugyanígy, a bruttó-ellenőrzéssel kerül rá
+      source: { in: ["SZAMLAZZ", NAV_SOURCE] },
       pdfStorageKey: null,
       documentNumber: { not: "" },
       issueDate: monthRange(month),

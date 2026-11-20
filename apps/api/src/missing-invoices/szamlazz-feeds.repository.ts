@@ -1,7 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 
-import { takeOverEbizRow } from "../billing/external-billing-one-row.js";
+import {
+  NAV_SOURCE,
+  takeOverEbizRow,
+  takeOverNavRow,
+} from "../billing/external-billing-one-row.js";
 import type { ExternalInvoiceProjection } from "../billing/external-szamlazz-invoice.js";
 import type { IncomingInvoiceProjection } from "../billing/incoming-szamlazz-invoice.js";
 import {
@@ -149,16 +153,25 @@ export class SzamlazzFeedsRepository {
         where: { source_externalId: { source: "SZAMLAZZ", externalId } },
         select: { id: true },
       });
-      const ebizTwin = own
+      // ugyanígy a NAV kimenő lekérdezéséből felvett sort is (kártya 785dfea6): az csak a létezést hozta, a Számlázz.hu az egészet
+      const twin = own
         ? null
         : await transaction.externalBillingDocument.findFirst({
             where: {
-              source: "EBIZ",
+              source: { in: ["EBIZ", NAV_SOURCE] },
               documentNumber: data.documentNumber,
             },
             orderBy: { createdAt: "asc" },
-            select: { id: true, externalId: true },
+            select: { id: true, externalId: true, source: true },
           });
+      if (twin?.source === NAV_SOURCE) {
+        await transaction.externalBillingDocument.update({
+          where: { id: twin.id },
+          data: takeOverNavRow({ source: "SZAMLAZZ", externalId, ...data }),
+        });
+        return "PROJECTED";
+      }
+      const ebizTwin = twin;
       if (ebizTwin) {
         await transaction.externalBillingDocument.update({
           where: { id: ebizTwin.id },
