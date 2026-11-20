@@ -5,17 +5,25 @@ import { Prisma, type IncomingBillingDocument } from "@acropora/database";
 import { probablyNotTransferNote } from "@acropora/types";
 
 import {
-  ACCOUNT_KEEPING_BANK_TAX_BASES,
   WINDOW_DAYS,
-  bankDeductionEvidence,
+  bankDeductionEvidence as evidenceOf,
+  parseAccountBankTaxBases,
 } from "./due-invoices-bank-deduction.js";
+
+const bankDeductionEvidence = (input: {
+  rows: IncomingBillingDocument[];
+  bankFeeDebits: ReturnType<typeof fee>[];
+  bankTaxBases?: ReadonlySet<string>;
+}) => evidenceOf({ bankTaxBases: BASES, ...input });
 
 /*
   A BANK SAJÁT SZÁMLÁJA, AMIT A BANK LEVON (acrobot 58915, az OTP-sor). MI PIROSÍT: ha egy idegen szállító azonos összegű sora bekerül; ha a bank saját számlája egy más összegű, más pénznemű, a
   kiállítás előtti vagy az ablakon túli díj-levonáshoz kerül; ha egy terhelés két számlát igazol; ha a sztornózott számla igazolást kap; ha a bank számlája levonás nélkül kerül be; ha az ablak határa
   eltolódik; ha az ok szövege nem „valószínű” és nem nevezi meg a napot.
 */
-const BANK_TAX = "10537914-4-44";
+// neutral test data: no real company's tax number in the public base
+const BANK_TAX = "12345678-4-44";
+const BASES = new Set(["12345678"]);
 let n = 0;
 const row = (
   over: Partial<Record<string, unknown>> = {},
@@ -60,7 +68,6 @@ describe("bankDeductionEvidence", () => {
       }).size,
       0,
     );
-    assert.ok(ACCOUNT_KEEPING_BANK_TAX_BASES.has("10537914"));
   });
 
   it("the amount, the currency and the window must all fit: another amount or currency, a debit before the issue day, one past the window", () => {
@@ -120,6 +127,43 @@ describe("bankDeductionEvidence", () => {
     );
     assert.equal(
       bankDeductionEvidence({ rows: [row()], bankFeeDebits: [] }).size,
+      0,
+    );
+  });
+});
+
+describe("the configuration of the account-keeping bank", () => {
+  it("an empty or missing value runs no rule: nothing is evidence", () => {
+    const bank = row();
+    for (const bases of [
+      parseAccountBankTaxBases(undefined),
+      parseAccountBankTaxBases(""),
+      parseAccountBankTaxBases(" , "),
+    ])
+      assert.equal(
+        bankDeductionEvidence({
+          rows: [bank],
+          bankFeeDebits: [fee("2026-11-05")],
+          bankTaxBases: bases,
+        }).size,
+        0,
+      );
+  });
+
+  it("the value is comma-separated tax numbers, each cut to its 8-digit base; a short or digitless entry is dropped", () => {
+    assert.deepEqual(
+      [...parseAccountBankTaxBases("12345678, 87654321-4-44 ,abc,1234")].sort(),
+      ["12345678", "87654321"],
+    );
+  });
+
+  it("a supplier whose base is not in the configured list gets nothing", () => {
+    const other = row({ supplierTaxNumber: "87654321-2-44" });
+    assert.equal(
+      bankDeductionEvidence({
+        rows: [other],
+        bankFeeDebits: [fee("2026-11-05")],
+      }).size,
       0,
     );
   });

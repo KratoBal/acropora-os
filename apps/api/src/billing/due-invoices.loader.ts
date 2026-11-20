@@ -7,7 +7,11 @@ import type {
 import type { MissingInvoicesService } from "../missing-invoices/missing-invoices.service.js";
 import { budapestDay } from "./billing-document-list.js";
 import { buildDueInvoices } from "./due-invoices.js";
-import { bankDeductionEvidence } from "./due-invoices-bank-deduction.js";
+import {
+  ACCOUNT_BANK_TAX_BASES_ENV,
+  bankDeductionEvidence,
+  parseAccountBankTaxBases,
+} from "./due-invoices-bank-deduction.js";
 import { cardPaidSupplierEvidence } from "./due-invoices-card-history.js";
 import { withoutPdfTransfer } from "./due-invoices-pdf-transfer.js";
 import { pdfTextLines } from "../purchasing/supplier-invoice-import/pdf-text-lines.js";
@@ -35,6 +39,7 @@ export async function loadDueInvoices(
     reviews: Pick<IncomingReviewService, "pendingReadings">;
   },
   now: Date = new Date(),
+  environment: NodeJS.ProcessEnv = process.env,
 ): Promise<DueInvoicesResponse> {
   const database = prisma;
   const [rows, bankData, collected, readings, purchases, attached] =
@@ -57,7 +62,15 @@ export async function loadDueInvoices(
     await withoutPdfTransfer<ProbablyNotTransferEvidence>({
       // a kártyás ok elöl: ha egy sor mindkettőre jelölt, a kártyás múlt az erősebb (több számlán áll)
       evidence: new Map<string, ProbablyNotTransferEvidence>([
-        ...[...bankDeductionEvidence({ rows, bankFeeDebits })].map(
+        ...[
+          ...bankDeductionEvidence({
+            rows,
+            bankFeeDebits,
+            bankTaxBases: parseAccountBankTaxBases(
+              environment[ACCOUNT_BANK_TAX_BASES_ENV],
+            ),
+          }),
+        ].map(
           ([id, found]) =>
             [id, { kind: "BANK_DEDUCTION" as const, ...found }] as const,
         ),

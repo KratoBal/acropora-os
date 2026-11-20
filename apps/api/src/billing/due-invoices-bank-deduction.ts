@@ -6,17 +6,30 @@ import { supplierAccountKey } from "./supplier-bank-account-key.js";
 /**
  * A BANK SAJÁT SZÁMLÁJA, AMIT A BANK LEVON (acrobot 58915, nautilus 58712 javaslata; az OTP-sor, 9 525 Ft): a bank a saját díjait a számláról levonja, és a terhelés a kivonaton nem a számlához
  * párosított, hanem „Nem kell számla” (BANK_FEE). A sor ezért a „valószínűleg nem utalandó” szakaszba kerül, ha MIND a három igaz:
- *  1. a számla kiállítója MAGA A SZÁMLAVEZETŐ BANK (adószám-törzs szerint, `ACCOUNT_KEEPING_BANK_TAX_BASES`): egy idegen szállító azonos összegű sora nem eshet bele;
+ *  1. a számla kiállítója MAGA A SZÁMLAVEZETŐ BANK (adószám-törzs szerint, a környezetből: `DUE_INVOICES_ACCOUNT_BANK_TAX_BASES`): egy idegen szállító azonos összegű sora nem eshet bele;
  *  2. a számla bruttó összegével AZONOS (és azonos pénznemű) bank-díj terhelés áll a kivonaton, a számla kiállítása napjától számított `WINDOW_DAYS` napon belül;
  *  3. a terhelés EGYSZER használható: egy terhelés egy számlát igazol (a két azonos összegű díj egy hónapban eset a bank saját számlái között is csak egy-egy párt ad).
  * Semmi nem esik ki: a sor a szakaszban áll, „a bank levonta” okkal, ami „valószínű”, nem tény.
  *
- * A BANK ADÓSZÁMA: a számlavezető bank a kivonat-feltöltés forrása (`otp-statement.parser.ts`: minden betöltött kivonat OTP-é), adószám-törzse 10537914 (az OTP Bank Nyrt. kivonatán áll). Ha egy MÁSIK
- * számlavezető bank kivonata is betöltődik, annak törzsét ide kell venni; addig az ő számlái nem kapnak ilyen besorolást (a konzervatív oldal).
+ * A BANK ADÓSZÁMA A KÖRNYEZETBŐL JÖN, NEM A KÓDBÓL (barracuda 58920, Balázs 2026-09-25 elve: ez a kód egyszer publikus alap): az, hogy melyik bank a számlavezetőnk, cégadat. A
+ * `DUE_INVOICES_ACCOUNT_BANK_TAX_BASES` vesszővel elválasztott 8 jegyű adószám-törzsek listája. ÜRESEN A SZABÁLY NEM FUT (a konzervatív oldal: semmi nem mozog). Az éles értéket a környezet adja.
  */
-export const ACCOUNT_KEEPING_BANK_TAX_BASES: ReadonlySet<string> = new Set([
-  "10537914",
-]);
+export const ACCOUNT_BANK_TAX_BASES_ENV = "DUE_INVOICES_ACCOUNT_BANK_TAX_BASES";
+
+/**
+ * A környezeti érték: vesszővel elválasztott adószámok, mindegyikből az első 8 számjegy (a kötőjeles 11 jegyű alak is jó). A 8 jegynél rövidebb vagy számjegy nélküli elem kimarad. Üres vagy hiányzó
+ * érték üres halmaz: a szabály nem fut.
+ */
+export function parseAccountBankTaxBases(
+  value: string | undefined,
+): ReadonlySet<string> {
+  const bases = (value ?? "")
+    .split(",")
+    .map((part) => part.replace(/\D/g, ""))
+    .filter((digits) => digits.length >= 8)
+    .map((digits) => digits.slice(0, 8));
+  return new Set(bases);
+}
 
 /** A számla kiállításától a terhelés könyvelési napjáig eltelt legtöbb nap. */
 export const WINDOW_DAYS = 45;
@@ -34,8 +47,11 @@ const money = (value: { toFixed(digits?: number): string }, currency: string) =>
 export function bankDeductionEvidence(input: {
   rows: readonly IncomingBillingDocument[];
   bankFeeDebits: readonly BankFeeDebit[];
+  /** a számlavezető bank(ok) 8 jegyű adószám-törzse (`parseAccountBankTaxBases`); üresen nincs bizonyíték */
+  bankTaxBases: ReadonlySet<string>;
 }): ReadonlyMap<string, { bookingDate: string }> {
   const evidence = new Map<string, { bookingDate: string }>();
+  if (input.bankTaxBases.size === 0) return evidence;
   const bankRows = input.rows
     .filter((row) => {
       if (row.cancelled) return false;
@@ -47,7 +63,7 @@ export function bankDeductionEvidence(input: {
       return (
         key !== null &&
         key.startsWith("hu:") &&
-        ACCOUNT_KEEPING_BANK_TAX_BASES.has(key.slice(3))
+        input.bankTaxBases.has(key.slice(3))
       );
     })
     // a korábbi számla választ elébb a korábbi terhelést: determinisztikus párosítás

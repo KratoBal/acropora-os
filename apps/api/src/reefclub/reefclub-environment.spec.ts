@@ -96,6 +96,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   // the Lejáró számlák weekly mail (acrobot 58274): the default sender address and name and the scheduler's kill-switch, none a secret
   "DUE_INVOICES_MAIL_FROM",
   "DUE_INVOICES_MAIL_FROM_NAME",
+  // the account-keeping bank's tax base for the due list's bank-deduction reason (barracuda 58920): company data, not a secret
+  "DUE_INVOICES_ACCOUNT_BANK_TAX_BASES",
   "DUE_INVOICES_MAIL_SCHEDULER",
   "MNB_API_URL",
   "NEV",
