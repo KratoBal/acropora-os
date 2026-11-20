@@ -238,7 +238,7 @@ describe("az ismert szállító szabályai", { skip: gate.mode === "skip" }, () 
     );
   });
 
-  it("an acceptance logs the rule, raises the ceiling and the count, and an undo puts the document back unless it was paired meanwhile", async () => {
+  it("an acceptance logs the rule and the count (a machine one leaves the ceiling), and an undo puts the document back unless it was paired meanwhile", async () => {
     const rule = await rules.create(
       newRule({ label: `${MARK}-accepted`, taxKey: "DE777777777" }),
     );
@@ -265,7 +265,7 @@ describe("az ismert szállító szabályai", { skip: gate.mode === "skip" }, () 
     });
     assert.deepEqual(
       [stored.acceptedCount, stored.grossCeilings],
-      [1, { EUR: 9000 }],
+      [1, { EUR: 4950 }],
     );
     const document = await prisma.incomingSupplierDocument.findUniqueOrThrow({
       where: { id: documentId },
