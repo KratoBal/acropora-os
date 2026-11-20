@@ -2451,3 +2451,4 @@ export type {
   WebshopGiftCardTransaction,
   WebshopGiftCardTransactionKind,
 } from "./webshop-gift-cards.js";
+export type { DueInvoiceItem, DueInvoicesResponse } from "./due-invoices.js";
