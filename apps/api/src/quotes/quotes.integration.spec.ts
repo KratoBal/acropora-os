@@ -327,7 +327,11 @@ describe(
       } finally {
         await prisma.quote.update({
           where: { id: quoteId },
-          data: { customerId: null },
+          data: { customerId: null, status: "DRAFT" },
+        });
+        await prisma.quoteVersion.updateMany({
+          where: { quoteId },
+          data: { customerSnapshot: Prisma.DbNull },
         });
         await prisma.customer
           .delete({ where: { id: other.id } })
