@@ -5,6 +5,7 @@ import type {
   NavOnlineInvoiceClient,
 } from "../integrations/nav/nav-online-invoice.client.js";
 import type { NavCredentialsService } from "../integrations/nav/nav-credentials.service.js";
+import { EBIZ_DEFAULT_SINCE } from "../integrations/ebiz/ebiz-sync.service.js";
 import { NAV_SOURCE, invoiceNumberKey } from "./external-billing-one-row.js";
 
 /**
@@ -291,7 +292,25 @@ export const prismaNavOutboundWriter: NavOutboundWriter = {
 };
 
 export type NavOutboundRunResult = NavOutboundWindowResult &
-  Partial<NavOutboundWriteResult>;
+  Partial<NavOutboundWriteResult> & {
+    /** eBIZ-számla (EINV) a határnap előtti kelttel: nem vettük fel */
+    skippedEbizCutoff?: number;
+  };
+
+/**
+ * AZ eBIZ RÉGI SZÁMLÁI NEM KELLENEK (Balázs, 2026-10-02 19:44 UTC: „Ebizbol nem kellenek a regi szamlak. Csak oktober 1-tol”;
+ * acrobot 58116: a visszatöltés ezt nem írja felül). Az eBIZ szinkron a határnap előtti EINV számlát soha nem hozza be, ezért a NAV
+ * sem: a száraz futás hiányzóként mutatja, az írás kihagyja és megszámolja.
+ */
+export function beforeEbizCutoff(
+  item: NavInvoiceDigestItem,
+  since: string,
+): boolean {
+  return (
+    navOutboundSeries(item.invoiceNumber).trim().toUpperCase() === "EINV" &&
+    item.invoiceIssueDate.slice(0, 10) < since
+  );
+}
 
 export class NavOutboundBackfill {
   constructor(
@@ -314,8 +333,11 @@ export class NavOutboundBackfill {
     from: Date;
     to: Date;
     apply: boolean;
+    /** az eBIZ határnapja (`ebizSince`, ÉÉÉÉ-HH-NN); alapból Balázs napja */
+    ebizSince?: string;
     onWindow?: (result: NavOutboundRunResult) => void;
   }): Promise<NavOutboundRunResult[]> {
+    const ebizSince = options.ebizSince ?? EBIZ_DEFAULT_SINCE;
     const credentials = await this.credentials.resolve();
     const results: NavOutboundRunResult[] = [];
     for (const window of issueDateWindows(options.from, options.to)) {
@@ -346,12 +368,13 @@ export class NavOutboundBackfill {
       );
       if (options.apply) {
         const missing = new Set(result.missingNumbers);
-        Object.assign(
-          result,
-          await this.writer.write(
-            items.filter((item) => missing.has(item.invoiceNumber)),
-          ),
+        const wanted = items.filter((item) => missing.has(item.invoiceNumber));
+        const kept = wanted.filter(
+          (item) => !beforeEbizCutoff(item, ebizSince),
         );
+        Object.assign(result, await this.writer.write(kept), {
+          skippedEbizCutoff: wanted.length - kept.length,
+        });
       }
       options.onWindow?.(result);
       results.push(result);

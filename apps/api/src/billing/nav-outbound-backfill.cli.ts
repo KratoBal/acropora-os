@@ -6,6 +6,7 @@ import { NavConnectionRepository } from "../integrations/nav/nav-connection.repo
 import { NavCredentialCryptoService } from "../integrations/nav/nav-credential-crypto.service.js";
 import { NavCredentialsService } from "../integrations/nav/nav-credentials.service.js";
 import { NavOnlineInvoiceClient } from "../integrations/nav/nav-online-invoice.client.js";
+import { ebizSince } from "../integrations/ebiz/ebiz-sync.service.js";
 import {
   NavOutboundBackfill,
   parseNavOutboundArgs,
@@ -38,12 +39,13 @@ async function main(argv: readonly string[]): Promise<number> {
     from: args.from,
     to: args.to,
     apply: args.apply,
+    ebizSince: ebizSince(process.env),
     onWindow: (w) =>
       ki(
         `  ${w.windowStart.slice(0, 10)} .. ${w.windowEnd.slice(0, 10)}  látott ${w.seen}, megvan (külső) ${w.presentExternal}, megvan (OS) ${w.presentOwn}, HIÁNYZIK ${w.missing}` +
           `, sztornó ${w.storno}, módosító ${w.modification}, magánszemély ${w.privatePerson}` +
           (args.apply
-            ? `; felvéve ${w.created}, érvénytelenítve ${w.cancelled}, összeg nélkül kihagyva ${w.skippedNoAmount}`
+            ? `; felvéve ${w.created}, érvénytelenítve ${w.cancelled}, összeg nélkül kihagyva ${w.skippedNoAmount}, eBIZ-határ miatt kihagyva ${w.skippedEbizCutoff}`
             : "") +
           `\n`,
       ),

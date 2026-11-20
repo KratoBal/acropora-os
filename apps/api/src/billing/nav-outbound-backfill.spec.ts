@@ -7,6 +7,7 @@ import {
   NAV_PRIVATE_PERSON_NAME,
   NavOutboundBackfill,
   NavOutboundPageLimitError,
+  beforeEbizCutoff,
   type NavOutboundWriter,
   classifyNavOutbound,
   issueDateWindows,
@@ -360,6 +361,41 @@ describe("NavOutboundBackfill.run", () => {
         [3, 1, 1, 0, 0],
         [1, 1, 1, 0, 0],
       ],
+    );
+  });
+
+  it("az eBIZ határnap előtti EINV számla nem megy az íróhoz, megszámolva; a határnapi és a más sorozatú igen", async () => {
+    const client = {
+      queryInvoiceDigest: async () => ({
+        currentPage: 1,
+        availablePage: 1,
+        items: [
+          item("EINV000000700", { invoiceIssueDate: "2026-09-30" }),
+          item("einv000000701", { invoiceIssueDate: "2026-09-12" }),
+          item("EINV000000702", { invoiceIssueDate: "2026-10-01" }),
+          item("ACRW-2026/00400", { invoiceIssueDate: "2026-09-30" }),
+        ],
+      }),
+    } as never;
+    const written: string[][] = [];
+    const [result] = await new NavOutboundBackfill(client, credentials, none, {
+      write: async (items) => {
+        written.push(items.map((i) => i.invoiceNumber));
+        return { created: items.length, cancelled: 0, skippedNoAmount: 0 };
+      },
+    }).run({ from: day("2026-09-10"), to: day("2026-10-05"), apply: true });
+    assert.deepEqual(written, [["EINV000000702", "ACRW-2026/00400"]]);
+    assert.deepEqual(
+      [result!.missing, result!.created, result!.skippedEbizCutoff],
+      [4, 2, 2],
+    );
+    // a határnap felülírható (OTP_EBIZ_SINCE), mint az eBIZ szinkronnál
+    assert.equal(
+      beforeEbizCutoff(
+        item("EINV1", { invoiceIssueDate: "2026-09-30" }),
+        "2026-09-01",
+      ),
+      false,
     );
   });
 
