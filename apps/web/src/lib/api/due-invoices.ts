@@ -11,6 +11,21 @@ import { apiRequest } from "./client";
  * határidő szerint rendezve. Csak olvasás, a jog `finance.view`.
  */
 export const dueInvoicesApi = {
+  /**
+   * A SZÁLLÍTÓI BANKSZÁMLASZÁM KÉZI MEGADÁSA egy sorhoz (acrobot 58655): `finance.manage`. A hibát mondatban adja (400 érvénytelen, 422 nem megengedett); a 409 azt jelenti, hogy a szállítónak
+   * már van kitöltött számlaszáma, és a cseréhez a `confirmReplace` kell.
+   */
+  setSupplierAccount(
+    token: string,
+    rowId: string,
+    input: { account: string; confirmReplace?: boolean },
+  ) {
+    return apiRequest<{ account: string; changed: boolean }>(
+      `/billing/due-invoices/${encodeURIComponent(rowId)}/supplier-account`,
+      token,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
+  },
   list(token: string, signal?: AbortSignal) {
     return apiRequest<DueInvoicesResponse>(
       "/billing/due-invoices",

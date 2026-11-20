@@ -8,6 +8,8 @@ import type {
 } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "@/lib/api/client";
+
 import { DueInvoicesPage } from "./due-invoices-page";
 
 /*
@@ -20,7 +22,7 @@ vi.mock("next/font/local", () => ({
   default: () => ({ className: "pilot-inter-stub" }),
 }));
 
-const api = vi.hoisted(() => ({ list: vi.fn() }));
+const api = vi.hoisted(() => ({ list: vi.fn(), setSupplierAccount: vi.fn() }));
 vi.mock("@/lib/api/due-invoices", () => ({ dueInvoicesApi: api }));
 
 const auth = vi.hoisted(() => ({ role: "OWNER" as UserRole }));
@@ -78,6 +80,7 @@ const response = (
 beforeEach(() => {
   auth.role = "OWNER";
   api.list.mockReset().mockResolvedValue(response([row()]));
+  api.setSupplierAccount.mockReset();
 });
 
 describe("the due invoices page", () => {
@@ -244,5 +247,154 @@ describe("the due invoices page", () => {
     await waitFor(() =>
       expect(screen.getByText("Alfa Kft.")).toBeInTheDocument(),
     );
+  });
+});
+
+/*
+  A SZÁLLÍTÓI SZÁMLASZÁM KÉZI MEGADÁSA A LISTÁN (acrobot 58655). MI PIROSÍT: ha a Pénzügy írási joga nélkül is lenne megadó gomb; ha a számla saját vagy a törzsből/másik számláról pótolt számlaszám mellett
+  is lenne; ha a hiányzó vagy a kitöltésből jött számlaszám mellett nem; ha a mentés nem a beírt számlaszámmal és a sor azonosítójával menne; ha a szerver mondata (érvénytelen, nem megengedett)
+  nem látszana; ha a csere megerősítés nélkül menne, vagy a megerősítés nem küldené a confirmReplace-t; ha mentés után a lista nem töltődne újra.
+*/
+describe("entering a supplier bank account by hand", () => {
+  const missing = row({
+    id: "m",
+    supplierName: "Hiányos Kft.",
+    supplierBankAccount: null,
+    supplierBankAccountSource: null,
+    missing: {
+      dueDate: false,
+      supplierBankAccount: true,
+      paymentMethod: false,
+    },
+  });
+  const fromPdf = row({
+    id: "p",
+    supplierName: "PDF Kft.",
+    supplierBankAccount: "11773016-11111018",
+    supplierBankAccountSource: "INVOICE_PDF",
+  });
+
+  it("offers the entry only to the finance manage right, and only where it can take effect", async () => {
+    api.list.mockResolvedValue(
+      response([
+        missing,
+        fromPdf,
+        row({ id: "o", supplierName: "Saját Kft." }),
+        row({
+          id: "x",
+          supplierName: "Másik Kft.",
+          supplierBankAccount: "10918001-00000017",
+          supplierBankAccountSource: "OTHER_INVOICE",
+        }),
+        row({
+          id: "t",
+          supplierName: "Törzs Kft.",
+          supplierBankAccount: "10918001-00000017",
+          supplierBankAccountSource: "MASTER",
+        }),
+      ]),
+    );
+    render(<DueInvoicesPage />);
+    const rowOf = async (name: string) =>
+      (await screen.findByText(name)).closest("tr")!;
+    expect(
+      within(await rowOf("Hiányos Kft.")).getByText("Számlaszám megadása"),
+    ).toBeInTheDocument();
+    expect(
+      within(await rowOf("PDF Kft.")).getByText("Csere"),
+    ).toBeInTheDocument();
+    for (const name of ["Saját Kft.", "Másik Kft.", "Törzs Kft."])
+      expect(
+        within(await rowOf(name)).queryByRole("button", {
+          name: /megadása|Csere/,
+        }),
+      ).toBeNull();
+  });
+
+  it("shows nothing without the finance manage right", async () => {
+    auth.role = "VIEWER";
+    api.list.mockResolvedValue(response([missing]));
+    render(<DueInvoicesPage />);
+    await screen.findByText("Hiányos Kft.");
+    expect(screen.queryByText("Számlaszám megadása")).toBeNull();
+  });
+
+  it("saves the typed account for the row and reloads the list", async () => {
+    api.list.mockResolvedValue(response([missing]));
+    api.setSupplierAccount.mockResolvedValue({
+      account: "11773016-11111018",
+      changed: true,
+    });
+    const user = userEvent.setup();
+    render(<DueInvoicesPage />);
+    await user.click(await screen.findByText("Számlaszám megadása"));
+    await user.type(
+      screen.getByLabelText(/Bankszámlaszám: Hiányos Kft\./),
+      "11773016-11111018",
+    );
+    await user.click(screen.getByRole("button", { name: "Mentés" }));
+    await waitFor(() =>
+      expect(api.setSupplierAccount).toHaveBeenCalledWith("token-1", "m", {
+        account: "11773016-11111018",
+      }),
+    );
+    await waitFor(() => expect(api.list).toHaveBeenCalledTimes(2));
+  });
+
+  it("shows the server's sentence when the entry is refused", async () => {
+    api.list.mockResolvedValue(response([missing]));
+    api.setSupplierAccount.mockRejectedValue(
+      new ApiError(
+        "A számlaszám nem érvényes: az ellenőrző összeg nem stimmel.",
+        400,
+      ),
+    );
+    const user = userEvent.setup();
+    render(<DueInvoicesPage />);
+    await user.click(await screen.findByText("Számlaszám megadása"));
+    await user.type(
+      screen.getByLabelText(/Bankszámlaszám:/),
+      "11773016-11111019",
+    );
+    await user.click(screen.getByRole("button", { name: "Mentés" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "A számlaszám nem érvényes",
+    );
+    expect(api.list).toHaveBeenCalledTimes(1);
+  });
+
+  it("replaces a filled account only after a separate confirmation that sends confirmReplace", async () => {
+    api.list.mockResolvedValue(response([fromPdf]));
+    api.setSupplierAccount
+      .mockRejectedValueOnce(
+        new ApiError(
+          "A szállítónak már van számlaszáma ...1018 (a számla PDF-jéből). A csere külön megerősítés.",
+          409,
+        ),
+      )
+      .mockResolvedValueOnce({ account: "10918001-00000017", changed: true });
+    const user = userEvent.setup();
+    render(<DueInvoicesPage />);
+    await user.click(await screen.findByText("Csere"));
+    await user.type(
+      screen.getByLabelText(/Bankszámlaszám:/),
+      "10918001-00000017",
+    );
+    await user.click(screen.getByRole("button", { name: "Mentés" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("...1018");
+    expect(api.setSupplierAccount).toHaveBeenCalledTimes(1);
+    expect(api.setSupplierAccount).toHaveBeenLastCalledWith("token-1", "p", {
+      account: "10918001-00000017",
+    });
+    await user.click(
+      screen.getByRole("button", { name: "Csere megerősítése" }),
+    );
+    await waitFor(() =>
+      expect(api.setSupplierAccount).toHaveBeenLastCalledWith("token-1", "p", {
+        account: "10918001-00000017",
+        confirmReplace: true,
+      }),
+    );
+    await waitFor(() => expect(api.list).toHaveBeenCalledTimes(2));
   });
 });

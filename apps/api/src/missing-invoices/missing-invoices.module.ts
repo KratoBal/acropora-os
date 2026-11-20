@@ -4,6 +4,7 @@ import { DueInvoicesController } from "../billing/due-invoices.controller.js";
 import { DueInvoicesMailScheduler } from "../billing/due-invoices-mail.scheduler.js";
 import { DueInvoicesMailService } from "../billing/due-invoices-mail.service.js";
 import { DueInvoicesSettingsController } from "../billing/due-invoices-settings.controller.js";
+import { ManualSupplierAccountController } from "../billing/supplier-bank-account-manual.controller.js";
 import { DueInvoicesSettingsRepository } from "../billing/due-invoices-settings.repository.js";
 import { NotificationsModule } from "../notifications/notifications.module.js";
 import { IncomingBillingDocumentsController } from "../billing/incoming-billing-documents.controller.js";
@@ -46,6 +47,7 @@ import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
   controllers: [
     DueInvoicesController,
     DueInvoicesSettingsController,
+    ManualSupplierAccountController,
     IncomingBillingDocumentsController,
     InvoiceCollectionSuggestionsController,
     SupplierRulesController,

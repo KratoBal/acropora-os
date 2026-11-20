@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { supplierAccountKey } from "./supplier-bank-account-key.js";
+import {
+  isGroupVatTaxNumber,
+  supplierAccountKey,
+} from "./supplier-bank-account-key.js";
 
 /*
   A SZÁLLÍTÓ KULCSA (acrobot 58553). MI PIROSÍT: ha ugyanazon szállító két írásmódja (8 vagy 11 jegy, kötőjel, HU előtag) két kulcs lenne; ha két szállító egy kulcson osztozna; ha a külföldi
@@ -50,6 +53,37 @@ describe("a szállító kulcsa a kitöltött számlaszámhoz", () => {
     assert.notEqual(
       supplierAccountKey("32435119", null, "A"),
       supplierAccountKey("12369410", null, "A"),
+    );
+  });
+});
+
+describe("a csoportos ÁFA-alany nem szállító-kulcs (barracuda #2801)", () => {
+  it("a 11 jegyű adószám 9. jegye az 5: csoportos; a 4, a 2, a 8 jegyű törzsszám és az üres nem", () => {
+    for (const tax of ["12345678-5-41", "12345678541", "HU12345678-5-41"])
+      assert.equal(isGroupVatTaxNumber(tax), true, tax);
+    for (const tax of [
+      "12345678-2-41",
+      "12345678-4-41",
+      "12345678",
+      "",
+      null,
+      undefined,
+    ])
+      assert.equal(isGroupVatTaxNumber(tax), false, String(tax));
+  });
+
+  it("a csoport-adószámú szállító a névre esik (az nem ír és nem pótol), a tag saját adószámú sora a hazai kulcsot kapja", () => {
+    assert.equal(
+      supplierAccountKey("12345678-5-41", null, "Csoport Tag Kft."),
+      "name:csoport tag kft.",
+    );
+    assert.equal(
+      supplierAccountKey(null, "HU12345678-5-41", "Csoport Tag Kft."),
+      "name:csoport tag kft.",
+    );
+    assert.equal(
+      supplierAccountKey("12345678-4-41", null, "Csoport Tag Kft."),
+      "hu:12345678",
     );
   });
 });
