@@ -20,7 +20,7 @@ const errorText = (cause: unknown, fallback: string) =>
 
 /** Centből a lapon látszó összeg (`4950` + EUR -> 49,50 EUR). */
 const centsText = (cents: number, currency: string) =>
-  formatAmount((cents / 100).toFixed(2), currency);
+  formatAmount(cents / 100, currency);
 
 /**
  * MILYEN SZABÁLY VEHETŐ FEL, A SZERVER `canCreate`-JE SZERINT (murena 58021: a kliens ne számolja újra). Ingadozó adószámnál
