@@ -1,0 +1,59 @@
+import type { DecimalText } from "./billing-document-amounts.js";
+
+/**
+ * LEJÁRÓ SZÁMLÁK (Balázs, Acropora OS szál, 2026-11-20 14:50 UTC; acrobot 58227): a bejövő számlák, amelyeket átutalással kell
+ * fizetni, és még nincsenek (teljesen) kifizetve; a fizetési határidő szerint rendezve. Ez a lista az 1. szelet; a heti PDF és a
+ * levél (2.), a beállítás (3.) külön szelet.
+ */
+
+/**
+ * Egy tétel. A hiányzó adat NEM ejti ki a sort: a `missing` mondja meg, melyik mező hiányzik, és a felület „nincs adat”-ot ír
+ * (Balázs jóváhagyta, 2026-11-20 14:51 UTC).
+ */
+export interface DueInvoiceItem {
+  /** a bejövő számla sorának azonosítója (a Bejövő számlák listáé) */
+  id: string;
+  documentNumber: string;
+  /** a cég, akinek fizetünk */
+  supplierName: string;
+  /** `ÉÉÉÉ-HH-NN`, vagy `null`, ha a számla nem hozott fizetési határidőt */
+  dueDate: string | null;
+  /** a határidő a mai nap előtt volt, és a számla nincs teljesen kifizetve */
+  overdue: boolean;
+  /** hány napja lejárt (csak lejártnál, különben `null`) */
+  daysOverdue: number | null;
+  /** a cég bankszámlaszáma, ahogy a számlán áll; `null`: nincs adat */
+  supplierBankAccount: string | null;
+  /** a HÁTRALÉK: a bruttó mínusz a kifizetett rész (a számla pénznemében) */
+  outstanding: DecimalText;
+  currency: string;
+  /** a közlemény: alapból a számla száma */
+  reference: string;
+  /**
+   * Igaz, ha a közlemény az alapértelmezés (a számla száma): a számla PDF-jének kért közleménye még nincs olvasatként az
+   * adatban, ezért a sor ezt jelöli (Balázs kérése).
+   */
+  referenceIsDefault: boolean;
+  /** a számlán álló fizetési mód, ahogy áll; `null`: nincs adat */
+  paymentMethod: string | null;
+  missing: {
+    dueDate: boolean;
+    supplierBankAccount: boolean;
+    paymentMethod: boolean;
+  };
+}
+
+export interface DueInvoicesResponse {
+  /** a nap, amihez a „lejárt” mérve van (`ÉÉÉÉ-HH-NN`, Budapest) */
+  asOf: string;
+  /** lejárt, ki nem fizetett tétel elöl (a legrégebben lejárt legfelül), utána a határidő szerint növekvően, határidő nélkül a végén */
+  items: DueInvoiceItem[];
+  summary: {
+    count: number;
+    overdue: number;
+    /** a sorok száma, amelyiknek hiányzik a határidő, a bankszámlaszám vagy a fizetési mód */
+    withMissingData: number;
+    /** pénznemenként a hátralék összege */
+    totals: { currency: string; outstanding: DecimalText }[];
+  };
+}

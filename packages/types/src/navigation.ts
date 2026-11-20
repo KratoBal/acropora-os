@@ -463,6 +463,15 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.FINANCE_VIEW),
   },
   {
+    /**
+     * LEJÁRÓ SZÁMLÁK (Balázs, 2026-11-20): az átutalással fizetendő, még ki nem fizetett bejövő számlák, a határidő szerint. A
+     * Hiányzó számlák mellett, ugyanazzal a joggal (`finance.view`): a lista bankszámlaszámokat hordoz.
+     */
+    id: "due-invoices",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.FINANCE_VIEW),
+  },
+  {
     id: "foxpost-settlement",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.FINANCE_VIEW),

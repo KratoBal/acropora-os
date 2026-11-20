@@ -193,7 +193,13 @@ describe("navigation", () => {
       ],
       [
         "Pénzügy",
-        ["Számlázás", "NAV számla lekérés", "Hiányzó számlák", "Elszámolások"],
+        [
+          "Számlázás",
+          "NAV számla lekérés",
+          "Hiányzó számlák",
+          "Lejáró számlák",
+          "Elszámolások",
+        ],
       ],
       [
         "Raktár és beszerzés",
@@ -455,6 +461,7 @@ describe("navigation", () => {
     ["/berles", "rentals", "Bérlés"],
     ["/penzugy/elszamolasok", "settlements", "Elszámolások"],
     ["/penzugy/hianyzo-szamlak", "missing-invoices", "Hiányzó számlák"],
+    ["/penzugy/lejaro-szamlak", "due-invoices", "Lejáró számlák"],
     ["/raktar", "inventory", "Leltár"],
     ["/keszlet-egyeztetes", "inventory-reconciliation", "Készlet-egyeztetés"],
     ["/keszlet-kimenosor", "stock-sync-outbox", "Készlet-kimenősor"],
@@ -834,6 +841,8 @@ describe("navigation", () => {
     // A Hiányzó számlák 2026-09-30-án jött, a bevezetés UTÁN; a jog az
     // Elszámolásoké (`finance.view`).
     "/penzugy/hianyzo-szamlak": "finance.view",
+    // A Lejáró számlák 2026-11-20-án jött, a bevezetés UTÁN; a jog a Hiányzó számlákéval azonos (`finance.view`).
+    "/penzugy/lejaro-szamlak": "finance.view",
     "/raktar": "inventory.view",
     "/keszlet-egyeztetes": "inventory.view",
     "/keszlet-kimenosor": "inventory.view",
