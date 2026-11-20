@@ -453,6 +453,28 @@ describe("the PDF from the UNAS order's cmfx link", () => {
     );
   });
 
+  it("a failed fetch names only the error's name and code, never its message (it may carry the link)", async () => {
+    let out = "";
+    const pdfs = await readUnasLinkPdfs(
+      [
+        {
+          number: "ACRW-2026/00536",
+          url: "https://www.cmfx.hu/sz/abc?t=SECRET",
+        },
+      ],
+      (async () => {
+        throw Object.assign(
+          new Error("connect failed to https://www.cmfx.hu/sz/abc?t=SECRET"),
+          { name: "Error", code: "ECONNRESET" },
+        );
+      }) as never,
+      (line) => (out += line),
+      async () => undefined,
+    );
+    assert.deepEqual(pdfs, []);
+    assert.equal(out, "LINK ACRW-2026/00536 hiba: Error ECONNRESET\n");
+  });
+
   it("main --unas-link: the rows' links, the same checks, WOULD_STORE on a dry run; not together with --dir", async () => {
     let out = "";
     const linksAsked: string[][] = [];
