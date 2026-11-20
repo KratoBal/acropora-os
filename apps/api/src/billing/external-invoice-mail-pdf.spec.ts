@@ -6,8 +6,8 @@ import { describe, it } from "node:test";
 
 import {
   CLI_RATE_LIMIT_DELAYS_MS,
+  CLI_REQUEST_GAP_MS,
   REQUEST_GAP_MS,
-  cliRequestGapMs,
   main,
   readCmfxMail,
 } from "./external-invoice-mail-pdf.cli.js";
@@ -345,17 +345,8 @@ describe("the letter really came from cmfx", () => {
 });
 
 describe("the manual run's pace (785dfea6, acrobot 58354: the 2026-03 --apply hit GOOGLE_RATE_LIMITED twice)", () => {
-  it("one second between requests by default; MAIL_PDF_REQUEST_GAP_MS sets it, never below the daily job's gap", () => {
-    assert.deepEqual(
-      [
-        cliRequestGapMs({}),
-        cliRequestGapMs({ MAIL_PDF_REQUEST_GAP_MS: "3000" }),
-        cliRequestGapMs({ MAIL_PDF_REQUEST_GAP_MS: "100" }),
-        cliRequestGapMs({ MAIL_PDF_REQUEST_GAP_MS: "lassan" }),
-      ],
-      [1_000, 3_000, 1_000, 1_000],
-    );
-    assert.ok(cliRequestGapMs({}) >= REQUEST_GAP_MS);
+  it("one second between requests, four times the daily job's gap", () => {
+    assert.deepEqual([CLI_REQUEST_GAP_MS, REQUEST_GAP_MS], [1_000, 250]);
   });
 
   it("waits up to five times after a rate limit, the last one five minutes", () => {
