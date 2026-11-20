@@ -647,6 +647,76 @@ export interface InvoiceCollectionSuggestionsResponse {
   staleCount: number;
 }
 
+/**
+ * AZ ISMERT SZÁLLÍTÓ SZABÁLYA (PDF-javaslatok 2. útja; acrobot 57881, 57884). Egy szállítót egy ember fogad el egyszer, és a
+ * szállító következő PDF-jét a begyűjtés magától elfogadja (naplózva, visszavonhatóan). `TAX`: a PDF-ből kiolvasott
+ * adószám/EU-adószám; `NAME`: a szállító jellemző neve a PDF szövegében, csak külső feladóval.
+ */
+export type SupplierRuleKind = "TAX" | "NAME";
+
+export interface SupplierRuleView {
+  id: string;
+  kind: SupplierRuleKind;
+  /** a szállító neve a lapon: amit az ember beírt, vagy az adószám */
+  label: string;
+  /** TAX: a normalizált adószám; NAME: a jellemző szavak */
+  key: string;
+  /** a feladó tartománya, vagy null: megbízott továbbítótól jött (csak TAX) */
+  senderDomain: string | null;
+  /** pénznemenként a legnagyobb elfogadott bruttó, centben */
+  grossCeilings: Record<string, number>;
+  acceptedCount: number;
+  createdAt: string;
+  /** null: él; különben mikor kapcsolták ki */
+  disabledAt: string | null;
+}
+
+/** Mit tehet az ember egy döntésre váró PDF-fel a szabály létrehozásához (`GET suggestions/:id/rule-preview`). */
+export interface SupplierRulePreview {
+  documentId: string;
+  /** a PDF-ből olvasható normalizált adószám, vagy null: nincs (név alapú szabály kell) */
+  taxKey: string | null;
+  /** igaz, ha a feladó külső (nem a begyűjtött postafiókunk tartománya): név alapú szabály csak ilyennel él */
+  externalSender: boolean;
+  senderDomain: string | null;
+  /** ugyanattól a külső feladótól álló függő PDF-ek KÜLÖNBÖZŐ adószámot hordoznak: valószínűleg olvasó-hiba, név alapú szabály javasolt */
+  taxLooksUnstable: boolean;
+  /** hány MÁSIK függő PDF fogadódna el azonnal, ha a szabály létrejönne (a mai szabály-egyeztetéssel) */
+  pendingCount: Record<SupplierRuleKind, number>;
+}
+
+export interface AcceptWithRuleInput {
+  kind: SupplierRuleKind;
+  /** a szállító neve a PDF-en: a NAME kulcs forrása (kötelező), TAX-nál a lapon látszó név */
+  vendorName?: string;
+  /** a függő, a szabály alá eső többi PDF-et is elfogadja (az ember megerősítésével) */
+  alsoPending?: boolean;
+}
+
+export interface AcceptWithRuleResult {
+  ruleId: string;
+  /** hamis: már élt ugyanilyen szabály, azt használtuk */
+  created: boolean;
+  /** hány további függő PDF fogadódott el a szabály alapján */
+  alsoAccepted: number;
+}
+
+/** Egy, a szabály nevén elfogadott PDF a visszavonás listájához. */
+export interface AutoAcceptedView {
+  documentId: string;
+  fileName: string;
+  sender: string | null;
+  receivedAt: string | null;
+  acceptedAt: string;
+  ruleId: string;
+  invoiceNumber: string | null;
+  gross: string | null;
+  currency: string | null;
+}
+
+/** A visszavonás eredménye: UNDONE, vagy IN_USE (közben párosult/csatolták: előbb azt kell visszavonni). */
+export type AutoAcceptUndoResult = "UNDONE" | "IN_USE";
+
 /** A javaslat sorsa: elfogadva jelölt lesz, elvetve a dokumentum törlődik. */
 export type InvoiceCollectionSuggestionDecision = "ACCEPT" | "REJECT";
 

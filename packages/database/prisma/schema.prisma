@@ -9492,6 +9492,9 @@ model IncomingSupplierDocument {
   /// auditnaplóban látszik).
   reviewedAt              DateTime?
   reviewedByUserId        String?
+  /// Az ismert szállító szabálya, ami ezt a dokumentumot magától elfogadta (`IncomingSupplierRule`); NULL: ember döntött,
+  /// vagy nincs döntés. A visszavonás ebből és a `reviewedAt`-ből tudja, mit állít vissza.
+  acceptedByRuleId        String?
   /// A beszerzési számla, amihez kézzel csatolták (kártya 5ec62e35, Luca: a
   /// beszkennelt számla). Közvetlen kapcsolat: ugyanarra a számlaszámra és
   /// adószámra ez nyer a szám szerinti párosítás előtt.
@@ -9505,9 +9508,38 @@ model IncomingSupplierDocument {
 
   @@unique([gmailMessageId, fileName])
   @@index([reviewState])
+  @@index([acceptedByRuleId])
   @@index([expectedArrivalId])
   @@index([purchaseInvoiceId])
   @@index([sha256])
+}
+
+/// AZ ISMERT SZÁLLÍTÓ SZABÁLYA (PDF-javaslatok 2. útja; acrobot 57881, 57884, 2026-11-20). Egy szállítót egy ember fogad el
+/// egyszer a Javasolt számlák lapon, és a szállító következő PDF-jét a begyűjtés magától elfogadja (naplózva, visszavonhatóan).
+/// KULCS: `TAX` (a PDF-ből kiolvasott adószám/EU-adószám, normalizálva: `taxKey`) vagy `NAME` (a szállító jellemző szavai a PDF
+/// szövegében: `nameKey`); a NAME csak külső feladóval él. `senderDomain`: a feladó tartománya betűkre-számjegyekre szűrve; NULL,
+/// ha a szabály egy megbízott továbbítótól (a begyűjtött postafiókok tartománya) jött, ami csak TAX-nál lehet. Egy aktív kulcs
+/// egyszer áll (részleges egyedi index a migrációban: a Prisma nem tudja kifejezni).
+model IncomingSupplierRule {
+  id               String    @id @default(cuid())
+  /// TAX vagy NAME
+  kind             String
+  taxKey           String?
+  nameKey          String?
+  senderDomain     String?
+  /// A szállító neve a lapon: amit az ember beírt, vagy az adószám.
+  label            String
+  /// Pénznemenként a legnagyobb elfogadott bruttó, centben (`{"EUR": 12345}`): efölött a háromszorosa emberre marad.
+  grossCeilings    Json      @default("{}")
+  acceptedCount    Int       @default(0)
+  /// Az első, ember által elfogadott dokumentum.
+  sourceDocumentId String?
+  createdByUserId  String?
+  createdAt        DateTime  @default(now())
+  disabledAt       DateTime?
+  disabledByUserId String?
+
+  @@index([disabledAt])
 }
 
 enum IncomingSupplierDocumentStatus {

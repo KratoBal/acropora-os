@@ -18,7 +18,14 @@ import {
 import { pdfTextLines } from "../../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import { SupplierInvoiceImportService } from "../../purchasing/supplier-invoice-import/supplier-invoice-import.service.js";
 import { normalizeName } from "../missing-invoice-matching.js";
-import { corroboratedBy } from "./invoice-corroboration.js";
+import { corroboratedBy, senderDomain } from "./invoice-corroboration.js";
+import {
+  amountlessAccepted,
+  decideSupplierRule,
+  supplierRulesLive,
+  trustedForwarderDomains,
+} from "./supplier-rule.js";
+import { SupplierRulesRepository } from "./supplier-rules.repository.js";
 import { payeeFromText } from "../payee-check.js";
 import {
   invoiceCollectionDays,
@@ -175,6 +182,12 @@ export class InvoiceCollectionService {
      */
     @Optional()
     private readonly classifier: LetterClassJevService | null = null,
+    /**
+     * AZ ISMERT SZÁLLÍTÓ SZABÁLYAI (`supplier-rule.ts`). A kapcsolója a sajátja (`INVOICE_SUPPLIER_RULES=live`, alapból KI):
+     * kikapcsolva a kötetlen PDF emberre vár, mint eddig.
+     */
+    @Optional()
+    private readonly supplierRules: SupplierRulesRepository | null = null,
   ) {}
 
   /**
@@ -364,6 +377,18 @@ export class InvoiceCollectionService {
     );
   }
 
+  private trustedDomainList: string[] | null = null;
+  /** A saját továbbítóink: a begyűjtött postafiókok tartománya és a beállított további megbízottak. */
+  private trustedDomains(): string[] {
+    this.trustedDomainList ??= trustedForwarderDomains(
+      invoiceCollectionSources(this.environment).flatMap((source) =>
+        "user" in source ? [source.user] : [],
+      ),
+      this.environment,
+    );
+    return this.trustedDomainList;
+  }
+
   private ownAccountDigits: Promise<string[]> | null = null;
   /** Az ismert bejövő számok, futásonként egyszer (`withKnownNumber`). */
   private knownNumberList: Promise<KnownInvoiceNumber[]> | null = null;
@@ -549,6 +574,95 @@ export class InvoiceCollectionService {
         - a száraz futás nem ír semmit;
         - egy már tárolt, még nem párosodott példány UNASSIGNED marad, de az olvasata a mai olvasóé lesz.
     */
+    /*
+      AZ ISMERT SZÁLLÍTÓ SZABÁLYA (PDF-javaslatok 2. útja; acrobot 57881, 57884): ha egy ember már elfogadott ilyen szállítót
+      (adószám vagy név, a feladó tartományával), a PDF rendes begyűjtött dokumentum lesz, naplózva és visszavonhatóan. Csak a
+      többi kötés UTÁN fut, a díjbekérőn soha, és a kiugró, új pénznemű vagy összeg nélküli PDF emberre marad
+      (`decideSupplierRule`). A száraz újraértékelés csak feljegyzi.
+    */
+    const bySupplierRule = async (
+      reading: InvoiceTextReading,
+      kind: "INVOICE" | "PROFORMA",
+      payee: string,
+    ): Promise<InvoiceCollectionVerdict | null> => {
+      if (
+        !this.supplierRules ||
+        !supplierRulesLive(this.environment) ||
+        kind === "PROFORMA"
+      )
+        return null;
+      const rules = await this.supplierRules.activeRules();
+      if (rules.length === 0) return null;
+      const decision = decideSupplierRule({
+        rules,
+        document: {
+          taxNumber: reading.supplierTaxNumber,
+          senderDomain: senderDomain(found.sender),
+          text,
+          gross: reading.gross ?? null,
+          currency: reading.currency ?? null,
+          payee,
+        },
+        trustedDomains: this.trustedDomains(),
+        normalizeName,
+        amountless: amountlessAccepted(this.environment),
+      });
+      if (!decision.accept) return null;
+      // ugyanazzal a számmal már tárolt másik dokumentum: ember dönt (a saját, újraolvasott példány nem számít)
+      if (reading.invoiceNumber) {
+        const same = await this.repository.sameNumberDocuments(
+          reading.invoiceNumber,
+        );
+        if (same.length > (reassess ? 1 : 0)) return null;
+      }
+      const detail = `szállítói szabály (${decision.rule.kind}): ${decision.rule.taxKey ?? decision.rule.nameKey ?? ""}`;
+      if (this.dry) {
+        this.dry.push({
+          source,
+          externalId,
+          fileName: found.fileName,
+          before: await this.repository.verdictOf(
+            source,
+            externalId,
+            found.fileName,
+          ),
+          after: "STORED",
+          detail,
+        });
+        counts.storedCount++;
+        return "STORED";
+      }
+      const documentId = await persist({
+        source,
+        externalId,
+        fileName: found.fileName,
+        sender: found.sender,
+        subject: found.subject,
+        receivedAt: found.receivedAt,
+        content: found.content,
+        sha256,
+        read: false,
+        kind,
+        importResult: null,
+        textReading: reading,
+        payee,
+      });
+      if (!documentId) return skip("DUPLICATE", "SAME_CONTENT");
+      await this.supplierRules.recordAccepted({
+        ruleId: decision.rule.id,
+        documentId,
+        grossCents: decision.grossCents,
+        currency: decision.currency,
+        userId: null,
+        signals: {
+          ruleKind: decision.rule.kind,
+          senderDomain: senderDomain(found.sender),
+          fileName: found.fileName,
+        },
+      });
+      counts.storedCount++;
+      return "STORED";
+    };
     const keepUnassigned = async (
       reading: InvoiceTextReading | null,
       kind: "INVOICE" | "PROFORMA",
@@ -720,6 +834,13 @@ export class InvoiceCollectionService {
               DecisionRun-t ír, a száraz út pedig semmit nem írhat. Ott a fájl
               UNMATCHED-ként látszik.
             */
+            // az ismert szállító szabálya a Jev előtt: ha egy ember már elfogadta ezt a szállítót, a besorolás sem kell
+            const ruled = await bySupplierRule(
+              withLabelledTotal(textReading, lines),
+              looksLikeProforma(text) ? "PROFORMA" : "INVOICE",
+              payeeFromText(text),
+            );
+            if (ruled) return ruled;
             const suggestion = this.dry
               ? null
               : await this.suggestionFor(source, externalId, lines, found);

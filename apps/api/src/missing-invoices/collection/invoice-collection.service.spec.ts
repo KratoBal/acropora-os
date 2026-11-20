@@ -20,6 +20,8 @@ import {
 import type { KnownInvoiceFacts } from "./invoice-corroboration.js";
 import type { CardDebit, KnownInvoiceNumber } from "./invoice-text.js";
 import type { LetterClassJevService } from "./letter-class-jev.service.js";
+import type { SupplierRule } from "./supplier-rule.js";
+import type { SupplierRulesRepository } from "./supplier-rules.repository.js";
 import {
   INVOICE_COLLECTION_HEARTBEAT_MS,
   InvoiceCollectionService,
@@ -98,6 +100,9 @@ function setup(input: {
   before?: string | null;
   /** a már tárolt dokumentumok számlaszám szerint */
   storedNumbers?: Record<string, { fileName: string; origin: string }[]>;
+  /** az ismert szállító szabályai; hiányában a szolgáltatás nem kap szabály-tárolót */
+  supplierRules?: SupplierRule[];
+  /** a szabály alá eső PDF a már tárolt, még nem párosodott példány tartalma is (újraolvasás) */
   /** a Jev levél-besorolója (4. szelet); hiányában nincs javaslat */
   classify?: (letter: {
     fileName: string;
@@ -106,6 +111,7 @@ function setup(input: {
   }) => Promise<unknown>;
 }) {
   const classified: string[] = [];
+  const accepted: Record<string, unknown>[] = [];
   const stored: CollectedDocumentInput[] = [];
   const promoted: { id: string; document: CollectedDocumentInput }[] = [];
   const refreshed: { id: string; textReading: object; payee: string }[] = [];
@@ -246,7 +252,17 @@ function setup(input: {
             },
           } as unknown as LetterClassJevService)
         : null,
+      input.supplierRules
+        ? ({
+            activeRules: async () => input.supplierRules!,
+            recordAccepted: async (entry: Record<string, unknown>) => {
+              accepted.push(entry);
+              return true;
+            },
+          } as unknown as SupplierRulesRepository)
+        : null,
     ),
+    accepted,
     classified,
     stored,
     promoted,
@@ -1720,5 +1736,137 @@ describe("InvoiceCollectionService ties a GLS PDF whose number looked like a tax
     });
     await collection.run("MANUAL");
     assert.deepEqual(tied(stored), []);
+  });
+});
+
+/*
+  AZ ISMERT SZÁLLÍTÓ SZABÁLYA A BEGYŰJTÉSBEN (acrobot 57881, 57884). MI PIROSÍT: ha a szabály kapcsoló nélkül is elfogad; ha a kiugró
+  összeg, az összeg nélküli PDF (alapból), a másik feladó, a díjbekérő vagy a már tárolt azonos számú dokumentum mégis átmegy; ha az
+  elfogadás nem naplózódik a szabály azonosítójával és az összeggel; ha a Jev még hívódik egy szabály alá eső PDF-re; ha a száraz
+  újraértékelés ír.
+*/
+describe("InvoiceCollectionService accepts by a known supplier's rule", () => {
+  const rule = {
+    id: "rule-1",
+    kind: "TAX" as const,
+    taxKey: "DE152405660",
+    nameKey: null,
+    senderDomain: "szallitohu",
+    grossCeilings: { USD: 5000 },
+  };
+  const lines = (total = "Amount due: $20.50 USD", extra: string[] = []) => [
+    "Invoice",
+    "Supplier VAT: DE152405660",
+    "Invoice number: RE67456",
+    // the buyer is the company: a PDF addressed to anyone else is never accepted by a rule
+    "Bill to: Acropora Kft. Budapest",
+    total,
+    ...extra,
+  ];
+  const run = async (options: {
+    lines?: string[];
+    live?: boolean;
+    extraEnv?: Record<string, string>;
+    sender?: string;
+    storedNumbers?: Record<string, { fileName: string; origin: string }[]>;
+    dry?: boolean;
+  }) => {
+    const buffer = await pdf(options.lines ?? lines());
+    const made = setup({
+      environment: env(["GMAIL_FOXPOST"], {
+        ...(options.live === false ? {} : { INVOICE_SUPPLIER_RULES: "live" }),
+        ...options.extraEnv,
+      }),
+      messages: { "m-1": [{ fileName: "RE67456.pdf", buffer }] },
+      supplierRules: [rule],
+      sender: options.sender,
+      storedNumbers: options.storedNumbers,
+      // a classifier under the threshold: it is asked when no rule decided, and never makes a suggestion
+      classify: async () => ({
+        kind: "BEJOVO_SZAMLA",
+        confidence: 0.1,
+        decisionRunId: "run-jev-1",
+      }),
+    });
+    const changes = options.dry
+      ? (await made.collection.reevaluate(false)).changes
+      : (await made.collection.run("MANUAL"), []);
+    return { ...made, changes };
+  };
+
+  it("stores the PDF as an ordinary collected document and logs the rule, the amount and the currency; the Jev is not asked", async () => {
+    const { stored, accepted, classified, recorded } = await run({});
+    assert.deepEqual(untied(stored), []);
+    assert.equal(tied(stored).length, 1);
+    assert.deepEqual(
+      accepted.map((a) => [a.ruleId, a.grossCents, a.currency, a.userId]),
+      [["rule-1", 2050, "USD", null]],
+    );
+    assert.deepEqual(classified, []);
+    assert.deepEqual(recorded, []);
+  });
+
+  it("does nothing without the live switch: the PDF waits for a person", async () => {
+    const { stored, accepted } = await run({ live: false });
+    assert.equal(untied(stored).length, 1);
+    assert.deepEqual(accepted, []);
+  });
+
+  it("an outlier amount waits for a person", async () => {
+    const { stored, accepted } = await run({
+      lines: lines("Amount due: $200.00 USD"),
+    });
+    assert.equal(untied(stored).length, 1);
+    assert.deepEqual(accepted, []);
+  });
+
+  it("a PDF without a readable amount waits for a person, unless the amountless switch is set", async () => {
+    const noAmount = lines("Thank you for your business");
+    const waiting = await run({ lines: noAmount });
+    assert.equal(untied(waiting.stored).length, 1);
+    assert.deepEqual(waiting.accepted, []);
+    const allowed = await run({
+      lines: noAmount,
+      extraEnv: { INVOICE_SUPPLIER_RULES_AMOUNTLESS: "accept" },
+    });
+    assert.equal(tied(allowed.stored).length, 1);
+    assert.deepEqual(
+      allowed.accepted.map((a) => [a.grossCents, a.currency]),
+      [[null, null]],
+    );
+  });
+
+  it("another sender's PDF with the same VAT number waits for a person", async () => {
+    const { stored, accepted } = await run({ sender: "x@evil.example" });
+    assert.equal(untied(stored).length, 1);
+    assert.deepEqual(accepted, []);
+  });
+
+  it("a proforma is never accepted by a rule", async () => {
+    const { stored, accepted } = await run({
+      // the first line says the kind (`looksLikeProforma`)
+      lines: ["Proforma invoice", ...lines().slice(1)],
+    });
+    assert.deepEqual(accepted, []);
+    assert.equal(tied(stored).length, 0);
+  });
+
+  it("a PDF whose number is already on another stored document waits for a person", async () => {
+    const { stored, accepted } = await run({
+      storedNumbers: {
+        RE67456: [{ fileName: "other.pdf", origin: "UPLOAD" }],
+      },
+    });
+    assert.equal(untied(stored).length, 1);
+    assert.deepEqual(accepted, []);
+  });
+
+  it("the dry re-evaluation only lists it", async () => {
+    const { stored, accepted, changes } = await run({ dry: true });
+    assert.deepEqual([stored, accepted], [[], []]);
+    assert.deepEqual(
+      changes.map((c) => [c.fileName, c.after, c.detail]),
+      [["RE67456.pdf", "STORED", "szállítói szabály (TAX): DE152405660"]],
+    );
   });
 });
