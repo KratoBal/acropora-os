@@ -70,6 +70,13 @@ function credentials(
     : null;
 }
 
+/** A Drive-mappa csak olvasó kulcsa (GOOGLE_DRIVE_*), vagy null; a kimenő számla PDF-kitöltője is ezt olvassa. */
+export function driveReadonlyCredentials(
+  environment: NodeJS.ProcessEnv = process.env,
+): GoogleReadonlyCredentials | null {
+  return credentials(environment, "GOOGLE_DRIVE");
+}
+
 /** A mappa azonosítója a megosztási linkből (`.../folders/<id>`), vagy null. */
 export function driveFolderId(url: string | undefined): string | null {
   const id = /\/folders\/([A-Za-z0-9_-]{10,128})(?:[/?#]|$)/.exec(
@@ -104,7 +111,7 @@ export function invoiceCollectionSources(
         environment.INVOICE_COLLECTION_BALAZS_USER?.trim() ||
         "balazs@acropora.hu",
     });
-  const drive = credentials(environment, "GOOGLE_DRIVE");
+  const drive = driveReadonlyCredentials(environment);
   const folderId = driveFolderId(environment.MISSING_INVOICES_DRIVE_FOLDER_URL);
   if (drive && folderId)
     sources.push({ source: "DRIVE", credentials: drive, folderId });

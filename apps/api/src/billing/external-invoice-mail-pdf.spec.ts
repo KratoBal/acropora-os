@@ -10,11 +10,13 @@ import {
   REQUEST_GAP_MS,
   main,
   readCmfxMail,
+  readDriveFolder,
   readOwnMail,
   readUnasLinkPdfs,
   cookieHeaderFrom,
   pdfAddressesIn,
 } from "./external-invoice-mail-pdf.cli.js";
+import { GoogleReadonlyError } from "../integrations/google/google-readonly.client.js";
 import {
   authVerdictLine,
   cmfxMailAuthenticated,
@@ -1173,6 +1175,186 @@ describe("one named mail of our own domain (--mail-id)", () => {
       const refused = await go(argv, luca);
       assert.deepEqual([refused.code, refused.r.puts], [2, []], argv.join(" "));
     }
+  });
+});
+
+/*
+  ONE NAMED DRIVE FOLDER (--drive-folder; 785dfea6, acrobot 59127, 59129): the outbound PDFs on the fleet's machine reach the production
+  store through a Drive folder the read-only key sees. WHAT TURNS IT RED: another folder read, or the folder not read; the "E-" prefix
+  not added (the number would not be read) or added twice; a control character in a name reaching the output; a too-large file stopping
+  the run or vanishing unsaid; another Drive error swallowed; the checks skipped; a bad id, a missing key or a second source accepted.
+*/
+describe("one named Drive folder (--drive-folder)", () => {
+  const folder = "1AbCdEfGhIjKlMnOp_q-r";
+  type FakeFile = { name: string; body?: Buffer; error?: Error };
+  const drive = (files: Record<string, FakeFile>, asked: string[] = []) => ({
+    async driveFolderPdfs(id: string) {
+      asked.push(id);
+      return Object.entries(files).map(([fileId, file]) => ({
+        id: fileId,
+        name: file.name,
+        modifiedAt: null,
+        sizeBytes: null,
+      }));
+    },
+    async driveFile(id: string) {
+      const file = files[id]!;
+      if (file.error) throw file.error;
+      return file.body!;
+    },
+  });
+
+  it("readDriveFolder: by name, the E- prefix added once, control characters out, a too-large file named and skipped", async () => {
+    const lines: string[] = [];
+    const pdfs = await readDriveFolder(
+      drive({
+        b: {
+          name: "E-2026-00082-0.pdf",
+          body: pdf("x", "2026/00082").buffer,
+        },
+        a: {
+          name: "2026-00002-1048133.pdf",
+          body: pdf("x", "2026/00002").buffer,
+        },
+        c: {
+          name: "nagy\nWOULD_STORE.pdf",
+          error: new GoogleReadonlyError("GOOGLE_FILE_TOO_LARGE"),
+        },
+      }),
+      folder,
+      (line) => lines.push(line),
+    );
+    assert.deepEqual(
+      pdfs.map((p) => [p.messageId, p.fileName, p.authenticated]),
+      [
+        ["drive:a", "E-2026-00002-1048133.pdf", true],
+        ["drive:b", "E-2026-00082-0.pdf", true],
+      ],
+    );
+    assert.deepEqual(lines, [
+      "DRIVE nagy?WOULD_STORE.pdf túl nagy, kihagyva\n",
+    ]);
+    await assert.rejects(
+      readDriveFolder(
+        drive({
+          a: {
+            name: "E-2026-00082-0.pdf",
+            error: new GoogleReadonlyError("GOOGLE_RATE_LIMITED"),
+          },
+        }),
+        folder,
+      ),
+      /GOOGLE_RATE_LIMITED/,
+    );
+  });
+
+  const go = async (
+    argv: string[],
+    files: Record<string, FakeFile>,
+    asked: string[] = [],
+    environment: NodeJS.ProcessEnv = {},
+    withDrive = true,
+  ) => {
+    let out = "";
+    let err = "";
+    const r = recorder();
+    const code = await main(
+      argv,
+      { out: (t) => (out += t), err: (t) => (err += t) },
+      {
+        ...(withDrive ? { drive: drive(files, asked) } : {}),
+        candidates: async () => [
+          candidate("row-2", "2026/00002"),
+          candidate("row-518", "ACRW-2026/00518"),
+          candidate("row-3", "2026/00003"),
+        ],
+        rowsByNumber: async () => [],
+        ownInvoicesByNumber: async () => [],
+        documents: () => r.documents,
+        store: r.store,
+        textOf,
+      },
+      environment,
+    );
+    return { code, out, err, r };
+  };
+
+  it("main --drive-folder: reads the named folder, the same checks and the same store; a bad id, no key or a second source is refused", async () => {
+    const files = {
+      f1: {
+        name: "2026-00002-1048133.pdf",
+        body: pdf("x", "2026/00002").buffer,
+      },
+      f2: {
+        name: "E-ACRW-2026-00518-0.pdf",
+        body: pdf("x", "ACRW-2026/00518", "m", true, false).buffer,
+      },
+    };
+    const asked: string[] = [];
+    const dry = await go(
+      ["--month", "2026-01", "--drive-folder", folder],
+      files,
+      asked,
+    );
+    assert.equal(dry.code, 1);
+    assert.deepEqual(asked, [folder]);
+    assert.match(
+      dry.out,
+      /^Fájl a 1AbCdEfGhIjKlMnOp_q-r Drive-mappából \(2026-01\): 2 PDF; PDF nélküli feed-sor: 3$/m,
+    );
+    assert.match(
+      dry.out,
+      /^FAJL E-2026-00002-1048133\.pdf \d+ bájt sha256:[0-9a-f]{16}$/m,
+    );
+    assert.match(dry.out, /^WOULD_STORE\s+2026\/00002 \(\d+ bájt\)$/m);
+    // another cmfx customer's PDF in the folder: refused as in the letter path
+    assert.match(dry.out, /^NOT_OUR_INVOICE\s+ACRW-2026\/00518$/m);
+    assert.match(dry.out, /^NO_MAIL\s+2026\/00003$/m);
+    assert.deepEqual([dry.r.puts, dry.r.sets], [[], []]);
+
+    const applied = await go(
+      ["--month", "2026-01", "--drive-folder", folder, "--apply"],
+      files,
+    );
+    assert.equal(applied.code, 3);
+    assert.deepEqual(applied.r.puts, ["external-invoice/row-2/cmfx.pdf"]);
+
+    for (const argv of [
+      ["--month", "2026-01", "--drive-folder", "rovid"],
+      ["--month", "2026-01", "--drive-folder", "--apply"],
+      ["--month", "2026-01", "--drive-folder"],
+      ["--month", "2026-01", "--drive-folder", folder, "--dir", "/x"],
+      ["--month", "2026-01", "--drive-folder", folder, "--unas-link"],
+      [
+        "--month",
+        "2026-01",
+        "--drive-folder",
+        folder,
+        "--mail-id",
+        "19c20725a72c042a",
+      ],
+    ]) {
+      const refused = await go(argv, files, asked);
+      assert.deepEqual([refused.code, refused.r.puts], [2, []], argv.join(" "));
+    }
+    // the refused runs read nothing: only the dry run's one listing is here
+    assert.deepEqual(asked, [folder]);
+
+    // without the Drive key it stops before reading anything; the info@ key does not stand in for it
+    const noKey = await go(
+      ["--month", "2026-01", "--drive-folder", folder],
+      files,
+      asked,
+      {
+        GMAIL_SUPPLIER_INVOICE_CLIENT_ID: "id",
+        GMAIL_SUPPLIER_INVOICE_CLIENT_SECRET: "secret",
+        GMAIL_SUPPLIER_INVOICE_REFRESH_TOKEN: "token",
+      },
+      false,
+    );
+    assert.equal(noKey.code, 2);
+    assert.match(noKey.err, /Drive csak olvasó kulcsa nincs beállítva/);
+    assert.equal(noKey.out, "");
   });
 });
 
