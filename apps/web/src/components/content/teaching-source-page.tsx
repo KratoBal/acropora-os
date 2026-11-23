@@ -4,6 +4,7 @@ import {
   analyzeTeachingSource,
   buildTeachingNarration,
   buildTeachingSlides,
+  formatNumber,
   hasPermission,
   parseTeachingSourceInput,
   PERMISSIONS,
@@ -1102,7 +1103,7 @@ export function TeachingSourcePage({ contentId }: { contentId: string }) {
                 {preview.slides.tableOverflow
                   .map(
                     (o) =>
-                      `${o.slide}. dia, kb. ${(o.over * 2.54).toFixed(1).replace(".", ",")} cm túllóg`,
+                      `${o.slide}. dia, kb. ${formatNumber(o.over * 2.54, 1)} cm túllóg`,
                   )
                   .join("; ")}
               </li>
