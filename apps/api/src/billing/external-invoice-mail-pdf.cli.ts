@@ -170,7 +170,11 @@ export async function main(
   }
   const driveAt = argv.indexOf("--drive-folder");
   const driveFolder = driveAt >= 0 ? (argv[driveAt + 1] ?? "") : null;
-  if (driveFolder !== null && !DRIVE_FOLDER_ID.test(driveFolder)) {
+  // `--drive-folder --apply`: a flag after it is not a folder, even one long enough to pass the id's shape (barracuda #2810)
+  if (
+    driveFolder !== null &&
+    (driveFolder.startsWith("--") || !DRIVE_FOLDER_ID.test(driveFolder))
+  ) {
     io.err("A --drive-folder után a Drive-mappa azonosítója kell.\n");
     return 2;
   }
@@ -752,8 +756,9 @@ const DRIVE_FOLDER_ID = /^[A-Za-z0-9_-]{10,128}$/;
 /**
  * Egy megnevezett Drive-mappa PDF-jei a levél-út alakjában, név szerint rendezve. A mappát a futtató nevezi meg (`--drive-folder`),
  * az eredetet ő igazolja, mint a `--dir`-nél, ezért `authenticated`; a szám, az adószám és az összeg ellenőrzése ettől még lefut.
- * A név `E-` előtagot kap, ha nincs rajta (Luca csomag-nevei), és a vezérlőkarakter kikerül belőle: a név a kimenet egy sorába
- * kerül. A túl nagy fájl kimarad, és a sora megnevezi; minden más Drive-hiba megállítja a futást. Exportálva, hogy a teszt hamis
+ * A név `E-` előtagot kap, ha nincs rajta (Luca csomag-nevei), és a vezérlőkarakter (C0, C1, sor- és bekezdés-elválasztó) kikerül
+ * belőle: a név a kimenet egy sorába kerül. A túl nagy fájl kimarad (a listázás mérete szerint letöltés előtt, a letöltőé szerint
+ * utána), és a sora megnevezi; minden más Drive-hiba megállítja a futást. Exportálva, hogy a teszt hamis
  * Drive-klienssel mérje.
  */
 export async function readDriveFolder(
@@ -766,7 +771,12 @@ export async function readDriveFolder(
   );
   const pdfs: MailPdf[] = [];
   for (const file of files) {
-    const name = file.name.replace(/[\u0000-\u001f\u007f]/g, "?");
+    const name = file.name.replace(/[\p{Cc}\u2028\u2029]/gu, "?");
+    // the listing gives the size: a too-large file is not downloaded into memory first (barracuda #2810)
+    if (file.sizeBytes !== null && file.sizeBytes > GOOGLE_PDF_MAX_BYTES) {
+      report(`DRIVE ${name} túl nagy, kihagyva\n`);
+      continue;
+    }
     let buffer: Buffer;
     try {
       buffer = await drive.driveFile(file.id);
