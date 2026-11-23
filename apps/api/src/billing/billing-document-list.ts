@@ -19,6 +19,7 @@ import {
   type ExternalInvoicePayment,
 } from "./external-szamlazz-invoice.js";
 import { OWN_ROWS } from "./billing-documents.repository.js";
+import { externalSourceOf } from "./external-billing-one-row.js";
 
 /**
  * A BIZONYLATLISTA (Számlázás v0.1; szerződés:
@@ -723,7 +724,7 @@ export function toExternalListItem(
     opens: "EXTERNAL_DETAIL",
     origin: "EXTERNAL",
     externalKindLabel: externalKindLabel(row.kindCode),
-    externalSource: row.source === "EBIZ" ? "EBIZ" : "SZAMLAZZ",
+    externalSource: externalSourceOf(row.source),
     ...externalPaymentFields(row, simplePay, marks),
     pdf: row.pdfStorageKey
       ? { available: true, missingReason: null }

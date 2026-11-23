@@ -411,6 +411,59 @@ describe("the mail queue (acrobot 43965)", () => {
   });
 });
 
+describe("the mail queue's send, one at a time (card 31445d0f)", () => {
+  // WHAT TURNS THIS RED: a second send starting while one runs (it would mail a link the first just replaced), or the
+  // scheduler's send (no user) not audited
+  it("a second call while one runs sends nothing and says busy; the scheduler's send is audited without a user", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const delivered: string[] = [];
+    const audits: { userId: unknown }[] = [];
+    const game = {
+      deliver: async (_id: string, email: string) => {
+        await gate;
+        delivered.push(email);
+        return "SENT";
+      },
+      sentToday: async () => 1,
+      dailyCap: () => 3000,
+      mailStatus: () => ({ blocked: null, lastError: null }),
+      testLinksOn: () => false,
+    };
+    const service = new GameAdminService(game as never);
+    service.database = {
+      gameEntry: {
+        findMany: async () => [
+          { id: "e1", email: "a@x.hu", question: { week: "2026-W46" } },
+        ],
+        count: async () => 0,
+        update: async () => undefined,
+      },
+      auditLog: {
+        create: async ({ data }: { data: { userId: unknown } }) =>
+          void audits.push(data),
+      },
+    } as never;
+    const first = service.sendQueued(null);
+    await new Promise((resolve) => setImmediate(resolve));
+    // the second starts while the first waits on its mail; both are released together, so without the guard both would send
+    const pendingSecond = service.sendQueued("u1");
+    await new Promise((resolve) => setImmediate(resolve));
+    release();
+    const [done, second] = await Promise.all([first, pendingSecond]);
+    assert.deepEqual(
+      [second.busy, second.sent, done.busy, done.sent, delivered],
+      [true, 0, false, 1, ["a@x.hu"]],
+    );
+    assert.deepEqual(
+      audits.map((a) => a.userId),
+      [null],
+    );
+    // after it finished, the next call runs again
+    assert.equal((await service.sendQueued("u1")).busy, false);
+  });
+});
+
 describe("the stage test link (acrobot 44026)", () => {
   // WHAT TURNS THIS RED: a link handed out without the stage switch, for a confirmed entry, or without a new token
   // and an audit row

@@ -70,6 +70,13 @@ function credentials(
     : null;
 }
 
+/** A Drive-mappa csak olvasó kulcsa (GOOGLE_DRIVE_*), vagy null; a kimenő számla PDF-kitöltője is ezt olvassa. */
+export function driveReadonlyCredentials(
+  environment: NodeJS.ProcessEnv = process.env,
+): GoogleReadonlyCredentials | null {
+  return credentials(environment, "GOOGLE_DRIVE");
+}
+
 /** A mappa azonosítója a megosztási linkből (`.../folders/<id>`), vagy null. */
 export function driveFolderId(url: string | undefined): string | null {
   const id = /\/folders\/([A-Za-z0-9_-]{10,128})(?:[/?#]|$)/.exec(
@@ -104,7 +111,7 @@ export function invoiceCollectionSources(
         environment.INVOICE_COLLECTION_BALAZS_USER?.trim() ||
         "balazs@acropora.hu",
     });
-  const drive = credentials(environment, "GOOGLE_DRIVE");
+  const drive = driveReadonlyCredentials(environment);
   const folderId = driveFolderId(environment.MISSING_INVOICES_DRIVE_FOLDER_URL);
   if (drive && folderId)
     sources.push({ source: "DRIVE", credentials: drive, folderId });
@@ -232,8 +239,10 @@ const BUDAPEST_DAY = new Intl.DateTimeFormat("en-CA", {
  *                 150 napos ablak UNMATCHED leveleit újraolvassa, a szeptemberieket is
  *   2026-11-13.2  más devizájú számla és kártyás fizetés (USD Stripe-számla, EUR terhelés): partner, legfeljebb 3 nap,
  *                 józan arány, egyetlen jelölt (acrobot 49581); a tárolt UNASSIGNED TypeSafe így előléptethető
+ *   2026-11-20.1  az ismert számlaszám, ami adószámnak látszik, a dokumentum száma (GLS: HU + 8 jegy; acrobot 57891, 57900):
+ *                 az első futás a 150 napos ablak UNMATCHED leveleit újraolvassa, a 13 GLS PDF így köthet
  */
-export const INVOICE_COLLECTION_RULES_VERSION = "2026-11-13.2";
+export const INVOICE_COLLECTION_RULES_VERSION = "2026-11-20.1";
 
 /**
  * Az UNMATCHED újraolvasás döntése: nincs még teljes futás, az utolsó teljes

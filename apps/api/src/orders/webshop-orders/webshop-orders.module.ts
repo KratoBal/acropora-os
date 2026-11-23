@@ -12,6 +12,7 @@ import { WebshopOrderTaxCheckService } from "./webshop-order-tax-check.service.j
 import { WebshopOrderLinesService } from "./webshop-order-lines.service.js";
 import { WebshopOrderPaymentService } from "./webshop-order-payment.service.js";
 import { WebshopOrderEditsService } from "./webshop-order-edits.service.js";
+import { WebshopOrderLoyaltyService } from "./webshop-order-loyalty.service.js";
 import { WebshopOrderParcelService } from "./webshop-order-parcel.service.js";
 import { WebshopOrderSplitService } from "./webshop-order-split.service.js";
 import { WebshopOrderShortagesController } from "./webshop-order-shortages.controller.js";
@@ -25,6 +26,7 @@ import { WebshopOrderShippingMethodService } from "./webshop-order-shipping-meth
 import { WebshopOrdersController } from "./webshop-orders.controller.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
+import { WebshopParcelStatusHealthController } from "./webshop-parcel-status-health.controller.js";
 import { WebshopParcelStatusScheduler } from "./webshop-parcel-status.scheduler.js";
 import { WebshopParcelStatusService } from "./webshop-parcel-status.service.js";
 import { WebshopProblemReportPullScheduler } from "./webshop-problem-report-pull.scheduler.js";
@@ -47,6 +49,7 @@ import { WebshopMailOutboxService } from "./webshop-mail-outbox.service.js";
     WebshopOrdersController,
     WebshopOrderShortagesController,
     WebshopMailOutboxController,
+    WebshopParcelStatusHealthController,
   ],
   providers: [
     WebshopOrdersService,
@@ -64,6 +67,7 @@ import { WebshopMailOutboxService } from "./webshop-mail-outbox.service.js";
     WebshopOrderPaymentService,
     WebshopMailOutboxService,
     WebshopOrderEditsService,
+    WebshopOrderLoyaltyService,
     WebshopOrderSplitService,
     WebshopOrderShortagesService,
     {

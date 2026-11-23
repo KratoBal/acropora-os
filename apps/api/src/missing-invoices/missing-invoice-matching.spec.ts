@@ -5,10 +5,7 @@ import { Prisma } from "@acropora/database";
 
 import { candidateDocument } from "../testing/billing-documents.fixture.js";
 import {
-  DIJNET_ISSUERS,
   inWindow,
-  isDijnetIssuer,
-  isDijnetPayment,
   matchMonth,
   namedMonth,
   normalizeName,
@@ -17,6 +14,7 @@ import {
   type MatchableCredit,
   type MatchableDebit,
 } from "./missing-invoice-matching.js";
+import { type PaymentIntermediary } from "./payment-intermediaries.js";
 import { sequenceRatio } from "./sequence-ratio.js";
 
 const D = (v: string | number) => new Prisma.Decimal(v);
@@ -2187,13 +2185,28 @@ describe("a fixed monthly surcharge, for a listed partner", () => {
 });
 
 /*
-  A DIJNET-FIZETÉS (acrobot 49440, 2026-11-12). MI PIROSÍT: ha a „SIMPLEP*dijnet” fizetés a pontos összegű, Dijnet-es
-  kiállítótól (MOHU) jövő számlával nem párosodik; ha a fizetés UTÁN kelt számlát visz el (a havi számlát előtte
-  állítják ki); ha két azonos összegű számlánál nem a fizetéshez időben legközelebbit; ha egy másik kiállító vagy
-  egy másik összeg párosodik; ha egy már elvitt számlát kap meg; ha egy nem-Dijnet fizetést érint.
+  A FIZETÉSI KÖZVETÍTŐ (acrobot 49440, 58103, 58107; 2026-11-12 és 2026-11-20). MI PIROSÍT: ha a „SIMPLEP*dijnet”
+  fizetés a pontos összegű, a leképezésben álló kiállítótól (MOHU, Csatornázási Művek) jövő számlával nem párosodik;
+  ha a fizetés UTÁN kelt számlát visz el (a havi számlát előtte állítják ki); ha két azonos összegű számlánál nem a
+  fizetéshez időben legközelebbit; ha egy másik kiállító vagy egy másik összeg párosodik; ha egy már elvitt számlát
+  kap meg; ha egy nem-közvetítős fizetést érint; ha az egyik közvetítő kiállítója egy másik közvetítő fizetését
+  viszi; ha a leképezés nélkül (üres lista) is fut; ha a második leképezés (PCSOMAG, Micro-Trend) nem működik.
 */
-describe("Dijnet payment: paired with the exact-amount invoice of a Dijnet-paid issuer", () => {
+describe("payment intermediary: paired with the exact-amount invoice of an issuer the intermediary pays for", () => {
   const MOHU = "MOHU MOL Hulladékgazdálkodási Zrt.";
+  const MAPPING: PaymentIntermediary[] = [
+    {
+      payment: /simplep[*]dijne/i,
+      issuers: [/^\s*mohu\b/i, /csatornazasi muvek/i],
+    },
+    { payment: /pcsomag/i, issuers: [/micro-?trend/i] },
+  ];
+  const runWith = (
+    debits: MatchableDebit[],
+    documents: CandidateDocument[],
+    manual = new Map<string, string[]>(),
+    intermediaries: readonly PaymentIntermediary[] = MAPPING,
+  ) => matchMonth({ debits, documents, manual, intermediaries });
   const payment = (overrides: Partial<MatchableDebit> = {}) =>
     debit({
       bookingDate: "2026-11-05",
@@ -2209,7 +2222,7 @@ describe("Dijnet payment: paired with the exact-amount invoice of a Dijnet-paid 
     const d = payment();
     const before = mohu("2026-09-21");
     const after = mohu("2026-11-12");
-    const out = run([d], [before, after]).get(d.id)!;
+    const out = runWith([d], [before, after]).get(d.id)!;
     assert.equal(out.state, "FOUND");
     assert.deepEqual(
       out.documents.map((x) => x.id),
@@ -2218,11 +2231,31 @@ describe("Dijnet payment: paired with the exact-amount invoice of a Dijnet-paid 
     assert.equal(out.matchedBy, "RULE");
   });
 
+  it("the second measured case (2026-11-05, 27 329 Ft): the sewage company's invoice of 10-21 is taken, the equal one of 11-20 is not", () => {
+    const d = payment({ amount: D(27329) });
+    const october = doc({
+      date: "2026-10-21",
+      gross: D(27329),
+      supplierName: "Fővárosi Csatornázási Művek Zrt.",
+    });
+    const november = doc({
+      date: "2026-11-20",
+      gross: D(27329),
+      supplierName: "Fővárosi Csatornázási Művek Zrt.",
+    });
+    const out = runWith([d], [november, october]).get(d.id)!;
+    assert.equal(out.state, "FOUND");
+    assert.deepEqual(
+      out.documents.map((x) => x.id),
+      [october.id],
+    );
+  });
+
   it("of two invoices issued before, the one closest to the payment date wins, and the other stays free", () => {
     const d = payment();
     const far = mohu("2026-09-21");
     const near = mohu("2026-10-20");
-    const out = run([d], [far, near]).get(d.id)!;
+    const out = runWith([d], [far, near]).get(d.id)!;
     assert.deepEqual(
       out.documents.map((x) => x.id),
       [near.id],
@@ -2232,24 +2265,24 @@ describe("Dijnet payment: paired with the exact-amount invoice of a Dijnet-paid 
   it("an invoice dated on the payment day is taken; one dated after the payment alone is not", () => {
     const sameDay = payment();
     assert.equal(
-      run([sameDay], [mohu("2026-11-05")]).get(sameDay.id)?.state,
+      runWith([sameDay], [mohu("2026-11-05")]).get(sameDay.id)?.state,
       "FOUND",
     );
     const later = payment();
-    const out = run([later], [mohu("2026-11-12")]).get(later.id)!;
+    const out = runWith([later], [mohu("2026-11-12")]).get(later.id)!;
     assert.notEqual(out.state, "FOUND");
     assert.deepEqual(out.documents, []);
   });
 
-  it("only a Dijnet-paid issuer and only the exact amount: another issuer or another amount is not paired", () => {
+  it("only an issuer of the mapping and only the exact amount: another issuer or another amount is not paired", () => {
     const other = payment();
-    const outOther = run(
+    const outOther = runWith(
       [other],
       [mohu("2026-10-20", { supplierName: "Valami Szolgáltató Zrt." })],
     ).get(other.id)!;
     assert.notEqual(outOther.state, "FOUND");
     const wrongAmount = payment();
-    const outAmount = run(
+    const outAmount = runWith(
       [wrongAmount],
       [mohu("2026-10-20", { gross: D(10990) })],
     ).get(wrongAmount.id)!;
@@ -2257,19 +2290,19 @@ describe("Dijnet payment: paired with the exact-amount invoice of a Dijnet-paid 
     // the 1 Ft HUF tolerance of every exact match holds here too
     const oneForint = payment();
     assert.equal(
-      run([oneForint], [mohu("2026-10-20", { gross: D(10883) })]).get(
+      runWith([oneForint], [mohu("2026-10-20", { gross: D(10883) })]).get(
         oneForint.id,
       )?.state,
       "FOUND",
     );
   });
 
-  it("two Dijnet payments of the same amount take two different invoices (an invoice is taken once); a manually paired invoice is not offered", () => {
+  it("two intermediary payments of the same amount take two different invoices (an invoice is taken once); a manually paired invoice is not offered", () => {
     const first = payment({ bookingDate: "2026-10-05", id: "dj-1" });
     const second = payment({ bookingDate: "2026-11-05", id: "dj-2" });
     const a = mohu("2026-09-21");
     const b = mohu("2026-10-02");
-    const out = run([first, second], [a, b]);
+    const out = runWith([first, second], [a, b]);
     assert.deepEqual(
       out.get("dj-1")?.documents.map((x) => x.id),
       [b.id],
@@ -2278,11 +2311,11 @@ describe("Dijnet payment: paired with the exact-amount invoice of a Dijnet-paid 
       out.get("dj-2")?.documents.map((x) => x.id),
       [a.id],
     );
-    // a manually paired invoice belongs to its payment: the Dijnet payment does not take it
+    // a manually paired invoice belongs to its payment: the intermediary payment does not take it
     const manualPaid = mohu("2026-10-20");
     const mine = payment();
     const elsewhere = debit({ id: "elsewhere", bookingDate: "2026-10-21" });
-    const taken = run(
+    const taken = runWith(
       [mine, elsewhere],
       [manualPaid],
       new Map([[elsewhere.id, [manualPaid.id]]]),
@@ -2291,39 +2324,72 @@ describe("Dijnet payment: paired with the exact-amount invoice of a Dijnet-paid 
     assert.deepEqual(taken.documents, []);
   });
 
-  it("a payment that is not a Dijnet payment is not touched, even beside a MOHU invoice of the same amount", () => {
+  it("a payment that is not an intermediary payment is not touched, even beside a MOHU invoice of the same amount", () => {
     const card = debit({
       bookingDate: "2026-11-05",
       amount: D(10882),
       counterpartyName: "VALAMI WEBSHOP",
       narrative: "2026.11.04 0194683438 VALAMI WEBSHOP",
     });
-    const out = run([card], [mohu("2026-10-20")]).get(card.id)!;
+    const out = runWith([card], [mohu("2026-10-20")]).get(card.id)!;
     assert.notEqual(out.state, "FOUND");
+    // the Vízművek payment is a different partner, it is not a Dijnet payment
+    const vizmuvek = payment({
+      counterpartyName: "SIMPLEP*VIZMUVEK.HU",
+      narrative: "",
+    });
+    assert.notEqual(
+      runWith([vizmuvek], [mohu("2026-10-20")]).get(vizmuvek.id)?.state,
+      "FOUND",
+    );
   });
 
-  it("the Dijnet detection reads the counterparty and the narrative, and the truncated statement form; the issuer list is MOHU only", () => {
-    assert.equal(
-      isDijnetPayment({ counterpartyName: "SIMPLEP*dijnet", narrative: "" }),
-      true,
+  it("the parcel locker payment is paired with the Micro-Trend invoice (26 975 Ft, 11-13 before 11-19), and with nothing else", () => {
+    const locker = debit({
+      bookingDate: "2026-11-19",
+      amount: D(26975),
+      counterpartyName: "PCSOMAG356",
+      narrative: "2026.11.18 PCSOMAG356",
+    });
+    const microTrend = doc({
+      date: "2026-11-13",
+      gross: D(26975),
+      supplierName: "Micro-Trend Kft.",
+    });
+    const out = runWith([locker], [microTrend]).get(locker.id)!;
+    assert.equal(out.state, "FOUND");
+    assert.deepEqual(
+      out.documents.map((x) => x.id),
+      [microTrend.id],
     );
-    assert.equal(
-      isDijnetPayment({
-        counterpartyName: null,
-        narrative: "2026.05.10 SIMPLEP*DIJNE 1234",
-      }),
-      true,
+    // an issuer of ANOTHER mapping does not pair here: the sewage company does not issue to a parcel locker
+    const sewage = doc({
+      date: "2026-11-13",
+      gross: D(26975),
+      supplierName: "Fővárosi Csatornázási Művek Zrt.",
+    });
+    assert.notEqual(runWith([locker], [sewage]).get(locker.id)?.state, "FOUND");
+    // and the Micro-Trend invoice does not pair with a Dijnet payment of the same amount
+    const dijnet = payment({ amount: D(26975), id: "dj-mt" });
+    assert.notEqual(
+      runWith([dijnet], [microTrend]).get(dijnet.id)?.state,
+      "FOUND",
     );
-    assert.equal(
-      isDijnetPayment({
-        counterpartyName: "SIMPLEP*VIZMUVEK.HU",
-        narrative: "",
-      }),
-      false,
+  });
+
+  it("no mapping, no rule: without the configuration (undefined or empty) the same payment is not paired", () => {
+    const d = payment();
+    const invoice = mohu("2026-10-20");
+    assert.notEqual(
+      matchMonth({ debits: [d], documents: [invoice], manual: new Map() }).get(
+        d.id,
+      )?.state,
+      "FOUND",
     );
-    assert.equal(isDijnetIssuer(MOHU), true);
-    assert.equal(isDijnetIssuer("Dijnet Zrt."), false);
-    assert.equal(DIJNET_ISSUERS.length, 1);
+    assert.notEqual(
+      runWith([d], [invoice], new Map(), []).get(d.id)?.state,
+      "FOUND",
+    );
   });
 });
 
@@ -2488,6 +2554,8 @@ describe("a double payment the partner paid back", () => {
       source: "UPLOAD",
       gross: null,
       number: "",
+      // the live shape: a scanned file whose buyer could not be read
+      payee: "UNKNOWN",
       identities: ["sha:dp-1"],
     });
   const read = (id: string, number = "KB-7777/2026") =>
@@ -2535,6 +2603,81 @@ describe("a double payment the partner paid back", () => {
       [without.a?.state, without.b?.state],
       ["DOUBLE_PAID", "DOUBLE_PAID"],
     );
+  });
+
+  /*
+    A KORÁBBI KAPJA A BEOLVASOTT SZÁMLÁT (acrobot 58155, éles: a Sopro 09-28-i terhelése Nem párosodott maradt, 0 jelölttel). MI
+    PIROSÍT: ha a korábbi terhelés a visszautalás után is az olvasatlan feltöltésnél marad (a számla a feleslegesnek mondott
+    későbbinél veszik el); ha a csere a fájlon NEM osztozó dokumentumot is viszi; ha a csere visszautalás nélkül is megtörténik;
+    ha ugyanahhoz a dokumentumhoz kötött pár (a megszokott eset) megváltozik; ha a későbbi tétel a számlát megtartja.
+  */
+  it("the earlier payment takes the read invoice its file print shares, and the later one lets go of it", () => {
+    const { a, b } = settle([refund()]);
+    assert.equal(b?.state, "NO_INVOICE_NEEDED");
+    assert.deepEqual(b?.documents, []);
+    assert.deepEqual(
+      a?.documents.map((d) => d.id),
+      ["dp-d2"],
+    );
+    // the unread upload left the earlier payment as Not matched (buyer unknown); the read invoice makes it Found
+    assert.equal(a?.state, "FOUND");
+    assert.match(a?.reason ?? "", /ide kerül/);
+    assert.match(a?.reason ?? "", /KB-7777\/2026/);
+  });
+
+  it("only the document that shares the file print is replaced: another document of the earlier payment stays", () => {
+    const a = payment("dp-a", "2026-09-28");
+    const b = payment("dp-b", "2026-09-29");
+    const other = doc({ id: "dp-other", number: "SZ-OTHER-1", gross: D(10) });
+    // a document of the LATER payment that shares no print with the earlier one: it is not handed over
+    const lateOnly = doc({ id: "dp-late", number: "SZ-LATE-1", gross: D(20) });
+    const out = matchMonth({
+      debits: [a, b],
+      documents: [unread("dp-d1"), read("dp-d2"), other, lateOnly],
+      manual: new Map([
+        [a.id, ["dp-d1", "dp-other"]],
+        [b.id, ["dp-d2", "dp-late"]],
+      ]),
+      credits: [refund()],
+    });
+    assert.equal(out.get("dp-b")?.state, "NO_INVOICE_NEEDED");
+    assert.deepEqual(
+      out
+        .get("dp-a")
+        ?.documents.map((d) => d.id)
+        .sort(),
+      ["dp-d2", "dp-other"],
+    );
+  });
+
+  it("without the refund nothing is exchanged: the pair stays double paid and the earlier keeps its own document", () => {
+    const { a } = settle([]);
+    assert.equal(a?.state, "DOUBLE_PAID");
+    assert.deepEqual(
+      a?.documents.map((d) => d.id),
+      ["dp-d1"],
+    );
+  });
+
+  it("a pair bound to the same document is not changed by the exchange (the usual case)", () => {
+    const a = payment("dp-a", "2026-09-28");
+    const b = payment("dp-b", "2026-09-29");
+    const out = matchMonth({
+      debits: [a, b],
+      documents: [read("dp-d2")],
+      manual: new Map([
+        [a.id, ["dp-d2"]],
+        [b.id, ["dp-d2"]],
+      ]),
+      credits: [refund()],
+    });
+    const earlier = out.get("dp-a");
+    assert.deepEqual(
+      earlier?.documents.map((d) => d.id),
+      ["dp-d2"],
+    );
+    assert.doesNotMatch(earlier?.reason ?? "", /ide kerül/);
+    assert.equal(out.get("dp-b")?.state, "NO_INVOICE_NEEDED");
   });
 
   it("a refund that is not exactly this one resolves nothing", () => {

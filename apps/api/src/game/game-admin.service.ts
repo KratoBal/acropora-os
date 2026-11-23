@@ -705,11 +705,30 @@ export class GameAdminService {
     return { link: this.game.confirmLink(token) };
   }
 
+  /** a send of the queue in progress in this process (the admin button and the scheduler share it) */
+  private queueSending = false;
+
   /**
    * The waiting mails sent, oldest first, as far as today's cap lets them: each gets a new link (the old token is
    * replaced). It stops at the first one the cap queues again.
+   *
+   * ONE SEND AT A TIME (card 31445d0f, the scheduled drain beside the admin button): each send gives the entry a new link and
+   * the old one stops working, so two sends of one entry at once would mail a link the other just replaced. A second call
+   * while one runs sends nothing and says so (`busy`). `userId` null: the scheduler (`GameMailQueueScheduler`), audited
+   * without a user.
    */
-  async sendQueued(userId: string) {
+  async sendQueued(userId: string | null) {
+    if (this.queueSending)
+      return { sent: 0, busy: true, ...(await this.mailQueue()) };
+    this.queueSending = true;
+    try {
+      return { ...(await this.sendQueuedUnlocked(userId)), busy: false };
+    } finally {
+      this.queueSending = false;
+    }
+  }
+
+  private async sendQueuedUnlocked(userId: string | null) {
     // only a question still open: a closed week's link would answer CLOSED (barracuda, #2254 v3)
     const waiting = await this.database.gameEntry.findMany({
       where: {

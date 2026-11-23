@@ -45,13 +45,15 @@ beforeEach(() => {
 });
 
 describe("SettlementTabs", () => {
-  it("shows the four tabs, pointing to their own paths, the current one marked", () => {
+  it("shows the six tabs, pointing to their own paths, the current one marked", () => {
     render(<SettlementTabs />);
     const links = screen.getAllByRole("link");
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
       "/penzugy/foxpost",
       "/penzugy/gls",
       "/penzugy/simplepay",
+      // A9, card 6339b04c: Stripe's payouts
+      "/penzugy/stripe",
       // card aeddb2c3: one transfer for several invoices
       "/penzugy/atutalasok",
       "/penzugy/napi-jeloles",
@@ -74,6 +76,9 @@ describe("SettlementTabs", () => {
       screen.getByText("Utánvét, díjszámla és kompenzáció"),
     ).toBeInTheDocument();
     expect(screen.getByText("Kártyás forgalmi kimutatás")).toBeInTheDocument();
+    expect(
+      screen.getByText("Kifizetések, díjak, rendelés és számla"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Egy utalás több számlára")).toBeInTheDocument();
   });
 

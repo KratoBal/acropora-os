@@ -12,6 +12,7 @@ import {
   type ServiceJobListResponse,
 } from "@acropora/types";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -79,7 +80,12 @@ export const MAINTENANCE_JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
     width: "280px",
     cell: (job) => (
       <>
-        <Link href={maintenanceSheetHref(job)} className={sv.rowTitle}>
+        {/* A cím-link a SAJÁT kattintását kezeli: a sor kattintása is ugyanoda visz (lásd `onRowActivate`), és a buborékozó kattintás kétszer lépne a lapra. */}
+        <Link
+          href={maintenanceSheetHref(job)}
+          className={sv.rowTitle}
+          onClick={(event) => event.stopPropagation()}
+        >
           {job.title}
         </Link>
         <div className={sv.rowMeta}>{job.jobNumber}</div>
@@ -166,6 +172,7 @@ export function ServiceJobListPage({
   kind?: "REPAIR" | "MAINTENANCE";
 }) {
   const { session } = useAuth();
+  const router = useRouter();
   /*
     A FÜL, A KERESÉS ÉS A REJTETTEK KAPCSOLÓJA AZ URL-BEN (Balázs kérése,
     2026-09-30): a jegyről visszalépve a lista ugyanott áll. A gépelt szöveg
@@ -448,6 +455,10 @@ export function ServiceJobListPage({
               rowKey={(job) => job.id}
               rowTestId="maintenance-job-row"
               minWidth={MAINTENANCE_JOB_TABLE_MIN_WIDTH}
+              // A SOR KATTINTÁSA IS A KARBANTARTÁSI LAPOT NYITJA (Luca, 2026-11-19; nautilus OS hibakör): a hibajegy- és a munkalap-lista sora
+              // nyit, itt eddig csak a cím-link. Ugyanaz a cél, mint a linké (`maintenanceSheetHref`): soha a munkalap vagy a hibajegy.
+              onRowActivate={(job) => router.push(maintenanceSheetHref(job))}
+              rowLabel={(job) => `${job.jobNumber} ${job.title} megnyitása`}
             />
             {/*
               NEM LAPOZO LISTA: a szerver egy hataron belul ad sorokat, es a

@@ -35,6 +35,8 @@ function row(
       currency: "EUR",
     },
     createdAt: new Date(NOW.getTime() - ageDays * DAY),
+    ruleRefusal: null,
+    ruleRefusalLabel: null,
     ...overrides,
   } as SuggestionRow;
 }
@@ -69,6 +71,31 @@ describe("toSuggestion state and staleness", () => {
     assert.equal(unassigned.state, "UNASSIGNED");
     assert.equal(unassigned.confidence, null);
     assert.equal(unassigned.invoiceNumber, "RE67456");
+  });
+
+  // kártya e09190c8: a lap a szabály okát és nevét kapja; ahol egy szabály sem illeszkedett, null
+  it("passes on why a matching supplier rule left it to a person, with the rule's name", () => {
+    assert.deepEqual(
+      [
+        toSuggestion(
+          row("g", "UNASSIGNED", 1, {
+            ruleRefusal: "OUTLIER",
+            ruleRefusalLabel: "Szállító Kft.",
+          }),
+          NOW,
+        ).ruleRefusal,
+        toSuggestion(
+          row("h", "UNASSIGNED", 1, { ruleRefusal: "NEW_CURRENCY" }),
+          NOW,
+        ).ruleRefusal,
+        toSuggestion(row("i", "UNASSIGNED", 1), NOW).ruleRefusal,
+      ],
+      [
+        { reason: "OUTLIER", ruleLabel: "Szállító Kft." },
+        { reason: "NEW_CURRENCY", ruleLabel: null },
+        null,
+      ],
+    );
   });
 });
 
@@ -107,5 +134,31 @@ describe("InvoiceCollectionSuggestionsService.list", () => {
       repository,
     ).list(NOW);
     assert.equal(result.staleCount, 0);
+  });
+
+  // nautilus 58009: the page shows the supplier-rule surface only when the server says the rules run
+  it("tells the page whether the supplier rules run, and whether an amountless PDF is accepted", async () => {
+    const repository = {
+      list: async () => [],
+    } as unknown as InvoiceCollectionSuggestionsRepository;
+    const list = (environment: NodeJS.ProcessEnv) =>
+      new InvoiceCollectionSuggestionsService(repository, environment)
+        .list(NOW)
+        .then((r) => r.supplierRules);
+    assert.deepEqual(await list({}), {
+      live: false,
+      amountlessAccepted: false,
+    });
+    assert.deepEqual(await list({ INVOICE_SUPPLIER_RULES: "live" }), {
+      live: true,
+      amountlessAccepted: false,
+    });
+    assert.deepEqual(
+      await list({
+        INVOICE_SUPPLIER_RULES: "live",
+        INVOICE_SUPPLIER_RULES_AMOUNTLESS: "accept",
+      }),
+      { live: true, amountlessAccepted: true },
+    );
   });
 });

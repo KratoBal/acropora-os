@@ -134,7 +134,29 @@ export interface NavInvoiceDigestItem {
   originalInvoiceNumber?: string;
   /** A számlára vonatkozó módosító okirat egyedi sorszáma. */
   modificationIndex?: number;
+  /**
+   * A KIMENŐ ÚTHOZ (kártya 785dfea6) olvasott további digest-mezők, a séma `InvoiceDigestType`-ja szerint (nav-gov-hu/Online-Invoice
+   * invoiceApi.xsd, cc7a775d). Mind elhagyható: a vevő neve és adószáma nem adóalany magánszemélynél (`PRIVATE_PERSON`) a NAV-ban
+   * nincs meg (interfész-specifikáció v3.0, 2026.02.12, 95., 108. o.).
+   */
+  invoiceCategory?: string;
+  customerTaxNumber?: string;
+  customerName?: string;
+  paymentMethod?: string;
+  /** PAPER, ELECTRONIC, EDI, UNKNOWN */
+  invoiceAppearance?: string;
+  /** Az adatszolgáltatás csatornája: WEB, XML, MGM, OPG, OSZ. */
+  source?: string;
+  transactionId?: string;
+  index?: number;
 }
+
+/**
+ * MELYIK DÁTUMRA KERES A DIGEST: a befogadás (`insDate`, UTC időpont; a napi bejövő szinkron ezt használja) vagy a kelt
+ * (`invoiceIssueDate`, nap; a visszatöltésnek ez kell, mert egy késve beküldött számla befogadása később van). A séma ezek közül
+ * pontosan egyet fogad el, és mindkettőnél legfeljebb 35 nap a tartomány (specifikáció 56. o., 19-es hiba a 178. o.).
+ */
+export type NavDigestDateField = "insDate" | "invoiceIssueDate";
 
 const OPERATIONS: ReadonlySet<string> = new Set(["CREATE", "MODIFY", "STORNO"]);
 
@@ -150,7 +172,7 @@ export interface NavInvoiceDataResult {
   compressed: boolean;
 }
 
-function buildQueryInvoiceDigestXml(
+export function buildQueryInvoiceDigestXml(
   page: number,
   direction: NavInvoiceDirection,
   insDateFrom: Date,
@@ -158,16 +180,25 @@ function buildQueryInvoiceDigestXml(
   user: NavTechnicalUser,
   software: NavSoftwareData,
   now: Date,
+  dateField: NavDigestDateField = "insDate",
 ): string {
+  // `invoiceIssueDate`: DateIntervalParamType (dateFrom, dateTo, xs:date, mindkét határ benne van); `insDate`: DateTimeIntervalParamType
+  const range =
+    dateField === "invoiceIssueDate"
+      ? `<invoiceIssueDate>` +
+        `<dateFrom>${insDateFrom.toISOString().slice(0, 10)}</dateFrom>` +
+        `<dateTo>${insDateTo.toISOString().slice(0, 10)}</dateTo>` +
+        `</invoiceIssueDate>`
+      : `<insDate>` +
+        `<dateTimeFrom>${insDateFrom.toISOString()}</dateTimeFrom>` +
+        `<dateTimeTo>${insDateTo.toISOString()}</dateTimeTo>` +
+        `</insDate>`;
   const body =
     `<page>${page}</page>` +
     `<invoiceDirection>${direction}</invoiceDirection>` +
     `<invoiceQueryParams>` +
     `<mandatoryQueryParams>` +
-    `<insDate>` +
-    `<dateTimeFrom>${insDateFrom.toISOString()}</dateTimeFrom>` +
-    `<dateTimeTo>${insDateTo.toISOString()}</dateTimeTo>` +
-    `</insDate>` +
+    range +
     `</mandatoryQueryParams>` +
     `</invoiceQueryParams>`;
   return buildEnvelopeXml(
@@ -213,6 +244,7 @@ export function parseQueryInvoiceDigestResponse(
       const operation = value(node, "invoiceOperation") ?? "CREATE";
       if (!OPERATIONS.has(operation)) return null;
       const modificationIndex = value(node, "modificationIndex");
+      const index = value(node, "index");
       return {
         invoiceNumber,
         invoiceOperation: operation as NavInvoiceOperation,
@@ -230,6 +262,14 @@ export function parseQueryInvoiceDigestResponse(
           modificationIndex && /^\d{1,9}$/.test(modificationIndex)
             ? Number(modificationIndex)
             : undefined,
+        invoiceCategory: value(node, "invoiceCategory"),
+        customerTaxNumber: value(node, "customerTaxNumber"),
+        customerName: value(node, "customerName"),
+        paymentMethod: value(node, "paymentMethod"),
+        invoiceAppearance: value(node, "invoiceAppearance"),
+        source: value(node, "source"),
+        transactionId: value(node, "transactionId"),
+        index: index && /^\d{1,9}$/.test(index) ? Number(index) : undefined,
       };
     })
     .filter((item): item is NavInvoiceDigestItem => item !== null);
@@ -312,6 +352,7 @@ export class NavOnlineInvoiceClient {
     insDateTo: Date,
     user: NavTechnicalUser,
     software: NavSoftwareData,
+    dateField: NavDigestDateField = "insDate",
   ): Promise<NavInvoiceDigestResult> {
     return this.call(
       "/queryInvoiceDigest",
@@ -323,6 +364,7 @@ export class NavOnlineInvoiceClient {
         user,
         software,
         new Date(),
+        dateField,
       ),
       parseQueryInvoiceDigestResponse,
     );

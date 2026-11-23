@@ -2,7 +2,7 @@ import "reflect-metadata";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { PERMISSIONS } from "@acropora/types";
+import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
 import { REQUIRED_PERMISSIONS_KEY } from "../../auth/decorators/require-permissions.decorator.js";
 import { WebshopOrdersController } from "./webshop-orders.controller.js";
@@ -39,5 +39,103 @@ describe("webshop order billing rights", () => {
         [PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.FINANCE_MANAGE],
         handler,
       );
+  });
+});
+
+/*
+  A KISZÁLLÍTÁSI KAPU FELÜLBÍRÁLÁSÁNAK JOGA A VÉGPONTON (kártya 33a0d3c7). MI PIROSÍT: ha a váltás végpontja a felülbírálás jogát nem a
+  kérő jogából veszi (mindenkinél igaz vagy hamis), vagy az indok nem jut el a szolgáltatásig; ha a végpont jogot kér a felülbírálás
+  helyett a rendelés-kezelés mellé (a váltás maga ugyanaz maradt: orders.manage).
+*/
+describe("webshop order status change: the shipping gate override", () => {
+  const user = (role: "OWNER" | "ADMIN" | "MANAGER" | "SALES") =>
+    ({
+      id: `${role}-user`,
+      email: "x@acropora.hu",
+      displayName: role,
+      role,
+      customerId: null,
+      supplierId: null,
+    }) as AuthenticatedUser;
+
+  const call = (
+    as: AuthenticatedUser,
+    overrideReason?: string,
+    personalDelivery?: boolean,
+  ) => {
+    const seen: unknown[][] = [];
+    const orders = {
+      changeStatus: async (...args: unknown[]) => void seen.push(args),
+    };
+    // the other nine services are not touched by this handler
+    const controller = new (
+      WebshopOrdersController as unknown as new (
+        orders: unknown,
+      ) => WebshopOrdersController
+    )(orders);
+    void controller.changeStatus(
+      "order_38",
+      { status: "out_for_delivery", overrideReason, personalDelivery } as never,
+      as,
+    );
+    return seen[0]!;
+  };
+
+  it("the endpoint still needs only orders.manage: the override is decided by the service from the caller's own right", () => {
+    assert.deepEqual(required("changeStatus"), [PERMISSIONS.ORDERS_MANAGE]);
+  });
+
+  it("the owner and the admin may override; the manager and sales may not", () => {
+    for (const [role, can] of [
+      ["OWNER", true],
+      ["ADMIN", true],
+      ["MANAGER", false],
+      ["SALES", false],
+    ] as const) {
+      const args = call(user(role), "Csomag a portálon feladva");
+      assert.deepEqual(
+        (args[5] as { canOverride: boolean }).canOverride,
+        can,
+        role,
+      );
+    }
+  });
+
+  it("the personal delivery choice reaches the service as a plain true, for every role, with no right needed", () => {
+    for (const role of ["OWNER", "ADMIN", "MANAGER", "SALES"] as const) {
+      const args = call(user(role), undefined, true);
+      assert.equal(
+        (args[5] as { personalDelivery: boolean }).personalDelivery,
+        true,
+        role,
+      );
+    }
+    for (const absent of [undefined, false]) {
+      const args = call(user("MANAGER"), undefined, absent);
+      assert.equal(
+        (args[5] as { personalDelivery: boolean }).personalDelivery,
+        false,
+      );
+    }
+  });
+
+  it("the reason reaches the service as the caller wrote it", () => {
+    const args = call(user("OWNER"), "Csomag a portálon feladva");
+    assert.equal(
+      (args[5] as { overrideReason?: string }).overrideReason,
+      "Csomag a portálon feladva",
+    );
+  });
+});
+
+/**
+ * The loyalty points on the order page (card dfb79916): reading asks for orders.view, a manual credit or debit for
+ * orders.manage. Whether a manual credit should ask for more (it can later pay for goods) is a business decision, not
+ * made here: this pins what is decided so that a change is a visible edit.
+ */
+describe("webshop order loyalty rights", () => {
+  it("reads with orders.view and moves points with orders.manage", () => {
+    assert.deepEqual(required("loyalty"), [PERMISSIONS.ORDERS_VIEW]);
+    assert.deepEqual(required("adjustLoyalty"), [PERMISSIONS.ORDERS_MANAGE]);
   });
 });

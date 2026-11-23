@@ -5,7 +5,11 @@ import {
   parseSzamlazzQueryResponse,
 } from "./billing-szamlazz-query.js";
 import { projectExternalInvoice } from "./external-szamlazz-invoice.js";
-import type { SzamlazzAgentQueryClient } from "../integrations/szamlazz/szamlazz-agent.client.js";
+import { buildSzamlazzAgentPdfXml } from "../integrations/szamlazz/szamlazz-agent-xml.js";
+import type {
+  SzamlazzAgentPdfClient,
+  SzamlazzAgentQueryClient,
+} from "../integrations/szamlazz/szamlazz-agent.client.js";
 import type { FeedStoreOutcome } from "../missing-invoices/szamlazz-feeds.repository.js";
 
 /**
@@ -38,6 +42,10 @@ import type { FeedStoreOutcome } from "../missing-invoices/szamlazz-feeds.reposi
 export interface FeedPullDeps {
   agentKey(): Promise<string>;
   client: SzamlazzAgentQueryClient;
+  /** a diagnosztikához: a PDF-lekérés (más Agent-művelet, amelyik élesben működik); hiányában kimarad */
+  pdf?: SzamlazzAgentPdfClient;
+  /** a diagnosztikához: egy, az OS által a Számlázz.hu-ban kiállított számlaszám (kontroll); hiányában kimarad */
+  ownIssuedNumber?(): Promise<string | null>;
   store(input: {
     externalId: string;
     sha256: string;
@@ -60,6 +68,12 @@ export type FeedPullLine =
       stored?: FeedStoreOutcome;
       projected?: string;
     };
+
+/** The Számlázz.hu's own error wording for the detail column: one line, cut, no control characters. */
+function answerText(message: string | null): string {
+  const text = (message ?? "").replace(/\s+/g, " ").trim().slice(0, 240);
+  return text ? `: ${text}` : " (üzenet nélkül)";
+}
 
 export async function pullFromSzamlazz(
   numbers: readonly string[],
@@ -100,7 +114,7 @@ export async function pullFromSzamlazz(
       lines.push({
         number,
         outcome: "NOT_FOUND",
-        detail: "a Számlázz.hu-ban nincs ilyen szám",
+        detail: `a Számlázz.hu 7-es hibakóddal felelt${answerText(found.errorMessage)}`,
       });
       continue;
     }
@@ -108,7 +122,7 @@ export async function pullFromSzamlazz(
       lines.push({
         number,
         outcome: "ERROR",
-        detail: `hibakód ${found.errorCode ?? "?"}`,
+        detail: `a Számlázz.hu hibát jelzett (hibakód ${found.errorCode ?? "?"})${answerText(found.errorMessage)}`,
       });
       continue;
     }
@@ -150,6 +164,105 @@ export async function pullFromSzamlazz(
     lines.push({ number, outcome: "STORED", detail, stored, projected });
   }
   return lines;
+}
+
+/**
+ * A KONTROLL BUKÁSÁNAK DIAGNOSZTIKÁJA (acrobot 57902, élő eredmény 2026-11-20: a Számlázz.hu a feedben lévő 2026/00090-re és az
+ * ACRW-2026/00571-re is 7-es hibakóddal felelt, "Hiányzó adat: számla xml (ismeretlen számlaszám, rendelésszám vagy külső
+ * azonosító)"). A 7-es válasz két dolgot jelenthet: a kérés alakja nem ért célba, vagy a számot a kulcs nem látja. A három kérdés
+ * a kettőt választja szét, mindegyik CSAK OLVAS:
+ *   1. ugyanaz a szám, a kérésben kiírt `<pdf>false</pdf>` elemmel: az elem hiánya volt-e a baj;
+ *   2. ugyanaz a szám a PDF-lekéréssel (`action-szamla_agent_pdf`), ami élesben működik: ha az megtalálja, az XML-lekérdezés
+ *      alakja a hibás; ha az sem, a szám nem látszik ennek a kulcsnak;
+ *   3. egy, az OS által kiállított számlaszám XML-lekérdezése: ha ezt megtalálja, a lekérdezés alakja jó, és a feed számai
+ *      nem ehhez a kulcshoz tartoznak (másik fiók vagy kiállítási út).
+ * A kimenet soronként egy mondat, a válasz XML-je nélkül (hibakód és a Számlázz.hu hibaüzenete).
+ */
+export async function diagnoseQueryFailure(
+  number: string,
+  deps: FeedPullDeps,
+): Promise<string[]> {
+  const lines: string[] = [];
+  const agentKey = await deps.agentKey();
+  const describeQuery = async (label: string, xml: string) => {
+    try {
+      const body = await deps.client.queryDocument(xml);
+      const result = parseSzamlazzQueryResponse(body);
+      lines.push(
+        `${label}: ${
+          result.outcome === "FOUND"
+            ? `megvan (${result.invoiceNumber})`
+            : result.outcome === "NOT_FOUND"
+              ? `7-es hibakód${answerText(result.errorMessage)}`
+              : `hibakód ${result.errorCode ?? "?"}${answerText(result.errorMessage)}`
+        }`,
+      );
+    } catch (error) {
+      lines.push(
+        `${label}: nem olvasható válasz (${error instanceof Error ? error.name : "UNKNOWN"})`,
+      );
+    }
+  };
+  const describePdf = async (label: string, invoiceNumber: string) => {
+    if (!deps.pdf) return;
+    try {
+      const response = await deps.pdf.downloadInvoicePdf(
+        buildSzamlazzAgentPdfXml({ agentKey, invoiceNumber }),
+      );
+      lines.push(
+        `${label}: ${
+          response.successful
+            ? `megvan (PDF ${response.pdf?.length ?? 0} bájt)`
+            : `hibakód ${response.errorCode ?? "?"}${answerText(response.errorMessage ?? null)}`
+        }`,
+      );
+    } catch (error) {
+      lines.push(
+        `${label}: nem futott le (${error instanceof Error ? error.name : "UNKNOWN"})`,
+      );
+    }
+  };
+  await describeQuery(
+    `${number}, XML-lekérdezés kiírt <pdf>false</pdf> elemmel`,
+    buildSzamlazzQueryXml({
+      agentKey,
+      key: { by: "invoiceNumber", value: number },
+      pdfFlag: false,
+    }),
+  );
+  await describePdf(`${number}, PDF-lekérés`, number);
+  const own = deps.ownIssuedNumber ? await deps.ownIssuedNumber() : null;
+  if (own) {
+    await describeQuery(
+      `az OS által kiállított ${own}, XML-lekérdezés`,
+      buildSzamlazzQueryXml({
+        agentKey,
+        key: { by: "invoiceNumber", value: own },
+      }),
+    );
+    await describePdf(`az OS által kiállított ${own}, PDF-lekérés`, own);
+  } else lines.push("OS által kiállított számlaszám: nincs ilyen sor");
+  return lines;
+}
+
+/**
+ * AZ ÉN KULCSOM LÁT-E EGY SAJÁT SZÁMOT (a kontroll bukásának ítéletéhez, acrobot 58095): az OS által, ugyanezzel az ügynök-
+ * kulccsal kiállított legutóbbi számla XML-lekérdezése. `true`: a lekérdezés alakja és a kulcs jó, tehát egy feedben lévő szám
+ * 7-es válasza azt jelenti, hogy a szám NEM ebből a Számlázz.hu fiókból való. `false` vagy `null` (nincs ilyen számla, vagy a
+ * kérés elhasalt): ez nem bizonyít semmit, a kontroll bukása marad kontroll-bukás. Csak olvas.
+ */
+export async function ownNumberKnown(
+  deps: FeedPullDeps,
+): Promise<boolean | null> {
+  const own = deps.ownIssuedNumber ? await deps.ownIssuedNumber() : null;
+  if (!own) return null;
+  const body = await deps.client.queryDocument(
+    buildSzamlazzQueryXml({
+      agentKey: await deps.agentKey(),
+      key: { by: "invoiceNumber", value: own },
+    }),
+  );
+  return parseSzamlazzQueryResponse(body).outcome === "FOUND";
 }
 
 export function feedPullReport(

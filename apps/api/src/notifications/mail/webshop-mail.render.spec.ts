@@ -995,3 +995,94 @@ describe("the legal pages' addresses in the order confirmation", () => {
     assert.doesNotMatch(sima.text, /általános szerződési feltételeket|\{\{/);
   });
 });
+
+/*
+  A15 (card aba7120c): A CEGES VASARLAS CEGE ES ADOSZAMA A RENDERELT LEVELBEN. MI PIROSIT: a ceges levelben nincs ott a mondat (html es
+  szoveg), vagy nem a level nyelven; a mondat nem a tetelek utan, a kovetkezo lepes elott all; a magan levelben marad ures bekezdes
+  vagy helyorzo; a ceg neve escape nelkul jut a html-be; egy hibas ceg-adat mas levelet ad, mint a magan.
+*/
+describe("the company of a company purchase in the rendered confirmation", () => {
+  const placed = (extra: Record<string, unknown>): WebshopMailFacts =>
+    ({
+      ...JSON.parse(JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"])),
+      buyer_company: null,
+      ...extra,
+    }) as WebshopMailFacts;
+  const render = (facts: WebshopMailFacts, key: string) => {
+    const mail = renderWebshopMail(template(key), facts);
+    assert.equal(mail.ok, true);
+    if (!mail.ok) throw new Error("not ok");
+    return mail;
+  };
+  const COMPANY = { name: "Teszt Kft.", tax_number: "12345676-2-13" };
+
+  it("both default confirmations place the sentence after the items and before the next step", () => {
+    for (const key of ["WEBSHOP_ORDER_PLACED", "WEBSHOP_ORDER_PLACED_EN"]) {
+      const html = template(key).bodyHtml;
+      const items = html.indexOf('data-variable="rendeles_tetelek"');
+      const company = html.indexOf('data-variable="ceg_mondat"');
+      const next = html.indexOf('data-variable="kovetkezo_lepes"');
+      assert.ok(items >= 0 && company > items && next > company, key);
+    }
+  });
+
+  it("the Hungarian mail names the company and the tax number, in the html and in the text", () => {
+    const mail = render(
+      placed({ buyer_company: COMPANY }),
+      "WEBSHOP_ORDER_PLACED",
+    );
+    for (const part of [mail.html, mail.text])
+      assert.ok(
+        part.includes("Számlázási adatok: Teszt Kft., adószám: 12345676-2-13."),
+      );
+  });
+
+  it("the English mail has the English sentence", () => {
+    const mail = render(
+      placed({ locale: "en", buyer_company: COMPANY }),
+      "WEBSHOP_ORDER_PLACED_EN",
+    );
+    for (const part of [mail.html, mail.text])
+      assert.ok(
+        part.includes(
+          "Billing details: Teszt Kft., tax number: 12345676-2-13.",
+        ),
+      );
+    assert.doesNotMatch(mail.html, /Számlázási adatok/);
+  });
+
+  it("a private purchase (and a bad company) has no sentence, no empty paragraph and no placeholder", () => {
+    const sima = render(
+      placed({ buyer_company: null }),
+      "WEBSHOP_ORDER_PLACED",
+    );
+    for (const rossz of [
+      undefined,
+      {},
+      { name: "  " },
+      { name: 7 },
+      "Teszt Kft.",
+    ]) {
+      const mail = render(
+        placed({ buyer_company: rossz }),
+        "WEBSHOP_ORDER_PLACED",
+      );
+      assert.equal(mail.html, sima.html, JSON.stringify(rossz));
+      assert.equal(mail.text, sima.text, JSON.stringify(rossz));
+    }
+    assert.doesNotMatch(
+      sima.html,
+      /Számlázási adatok|ceg_mondat|<p>\s*<\/p>|\{\{/,
+    );
+    assert.doesNotMatch(sima.text, /Számlázási adatok|\{\{/);
+  });
+
+  it("the company's name is escaped in the html", () => {
+    const mail = render(
+      placed({ buyer_company: { name: "A <b>&</b> Kft.", tax_number: null } }),
+      "WEBSHOP_ORDER_PLACED",
+    );
+    assert.ok(mail.html.includes("A &lt;b&gt;&amp;&lt;/b&gt; Kft."));
+    assert.ok(!mail.html.includes("<b>&</b>"));
+  });
+});

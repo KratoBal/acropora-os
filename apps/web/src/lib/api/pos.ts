@@ -1,5 +1,9 @@
 import type {
+  CreatePosInternalUseInput,
   CreatePosSaleInput,
+  PosInternalUseListResponse,
+  PosInternalUseResult,
+  PosInternalUseSummaryResponse,
   PosProductSearchResult,
   PosPaymentSummaryResponse,
   PosSaleDetail,
@@ -51,6 +55,28 @@ export const posApi = {
     const params = new URLSearchParams({ from: query.from, to: query.to });
     return apiRequest<PosPaymentSummaryResponse>(
       `/pos/summary?${params.toString()}`,
+      token,
+    );
+  },
+  // a „Belső felhasználás” (kártya ec51e614): saját rekord, nem eladás
+  createInternalUse(token: string, input: CreatePosInternalUseInput) {
+    return apiRequest<PosInternalUseResult>(`/pos/internal-uses`, token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  },
+  listInternalUses(token: string, query: PosSaleListQuery) {
+    return apiRequest<PosInternalUseListResponse>(
+      `/pos/internal-uses?${listQueryString(query)}`,
+      token,
+    );
+  },
+  // a budapesti napok belső felhasználása beszerzési értéken, az ár nélküli tételek külön (kártya ada14a7c)
+  internalUseSummary(token: string, query: { from: string; to: string }) {
+    const params = new URLSearchParams({ from: query.from, to: query.to });
+    return apiRequest<PosInternalUseSummaryResponse>(
+      `/pos/internal-uses/summary?${params.toString()}`,
       token,
     );
   },

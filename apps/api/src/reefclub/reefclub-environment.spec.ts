@@ -83,10 +83,22 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "INCOMING_FOREIGN_READ_ENABLED",
   "INCOMING_FOREIGN_READ_INTERVAL_MINUTES",
   "INCOMING_FOREIGN_READ_SINCE",
+  // the known-supplier rules' switch and its two settings (acrobot 57884): a switch, a switch and a domain list, none a secret
+  "INVOICE_SUPPLIER_RULES",
+  "INVOICE_SUPPLIER_RULES_AMOUNTLESS",
+  "INVOICE_SUPPLIER_RULE_TRUSTED_DOMAINS",
   // the research source discovery's switch (S2): on | off, not a secret
   "KNOWLEDGE_DISCOVERY",
   "MAINTENANCE_INVOICE_ISSUE_ENABLED",
   "MISSING_INVOICES_DRIVE_FOLDER_URL",
+  // the payment intermediaries of the missing-invoices matching (acrobot 58103): a list of name patterns, not a secret
+  "MISSING_INVOICES_PAYMENT_INTERMEDIARIES",
+  // the Lejáró számlák weekly mail (acrobot 58274): the default sender address and name and the scheduler's kill-switch, none a secret
+  "DUE_INVOICES_MAIL_FROM",
+  "DUE_INVOICES_MAIL_FROM_NAME",
+  // the account-keeping bank's tax base for the due list's bank-deduction reason (barracuda 58920): company data, not a secret
+  "DUE_INVOICES_ACCOUNT_BANK_TAX_BASES",
+  "DUE_INVOICES_MAIL_SCHEDULER",
   "MNB_API_URL",
   "NEV",
   "NEXT_PROXY_TIMEOUT_MS",
@@ -98,6 +110,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "JATEK_PUBLIC_URL",
   // the giveaway's daily mail cap (acrobot, 2026-11-05): a number, not a secret
   "JATEK_MAIL_DAILY_CAP",
+  // the switch of the giveaway's scheduled mail queue drain (card 31445d0f): a switch, not a secret
+  "JATEK_MAIL_QUEUE_AUTO",
   // the giveaway's sender and Reply-To addresses (acrobot 44556): addresses, not secrets (its SMTP login and key are under
   // JATEK_SMTP_, which the ReefClub rule refuses as an internal integration)
   "JATEK_MAIL_FROM",
@@ -140,6 +154,9 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "RUN_DB_INTEGRATION",
   // the global search's time limit for an external group, in milliseconds: a number, not a secret
   "SEARCH_EXTERNAL_GROUP_TIMEOUT_MS",
+  // the Stripe settlement pull (A9): a switch and a minute count, not secrets (the OS holds no Stripe key)
+  "STRIPE_SETTLEMENT_SYNC_ENABLED",
+  "STRIPE_SETTLEMENT_SYNC_INTERVAL_MINUTES",
   "VIES_API_URL",
   // the webshop problem report pull (V1.2): a switch, two minute counts and a user id: not secrets
   "WEBSHOP_COMPLAINT_ASSIGNEE_ID",

@@ -29,12 +29,14 @@ import { externalDocumentType } from "./billing-document-list.js";
  *
  * Díjbekérő és szállítólevél nem számla, nem kerül bele.
  */
-export type OutgoingSource = "OS" | "SZAMLAZZ" | "EBIZ";
+export type OutgoingSource = "OS" | "SZAMLAZZ" | "EBIZ" | "NAV";
 
 export const OUTGOING_SOURCE_LABEL: Record<OutgoingSource, string> = {
   OS: "OS",
   SZAMLAZZ: "Számlázz.hu",
   EBIZ: "eBIZ",
+  // a NAV kimenő lekérdezéséből (kártya 785dfea6): a számla megvan, a PDF-je a kiállító programban (CASHMAN)
+  NAV: "NAV",
 };
 
 export interface OutgoingCandidate {
@@ -67,6 +69,8 @@ const SOURCE_ORDER: Record<OutgoingSource, number> = {
   OS: 0,
   SZAMLAZZ: 1,
   EBIZ: 2,
+  // the NAV row knows only that the invoice exists: last (card 785dfea6)
+  NAV: 3,
 };
 
 const issueDay = (c: OutgoingCandidate) =>

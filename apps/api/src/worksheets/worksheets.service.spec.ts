@@ -118,6 +118,8 @@ function worksheetRow(
     // lap keletkezhet hibajegy nélkül, és addig nincs átadva, amíg a szerelő
     // nem végzett. Ami ezt méri, az `overrides`-szal állítja be.
     serviceJobId: null,
+    // alapból önálló munkalap: a karbantartási lap felelőseit nem követi (kártya d91005e9)
+    followsJobAssignees: false,
     // A BETOLTOTT JEGY IS `null` ALAPBOL, nem csak az azonosito. A ketto kulon
     // mezo: az egyik a kapcsolat, a masik az, amit a reszletlap KIIR. Ha csak
     // az azonosito allna itt, a lekepezes egy nem letezo sorra hivatkozna.
@@ -201,7 +203,7 @@ function repository(
     replaceDraftContent: async () => true,
     close: async () => ({ ok: true }),
     amend: async () => ({ ok: true, version: 2 }),
-    sign: async () => ({ ok: true }),
+    sign: async () => ({ ok: true, autoTicket: null }),
     ...overrides,
   } as unknown as WorksheetsRepository;
 }
@@ -469,7 +471,7 @@ describe("WorksheetsService", () => {
       repository({
         sign: async () => {
           signCalled = true;
-          return { ok: true };
+          return { ok: true, autoTicket: null };
         },
       }),
     );
@@ -505,7 +507,7 @@ describe("WorksheetsService", () => {
         detail: async () => alairhatoLap(),
         sign: async (input: { note?: string | null }) => {
           received = input;
-          return { ok: true };
+          return { ok: true, autoTicket: null };
         },
       }),
     );
@@ -543,30 +545,81 @@ describe("WorksheetsService", () => {
   });
 
   /**
-   * A BEKOTES ALLITASA, NEM A SZABALYE. A szabalyt a
-   * `worksheet-signature-gate.spec.ts` meri; ez azt meri, hogy a szolgaltatas
-   * HIVJA is. A ketto kulon romolhat el: egy tiszta fuggveny, amit senki nem
-   * hiv, zolden all a keszletben, es a kapu kozben nyitva van.
+   * A BEKOTES ALLITASA, NEM A SZABALYE. A dontest a `worksheet-auto-ticket.spec.ts` meri, a tranzakciot az
+   * integracios spec; ez azt meri, hogy a szolgaltatas a ket hatokort KULON viszi tovabb.
    *
-   * A LAP ITT AZ ALAPERTELMEZETT SOR, ami jegy NELKULI -- tehat ez az allitas
-   * egyben azt is rogziti, hogy a jegy nelkuli lap a rendes kiindulas.
+   * A LAP ITT AZ ALAPERTELMEZETT SOR, ami jegy NELKULI. Luca es Balazs 2026-11-20-i kerese ota a belso kollega
+   * utjan ez nem megallas, hanem jegynyitas: a szolgaltatas engedi a tarba, es jelzi, hogy ott nyilhat jegy.
    */
-  it("jegy nelkul nem irhato ala a lap (belso kollega mondata)", async () => {
-    const service = new WorksheetsService(repository());
+  it("jegy nelkuli lapot a belso kollega alairhat: a tar nyitja a jegyet", async () => {
+    let received: { openTicketIfMissing?: boolean } | null = null;
+    const service = new WorksheetsService(
+      repository({
+        sign: async (input: { openTicketIfMissing?: boolean }) => {
+          received = input;
+          return {
+            ok: true,
+            autoTicket: { id: "job-9", jobNumber: "HJ-2026-009" },
+          };
+        },
+      }),
+    );
+    await service.sign(
+      "worksheet-1",
+      { decision: "ACCEPTED", signerName: "Kovács Béla" },
+      BELSOS_KERO,
+    );
+    assert.equal(
+      (received as { openTicketIfMissing?: boolean } | null)
+        ?.openTicketIfMissing,
+      true,
+    );
+  });
+
+  it("a partner utja valtozatlan: jegy nelkul a regi mondat, a tarig el sem jut", async () => {
+    let called = false;
+    const service = new WorksheetsService(
+      repository({
+        sign: async () => {
+          called = true;
+          return { ok: true, autoTicket: null };
+        },
+      }),
+    );
+    await assert.rejects(
+      service.sign(
+        "worksheet-1",
+        { decision: "ACCEPTED", signerName: "Kovács Béla" },
+        {
+          id: "partner-1",
+          customerId: "customer-1",
+          supplierId: null,
+        } as never,
+      ),
+      (hiba: unknown) =>
+        hiba instanceof BadRequestException &&
+        /hiányzik hozzá a hibajegy\. Szólj nekünk, és pótoljuk\./.test(
+          hiba.message,
+        ),
+    );
+    assert.equal(called, false);
+  });
+
+  it("a karbantartasi laphoz kotott lap a tarbol NO_TICKET-tel jon vissza: a belso kollega a KT-mondatot kapja", async () => {
+    const service = new WorksheetsService(
+      repository({ sign: async () => ({ ok: false, reason: "NO_TICKET" }) }),
+    );
     await assert.rejects(
       service.sign(
         "worksheet-1",
         { decision: "ACCEPTED", signerName: "Kovács Béla" },
         BELSOS_KERO,
       ),
-      (hiba: unknown) => {
-        assert.ok(hiba instanceof BadRequestException);
-        const uzenet = (hiba as BadRequestException).message;
-        assert.match(uzenet, /nincs fölötte hibajegy/);
-        // A TEENDOT IS MEGMONDJA: a belso kollega tud jegyet nyitni vagy csatolni.
-        assert.match(uzenet, /Nyiss fölé hibajegyet, vagy csatold/);
-        return true;
-      },
+      (hiba: unknown) =>
+        hiba instanceof BadRequestException &&
+        /karbantartási laphoz kapcsolódik, ezért nem nyílik hozzá automatikusan hibajegy/.test(
+          hiba.message,
+        ),
     );
   });
 
@@ -757,6 +810,73 @@ describe("WorksheetsService.create és a felelősök", () => {
       (received as { serviceJobId?: string | null }).serviceJobId,
       "job-1",
     );
+  });
+
+  /**
+   * A MUNKALAP A KARBANTARTÁSI LAP FELELŐSEIT KÖVETI, HA A NYITÁSKOR PONTOSAN AZOK A FELELŐSEI (kártya d91005e9). MI
+   * PIROSÍT: a követés hibajegy alatt vagy jegy nélkül; egy másképp kiosztott (vagy részben egyező) lista követőnek
+   * számít; az üres lista egy kiosztatlan karbantartási lap alatt nem követő (a rendszer által nyitott lap ilyen); a
+   * sorrend számít az egyezésnél.
+   */
+  describe("a karbantartási lap felelőseinek követése", () => {
+    const open = async (
+      ticket: unknown,
+      assigneeIds: string[] | undefined,
+      withJob = true,
+    ) => {
+      let received: unknown = null;
+      const service = new WorksheetsService(
+        repository({
+          ticketPartner: async () => ticket as never,
+          assignableUserIds: async (ids: readonly string[]) => new Set(ids),
+          createDraft: async (input: unknown) => {
+            received = input;
+            return "worksheet-1";
+          },
+        }),
+      );
+      await service.create(
+        {
+          ...contentDto(),
+          ...(withJob ? { serviceJobId: "job-1" } : {}),
+          ...(assigneeIds ? { assigneeIds } : {}),
+        },
+        BELSOS_KERO,
+      );
+      return (received as { followsJobAssignees?: boolean })
+        .followsJobAssignees;
+    };
+    const lap = (kind: string, ids: string[]) => ({
+      customerId: "customer-1",
+      kind,
+      assignees: ids.map((userId) => ({ userId })),
+    });
+
+    it("a lap felelőseivel azonos lista követő, sorrendtől függetlenül", async () => {
+      assert.equal(
+        await open(lap("MAINTENANCE", ["a", "b"]), ["b", "a"]),
+        true,
+      );
+    });
+
+    it("más lista, részben egyező, vagy több/kevesebb nem követő", async () => {
+      assert.equal(await open(lap("MAINTENANCE", ["a", "b"]), ["a"]), false);
+      assert.equal(await open(lap("MAINTENANCE", ["a"]), ["a", "b"]), false);
+      assert.equal(
+        await open(lap("MAINTENANCE", ["a", "b"]), ["a", "c"]),
+        false,
+      );
+    });
+
+    it("a kiosztatlan karbantartási lap alá kiosztatlanul nyitott lap követő (a rendszer által nyitott lap ilyen)", async () => {
+      assert.equal(await open(lap("MAINTENANCE", []), undefined), true);
+      assert.equal(await open(lap("MAINTENANCE", []), []), true);
+    });
+
+    it("hibajegy alatt, jegy nélkül és ismeretlen jegynél önálló, ha az azonos lista is", async () => {
+      assert.equal(await open(lap("REPAIR", ["a"]), ["a"]), false);
+      assert.equal(await open(lap("MAINTENANCE", ["a"]), ["a"], false), false);
+    });
   });
 
   /**

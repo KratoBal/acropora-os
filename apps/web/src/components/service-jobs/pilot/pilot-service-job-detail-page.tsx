@@ -45,6 +45,7 @@ import { PartnerPicker } from "../partner-picker";
 import { ServiceDocumentGallery } from "@/components/service/service-document-gallery";
 import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { PilotDelegatedColleaguesCard } from "./pilot-delegated-colleagues-card";
+import { PilotLinkedWorksheetsCard } from "./pilot-linked-worksheets-card";
 import { ServiceJobPlacementEditor } from "../service-job-placement-editor";
 import { ServiceJobFieldsEditor } from "../service-job-fields-editor";
 import { ServiceJobDelete } from "../service-job-delete";
@@ -979,7 +980,12 @@ export function PilotServiceJobDetailPage({
                     key={worksheet.id}
                     className="flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-3"
                   >
-                    <div className="min-w-0 flex-1">
+                    {/*
+                      TELEFONON A TÁRGY SAJÁT SORT KAP, az állapot, a munkaóra és a leválasztás alá tör (teszt OS, 390 px,
+                      2026-11-20: a `flex-1` 0-s alapja miatt a sor sosem tört, és a hosszú tárgy betűnként tördelődött egy keskeny
+                      oszlopban). `sm`-től a régi elrendezés: a tárgy kitölti, ami a többiek mellett marad.
+                    */}
+                    <div className="min-w-0 grow basis-full sm:basis-0">
                       {/*
                         A FŐ SOR A MUNKALAP TÁRGYA, ALATTA A SZÁM (Balázs,
                         2026-10-26 12:48 UTC, msg 1564259312728150148), mint
@@ -1087,6 +1093,14 @@ export function PilotServiceJobDetailPage({
               </div>
             ) : null}
           </PilotCard>
+
+          {maintenance ? (
+            <PilotLinkedWorksheetsCard
+              token={token}
+              jobId={jobId}
+              canManage={canManage}
+            />
+          ) : null}
 
           <div id="hibajegy-eszkoz" className="scroll-mt-6">
             <PilotCard>

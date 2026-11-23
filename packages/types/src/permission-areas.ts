@@ -51,7 +51,12 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
     label: "Rendelések",
     view: P.ORDERS_VIEW,
     manage: P.ORDERS_MANAGE,
-    extras: [],
+    extras: [
+      {
+        permission: P.ORDERS_SHIPPING_OVERRIDE,
+        label: "Kiszállítási kapu felülbírálása",
+      },
+    ],
   },
   {
     key: "products",

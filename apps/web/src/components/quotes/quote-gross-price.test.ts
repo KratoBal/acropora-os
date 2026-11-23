@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { grossFromNet, netFromGross } from "./quote-gross-price";
+import {
+  centsToDecimal,
+  grossFromNet,
+  itemLineAmounts,
+  netFromGross,
+} from "./quote-gross-price";
 
 describe("nettó és bruttó egységár", () => {
   it("a nettóból a bruttó két tizedesre, fél felfelé", () => {
@@ -43,5 +48,46 @@ describe("nettó és bruttó egységár", () => {
   it("negatív összeg (jóváírás) is számolható", () => {
     expect(netFromGross("-1270", "27")).toBe("-1000");
     expect(grossFromNet("-1000", "27")).toBe("-1270");
+  });
+});
+
+describe("egy tétel sora nettóban és bruttóban", () => {
+  it("1 db, 10 000 Ft nettó, 27 %: bruttó 12 700", () => {
+    const line = itemLineAmounts("1", "10000", "27")!;
+    expect([
+      centsToDecimal(line.netCents),
+      centsToDecimal(line.grossCents),
+    ]).toEqual(["10000", "12700"]);
+  });
+
+  it("több darab: a bruttó a sor nettójából megy, egyszer kerekítve (3 db, 3,3333 Ft nettó, 27 %)", () => {
+    const line = itemLineAmounts("3", "3.3333", "27")!;
+    // nettó 9,9999 -> 10,00; bruttó 9,9999 * 1,27 = 12,699873 -> 12,70
+    expect([
+      centsToDecimal(line.netCents),
+      centsToDecimal(line.grossCents),
+    ]).toEqual(["10", "12.7"]);
+  });
+
+  it("tört mennyiség és vesszős szám", () => {
+    const line = itemLineAmounts("2,5", "1000,50", "5")!;
+    expect([
+      centsToDecimal(line.netCents),
+      centsToDecimal(line.grossCents),
+    ]).toEqual(["2501.25", "2626.31"]);
+  });
+
+  it("ami nem szám, arra null jön", () => {
+    expect(itemLineAmounts("", "1000", "27")).toBeNull();
+    expect(itemLineAmounts("1", "x", "27")).toBeNull();
+    expect(itemLineAmounts("1", "1000", "")).toBeNull();
+  });
+
+  it("negatív sor (jóváírás tétel) is számolható", () => {
+    const line = itemLineAmounts("1", "-1000", "27")!;
+    expect([
+      centsToDecimal(line.netCents),
+      centsToDecimal(line.grossCents),
+    ]).toEqual(["-1000", "-1270"]);
   });
 });

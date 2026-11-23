@@ -438,12 +438,12 @@ describe("the partner's view of a service job conversation", () => {
     assert.deepEqual(f.visibilityAsks, [
       {
         id: "job1",
-        scope: { kind: "customer", customerId: "cust1" },
+        scope: { kind: "customer", customerId: "cust1", userId: "partner" },
         userId: "partner",
       },
       {
         id: "job1",
-        scope: { kind: "customer", customerId: "cust1" },
+        scope: { kind: "customer", customerId: "cust1", userId: "partner" },
         userId: "partner",
       },
       {

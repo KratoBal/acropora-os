@@ -175,6 +175,19 @@ export const SETTINGS_AREAS: SettingsArea[] = [
     ],
   },
   {
+    title: "Pénzügy",
+    icon: "finance",
+    links: [
+      {
+        label: "Lejáró számlák levele",
+        description:
+          "A heti Utalási jegyzék PDF: kinek megy, mikor (legkorábban, legkésőbb), ki a feladó, és kikapcsolható.",
+        href: "/beallitasok/lejaro-szamlak",
+        permission: PERMISSIONS.FINANCE_MANAGE,
+      },
+    ],
+  },
+  {
     title: "AI csevegés",
     icon: "settings",
     links: [
@@ -367,6 +380,13 @@ export const WEBSHOP_SETTINGS_AREAS: SettingsArea[] = [
           "Vevőnként beállítható százalékos kedvezmény a termékárból, minden rendelésére. Be- és kikapcsolás.",
         href: "/webshop/egyedi-kedvezmenyek",
         entryId: "webshop-coupons",
+      },
+      {
+        label: "Ajándékkártyák",
+        description:
+          "Ajándékkártya kiadása (a kód csak a kiadáskor látszik), a kártyák egyenlege és naplója, kikapcsolás.",
+        href: "/webshop/ajandekkartyak",
+        entryId: "webshop-gift-cards",
       },
     ],
   },

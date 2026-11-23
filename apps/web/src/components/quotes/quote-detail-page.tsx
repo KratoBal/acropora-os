@@ -43,6 +43,7 @@ import { QuoteHandoffCard, QuoteHandoffDrawer } from "./quote-handoff";
 import { QuoteMilestonesCard } from "./quote-proforma";
 import { QuoteAcceptanceLinkCard } from "./quote-link";
 import { QuoteDeliveryLog, QuoteSendDrawer } from "./quote-send";
+import { QuotePartnerEditor } from "./quote-partner-editor";
 import { canEditQuoteTitle, QuoteTitleEditor } from "./quote-title-editor";
 
 /** A legújabb verzió (a verziók számuk szerint növekvő sorrendben jönnek). */
@@ -91,6 +92,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const [sending, setSending] = useState(false);
   const [quote, setQuote] = useState<QuoteDetailDto | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
+  const [editingPartner, setEditingPartner] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -326,6 +328,15 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
                   Cím szerkesztése
                 </PilotButton>
               ) : null}
+              {canEditQuoteTitle(quote, canManage) ? (
+                <PilotButton
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => setEditingPartner(true)}
+                >
+                  Partner cseréje
+                </PilotButton>
+              ) : null}
               {canManage && deletable ? (
                 <PilotButton
                   variant="ghost"
@@ -368,6 +379,28 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
           onSaved={(title) => {
             setQuote({ ...quote, title });
             setEditingTitle(false);
+          }}
+        />
+      ) : null}
+
+      {editingPartner && canEditQuoteTitle(quote, canManage) ? (
+        <QuotePartnerEditor
+          token={token}
+          quote={quote}
+          canCreateCustomer={Boolean(
+            session &&
+            hasPermission(session.user, PERMISSIONS.CUSTOMERS_MANAGE),
+          )}
+          onClose={() => setEditingPartner(false)}
+          onSaved={(customer) => {
+            setQuote({
+              ...quote,
+              customerId: customer.id,
+              customerName: customer.displayName,
+            });
+            setEditingPartner(false);
+            // the send's recipient and the printed partner come from the quote's partner: read the page again
+            void load();
           }}
         />
       ) : null}

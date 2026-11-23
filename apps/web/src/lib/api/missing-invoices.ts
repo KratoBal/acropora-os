@@ -1,7 +1,13 @@
 import type {
   BankStatementImportResult,
   InvoiceCollectionItemsResponse,
+  AcceptWithRuleInput,
+  AcceptWithRuleResult,
+  AutoAcceptUndoResult,
+  AutoAcceptedView,
   InvoiceCollectionSuggestionsResponse,
+  SupplierRulePreview,
+  SupplierRuleView,
   MissingInvoiceDuplicateResult,
   MissingInvoiceDuplicatesResponse,
   MissingInvoiceJevSuggestion,
@@ -117,6 +123,53 @@ export const missingInvoicesApi = {
   acceptSuggestion(token: string, id: string) {
     return apiRequest<void>(
       `${base}/suggestions/${encodeURIComponent(id)}/accept`,
+      token,
+      { method: "POST" },
+    );
+  },
+  /** Az ismert szállító szabálya egy döntésre váró PDF-re: kulcs, feladó, hány másik PDF fogadódna el (acrobot 57881). */
+  supplierRulePreview(
+    token: string,
+    id: string,
+    vendorName?: string,
+    signal?: AbortSignal,
+  ) {
+    const query = vendorName?.trim()
+      ? `?${new URLSearchParams({ vendorName: vendorName.trim() }).toString()}`
+      : "";
+    return apiRequest<SupplierRulePreview>(
+      `${base}/suggestions/${encodeURIComponent(id)}/rule-preview${query}`,
+      token,
+      { signal },
+    );
+  },
+  acceptWithRule(token: string, id: string, input: AcceptWithRuleInput) {
+    return apiRequest<AcceptWithRuleResult>(
+      `${base}/suggestions/${encodeURIComponent(id)}/accept-with-rule`,
+      token,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  },
+  supplierRules(token: string, signal?: AbortSignal) {
+    return apiRequest<SupplierRuleView[]>(`${base}/supplier-rules`, token, {
+      signal,
+    });
+  },
+  disableSupplierRule(token: string, ruleId: string) {
+    return apiRequest<void>(
+      `${base}/supplier-rules/${encodeURIComponent(ruleId)}/disable`,
+      token,
+      { method: "POST" },
+    );
+  },
+  autoAccepted(token: string, signal?: AbortSignal) {
+    return apiRequest<AutoAcceptedView[]>(`${base}/auto-accepted`, token, {
+      signal,
+    });
+  },
+  undoAutoAccepted(token: string, id: string) {
+    return apiRequest<AutoAcceptUndoResult>(
+      `${base}/auto-accepted/${encodeURIComponent(id)}/undo`,
       token,
       { method: "POST" },
     );

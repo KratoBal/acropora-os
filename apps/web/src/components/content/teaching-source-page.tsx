@@ -4,6 +4,7 @@ import {
   analyzeTeachingSource,
   buildTeachingNarration,
   buildTeachingSlides,
+  formatNumber,
   hasPermission,
   parseTeachingSourceInput,
   PERMISSIONS,
@@ -1096,6 +1097,17 @@ export function TeachingSourcePage({ contentId }: { contentId: string }) {
                     .join(", ")}`
                 : ", minden rész a keretben"}
             </li>
+            {preview.slides.tableOverflow?.length ? (
+              <li>
+                Táblázat nem fér a diára (becslés, 9 pontos betűvel is):{" "}
+                {preview.slides.tableOverflow
+                  .map(
+                    (o) =>
+                      `${o.slide}. dia, kb. ${formatNumber(o.over * 2.54, 1)} cm túllóg`,
+                  )
+                  .join("; ")}
+              </li>
+            ) : null}
             <li>
               Narráció:{" "}
               {preview.narration.chapters.filter((c) => c.text !== null).length}
@@ -1158,6 +1170,9 @@ export function TeachingSourcePage({ contentId }: { contentId: string }) {
                     )}
                     {output.overFrame ? (
                       <PilotBadge variant="amber">keret felett</PilotBadge>
+                    ) : null}
+                    {output.tableOverflow ? (
+                      <PilotBadge variant="amber">táblázat nem fér</PilotBadge>
                     ) : null}
                     {output.chaptersWithoutNarration ? (
                       <PilotBadge variant="grey">

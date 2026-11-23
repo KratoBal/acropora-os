@@ -4,6 +4,7 @@ import { ACROPORA_COMPANY } from "@acropora/types";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import { storageKeyFor } from "../service-assets/document-store/document-storage-key.js";
 import { monthRange } from "./external-invoice-pdf-fill.js";
+import { NAV_SOURCE } from "./external-billing-one-row.js";
 
 /**
  * A KIMENŐ SZÁMLA PDF-JE A VEVŐNEK KÜLDÖTT LEVÉLBŐL (kártya 07ec8219, Balázs 2026-10-21: „a számlák nem
@@ -87,24 +88,77 @@ export interface MailPdf {
  * kell a Gmailének lennie. Ha valaha nem az áll felül, a levél NEM_HITELES lesz: látható, nem néma.
  */
 export function cmfxMailAuthenticated(results: readonly string[]): boolean {
+  return mailAuthenticatedFor(results, "cmfx.hu");
+}
+
+/**
+ * Ugyanez a próba egy megnevezett domainre (785dfea6, acrobot 59000): a `--mail-id` a saját domainünk
+ * (acropora.hu) levelét fogadja el, ugyanazzal a mércével, mint a cmfx-ét: a legfelső fejléc a Gmailé,
+ * benne `dkim=pass` PONTOSAN erre a domainre ÉS `dmarc=pass header.from=<domain>`.
+ */
+export function mailAuthenticatedFor(
+  results: readonly string[],
+  domain: string,
+): boolean {
   const top = results[0]?.trim() ?? "";
   if (!/^mx\.google\.com\s*;/i.test(top)) return false;
   const parts = top.split(";").map((part) => part.trim().toLowerCase());
   // the domain ends where the token ends: no letter, digit, dot or hyphen may follow
   const end = String.raw`(?![a-z0-9.-])`;
+  const host = domain.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const dkim = parts.some(
     (part) =>
       /^dkim=pass\b/.test(part) &&
       new RegExp(
-        String.raw`(?:^|\s)header\.(?:d=cmfx\.hu|i=[^\s@]*@cmfx\.hu)${end}`,
+        String.raw`(?:^|\s)header\.(?:d=${host}|i=[^\s@]*@${host})${end}`,
       ).test(part),
   );
   const dmarc = parts.some(
     (part) =>
       /^dmarc=pass\b/.test(part) &&
-      new RegExp(String.raw`(?:^|\s)header\.from=cmfx\.hu${end}`).test(part),
+      new RegExp(String.raw`(?:^|\s)header\.from=${host}${end}`).test(part),
   );
   return dkim && dmarc;
+}
+
+/**
+ * A LEVÉL ÍTÉLETE EGY SORBAN, CÍM NÉLKÜL (785dfea6, acrobot 59099): az első éles száraz futás Luca mindhárom levelére „NEM hiteles"
+ * ítéletet adott, és a kimenetből nem derült ki, miért: hiányzik-e a Gmail sora, más-e a fogadó, vagy más a DKIM-domain. Ez a sor
+ * megmondja: hány `Authentication-Results` fejléc jött, a legfelső kié, és benne módszerenként az eredmény a domainnel. Csak a domain
+ * kerül ki (a feladóé és a `header.d`/`header.i`/`header.from`/`smtp.mailfrom` értéké), a cím helyi része soha; a legfelső fejléc
+ * nem a Gmailé is lehet, ezért minden kiírt token a [a-z0-9.-] karakterekre és 64 karakterre szűkül.
+ */
+export function authVerdictLine(
+  results: readonly string[],
+  sender: string | null,
+): string {
+  const clean = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9.-]/g, "")
+      .slice(0, 64) || "-";
+  const domainOf = (value: string | null | undefined) =>
+    value ? clean(value.includes("@") ? value.split("@").at(-1)! : value) : "-";
+  const top = results[0]?.trim() ?? "";
+  const parts = top.split(";").map((part) => part.trim());
+  const verdicts = parts
+    .slice(1)
+    .map((part) => {
+      const method = /^([a-z-]+)=([a-z]+)\b/i.exec(part);
+      if (!method) return null;
+      const domain =
+        /\bheader\.(?:d|from)=([^\s;]+)/i.exec(part)?.[1] ??
+        /\bheader\.i=([^\s;]+)/i.exec(part)?.[1] ??
+        /\bsmtp\.mailfrom=([^\s;]+)/i.exec(part)?.[1];
+      return `${clean(method[1]!)}=${clean(method[2]!)} (${domainOf(domain)})`;
+    })
+    .filter(Boolean);
+  return (
+    `Ítélet: feladó-domain ${domainOf(sender)}; Authentication-Results ${results.length} db; ` +
+    (top
+      ? `legfelső: ${clean(parts[0]!)}${verdicts.length ? `; ${verdicts.join("; ")}` : "; nincs benne ítélet"}`
+      : "legfelső: nincs")
+  );
 }
 
 /**
@@ -139,14 +193,27 @@ export function textCarriesOurTaxNumber(text: string): boolean {
  * nélkül; a `HUF` külön cellában. Ugyanez a szám az áfa-sorban is előfordulhat, ezért NEM elég, hogy a
  * szöveg valahol tartalmazza: a felirat UTÁNI első számcsoport számít (a sorba rendezett szövegben a
  * cellák között ` | ` áll). Egy nem egész feed-összeg (devizás számla) nem kerekítődik: nem egyezik.
+ * A STORNÓ VÉGÖSSZEGE NEGATÍV (785dfea6, acrobot 59264: a 2026/00043, 00044 és 00080 stornó-okirat éles futása AMOUNT_MISMATCH
+ * lett „nincs fizetendő-sor" okkal, a feed-sor -1 562 100, -1 714 500 és -169 990). A felirat utáni mínuszjel (`-` vagy `−`) az
+ * összeg része: a negatív sor csak negatív PDF-összeggel egyezik, az előjel-eltérés továbbra is eltérés.
  */
 export function pdfPayableMatches(text: string, grossAmount: string): boolean {
   // the group is greedy and read as a whole number: a longer number, or a fractional feed amount, is unequal
-  const match = /FIZETENDŐ\s+BRUTTÓ\s+VÉGÖSSZEG:[\s|]*(\d(?:[\d ]*\d)?)/.exec(
-    text,
-  );
-  if (!match) return false;
-  return Number(match[1]!.replace(/ /g, "")) === Number(grossAmount);
+  const payable = pdfPayableAmount(text);
+  return payable !== null && Number(payable) === Number(grossAmount);
+}
+
+/**
+ * A PDF fizetendő végösszege, ahogy a `pdfPayableMatches` olvassa (szóköz nélkül), vagy `null`, ha a felirat nincs meg. Az
+ * `AMOUNT_MISMATCH` sor ezt írja ki a sor összege mellé (acrobot 58326: az élesen olvasó szerep a sort nem látja, a két
+ * számot csak a parancs kimenete adhatja).
+ */
+export function pdfPayableAmount(text: string): string | null {
+  const match =
+    /FIZETENDŐ\s+BRUTTÓ\s+VÉGÖSSZEG:[\s|]*([-\u2212])?\s*(\d(?:[\d ]*\d)?)/.exec(
+      text,
+    );
+  return match ? `${match[1] ? "-" : ""}${match[2]!.replace(/ /g, "")}` : null;
 }
 
 export type MailPdfOutcome =
@@ -158,12 +225,18 @@ export type MailPdfOutcome =
       bytes: number;
     }
   | { kind: "NO_MAIL"; documentNumber: string }
+  /** a sor összege (`expected`) és a PDF fizetendő végösszege (`found`, `null`, ha a felirat nincs a PDF-ben) */
+  | {
+      kind: "AMOUNT_MISMATCH";
+      documentNumber: string;
+      expected: string;
+      found: string | null;
+    }
   | {
       kind:
         | "NOT_PDF"
         | "NUMBER_NOT_IN_PDF"
         | "NOT_OUR_INVOICE"
-        | "AMOUNT_MISMATCH"
         | "STORE_FAILED"
         | "NOT_AUTHENTICATED";
       documentNumber: string;
@@ -229,6 +302,7 @@ export async function fillExternalPdfsFromMail(input: {
       "NOT_PDF" | "NUMBER_NOT_IN_PDF" | "NOT_OUR_INVOICE" | "AMOUNT_MISMATCH" =
       "NOT_PDF";
     let chosen: MailPdf | null = null;
+    let found: string | null = null;
     for (const pdf of trusted) {
       if (pdf.buffer.subarray(0, 5).toString("latin1") !== "%PDF-") continue;
       const text = await input.textOf(pdf.buffer).catch(() => [] as string[]);
@@ -242,13 +316,23 @@ export async function fillExternalPdfsFromMail(input: {
       }
       if (!pdfPayableMatches(text.join("\n"), row.grossAmount)) {
         verdict = "AMOUNT_MISMATCH";
+        found = pdfPayableAmount(text.join("\n"));
         continue;
       }
       chosen = pdf;
       break;
     }
     if (!chosen) {
-      outcomes.push({ kind: verdict, documentNumber: number });
+      outcomes.push(
+        verdict === "AMOUNT_MISMATCH"
+          ? {
+              kind: verdict,
+              documentNumber: number,
+              expected: row.grossAmount,
+              found,
+            }
+          : { kind: verdict, documentNumber: number },
+      );
       continue;
     }
     if (!input.apply) {
@@ -294,7 +378,7 @@ export async function fillExternalPdfsFromMail(input: {
 }
 
 /**
- * A hónap PDF nélküli feed-sorai. Az ok (`pdfMissingReason`) nem zár ki: egy Számlázz.hu-s 7-es
+ * A hónap PDF nélküli feed-sorai (és a NAV-ból felvettek). Az ok (`pdfMissingReason`) nem zár ki: egy Számlázz.hu-s 7-es
  * hibájú sor (a Számlázz.hu nem ismeri, mert a cmfx állította ki) épp az, amit a levél pótolhat.
  */
 export async function mailPdfCandidates(
@@ -304,7 +388,9 @@ export async function mailPdfCandidates(
   // (unas-prisma-select-mezok.spec.ts) reads `prisma.<model>.findMany({`
   const rows = await prisma.externalBillingDocument.findMany({
     where: {
-      source: "SZAMLAZZ",
+      // a NAV-ból felvett sor is (kártya 785dfea6): a 01-01 és 09-30 közötti cmfx-számlának más sora nincs, a PDF-je
+      // a levélből vagy a cmfx-letöltőből (`--dir`) ugyanígy, a bruttó-ellenőrzéssel kerül rá
+      source: { in: ["SZAMLAZZ", NAV_SOURCE] },
       pdfStorageKey: null,
       documentNumber: { not: "" },
       issueDate: monthRange(month),

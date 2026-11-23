@@ -53,6 +53,8 @@ const api = vi.hoisted(() => ({
   createSale: vi.fn(),
   listSales: vi.fn(),
   getSale: vi.fn(),
+  createInternalUse: vi.fn(),
+  listInternalUses: vi.fn(),
 }));
 
 const auth = vi.hoisted(() => ({
@@ -138,6 +140,8 @@ beforeEach(() => {
   api.createSale.mockReset();
   api.listSales.mockReset().mockResolvedValue(emptySalesResponse);
   api.getSale.mockReset();
+  api.createInternalUse.mockReset();
+  api.listInternalUses.mockReset().mockResolvedValue(emptySalesResponse);
 });
 
 describe("PilotPosTerminalPage", () => {
@@ -294,7 +298,7 @@ describe("PilotPosTerminalPage", () => {
    * küldene (a statisztikában összeolvadna a pénztárgéppel), ha az alapértelmezett
    * fizetés nem CASH maradna, vagy ha a gomb a három gomb rácsában állna.
    */
-  it("a Pénztárgép az alapértelmezés (CASH), a Kassza külön sorban a három gomb alatt", async () => {
+  it("a Pénztárgép az alapértelmezés (CASH), a Kassza külön sorban a három gomb alatt, mellette a Belső felhasználás", async () => {
     api.searchProducts.mockResolvedValue([searchResult]);
     api.createSale.mockResolvedValue(saleResult());
 
@@ -312,9 +316,12 @@ describe("PilotPosTerminalPage", () => {
     expect(cashButton).toHaveAttribute("aria-pressed", "true");
     expect(deskButton).toHaveAttribute("aria-pressed", "false");
     expect(screen.queryByRole("button", { name: "Készpénz" })).toBeNull();
-    // teljes szélességű, külön sorban a három gomb alatt
+    // külön sorban a három gomb alatt, mellette a Belső felhasználás (Balázs 2026-11-20, kártya ec51e614)
     expect(deskButton.parentElement).not.toBe(cashButton.parentElement);
-    expect(deskButton.parentElement?.className).toContain("grid-cols-1");
+    expect(deskButton.parentElement?.className).toContain("grid-cols-2");
+    expect(
+      screen.getByRole("button", { name: "Belső felhasználás" }).parentElement,
+    ).toBe(deskButton.parentElement);
     expect(
       cashButton.parentElement?.compareDocumentPosition(
         deskButton.parentElement!,
@@ -327,6 +334,130 @@ describe("PilotPosTerminalPage", () => {
         "token-OWNER",
         expect.objectContaining({ paymentMethod: "CASH" }),
       ),
+    );
+  });
+
+  /**
+   * A BELSŐ FELHASZNÁLÁS (kártya ec51e614). MI PIROSÍT: ha eladásként menne (createSale); ha megjegyzés nélkül is rögzítene, vagy
+   * a csupa szóközt elfogadná; ha árat vagy kedvezményt küldene; ha kézi tétellel is engedné; ha rögzítés után a kosár, a
+   * megjegyzés vagy a mód megmaradna; ha a napi lista nem kérné le, vagy nem mutatná a megjegyzést.
+   */
+  it("a Belső felhasználás megjegyzés nélkül nem rögzít; megjegyzéssel termék és mennyiség megy, ár nélkül, nem eladásként", async () => {
+    api.searchProducts.mockResolvedValue([searchResult]);
+    api.createInternalUse.mockResolvedValue({
+      detail: {
+        id: "bfh-1",
+        number: "BFH-0001",
+        note: "bemutató akvárium",
+        performedByName: "Teszt Felhasználó",
+        occurredAt: new Date().toISOString(),
+        totalCost: "15000.00",
+        lines: [],
+      },
+      stockWarnings: [],
+    });
+
+    render(createElement(PilotPosTerminalPage));
+    fireEvent.change(screen.getByRole("textbox", { name: "Termék keresése" }), {
+      target: { value: "reef" },
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    // the same search result twice: one cart line of 2
+    const result = await screen.findByText("Red Sea ReefMat 500");
+    fireEvent.click(result);
+    fireEvent.click(result);
+
+    fireEvent.click(screen.getByRole("button", { name: "Belső felhasználás" }));
+    expect(screen.getByTestId("pos-internal-use-notice")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Fizetés/ })).toBeNull();
+    const record = screen.getByRole("button", {
+      name: "Belső felhasználás rögzítése",
+    });
+    expect(record).toBeDisabled();
+    const note = screen.getByRole("textbox", {
+      name: /Miért vették ki\? \(kötelező\)/,
+    });
+    fireEvent.change(note, { target: { value: "   " } });
+    expect(record).toBeDisabled();
+    fireEvent.change(note, { target: { value: "  bemutató akvárium  " } });
+    expect(record).toBeEnabled();
+    fireEvent.click(record);
+
+    await waitFor(() =>
+      expect(api.createInternalUse).toHaveBeenCalledWith("token-OWNER", {
+        note: "bemutató akvárium",
+        lines: [{ variantId: "variant-1", quantity: 2 }],
+      }),
+    );
+    expect(api.createSale).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText("Belső felhasználás rögzítve: BFH-0001"),
+    ).toBeInTheDocument();
+    // the cart, the note and the mode are reset: the next customer is a sale again
+    expect(screen.getByRole("button", { name: "Pénztárgép" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.queryByRole("textbox", { name: /Miért vették ki/ }),
+    ).toBeNull();
+    expect(screen.getByText("0 tétel")).toBeInTheDocument();
+  });
+
+  it("kézi tétellel a Belső felhasználás nem rögzíthető, és megmondja, mit kell kivenni", async () => {
+    render(createElement(PilotPosTerminalPage));
+    fireEvent.click(screen.getByRole("button", { name: "Kézi tétel" }));
+    const form = within(screen.getByRole("form", { name: "Kézi tétel" }));
+    fireEvent.change(form.getByRole("textbox", { name: "Megnevezés" }), {
+      target: { value: "Vágott korall" },
+    });
+    fireEvent.change(form.getByRole("spinbutton", { name: "Darabszám" }), {
+      target: { value: "1" },
+    });
+    fireEvent.change(
+      form.getByRole("spinbutton", { name: "Bruttó egységár (Ft)" }),
+      { target: { value: "1000" } },
+    );
+    fireEvent.click(form.getByRole("button", { name: "Hozzáadás a kosárhoz" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Belső felhasználás" }));
+    fireEvent.change(screen.getByRole("textbox", { name: /Miért vették ki/ }), {
+      target: { value: "teszt" },
+    });
+    expect(
+      screen.getByText("Kézi tétel nem lehet belső felhasználás"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Belső felhasználás rögzítése" }),
+    ).toBeDisabled();
+  });
+
+  it("a mai belső felhasználásokat külön listában mutatja, a megjegyzéssel és a beszerzési értékkel", async () => {
+    api.listInternalUses.mockResolvedValue({
+      ...emptySalesResponse,
+      items: [
+        {
+          id: "bfh-1",
+          number: "BFH-TODAY",
+          note: "műhely, szivattyú-próba",
+          performedByName: "Teszt Felhasználó",
+          occurredAt: new Date().toISOString(),
+          totalCost: null,
+          lineCount: 2,
+        },
+      ],
+    });
+    render(createElement(PilotPosTerminalPage));
+    const list = await screen.findByTestId("pos-internal-uses");
+    expect(within(list).getByText("BFH-TODAY")).toBeInTheDocument();
+    expect(
+      within(list).getByText("műhely, szivattyú-próba"),
+    ).toBeInTheDocument();
+    expect(within(list).getByText("ár nélkül")).toBeInTheDocument();
+    expect(api.listInternalUses.mock.calls[0]![1]).toEqual(
+      api.listSales.mock.calls[0]![1],
     );
   });
 

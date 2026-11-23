@@ -419,13 +419,13 @@ describe("PilotContractsPage -- javítási díjak", () => {
   it("a kitöltött díjak a szerver számalakjában mennek, az üresek nullként", async () => {
     await fillContract();
     fireEvent.change(
-      screen.getByLabelText("1. tétel Munkanapon, munkaidőben (Ft)"),
+      screen.getByLabelText("1. tétel Munkanapon, munkaidőben (nettó Ft)"),
       { target: { value: "9 000" } },
     );
     fireEvent.change(screen.getByLabelText("1. tétel Súlyszám"), {
       target: { value: "90" },
     });
-    fireEvent.change(screen.getByLabelText("1. tétel Összesen (Ft)"), {
+    fireEvent.change(screen.getByLabelText("1. tétel Összesen (nettó Ft)"), {
       target: { value: "10 125 000" },
     });
     fireEvent.click(screen.getByText("Szerződés mentése"));
@@ -453,6 +453,47 @@ describe("PilotContractsPage -- javítási díjak", () => {
         .closest("button")!
         .hasAttribute("disabled"),
     ).toBe(true);
+  });
+
+  /*
+    A TÉTEL SZÁMOLT ÖSSZEGE AZ ŰRLAPON (kártya 51898ed9): élőben, ahogy a mezők kitöltődnek. MI PIROSÍT: ha nem látszik, vagy nem
+    követi a mezőket; ha a félig beírt tétel összeget ír; ha az Összesen mező súlyszám nélkül szerkeszthető.
+  */
+  it("az összeg élőben követi a mezőket, és csak érvényes mezőkből áll elő", async () => {
+    await fillContract();
+    // az egységár 0, a darabszám és az alkalom még nincs: az összeg nulla
+    expect(screen.getByTestId("contract-item-amounts").textContent).toMatch(
+      /nettó 0 Ft, bruttó 0 Ft/,
+    );
+    fireEvent.change(screen.getByLabelText("Nettó egységár"), {
+      target: { value: "15000" },
+    });
+    fireEvent.change(screen.getByLabelText("Darabszám"), {
+      target: { value: "10" },
+    });
+    fireEvent.change(screen.getByLabelText("Alkalom / év"), {
+      target: { value: "3" },
+    });
+    expect(screen.getByTestId("contract-item-amounts").textContent).toMatch(
+      /^Összesen: nettó 450\s000 Ft, bruttó 571\s500 Ft$/,
+    );
+    fireEvent.change(screen.getByLabelText("Alkalom / év"), {
+      target: { value: "" },
+    });
+    expect(screen.queryByTestId("contract-item-amounts")).toBeNull();
+  });
+
+  it("az Összesen mező súlyszám nélkül tiltott, súlyszámmal szerkeszthető", async () => {
+    await fillContract();
+    const total = () =>
+      screen.getByLabelText("1. tétel Összesen (nettó Ft)") as HTMLInputElement;
+    expect(total().disabled).toBe(true);
+    expect(screen.getByTestId("repair-total-hint")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("1. tétel Súlyszám"), {
+      target: { value: "90" },
+    });
+    expect(total().disabled).toBe(false);
+    expect(screen.queryByTestId("repair-total-hint")).toBeNull();
   });
 });
 

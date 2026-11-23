@@ -987,7 +987,20 @@ export function withKnownNumber(
   known: readonly KnownInvoiceNumber[],
   hints?: KnownNumberHints,
 ): InvoiceTextReading {
-  if (reading.supplierTaxNumber) return reading;
+  /*
+    AZ ADÓSZÁMNAK OLVASOTT ÉRTÉK EGY ISMERT SZÁMLASZÁM IS LEHET (acrobot 57891, 57900; a GLS: a számlaszáma `HU00956903`, HU + 8
+    jegy, ami egy EU-s adószám alakja is). Ha az olvasat "adószáma" egy ismert számlaszám (NAV, feed, beszerzés), akkor az a
+    dokumentum SZÁMA, nem a szállító adószáma: az olvasat nem marad meg, hanem az ismert szám és annak a sornak a szállítója dönt.
+    A valódi EU-s adószám (ami nem ismert számlaszám) továbbra is az olvasaté marad.
+  */
+  const taxIsKnownNumber =
+    Boolean(reading.supplierTaxNumber) &&
+    known.some(
+      (candidate) =>
+        compactNumber(candidate.number) ===
+        compactNumber(reading.supplierTaxNumber!),
+    );
+  if (reading.supplierTaxNumber && !taxIsKnownNumber) return reading;
   const hit = knownNumberInText(lines, known, hints);
   if (!hit) return reading;
   if (

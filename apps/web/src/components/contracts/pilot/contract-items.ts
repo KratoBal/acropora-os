@@ -92,30 +92,32 @@ export const isUnsavedItem = (id: string) => id.startsWith(NEW_ITEM_PREFIX);
  * exchange/szerzodes-javitasi-dijak-minta-2026-10-05.png). Mind nem kötelező,
  * és NINCS számolás: a szorzó szerződésenként más, kézzel töltik (Luca). A minta
  * összesene sem a díjakból jön (90 súlyszám mellett 10 125 000 Ft).
+ *
+ * MINDEN DÍJ NETTÓ (Luca kérdésére, kártya 51898ed9, 2026-11-19): a felirat kimondja.
  */
 export const REPAIR_FEE_FIELDS = [
   {
     key: "repairFeeWorkdayHours",
-    label: "Munkanapon, munkaidőben (Ft)",
+    label: "Munkanapon, munkaidőben (nettó Ft)",
     short: "munkaidőben",
     unit: " Ft",
   },
   {
     key: "repairFeeWorkdayOffHours",
-    label: "Munkanapon, munkaidőn kívül (Ft)",
+    label: "Munkanapon, munkaidőn kívül (nettó Ft)",
     short: "munkaidőn kívül",
     unit: " Ft",
   },
   {
     key: "repairFeeHoliday",
-    label: "Munkaszüneti és ünnepnapon (Ft)",
+    label: "Munkaszüneti és ünnepnapon (nettó Ft)",
     short: "munkaszüneti és ünnepnapon",
     unit: " Ft",
   },
   { key: "repairWeight", label: "Súlyszám", short: "súlyszám", unit: "" },
   {
     key: "repairTotal",
-    label: "Összesen (Ft)",
+    label: "Összesen (nettó Ft)",
     short: "összesen",
     unit: " Ft",
   },
@@ -156,5 +158,101 @@ export function repairFeeSummary(
     const value = item[key];
     return value && value.trim() ? [`${short} ${format(value)}${unit}`] : [];
   });
-  return parts.length ? `Javítási díjak: ${parts.join(" · ")}` : null;
+  return parts.length ? `Javítási díjak (nettó): ${parts.join(" · ")}` : null;
+}
+
+/**
+ * A JAVÍTÁSI DÍJAK "ÖSSZESEN" MEZŐJE CSAK SÚLYSZÁMMAL SZERKESZTHETŐ (kártya 51898ed9, Balázs 2026-11-19): ahol súlyszám van, ott
+ * az összeg nem számolt, hanem kézi marad; súlyszám nélkül a tétel összege a SZÁMOLT nettó (`contractItemAmounts`), és Luca
+ * ezért írta a 450 000 Ft-ot a díjak közé. A mező súlyszám nélkül tiltott, DE A MEGLÉVŐ ÉRTÉKE NEM TŰNIK EL: a tiltott mező
+ * mutatja, és a küldött alak (`repairFeesPayload`) változatlanul viszi, tehát egy mentés nem törli a kézi összeget.
+ */
+export function repairTotalState(item: RepairFeeValues): {
+  editable: boolean;
+  /** A magyarázat a mező alatt: súlyszám nélkül mindig, kiegészítve, ha kézi érték már áll benne. */
+  hint: string | null;
+} {
+  const weight = item.repairWeight;
+  if (weight && weight.trim()) return { editable: true, hint: null };
+  const kept = item.repairTotal && item.repairTotal.trim();
+  return {
+    editable: false,
+    hint: kept
+      ? "A korábban kézzel beírt összeg megmarad, de súlyszám nélkül nem szerkeszthető. A tétel összege fent a számolt nettó."
+      : "Súlyszám nélkül az összeg nem írható: a tétel összege fent a számolt nettó. Súlyszámmal kézzel adható meg.",
+  };
+}
+
+/**
+ * A TÉTEL SZÁMOLT ÖSSZEGE (kártya 51898ed9): nettó = egységár x darab x alkalom (beszerzésnél és az alkalom nélküli javítási
+ * tételnél egységár x mennyiség), az ÁFA a KEREKÍTETT nettóból, a bruttó a kettő összege. UGYANAZ A SZABÁLY, mint a szerver
+ * megrendelőlap-összegénél (`computeMaintenanceOrderFormItemAmounts`): négy tizedesre kerekítve, félre felfelé (`ROUND_HALF_UP`), tehát a képernyő
+ * és a kiadott lap nem térhet el. A szorzás egész számokkal megy (`BigInt`), mert a `Number` szorzat egy 0,1 + 0,2 jellegű eltérést
+ * pénzre vinne. Az eredmény tizedes SZÖVEG (négy tizedessel); a forintra kerekítés a megjelenítés dolga. `null`, ha egy szám még
+ * nem érvényes (üres vagy félig beírt mező): a felület ilyenkor nem ír összeget.
+ */
+export function contractItemAmounts(
+  item: {
+    unitNet: string;
+    quantity: string;
+    vatRatePercent: string;
+    occasionsPerYear: string | number | null;
+  },
+  kind: ContractKind = "MAINTENANCE",
+): { net: string; vat: string; gross: string } | null {
+  const unit = parseScaled(item.unitNet);
+  const quantity = parseScaled(item.quantity);
+  const rate = parseScaled(item.vatRatePercent);
+  if (!unit || !quantity || !rate) return null;
+  let occasions = 1n;
+  if (kind !== "PURCHASE") {
+    const raw = item.occasionsPerYear;
+    const given = raw !== null && String(raw).trim() !== "";
+    if (given) {
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 1 || n > 366) return null;
+      occasions = BigInt(n);
+    } else if (kind !== "REPAIR") {
+      // karbantartásnál az alkalom kötelező: nélküle nincs összeg
+      return null;
+    }
+  }
+  const net = roundHalfUp(
+    unit.value * quantity.value * occasions,
+    unit.scale + quantity.scale,
+    MONEY_SCALE,
+  );
+  const vat = roundHalfUp(
+    net * rate.value,
+    MONEY_SCALE + rate.scale + 2,
+    MONEY_SCALE,
+  );
+  return {
+    net: formatScaled(net, MONEY_SCALE),
+    vat: formatScaled(vat, MONEY_SCALE),
+    gross: formatScaled(net + vat, MONEY_SCALE),
+  };
+}
+
+const MONEY_SCALE = 4;
+
+/** Egy tizedes SZÖVEG egész számként és tizedes-számmal; `null`, ha nem szám (a szerver `DECIMAL`-ja, vesszővel is). */
+function parseScaled(text: string): { value: bigint; scale: number } | null {
+  const normalized = normalizeAmount(text);
+  if (!DECIMAL.test(normalized)) return null;
+  const [whole, fraction = ""] = normalized.split(".");
+  return { value: BigInt(whole! + fraction), scale: fraction.length };
+}
+
+/** `value` (tizedes-számmal `from`) a `to` tizedesre, félre felfelé (csak nemnegatív érték: a szerver `DECIMAL`-ja sem enged mást). */
+function roundHalfUp(value: bigint, from: number, to: number): bigint {
+  if (from <= to) return value * 10n ** BigInt(to - from);
+  const divisor = 10n ** BigInt(from - to);
+  const quotient = value / divisor;
+  return (value % divisor) * 2n >= divisor ? quotient + 1n : quotient;
+}
+
+function formatScaled(value: bigint, scale: number): string {
+  const text = value.toString().padStart(scale + 1, "0");
+  return `${text.slice(0, text.length - scale)}.${text.slice(text.length - scale)}`;
 }

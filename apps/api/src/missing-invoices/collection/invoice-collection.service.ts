@@ -19,6 +19,15 @@ import { pdfTextLines } from "../../purchasing/supplier-invoice-import/pdf-text-
 import { SupplierInvoiceImportService } from "../../purchasing/supplier-invoice-import/supplier-invoice-import.service.js";
 import { normalizeName } from "../missing-invoice-matching.js";
 import { corroboratedBy } from "./invoice-corroboration.js";
+import { authenticationVerdict } from "../../service-drafts/ticket-mail/ticket-mail-message.js";
+import {
+  amountlessAccepted,
+  decideSupplierRule,
+  strictSenderDomain,
+  supplierRulesLive,
+  trustedForwarderDomains,
+} from "./supplier-rule.js";
+import { SupplierRulesRepository } from "./supplier-rules.repository.js";
 import { payeeFromText } from "../payee-check.js";
 import {
   invoiceCollectionDays,
@@ -37,6 +46,7 @@ import {
   type CollectedDocumentInput,
   type InvoiceCollectionCounts,
   type InvoiceCollectionVerdict,
+  type RuleRefusalRecord,
 } from "./invoice-collection.repository.js";
 import {
   hasNoTextLayer,
@@ -118,6 +128,8 @@ interface Found {
   sender: string | null;
   subject: string | null;
   receivedAt: Date | null;
+  /** a levél `Authentication-Results` fejlécei (Gmail): a szállítói szabály csak hitelesített feladót fogad el; Drive-fájlnál nincs */
+  authenticationResults?: readonly string[];
 }
 
 /**
@@ -175,6 +187,12 @@ export class InvoiceCollectionService {
      */
     @Optional()
     private readonly classifier: LetterClassJevService | null = null,
+    /**
+     * AZ ISMERT SZÁLLÍTÓ SZABÁLYAI (`supplier-rule.ts`). A kapcsolója a sajátja (`INVOICE_SUPPLIER_RULES=live`, alapból KI):
+     * kikapcsolva a kötetlen PDF emberre vár, mint eddig.
+     */
+    @Optional()
+    private readonly supplierRules: SupplierRulesRepository | null = null,
   ) {}
 
   /**
@@ -364,6 +382,18 @@ export class InvoiceCollectionService {
     );
   }
 
+  private trustedDomainList: string[] | null = null;
+  /** A saját továbbítóink: a begyűjtött postafiókok tartománya és a beállított további megbízottak. */
+  private trustedDomains(): string[] {
+    this.trustedDomainList ??= trustedForwarderDomains(
+      invoiceCollectionSources(this.environment).flatMap((source) =>
+        "user" in source ? [source.user] : [],
+      ),
+      this.environment,
+    );
+    return this.trustedDomainList;
+  }
+
   private ownAccountDigits: Promise<string[]> | null = null;
   /** Az ismert bejövő számok, futásonként egyszer (`withKnownNumber`). */
   private knownNumberList: Promise<KnownInvoiceNumber[]> | null = null;
@@ -452,6 +482,7 @@ export class InvoiceCollectionService {
           sender: message.sender,
           subject: message.subject,
           receivedAt: message.receivedAt,
+          authenticationResults: message.authenticationResults,
         });
       // egy PDF nélküli levél is látott: a következő futás ne kérje le újra
       if (!message.pdfs.length && !message.skippedTooLarge)
@@ -549,6 +580,128 @@ export class InvoiceCollectionService {
         - a száraz futás nem ír semmit;
         - egy már tárolt, még nem párosodott példány UNASSIGNED marad, de az olvasata a mai olvasóé lesz.
     */
+    /*
+      AZ ISMERT SZÁLLÍTÓ SZABÁLYA (PDF-javaslatok 2. útja; acrobot 57881, 57884): ha egy ember már elfogadott ilyen szállítót
+      (adószám vagy név, a feladó tartományával), a PDF rendes begyűjtött dokumentum lesz, naplózva és visszavonhatóan. Csak a
+      többi kötés UTÁN fut, a díjbekérőn soha, és a kiugró, új pénznemű vagy összeg nélküli PDF emberre marad
+      (`decideSupplierRule`). A száraz újraértékelés csak feljegyzi.
+    */
+    /*
+      MIÉRT MARADT EMBERRE (kártya e09190c8, acrobot 58517): ha egy szabály kulcsa illeszkedett, de nem fogadott el, az ok és a
+      szabály a dokumentumra kerül, és a Javasolt számlák sora mutatja. Enélkül egy élő szabály mellett emberre maradt PDF-ről a lap
+      nem mondja meg, hogy a szabály látta-e. Ha egy kulcs sem illeszkedett, nincs mit mondani: null.
+    */
+    let ruleRefusal: RuleRefusalRecord | null = null;
+    const bySupplierRule = async (
+      reading: InvoiceTextReading,
+      kind: "INVOICE" | "PROFORMA",
+      payee: string,
+    ): Promise<InvoiceCollectionVerdict | null> => {
+      if (
+        !this.supplierRules ||
+        !supplierRulesLive(this.environment) ||
+        kind === "PROFORMA"
+      )
+        return null;
+      const rules = await this.supplierRules.activeRules();
+      if (rules.length === 0) return null;
+      const senderDomainStrict = strictSenderDomain(found.sender);
+      const decision = decideSupplierRule({
+        rules,
+        document: {
+          taxNumber: reading.supplierTaxNumber,
+          senderDomain: senderDomainStrict,
+          text,
+          gross: reading.gross ?? null,
+          currency: reading.currency ?? null,
+          payee,
+        },
+        trustedDomains: this.trustedDomains(),
+        normalizeName,
+        amountless: amountlessAccepted(this.environment),
+      });
+      /*
+        A FELADÓ HITELES-E (barracuda, #2769): a `From` fejlécet a feladó írja, ezért önmagában nem bizonyít semmit (bárki írhat
+        `From: valami@acropora.hu`-t). A szabály csak akkor dönt, ha a Gmail saját `Authentication-Results` fejléce `dmarc=pass`-t mond
+        a `From` tartományára (`authenticationVerdict`, ugyanaz az ellenőrzés, mint a hibajegy-levelezésé: minden Gmail-fejléc, egy
+        dmarc-bejegyzés, a `header.from` egyezik). Hiányzó vagy nem-Gmail fejléc, Drive-fájl: nem hitelesített, ember dönt.
+        A döntés ELŐTT áll: egy illeszkedő szabály mellett is ez az ok (`NOT_AUTHENTICATED`), akármit mondana a döntés.
+      */
+      if (
+        !senderDomainStrict ||
+        !authenticationVerdict(found.authenticationResults ?? [], found.sender)
+          .verified
+      ) {
+        if (decision.rule)
+          ruleRefusal = {
+            reason: "NOT_AUTHENTICATED",
+            ruleId: decision.rule.id,
+          };
+        return null;
+      }
+      if (!decision.accept) {
+        if (decision.rule)
+          ruleRefusal = { reason: decision.reason, ruleId: decision.rule.id };
+        return null;
+      }
+      // ugyanazzal a számmal már tárolt másik dokumentum: ember dönt (a saját, újraolvasott példány nem számít)
+      if (reading.invoiceNumber) {
+        const same = await this.repository.sameNumberDocuments(
+          reading.invoiceNumber,
+        );
+        if (same.length > (reassess ? 1 : 0)) {
+          ruleRefusal = { reason: "SAME_NUMBER", ruleId: decision.rule.id };
+          return null;
+        }
+      }
+      const detail = `szállítói szabály (${decision.rule.kind}): ${decision.rule.taxKey ?? decision.rule.nameKey ?? ""}`;
+      if (this.dry) {
+        this.dry.push({
+          source,
+          externalId,
+          fileName: found.fileName,
+          before: await this.repository.verdictOf(
+            source,
+            externalId,
+            found.fileName,
+          ),
+          after: "STORED",
+          detail,
+        });
+        counts.storedCount++;
+        return "STORED";
+      }
+      const documentId = await persist({
+        source,
+        externalId,
+        fileName: found.fileName,
+        sender: found.sender,
+        subject: found.subject,
+        receivedAt: found.receivedAt,
+        content: found.content,
+        sha256,
+        read: false,
+        kind,
+        importResult: null,
+        textReading: reading,
+        payee,
+      });
+      if (!documentId) return skip("DUPLICATE", "SAME_CONTENT");
+      await this.supplierRules.recordAccepted({
+        ruleId: decision.rule.id,
+        documentId,
+        grossCents: decision.grossCents,
+        currency: decision.currency,
+        userId: null,
+        signals: {
+          ruleKind: decision.rule.kind,
+          senderDomain: senderDomainStrict,
+          fileName: found.fileName,
+        },
+      });
+      counts.storedCount++;
+      return "STORED";
+    };
     const keepUnassigned = async (
       reading: InvoiceTextReading | null,
       kind: "INVOICE" | "PROFORMA",
@@ -572,6 +725,7 @@ export class InvoiceCollectionService {
           reassess,
           reading,
           payee,
+          ruleRefusal,
         );
       if (reassess || this.dry) return skip("UNMATCHED", reason);
       await this.repository.store({
@@ -590,6 +744,7 @@ export class InvoiceCollectionService {
         payee,
         unassigned: true,
         reason,
+        ruleRefusal,
       });
       counts.unmatchedCount++;
       return "UNMATCHED";
@@ -720,6 +875,13 @@ export class InvoiceCollectionService {
               DecisionRun-t ír, a száraz út pedig semmit nem írhat. Ott a fájl
               UNMATCHED-ként látszik.
             */
+            // az ismert szállító szabálya a Jev előtt: ha egy ember már elfogadta ezt a szállítót, a besorolás sem kell
+            const ruled = await bySupplierRule(
+              withLabelledTotal(textReading, lines),
+              looksLikeProforma(text) ? "PROFORMA" : "INVOICE",
+              payeeFromText(text),
+            );
+            if (ruled) return ruled;
             const suggestion = this.dry
               ? null
               : await this.suggestionFor(source, externalId, lines, found);
@@ -751,6 +913,7 @@ export class InvoiceCollectionService {
                 textReading: withLabelledTotal(textReading, lines),
                 payee: payeeFromText(text),
                 suggestion,
+                ruleRefusal,
               }))
             )
               return skip("DUPLICATE", "SAME_CONTENT");

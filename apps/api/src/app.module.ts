@@ -25,6 +25,7 @@ import { HomepageContentModule } from "./homepage-content/homepage-content.modul
 import { WebshopCouponsModule } from "./webshop-coupons/webshop-coupons.module.js";
 import { WebshopCustomerDiscountsModule } from "./webshop-customer-discounts/webshop-customer-discounts.module.js";
 import { WebshopShippingSettingsModule } from "./webshop-shipping-settings/webshop-shipping-settings.module.js";
+import { WebshopGiftCardsModule } from "./webshop-gift-cards/webshop-gift-cards.module.js";
 import { SeoLandingModule } from "./seo-landing/seo-landing.module.js";
 import { AuthGuard } from "./auth/guards/auth.guard.js";
 import { PermissionGuard } from "./auth/guards/permission.guard.js";
@@ -53,6 +54,7 @@ import { GlsSettlementModule } from "./integrations/gls/gls-settlement.module.js
 import { PaidMarksModule } from "./billing/paid-marks/paid-marks.module.js";
 import { EbizModule } from "./integrations/ebiz/ebiz.module.js";
 import { SimplePaySettlementModule } from "./integrations/simplepay/simplepay-settlement.module.js";
+import { StripeSettlementModule } from "./integrations/stripe-settlement/stripe-settlement.module.js";
 import { InventoryModule } from "./inventory/inventory.module.js";
 import { AssetCategoriesModule } from "./asset-categories/asset-categories.module.js";
 import { AssetFunctionsModule } from "./asset-functions/asset-functions.module.js";
@@ -117,6 +119,7 @@ import { OperationsLogModule } from "./operations-log/operations-log.module.js";
     WebshopCouponsModule,
     WebshopCustomerDiscountsModule,
     WebshopShippingSettingsModule,
+    WebshopGiftCardsModule,
     ProductModule,
     UnasImportModule,
     InventoryModule,
@@ -146,6 +149,7 @@ import { OperationsLogModule } from "./operations-log/operations-log.module.js";
     PaidMarksModule,
     EbizModule,
     SimplePaySettlementModule,
+    StripeSettlementModule,
     SuppliersModule,
     PurchasingModule,
     ContentModule,

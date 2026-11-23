@@ -2,6 +2,7 @@ import type { WorksheetLineKind } from "@acropora/database";
 import { Transform, Type } from "class-transformer";
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsIn,
@@ -62,6 +63,16 @@ export class WorksheetListQueryDto {
   @IsString() @IsOptional() departmentId?: string;
   /** A szerelő saját lapjai: erre a szűrőre épül a "nekem kiosztva" lista. */
   @IsString() @IsOptional() assigneeId?: string;
+  /**
+   * A MEGNYITÁS NAPJÁNAK TÓL-IG SZŰRŐJE (kártya a785e580, Luca 2026-11-19): `ÉÉÉÉ-HH-NN`, a budapesti naptári nap, mindkét
+   * határ a napot is magában foglalja. Bármelyik elhagyható. A kezdő nem lehet a záró utáni nap.
+   */
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "A dátum alakja ÉÉÉÉ-HH-NN." })
+  @IsOptional()
+  createdFrom?: string;
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "A dátum alakja ÉÉÉÉ-HH-NN." })
+  @IsOptional()
+  createdTo?: string;
   /**
    * A KAPCSOLT MUNKA FAJTÁJA (kártya 8219e7d6): `REPAIR` a hibajegyhez, `MAINTENANCE` a karbantartási laphoz kötött lapok. Hiányában minden lap (az önállók is). Lásd `worksheetJobKindWhere`.
    */
@@ -634,4 +645,43 @@ export class SendWorksheetForSignatureDto {
   @IsString({ message: "Válassz aláírót a listáról." })
   @MinLength(1, { message: "Válassz aláírót a listáról." })
   signerUserId!: string;
+}
+
+/**
+ * A KIJELÖLT LAPOK KIADOTT PDF-JEI EGYBEN (kártya a785e580). `zip`: lapok szerint egy PDF egy zipben;
+ * `merged`: egy összefűzött PDF a nyomtatáshoz. A felső határ a kérés mérete és a válasz ideje miatt van.
+ */
+export class BulkWorksheetSheetsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  @MaxLength(64, { each: true })
+  ids!: string[];
+
+  @IsIn(["zip", "merged"])
+  format!: "zip" | "merged";
+}
+
+/**
+ * A KIJELÖLT MUNKALAPOK MÁSOLÁSA (kártya a785e580): 1-50 lap, és egy elhagyható kérés-azonosító. Ha van, a másolatok
+ * művelet-azonosítója ebből és a forrás-lapból képződik, tehát egy újraküldött kérés ugyanazokat a lapokat adja vissza.
+ * A lap-azonosító itt is legfeljebb 64 karakter, mint a PDF-kérésnél; a kérés-azonosítóval együtt a kulcs 128-on belül marad.
+ */
+export class CopyWorksheetsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  @MaxLength(54, { each: true })
+  ids!: string[];
+
+  @Matches(/^[A-Za-z0-9_.:-]{8,64}$/, {
+    message:
+      "A kérés-azonosító 8-64 karakter lehet: betű, szám, kötőjel, aláhúzás, pont és kettőspont.",
+  })
+  @IsOptional()
+  requestId?: string;
 }

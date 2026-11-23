@@ -227,6 +227,117 @@ describe(
       );
       assert.equal((await request(`/quotes/missing-${suffix}`)).status, 404);
     });
+    // LUCA 2026-11-20: a copy's partner could not be changed. The head change was already allowed on a DRAFT; what a swap must also do is
+    // rebuild the draft versions' printed partner data (a copy carries the source's snapshot) and say who swapped what.
+    it("a partner change on a DRAFT rebuilds the versions' printed partner data and logs the swap; on a sent quote it is refused and changes nothing", async () => {
+      role = "ADMIN";
+      const other = await prisma.customer.create({
+        data: {
+          customerNumber: `QP0-SWAP-${suffix}`,
+          displayName: "Swapped partner",
+          type: "COMPANY",
+        },
+      });
+      try {
+        const version = await prisma.quoteVersion.findFirstOrThrow({
+          where: { quoteId },
+          select: { id: true },
+        });
+        await prisma.quoteVersion.update({
+          where: { id: version.id },
+          data: { customerSnapshot: { name: "Old partner (stale copy)" } },
+        });
+        const swapped = await request(`/quotes/${quoteId}`, "PATCH", {
+          customerId: other.id,
+        });
+        assert.equal(swapped.status, 200);
+        assert.equal((await swapped.json()).customerId, other.id);
+        const after = await prisma.quoteVersion.findUniqueOrThrow({
+          where: { id: version.id },
+          select: { customerSnapshot: true },
+        });
+        assert.deepEqual(after.customerSnapshot, { name: "Swapped partner" });
+        const audit = await prisma.auditLog.findFirstOrThrow({
+          where: {
+            entityType: "Quote",
+            entityId: quoteId,
+            action: "quote.header_updated",
+          },
+          orderBy: { createdAt: "desc" },
+        });
+        assert.deepEqual(audit.metadata, {
+          fields: ["customerId"],
+          customerFrom: null,
+          customerTo: other.id,
+        });
+        // a title-only change is no swap: the snapshot stays as it is (the title stays "Updated": the next tests search for it)
+        await prisma.quoteVersion.update({
+          where: { id: version.id },
+          data: { customerSnapshot: { name: "Kept" } },
+        });
+        assert.equal(
+          (
+            await request(`/quotes/${quoteId}`, "PATCH", {
+              title: "Updated",
+            })
+          ).status,
+          200,
+        );
+        assert.deepEqual(
+          (
+            await prisma.quoteVersion.findUniqueOrThrow({
+              where: { id: version.id },
+              select: { customerSnapshot: true },
+            })
+          ).customerSnapshot,
+          { name: "Kept" },
+        );
+        // a SENT quote: the head is closed, nothing changes (the publication checks of a version row forbid a half-made PUBLISHED
+        // fixture, so the closed state is the quote's own status; the repository locks the quote row FOR UPDATE and refuses a non-DRAFT)
+        await prisma.quote.update({
+          where: { id: quoteId },
+          data: { status: "SENT" },
+        });
+        const refused = await request(`/quotes/${quoteId}`, "PATCH", {
+          customerId: customerId,
+        });
+        assert.equal(refused.status, 409);
+        assert.equal(
+          (
+            await prisma.quote.findUniqueOrThrow({
+              where: { id: quoteId },
+              select: { customerId: true },
+            })
+          ).customerId,
+          other.id,
+        );
+        assert.deepEqual(
+          (
+            await prisma.quoteVersion.findUniqueOrThrow({
+              where: { id: version.id },
+              select: { customerSnapshot: true },
+            })
+          ).customerSnapshot,
+          { name: "Kept" },
+        );
+        await prisma.quote.update({
+          where: { id: quoteId },
+          data: { status: "DRAFT" },
+        });
+      } finally {
+        await prisma.quote.update({
+          where: { id: quoteId },
+          data: { customerId: null, status: "DRAFT" },
+        });
+        await prisma.quoteVersion.updateMany({
+          where: { quoteId },
+          data: { customerSnapshot: Prisma.DbNull },
+        });
+        await prisma.customer
+          .delete({ where: { id: other.id } })
+          .catch(() => undefined);
+      }
+    });
     it("VIEWER has 403 for all four endpoints; ADMIN sees only explicitly mapped BOM costs", async () => {
       role = "VIEWER";
       for (const [path, method, body] of [

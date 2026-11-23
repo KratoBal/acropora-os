@@ -85,3 +85,13 @@ export class WebshopOrderMethodDto implements WebshopOrderMethodInput {
   @IsString() @MinLength(1) @MaxLength(100) optionId!: string;
   @IsOptional() @IsString() @MinLength(1) @MaxLength(100) pointId?: string;
 }
+
+/**
+ * A kézi hűségpont-mozgás (kártya dfb79916): egész, előjeles, nem nulla pont, kötelező indok, és a párbeszédablak
+ * kérés-azonosítója (a webshop idempotencia-kulcsa: az újraküldés egyszer tárolódik). A tartományt a szolgáltatás is méri.
+ */
+export class WebshopLoyaltyAdjustmentDto {
+  @IsInt() points!: number;
+  @IsString() @MinLength(1) @MaxLength(500) reason!: string;
+  @IsString() @MinLength(1) @MaxLength(100) requestId!: string;
+}

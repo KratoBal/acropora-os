@@ -64,10 +64,13 @@ export const NOT_PUBLIC_ADDRESS = "NOT_PUBLIC_ADDRESS";
 export type PdfFetch = (
   url: string,
   init: {
-    method: "GET";
+    /** POST only for a form-like step on the same guarded path (the cmfx Vaadin app's first UIDL request, 785dfea6) */
+    method: "GET" | "POST";
     headers: Record<string, string>;
     redirect: "manual";
     signal: AbortSignal;
+    /** a text body, only with POST */
+    body?: string;
   },
 ) => Promise<Response>;
 
@@ -218,7 +221,12 @@ export function guardedFetch(
       const client = target.protocol === "https:" ? https : http;
       const request = client.request(
         target,
-        { method: "GET", headers: init.headers, lookup, signal: init.signal },
+        {
+          method: init.method,
+          headers: init.headers,
+          lookup,
+          signal: init.signal,
+        },
         (incoming) => {
           const headers = new Headers();
           for (const [name, value] of Object.entries(incoming.headers))
@@ -237,7 +245,7 @@ export function guardedFetch(
         },
       );
       request.on("error", reject);
-      request.end();
+      request.end(init.method === "POST" ? (init.body ?? "") : undefined);
     });
 }
 

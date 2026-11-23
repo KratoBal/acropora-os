@@ -98,7 +98,7 @@ describe("asset list export", () => {
     await asPartner.service.exportItems(query, partner);
     assert.deepEqual(asPartner.calls[0], [
       query,
-      { kind: "customer", customerId: "customer-1" },
+      { kind: "customer", customerId: "customer-1", userId: "partner-user" },
       ["unit-a", "unit-b"],
       ASSET_EXPORT_MAX,
     ]);

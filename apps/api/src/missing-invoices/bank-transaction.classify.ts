@@ -96,6 +96,19 @@ const CASH = /KÉSZPÉNZ\s?FELVÉT/i;
  */
 const OWN_INVOICE_NUMBER = /\bA(?:CR|RC)[WB][-\s]?\d{4}\s*\/\s*\d{3,}/i;
 
+/**
+ * KÁRTYÁS TERHELÉS-E (a Lejáró számlák „valószínűleg nem utalandó” szakaszához, acrobot 58830): a tranzakció típusa kártyás, vagy a közlemény az Apple Pay jelét hordozza (`-APPLE`, lásd lent:
+ * a kártyahálózat így írja a közleményt). A típus a döntő; a közlemény-jel csak azt pótolja, ha a típus hiányzik. Átutalásra NEM illik, és a hiányzó típus nem kártya.
+ */
+export function isCardTransaction(transaction: {
+  transactionType: string | null;
+  narrative: string;
+}): boolean {
+  const type = (transaction.transactionType ?? "").trim();
+  if (type !== "") return /KÁRTY/i.test(type);
+  return /-APPLE\b/.test(transaction.narrative);
+}
+
 export function classifyTransaction(
   transaction: ClassifiableTransaction,
   context: {

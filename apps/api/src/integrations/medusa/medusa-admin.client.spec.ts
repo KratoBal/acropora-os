@@ -4,6 +4,8 @@ import { describe, it } from "node:test";
 import {
   describeMedusaFailure,
   EXTERNAL_ID_LOOKUP_LIMIT,
+  COLLECTION_LIST_LIMIT,
+  COLLECTION_LIST_MAX_PAGES,
   HttpMedusaAdminClient,
   MedusaAdminHttpError,
   medusaFailureField,
@@ -716,5 +718,153 @@ describe("the withdrawal calls (V0.3)", () => {
       "https://shop.example/admin/order-withdrawals/ordwdr%2F1/pulled",
     );
     assert.equal(calls[0]!.method, "POST");
+  });
+});
+
+/*
+  A GYUJTEMENY-LISTA LAPOZASA (kartya ec82b629). A korabbi alak egyetlen, 500 soros oldalt kert, es `truncated`-et jelzett, ha az
+  oldal TELE volt -- egy PONTOSAN 500 gyujtemenyes bolt (vagy barmelyik teli oldal) igy csonkoltnak szamitott, es a lepes
+  megtagadta a munkat. MI PIROSIT: ha a kliens csak az elso oldalt kri (a masodik oldal sorai hianyoznak); ha a `count` elerese
+  utan is kerdez (felesleges kor); ha egy pontosan teli oldal csonkoltnak szamit; ha az `offset` nem a mar megkapott sorok
+  szama (atfedes vagy hezag); ha a `count` hianyaban a teli oldal utan nem kerdez tovabb; ha egy ures oldal a `count` ellenere
+  vegtelen ciklust indit; ha a felso hatar eleresekor nem jelzi a csonkolast.
+*/
+describe("HttpMedusaAdminClient.listProductCollections (lapozva)", () => {
+  const rowsOf = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `pcol_${i}`,
+      title: `Marka ${i}`,
+      handle: `marka-${i}`,
+      external_id: null,
+    }));
+
+  /** A hamisitvany BETARTJA a limitet es az offsetet, es kulon valasztott `count`-ot hoz (vagy nem hoz). */
+  function server(
+    all: ReturnType<typeof rowsOf>,
+    opts: { count?: number | null; pageCap?: number } = {},
+  ) {
+    const calls: { offset: number; limit: number }[] = [];
+    const fetchImpl = (async (url: string) => {
+      const q = new URL(String(url)).searchParams;
+      const limit = Number(q.get("limit"));
+      const offset = Number(q.get("offset"));
+      calls.push({ offset, limit });
+      const body: Record<string, unknown> = {
+        collections: all.slice(offset, offset + limit),
+        offset,
+        limit,
+      };
+      if (opts.count !== null) body.count = opts.count ?? all.length;
+      return { ok: true, json: async () => body } as unknown as Response;
+    }) as unknown as typeof fetch;
+    return {
+      calls,
+      client: new HttpMedusaAdminClient(
+        { baseUrl: "https://példa.invalid", apiKey: "sk_teszt" },
+        fetchImpl,
+      ),
+    };
+  }
+
+  it("minden oldalt lehoz, az offset a mar megkapott sorok szama", async () => {
+    const { client, calls } = server(rowsOf(1200));
+    const out = await client.listProductCollections();
+    assert.equal(out.rows.length, 1200);
+    assert.equal(out.truncated, false);
+    assert.deepEqual(
+      calls.map((c) => c.offset),
+      [0, COLLECTION_LIST_LIMIT, 2 * COLLECTION_LIST_LIMIT],
+    );
+    assert.equal(new Set(out.rows.map((r) => r.id)).size, 1200);
+  });
+
+  it("a pontosan teli oldal NEM csonkolt, ha a count szerint nincs tobb (es nem kerdez folosleg)", async () => {
+    const { client, calls } = server(rowsOf(COLLECTION_LIST_LIMIT));
+    const out = await client.listProductCollections();
+    assert.equal(out.rows.length, COLLECTION_LIST_LIMIT);
+    assert.equal(out.truncated, false);
+    assert.equal(calls.length, 1);
+  });
+
+  it("count nelkul a teli oldal utan tovabb kerdez, a rovid oldalnal megall", async () => {
+    const { client, calls } = server(rowsOf(700), { count: null });
+    const out = await client.listProductCollections();
+    assert.equal(out.rows.length, 700);
+    assert.equal(out.truncated, false);
+    assert.equal(calls.length, 2);
+  });
+
+  it("a felso hatar eleresekor csonkoltnak jelzi, es nem kerdez tovabb", async () => {
+    const huge = rowsOf(
+      COLLECTION_LIST_LIMIT * (COLLECTION_LIST_MAX_PAGES + 2),
+    );
+    const { client, calls } = server(huge);
+    const out = await client.listProductCollections();
+    assert.equal(out.truncated, true);
+    assert.equal(calls.length, COLLECTION_LIST_MAX_PAGES);
+    assert.equal(
+      out.rows.length,
+      COLLECTION_LIST_LIMIT * COLLECTION_LIST_MAX_PAGES,
+    );
+  });
+
+  it("egy ures oldal a count ellenere megall, nem pergeti a kerest", async () => {
+    const { client, calls } = server(rowsOf(10), { count: 999 });
+    const out = await client.listProductCollections();
+    assert.equal(out.rows.length, 10);
+    assert.equal(out.truncated, false);
+    assert.equal(calls.length, 2);
+  });
+});
+
+/*
+  EGY GYUJTEMENY TERMEKEI (kartya ec82b629, a handle-t foglalo gyujtemeny tartalma, 57247). MI PIROSIT: ha a kérés nem a
+  gyujtemenyre szur (`collection_id[]`); ha csak az elso oldalt hozza le; ha az offset nem a mar megkapott termekek szama; ha a
+  felso hatar elerese nem jelzi a csonkolast (egy csonkolt tartalom osszekotest engedne meg nem mert termekekre).
+*/
+describe("HttpMedusaAdminClient.listCollectionProductIds", () => {
+  function server(total: number, opts: { count?: number } = {}) {
+    const calls: { collection: string | null; offset: number }[] = [];
+    const fetchImpl = (async (url: string) => {
+      const q = new URL(String(url)).searchParams;
+      const limit = Number(q.get("limit"));
+      const offset = Number(q.get("offset"));
+      calls.push({ collection: q.get("collection_id[]"), offset });
+      const ids = Array.from({ length: total }, (_, i) => ({
+        id: `prod_${i}`,
+      }));
+      return {
+        ok: true,
+        json: async () => ({
+          products: ids.slice(offset, offset + limit),
+          count: opts.count ?? total,
+        }),
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+    return {
+      calls,
+      client: new HttpMedusaAdminClient(
+        { baseUrl: "https://példa.invalid", apiKey: "sk_teszt" },
+        fetchImpl,
+      ),
+    };
+  }
+
+  it("a gyujtemenyre szur, es minden oldalt lehoz", async () => {
+    const { client, calls } = server(COLLECTION_LIST_LIMIT + 10);
+    const out = await client.listCollectionProductIds("pcol_fm");
+    assert.equal(out.ids.length, COLLECTION_LIST_LIMIT + 10);
+    assert.equal(out.truncated, false);
+    assert.deepEqual(calls, [
+      { collection: "pcol_fm", offset: 0 },
+      { collection: "pcol_fm", offset: COLLECTION_LIST_LIMIT },
+    ]);
+  });
+
+  it("a felso hatar elerese csonkolt", async () => {
+    const tobb = COLLECTION_LIST_LIMIT * COLLECTION_LIST_MAX_PAGES + 1;
+    const { client } = server(tobb);
+    const out = await client.listCollectionProductIds("pcol_fm");
+    assert.equal(out.truncated, true);
   });
 });

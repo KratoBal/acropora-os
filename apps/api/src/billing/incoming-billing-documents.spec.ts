@@ -25,6 +25,8 @@ import {
   toIncomingListItem,
 } from "./incoming-billing-documents.js";
 import { supplierTaxBase } from "./billing-duplicates.js";
+import { setOffKeyOf } from "./incoming-set-off.js";
+import { incomingListItems } from "./purchase-incoming.js";
 import { identityTaxNumber, invoiceIdentity } from "./invoice-identity.js";
 
 const D = (value: string | number) => new Prisma.Decimal(value);
@@ -1262,5 +1264,209 @@ describe("pairingOfRow: the invoice identity as the second key", () => {
       ),
       undefined,
     );
+  });
+});
+
+/*
+  A FUTÁR LEVONTA A DÍJSZÁMLÁT AZ UTÁNVÉT-UTALÁSBÓL (acrobot 58315, 58343): a kifizetettség forrása. MI PIROSÍT: ha a levonás után a számla nem fizetett, a
+  bruttóval és a levonás (jóváírás) napjával; ha forrás-jelölés nélkül marad (a lapon nem látszik, miből); ha megelőzi a Számlázz.hu fizetését vagy a
+  banki párosítást (azok előbbre valók); ha nem előzi meg a kézi jelölést; ha a postafiókos vagy a beszerzésből jött sorra is hat.
+*/
+describe("a futár által levont díjszámla kifizetettsége", () => {
+  const setOff = {
+    day: "2026-09-03",
+    carrier: "FOXPOST",
+    reference: "26H35",
+  } as const;
+  const paired = bankMatchOf(
+    row(),
+    new Map([["doc-1", pairing({ debits: [debit] })]]),
+  );
+  const unpaired = bankMatchOf(row(), new Map());
+  const state = (
+    over: Partial<IncomingBillingDocument>,
+    match = unpaired,
+    paidInFull = false,
+    manualPaid: { paidAt: Date | null } | null = null,
+    off: typeof setOff | null = setOff,
+  ) => {
+    const r = incomingPaymentOf(row(over), match, paidInFull, manualPaid, off);
+    return [r.paymentState, r.paymentSource, r.paidAmount, r.lastPaymentDate];
+  };
+
+  it("a levonás fizetett, a bruttóval és a levonás napjával, megnevezett forrással", () => {
+    assert.deepEqual(state({ paymentsKnown: false }), [
+      "PAID",
+      "CARRIER_SETOFF",
+      "12700",
+      "2026-09-03",
+    ]);
+  });
+
+  it("levonás nélkül ugyanez a sor Nincs adat marad", () => {
+    assert.deepEqual(
+      state({ paymentsKnown: false }, unpaired, false, null, null),
+      ["UNKNOWN", null, "0", null],
+    );
+  });
+
+  it("a Számlázz.hu fizetése és a banki párosítás megelőzi a levonást, a levonás a kézi jelölést", () => {
+    assert.deepEqual(
+      state({ paidAmount: D(5000), lastPaymentDate: day("2026-09-29") }),
+      ["PARTIAL", "SZAMLAZZ", "5000", "2026-09-29"],
+    );
+    assert.deepEqual(state({ paymentsKnown: false }, paired, true), [
+      "PAID",
+      "BANK_PAIRING",
+      "12700",
+      "2026-09-30",
+    ]);
+    assert.deepEqual(
+      state({ paymentsKnown: false }, unpaired, false, {
+        paidAt: day("2026-10-05"),
+      }),
+      ["PAID", "CARRIER_SETOFF", "12700", "2026-09-03"],
+    );
+  });
+
+  it("a postafiókos és a beszerzésből jött sorra nem hat (csak a Számlázz.hu-ból érkezett számlára)", () => {
+    for (const source of ["MAILBOX", "PURCHASE"]) {
+      const item = toIncomingListItem(
+        row({ source, paymentsKnown: false }),
+        new Map(),
+        false,
+        null,
+        setOff,
+      );
+      assert.notEqual(item.paymentSource, "CARRIER_SETOFF", source);
+    }
+    const feed = toIncomingListItem(
+      row({ paymentsKnown: false }),
+      new Map(),
+      false,
+      null,
+      setOff,
+    );
+    assert.equal(feed.paymentState, "PAID");
+    assert.equal(feed.paymentSource, "CARRIER_SETOFF");
+  });
+});
+
+/*
+  A LISTA A SZÁLLÍTÓJA SZERINT KERESI A LEVONÁST (barracuda, #2788 review): két szállító azonos számú számlája közül csak a futáré kapja a jelölést. MI PIROSÍT:
+  ha a lista a számot a szállító nélkül keresné vissza (a másik szállító számlája is „levonva” lenne, banki terhelés nélkül).
+*/
+describe("az bejövő lista a levonást szállító és szám szerint keresi vissza", () => {
+  it("a futár számlája fizetett, egy másik szállító azonos számú számlája nem", () => {
+    const glsRow = row({
+      externalId: "gls-1",
+      documentNumber: "HU00912382",
+      supplierTaxNumber: "12369410-2-44",
+      paymentsKnown: false,
+    });
+    const otherRow = row({
+      externalId: "other-1",
+      documentNumber: "HU00912382",
+      supplierTaxNumber: "99999999-2-13",
+      paymentsKnown: false,
+    });
+    const items = incomingListItems({
+      rows: [glsRow, otherRow],
+      pairings: new Map(),
+      hasCollectedPdf: () => false,
+      readings: new Map(),
+      purchases: [],
+      setOff: new Map([
+        [
+          setOffKeyOf(glsRow),
+          { day: "2026-09-03", carrier: "GLS", reference: "2026-09-03" },
+        ],
+      ]),
+    });
+    assert.deepEqual(
+      items.map((item) => [item.id, item.paymentSource ?? null]),
+      [
+        [glsRow.id, "CARRIER_SETOFF"],
+        [otherRow.id, null],
+      ],
+    );
+  });
+});
+
+/*
+  A SZÁMLÁN ÁLLÓ „FIZETVE” A KIFIZETETTSÉGBEN (acrobot 58530). MI PIROSÍT: ha a „Fizetve” módú számla nem kifizetett, a bruttóval, forrás-jelöléssel (ISSUER_PAID) és nap nélkül; ha
+  megelőzi a Számlázz.hu fizetését, a banki párosítást vagy a futár-levonást (azok előbbre valók); ha nem előzi meg a kézi jelölést; ha a Számlázz.hu által ismert, nulla fizetés
+  mellett is kifizetett lenne; ha a postafiókos vagy a beszerzésből jött sorra is hatna.
+*/
+describe("a számlán álló „Fizetve” kifizetettsége", () => {
+  const unpaid = bankMatchOf(row(), new Map());
+  const paired = bankMatchOf(
+    row(),
+    new Map([["doc-1", pairing({ debits: [debit] })]]),
+  );
+  const state = (
+    over: Partial<IncomingBillingDocument>,
+    match = unpaid,
+    paidInFull = false,
+    manualPaid: { paidAt: Date | null } | null = null,
+    off: Parameters<typeof incomingPaymentOf>[4] = null,
+  ) => {
+    const r = incomingPaymentOf(
+      row({ paymentMethod: "Fizetve", paymentsKnown: false, ...over }),
+      match,
+      paidInFull,
+      manualPaid,
+      off,
+    );
+    return [r.paymentState, r.paymentSource, r.paidAmount, r.lastPaymentDate];
+  };
+
+  it("a Fizetve módú számla fizetett, a bruttóval, megnevezett forrással, nap nélkül", () => {
+    assert.deepEqual(state({}), ["PAID", "ISSUER_PAID", "12700", null]);
+  });
+
+  it("a Számlázz.hu ismert fizetése, a banki párosítás és a futár-levonás előbbre való", () => {
+    assert.equal(
+      state({ paymentsKnown: true, paidAmount: D("12700") })[1],
+      "SZAMLAZZ",
+    );
+    assert.equal(state({}, paired, true)[1], "BANK_PAIRING");
+    assert.equal(
+      state({}, unpaid, false, null, {
+        day: "2026-09-03",
+        carrier: "FOXPOST",
+        reference: "26H35",
+      })[1],
+      "CARRIER_SETOFF",
+    );
+  });
+
+  it("a kézi jelölés mögött áll: a kézi jelölés forrás nélkül, a Fizetve előbb", () => {
+    assert.deepEqual(state({}, unpaid, false, { paidAt: day("2026-10-05") }), [
+      "PAID",
+      "ISSUER_PAID",
+      "12700",
+      null,
+    ]);
+  });
+
+  it("a Számlázz.hu ismert nulla fizetése mellett nem fizetett: az ő nyilvántartása nyer", () => {
+    const result = state({ paymentsKnown: true, paidAmount: D("0") });
+    assert.notEqual(result[1], "ISSUER_PAID");
+    assert.notEqual(result[0], "PAID");
+  });
+
+  it("más fizetési mód vagy hasonló szöveg nem fizetett", () => {
+    for (const method of ["átutalás", "Nem fizetve", null])
+      assert.notEqual(
+        state({ paymentMethod: method })[1],
+        "ISSUER_PAID",
+        String(method),
+      );
+  });
+
+  it("a postafiókos és a beszerzésből jött sorra nem hat", () => {
+    for (const source of ["MAILBOX", "PURCHASE"])
+      assert.notEqual(state({ source })[1], "ISSUER_PAID", source);
   });
 });

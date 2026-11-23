@@ -5,6 +5,9 @@ import {
   formatMoney,
   hasPermission,
   PERMISSIONS,
+  SHIPPING_GATE_SENTENCE_PREFIX,
+  SHIPPING_OVERRIDE_REASON_MAX,
+  SHIPPING_OVERRIDE_REASON_MIN,
   WEBSHOP_ORDER_PAYMENT_STATE_LABELS,
   WEBSHOP_PROFORMA_DUE_DAYS,
   WEBSHOP_PARCEL_SIZES,
@@ -60,6 +63,10 @@ import {
   PointDialog,
   TransferReceivedDialog,
 } from "./webshop-order-edits";
+import {
+  WebshopOrderLoyalty,
+  type LoyaltyCardApi,
+} from "./webshop-order-loyalty";
 import {
   OrderLinesTable,
   ScissorsIcon,
@@ -216,39 +223,65 @@ const TERMINAL: readonly WebshopOrderStatus[] = [
 function StatusDialog({
   order,
   open,
+  canOverrideShipping,
   onClose,
   onSubmit,
 }: {
   order: WebshopOrderDetail;
   open: boolean;
+  canOverrideShipping: boolean;
   onClose: () => void;
   onSubmit: (
     status: WebshopOrderStatus,
     notifyCustomer: boolean,
+    overrideReason?: string,
+    personalDelivery?: boolean,
   ) => Promise<void>;
 }) {
   const [next, setNext] = useState<string>("");
   const [notify, setNotify] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A KISZÁLLÍTÁSI KAPU FELÜLBÍRÁLÁSA (kártya 33a0d3c7): csak akkor jelenik meg, ha a szerver a kapu mondatával utasította el a váltást,
+  // és a kérőnek van joga; a kötelező indok a naplóba kerül
+  const [gateHeld, setGateHeld] = useState(false);
+  const [overrideReason, setOverrideReason] = useState("");
+  // A SZEMÉLYES KISZÁLLÍTÁS (Luca, 2026-11-20): külön, kimondott választás a Kiszállításnál (nem rejtett felülbírálás): a kolléga viszi ki, csomag nélkül;
+  // számla ilyenkor is kell, és a lépés naplózódik (ki, mikor). Csak a Kiszállítás lépésnél látszik.
+  const [personal, setPersonal] = useState(false);
+  const personalOffered =
+    next === "out_for_delivery" && !order.shipping.storePickup;
+  const reason = overrideReason.trim();
+  const reasonValid =
+    reason.length >= SHIPPING_OVERRIDE_REASON_MIN &&
+    reason.length <= SHIPPING_OVERRIDE_REASON_MAX;
   useEffect(() => {
     if (open) {
       setNext(order.nextStatuses[0]?.status ?? "");
       setNotify(true);
       setError(null);
+      setGateHeld(false);
+      setOverrideReason("");
+      setPersonal(false);
     }
   }, [open, order.nextStatuses]);
-  const submit = async () => {
+  const submit = async (withOverride: boolean) => {
     if (!next) return;
     setBusy(true);
     setError(null);
     try {
-      await onSubmit(next as WebshopOrderStatus, notify);
+      await onSubmit(
+        next as WebshopOrderStatus,
+        notify,
+        withOverride && !personal ? reason : undefined,
+        personalOffered && personal ? true : undefined,
+      );
       onClose();
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "A státusz nem változott.",
-      );
+      const message =
+        cause instanceof Error ? cause.message : "A státusz nem változott.";
+      setGateHeld(message.startsWith(SHIPPING_GATE_SENTENCE_PREFIX));
+      setError(message);
     } finally {
       setBusy(false);
     }
@@ -297,6 +330,22 @@ function StatusDialog({
           />
           Vevő értesítése
         </label>
+        {personalOffered ? (
+          <div className="space-y-1 rounded-lg border border-pilot-grey-200 p-3">
+            <label className="flex items-center gap-2 text-sm text-pilot-grey-800">
+              <input
+                type="checkbox"
+                checked={personal}
+                onChange={(event) => setPersonal(event.target.checked)}
+              />
+              Személyes kiszállítás: a kolléga viszi ki, csomag nélkül
+            </label>
+            <p className="text-xs text-pilot-grey-600">
+              Számla ilyenkor is kell. A választás naplózódik: ki és mikor vitte
+              ki személyesen.
+            </p>
+          </div>
+        ) : null}
         {error ? (
           <p
             role="alert"
@@ -304,6 +353,37 @@ function StatusDialog({
           >
             {error}
           </p>
+        ) : null}
+        {gateHeld && canOverrideShipping && !(personalOffered && personal) ? (
+          <div className="space-y-2 rounded-lg border border-pilot-amber-200 bg-pilot-amber-50 p-3">
+            <p className="text-sm text-pilot-grey-800">
+              Felülbírálhatod a kaput, de a kártyás levonás számla és csomag
+              nélkül indul. Az indok és a te neved a naplóba kerül.
+            </p>
+            <label className="block text-xs text-pilot-grey-600">
+              Indoklás a felülbíráláshoz
+              <textarea
+                aria-label="Indoklás a felülbíráláshoz"
+                value={overrideReason}
+                onChange={(event) => setOverrideReason(event.target.value)}
+                maxLength={SHIPPING_OVERRIDE_REASON_MAX}
+                rows={3}
+                className="mt-1 w-full rounded-lg border border-pilot-grey-300 p-2 text-sm"
+              />
+              <span className="mt-1 block">
+                {reason.length}/{SHIPPING_OVERRIDE_REASON_MAX} karakter,
+                legalább {SHIPPING_OVERRIDE_REASON_MIN}
+              </span>
+            </label>
+            <PilotButton
+              size="regular"
+              variant="secondary"
+              onClick={() => void submit(true)}
+              disabled={busy || !reasonValid}
+            >
+              {busy ? "Folyamatban…" : "Mentés felülbírálással"}
+            </PilotButton>
+          </div>
         ) : null}
         <div className="flex justify-end gap-2">
           <PilotButton
@@ -316,7 +396,7 @@ function StatusDialog({
           </PilotButton>
           <PilotButton
             size="regular"
-            onClick={() => void submit()}
+            onClick={() => void submit(false)}
             disabled={busy || !next}
           >
             {busy ? "Folyamatban…" : "Státusz módosítása"}
@@ -368,18 +448,43 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     hasPermission(session.user, PERMISSIONS.ORDERS_MANAGE) &&
     hasPermission(session.user, PERMISSIONS.FINANCE_MANAGE),
   );
+  // a kiszállítási kapu felülbírálása külön jog (kártya 33a0d3c7): számla és csomag nélkül indít kártyás levonást
+  const canOverrideShipping = Boolean(
+    session &&
+    hasPermission(session.user, PERMISSIONS.ORDERS_SHIPPING_OVERRIDE),
+  );
   const token = session?.token ?? "";
   const [mailNotice, setMailNotice] = useState<string | null>(null);
   const changeStatus = async (
     status: WebshopOrderStatus,
     notifyCustomer: boolean,
+    overrideReason?: string,
+    personalDelivery?: boolean,
   ) => {
-    const result = await webshopOrdersApi.changeStatus(
-      token,
-      id,
-      status,
-      notifyCustomer,
-    );
+    // only what is set goes (the plain call stays the four arguments it always was)
+    const result = personalDelivery
+      ? await webshopOrdersApi.changeStatus(
+          token,
+          id,
+          status,
+          notifyCustomer,
+          overrideReason,
+          true,
+        )
+      : overrideReason
+        ? await webshopOrdersApi.changeStatus(
+            token,
+            id,
+            status,
+            notifyCustomer,
+            overrideReason,
+          )
+        : await webshopOrdersApi.changeStatus(
+            token,
+            id,
+            status,
+            notifyCustomer,
+          );
     setOrder(result.order);
     setMailNotice(statusMailText(result.mail));
     setNow(Date.now());
@@ -446,6 +551,10 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
   const saveNotes = async (input: WebshopOrderNotesInput) => {
     setOrder(await webshopOrdersApi.saveNotes(token, id, input));
     setNow(Date.now());
+  };
+  const loyaltyApi: LoyaltyCardApi = {
+    load: () => webshopOrdersApi.loyalty(token, id),
+    adjust: (input) => webshopOrdersApi.adjustLoyalty(token, id, input),
   };
   const searchPoints = (query: string) =>
     webshopOrdersApi.pickupPoints(token, id, query);
@@ -579,6 +688,7 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           order={order}
           now={now}
           canManage={canManage}
+          canOverrideShipping={canOverrideShipping}
           canIssue={canIssue}
           canSendProforma={canSendProforma}
           canRecordTransfer={canRecordTransfer}
@@ -610,6 +720,7 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           onSearchMethodPoints={searchMethodPoints}
           onChangeMethod={changeMethod}
           onSaveNotes={saveNotes}
+          loyaltyApi={loyaltyApi}
           onSearchPoints={searchPoints}
         />
       ) : null}
@@ -1879,6 +1990,7 @@ function OrderBody({
   order,
   now,
   canManage,
+  canOverrideShipping,
   canIssue,
   canSendProforma,
   canRecordTransfer,
@@ -1910,11 +2022,13 @@ function OrderBody({
   onSearchMethodPoints,
   onChangeMethod,
   onSaveNotes,
+  loyaltyApi,
   onSearchPoints,
 }: {
   order: WebshopOrderDetail;
   now: number;
   canManage: boolean;
+  canOverrideShipping: boolean;
   canIssue: boolean;
   canSendProforma: boolean;
   canRecordTransfer: boolean;
@@ -1925,6 +2039,8 @@ function OrderBody({
   onChangeStatus: (
     status: WebshopOrderStatus,
     notifyCustomer: boolean,
+    overrideReason?: string,
+    personalDelivery?: boolean,
   ) => Promise<void>;
   mailNotice: string | null;
   onResendStatusMail: () => Promise<void>;
@@ -1956,6 +2072,7 @@ function OrderBody({
   ) => Promise<WebshopPickupPointSearch>;
   onChangeMethod: (input: WebshopOrderMethodInput) => Promise<void>;
   onSaveNotes: (input: WebshopOrderNotesInput) => Promise<void>;
+  loyaltyApi: LoyaltyCardApi;
   onSearchPoints: (query: string) => Promise<WebshopPickupPointSearch>;
 }) {
   const [statusOpen, setStatusOpen] = useState(false);
@@ -2041,6 +2158,7 @@ function OrderBody({
         <StatusDialog
           order={order}
           open={statusOpen}
+          canOverrideShipping={canOverrideShipping}
           onClose={() => setStatusOpen(false)}
           onSubmit={onChangeStatus}
         />
@@ -2668,9 +2786,7 @@ function OrderBody({
           ) : null}
 
           <Card title="Hűségpontok">
-            <p className="text-sm text-pilot-grey-500">
-              Hűségpont-adat még nincs a webshopban.
-            </p>
+            <WebshopOrderLoyalty api={loyaltyApi} canManage={canManage} />
           </Card>
         </div>
       </div>

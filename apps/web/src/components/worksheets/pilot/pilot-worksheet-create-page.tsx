@@ -9,7 +9,7 @@ import {
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo } from "@/components/navigation-history";
@@ -23,6 +23,10 @@ import {
   useAssignableUsers,
   WorksheetAssigneePicker,
 } from "../worksheet-assignee-picker";
+import {
+  maintenanceAssigneePrefill,
+  type PrefillJobAssignee,
+} from "./worksheet-assignee-prefill";
 import {
   emptyLine,
   toLineInput,
@@ -117,6 +121,9 @@ interface HeaderDraft {
   dueDate: string;
 }
 
+/** A munkalap tárgyának hossz-korlátja (a szerver `MaxLength(500)`-ja): az előtöltött cím nem lehet hosszabb. */
+const SUBJECT_MAX_LENGTH = 500;
+
 function emptyHeader(): HeaderDraft {
   return {
     subject: "",
@@ -159,6 +166,16 @@ export function PilotWorksheetCreatePage() {
     name: "",
   });
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
+  // A karbantartási lap felelősei (kártya d91005e9): a lap betöltése után, és csak karbantartási lapnál, előtöltik a
+  // felelősöket. A felvivő bármikor átírhatja: ha már nyúlt a listához, az előtöltés nem írja felül.
+  const [jobAssignees, setJobAssignees] = useState<PrefillJobAssignee[] | null>(
+    null,
+  );
+  const [prefillDropped, setPrefillDropped] = useState<PrefillJobAssignee[]>(
+    [],
+  );
+  const assigneesTouched = useRef(false);
+  const assigneesPrefilled = useRef(false);
   const [assetIds, setAssetIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -182,6 +199,25 @@ export function PilotWorksheetCreatePage() {
     token,
     canManage,
   );
+
+  useEffect(() => {
+    if (
+      jobAssignees === null ||
+      assigneesPrefilled.current ||
+      assigneesTouched.current
+    )
+      return;
+    // a kiosztható kollégák listája kell hozzá: addig nem tudjuk, kik oszthatók ki
+    if (candidates.length === 0 && !candidatesError) return;
+    assigneesPrefilled.current = true;
+    const { selected, dropped } = maintenanceAssigneePrefill({
+      kind: "MAINTENANCE",
+      jobAssignees,
+      candidates,
+    });
+    setAssigneeIds(selected);
+    setPrefillDropped(dropped);
+  }, [candidates, candidatesError, jobAssignees]);
 
   useEffect(() => {
     if (!canManage) return;
@@ -249,6 +285,23 @@ export function PilotWorksheetCreatePage() {
         setTicketError(null);
         setTicketJobNumber(job.jobNumber);
         setTicketKind(job.kind === "MAINTENANCE" ? "MAINTENANCE" : "REPAIR");
+        // A MUNKALAP TÁRGYA A LAP CÍME (Luca, 2026-11-20): a hibajegyből és a karbantartási lapról nyitott munkalap tárgya
+        // előre a lap címe, szerkeszthetően. CSAK ÜRES mezőt tölt: amit a felvivő már beírt, azt nem írja felül (a betöltés
+        // alatt is gépelhet), és a mező jogos kiürítése után sem tér vissza (az előtöltés a betöltéskor fut, egyszer).
+        const title = typeof job.title === "string" ? job.title.trim() : "";
+        if (title)
+          setHeader((current) =>
+            current.subject.trim()
+              ? current
+              : { ...current, subject: title.slice(0, SUBJECT_MAX_LENGTH) },
+          );
+        if (job.kind === "MAINTENANCE")
+          setJobAssignees(
+            (job.assignees ?? []).map((assignee) => ({
+              userId: assignee.userId,
+              name: assignee.name,
+            })),
+          );
         if (job.customerId === null) {
           setTicketError(
             job.kind === "MAINTENANCE"
@@ -592,10 +645,32 @@ export function PilotWorksheetCreatePage() {
                   pilot
                   candidates={candidates}
                   selected={assigneeIds}
-                  onToggle={(userId) =>
-                    setAssigneeIds((current) => toggleAssignee(current, userId))
-                  }
+                  onToggle={(userId) => {
+                    assigneesTouched.current = true;
+                    setAssigneeIds((current) =>
+                      toggleAssignee(current, userId),
+                    );
+                  }}
                 />
+                {jobAssignees && jobAssignees.length > 0 ? (
+                  <p
+                    className="text-xs text-pilot-grey-500"
+                    data-testid="assignee-prefill-note"
+                  >
+                    A karbantartási lap felelősei előre ki vannak jelölve; itt
+                    módosíthatók.
+                  </p>
+                ) : null}
+                {prefillDropped.length > 0 ? (
+                  <p
+                    className="text-xs font-medium text-amber-700"
+                    data-testid="assignee-prefill-dropped"
+                  >
+                    A karbantartási lap felelősei közül nem jelölhető ki a
+                    munkalapra: {prefillDropped.map((p) => p.name).join(", ")}{" "}
+                    (a szerepkörük nem engedi).
+                  </p>
+                ) : null}
                 {candidatesError ? (
                   <p className="text-xs font-medium text-red-600">
                     {candidatesError}

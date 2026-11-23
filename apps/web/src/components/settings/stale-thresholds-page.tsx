@@ -118,68 +118,70 @@ export function StaleThresholdsPage() {
       ) : null}
       {rows ? (
         <PilotCard className="space-y-4 p-5">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="text-xs text-pilot-grey-500">
-                <th className="py-2 pr-3 font-medium">Státusz</th>
-                <th className="py-2 pr-3 font-medium">Érték</th>
-                <th className="py-2 pr-3 font-medium">Egység</th>
-                <th className="py-2 font-medium">Figyelés</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, index) => {
-                const label = WEBSHOP_ORDER_STATUS_LABELS[row.status];
-                return (
-                  <tr key={row.status}>
-                    <td className="py-2 pr-3 text-pilot-grey-900">{label}</td>
-                    <td className="py-2 pr-3">
-                      <PilotInput
-                        type="number"
-                        min={1}
-                        aria-label={`${label}: érték`}
-                        value={String(row.value)}
-                        disabled={!canManage}
-                        onChange={(value) =>
-                          change(index, { value: Number(value) })
-                        }
-                      />
-                    </td>
-                    <td className="py-2 pr-3">
-                      <PilotSelect
-                        chevron
-                        aria-label={`${label}: egység`}
-                        value={row.unit}
-                        disabled={!canManage}
-                        onChange={(value) =>
-                          change(index, {
-                            unit: value as WebshopStaleThreshold["unit"],
-                          })
-                        }
-                      >
-                        <option value="HOUR">óra</option>
-                        <option value="DAY">nap</option>
-                      </PilotSelect>
-                    </td>
-                    <td className="py-2">
-                      <label className="flex items-center gap-2 text-pilot-grey-700">
-                        <input
-                          type="checkbox"
-                          aria-label={`${label}: figyelés`}
-                          checked={row.enabled}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-xs text-pilot-grey-500">
+                  <th className="py-2 pr-3 font-medium">Státusz</th>
+                  <th className="py-2 pr-3 font-medium">Érték</th>
+                  <th className="py-2 pr-3 font-medium">Egység</th>
+                  <th className="py-2 font-medium">Figyelés</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, index) => {
+                  const label = WEBSHOP_ORDER_STATUS_LABELS[row.status];
+                  return (
+                    <tr key={row.status}>
+                      <td className="py-2 pr-3 text-pilot-grey-900">{label}</td>
+                      <td className="py-2 pr-3">
+                        <PilotInput
+                          type="number"
+                          min={1}
+                          aria-label={`${label}: érték`}
+                          value={String(row.value)}
                           disabled={!canManage}
-                          onChange={(event) =>
-                            change(index, { enabled: event.target.checked })
+                          onChange={(value) =>
+                            change(index, { value: Number(value) })
                           }
                         />
-                        {row.enabled ? "be" : "ki"}
-                      </label>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="py-2 pr-3">
+                        <PilotSelect
+                          chevron
+                          aria-label={`${label}: egység`}
+                          value={row.unit}
+                          disabled={!canManage}
+                          onChange={(value) =>
+                            change(index, {
+                              unit: value as WebshopStaleThreshold["unit"],
+                            })
+                          }
+                        >
+                          <option value="HOUR">óra</option>
+                          <option value="DAY">nap</option>
+                        </PilotSelect>
+                      </td>
+                      <td className="py-2">
+                        <label className="flex items-center gap-2 text-pilot-grey-700">
+                          <input
+                            type="checkbox"
+                            aria-label={`${label}: figyelés`}
+                            checked={row.enabled}
+                            disabled={!canManage}
+                            onChange={(event) =>
+                              change(index, { enabled: event.target.checked })
+                            }
+                          />
+                          {row.enabled ? "be" : "ki"}
+                        </label>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
           {invalid ? (
             <p className="text-sm text-pilot-red-700">
               Az érték legalább 1. A figyelést a kapcsolóval lehet kikapcsolni.

@@ -13,8 +13,11 @@ import {
   formatMoney,
   hasPermission,
   PERMISSIONS,
+  POS_INTERNAL_USE_NOTE_MAX,
   POS_MANUAL_LINE_SKU,
   POS_MANUAL_VAT_RATES,
+  type PosInternalUseListItem,
+  type PosInternalUseResult,
   type PosPaymentMethod,
   type PosProductSearchResult,
   type PosSaleListItem,
@@ -144,16 +147,25 @@ const PAYMENT_METHOD_LABEL: Record<PosPaymentMethod, string> = {
  * fizetési mód, hanem átadás az Új számla oldalnak, eladás nélkül. A korábbi
  * átutalásos eladások felirata (`PAYMENT_METHOD_LABEL`) marad.
  */
-type CheckoutChoice = PosPaymentMethod | "INVOICE";
+type CheckoutChoice = PosPaymentMethod | "INVOICE" | "INTERNAL_USE";
 const CHECKOUT_OPTIONS: { label: string; value: CheckoutChoice }[] = [
   { label: "Pénztárgép", value: "CASH" },
   { label: "Kártya", value: "CARD" },
   { label: "Számlázás", value: "INVOICE" },
 ];
-/** A három gomb alatt, teljes szélességben: a pénztárgépen nem átmenő készpénz. */
+/** A három gomb alatt: a pénztárgépen nem átmenő készpénz. */
 const CASH_DESK_OPTION: { label: string; value: CheckoutChoice } = {
   label: "Kassza",
   value: "CASH_DESK",
+};
+/**
+ * A „BELSŐ FELHASZNÁLÁS” A KASSZA MELLETT (Balázs, 2026-11-20 15:10 UTC, kártya ec51e614): „amit leveszünk a polcról magunknak”,
+ * kötelező megjegyzéssel. NEM eladás: nincs fizetés, és a bevételbe nem számít (saját rekord a szerveren, nem `SalesOrder`).
+ * A készlet ugyanúgy csökken. Csak termék: kézi tétel nem lehet benne.
+ */
+const INTERNAL_USE_OPTION: { label: string; value: CheckoutChoice } = {
+  label: "Belső felhasználás",
+  value: "INTERNAL_USE",
 };
 
 function localDayRange(now = new Date()): {
@@ -248,7 +260,13 @@ export function PilotPosTerminalPage() {
   const [checkingOut, setCheckingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<PosSaleResult | null>(null);
+  const [lastInternalUse, setLastInternalUse] =
+    useState<PosInternalUseResult | null>(null);
+  const [internalNote, setInternalNote] = useState("");
   const [recentSales, setRecentSales] = useState<PosSaleListItem[]>([]);
+  const [recentInternalUses, setRecentInternalUses] = useState<
+    PosInternalUseListItem[]
+  >([]);
   const [loadingRecent, setLoadingRecent] = useState(true);
   const [lastAdded, setLastAdded] = useState<LastAdded | null>(null);
   /** A nyitott kézi-tétel űrlap, vagy `null`, ha zárva van. */
@@ -275,6 +293,15 @@ export function PilotPosTerminalPage() {
       })
       .catch(() => undefined)
       .finally(() => setLoadingRecent(false));
+    // the day's internal uses, a list of their own: they are no sales (card ec51e614)
+    void posApi
+      .listInternalUses(token, { page: 1, pageSize: 10, ...dayRange })
+      .then((response) => {
+        if (dayRange.createdFrom === localDayRange().createdFrom) {
+          setRecentInternalUses(response.items);
+        }
+      })
+      .catch(() => undefined);
   }, [canView, token]);
 
   useEffect(() => {
@@ -287,6 +314,7 @@ export function PilotPosTerminalPage() {
       if (day !== currentDay) {
         currentDay = day;
         setRecentSales([]);
+        setRecentInternalUses([]);
         loadRecentSales();
       }
     };
@@ -486,7 +514,8 @@ export function PilotPosTerminalPage() {
     // else in this component.
     if (!canManage || cart.length === 0 || checkingOut || missingVat.length > 0)
       return;
-    if (paymentMethod === "INVOICE") return;
+    // neither one is a sale: the invoice hands over, the internal use has its own record (`recordInternalUse`)
+    if (paymentMethod === "INVOICE" || paymentMethod === "INTERNAL_USE") return;
     setCheckingOut(true);
     setError(null);
     void posApi
@@ -512,6 +541,7 @@ export function PilotPosTerminalPage() {
       })
       .then((result) => {
         setLastResult(result);
+        setLastInternalUse(null);
         setLastAdded(null);
         setCart([]);
         setDiscountPercent(0);
@@ -524,6 +554,51 @@ export function PilotPosTerminalPage() {
           cause instanceof Error
             ? cause.message
             : "Az eladás rögzítése nem sikerült.",
+        ),
+      )
+      .finally(() => setCheckingOut(false));
+  };
+
+  const internalUse = paymentMethod === "INTERNAL_USE";
+  const internalUseManualLines = cart.filter((line) => line.manual);
+  const internalNoteMissing = internalNote.trim() === "";
+  const recordInternalUse = () => {
+    if (
+      !canManage ||
+      cart.length === 0 ||
+      checkingOut ||
+      internalNoteMissing ||
+      internalUseManualLines.length > 0
+    )
+      return;
+    setCheckingOut(true);
+    setError(null);
+    void posApi
+      .createInternalUse(token, {
+        note: internalNote.trim(),
+        // no price, no discount: an internal use carries none (the server values it at purchase price)
+        lines: cart.map((line) => ({
+          variantId: line.variantId,
+          quantity: line.quantity,
+        })),
+      })
+      .then((result) => {
+        setLastInternalUse(result);
+        setLastResult(null);
+        setLastAdded(null);
+        setCart([]);
+        setDiscountPercent(0);
+        setInternalNote("");
+        setPaymentMethod("CASH");
+        setSearchTerm("");
+        setSearchResults([]);
+        loadRecentSales();
+      })
+      .catch((cause: unknown) =>
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "A belső felhasználás rögzítése nem sikerült.",
         ),
       )
       .finally(() => setCheckingOut(false));
@@ -597,13 +672,22 @@ export function PilotPosTerminalPage() {
           description="Keresés, kosár és fizetés egy képernyőn. A készlet az Acropora OS-ből jön."
         />
         {canView ? (
-          <button
-            type="button"
-            onClick={() => router.push("/pos/osszesito")}
-            className="mt-3 text-[11px] font-semibold text-pilot-aqua-700 hover:underline"
-          >
-            Összesítő fizetési módonként
-          </button>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+            <button
+              type="button"
+              onClick={() => router.push("/pos/osszesito")}
+              className="text-[11px] font-semibold text-pilot-aqua-700 hover:underline"
+            >
+              Összesítő fizetési módonként
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/pos/belso-felhasznalas")}
+              className="text-[11px] font-semibold text-pilot-aqua-700 hover:underline"
+            >
+              Belső felhasználás havonta
+            </button>
+          </div>
         ) : null}
       </div>
 
@@ -626,6 +710,34 @@ export function PilotPosTerminalPage() {
               <button
                 type="button"
                 onClick={() => setLastResult(null)}
+                aria-label="Bezárás"
+              >
+                <Icon name="x" size={14} />
+              </button>
+            }
+          />
+        </div>
+      ) : null}
+
+      {lastInternalUse ? (
+        <div className={`${PAGE_GUTTER_MX} mb-5`}>
+          <Alert
+            variant="info"
+            className={
+              lastInternalUse.stockWarnings.length > 0
+                ? "!border-pilot-amber-100 !bg-pilot-amber-50 !text-pilot-amber-700"
+                : "!border-pilot-aqua-200 !bg-pilot-aqua-50 !text-pilot-aqua-700"
+            }
+            title={`Belső felhasználás rögzítve: ${lastInternalUse.detail.number}`}
+            description={
+              lastInternalUse.stockWarnings.length > 0
+                ? `Figyelem, negatívba fordult a nyilvántartott készlet: ${lastInternalUse.stockWarnings.map((warning) => `${warning.productName} (${warning.resultingQty})`).join(", ")}. Ez nem akadályozta meg a rögzítést.`
+                : "Nem eladás: a bevételbe nem számít. A készlet helyileg lekönyvelve, a UNAS-szinkron a háttérben fut."
+            }
+            action={
+              <button
+                type="button"
+                onClick={() => setLastInternalUse(null)}
                 aria-label="Bezárás"
               >
                 <Icon name="x" size={14} />
@@ -895,6 +1007,54 @@ export function PilotPosTerminalPage() {
               </div>
             )}
           </PilotCard>
+
+          <PilotCard>
+            <PilotCardHeader
+              title="Mai belső felhasználások"
+              action={
+                <span className="text-[10px] text-pilot-grey-500">
+                  Nem eladás · beszerzési áron
+                </span>
+              }
+            />
+            {recentInternalUses.length === 0 ? (
+              <p className="px-5 py-8 text-center text-xs text-pilot-grey-500">
+                Ma még nem volt belső felhasználás.
+              </p>
+            ) : (
+              <div className="px-4" data-testid="pos-internal-uses">
+                {recentInternalUses.map((item) => (
+                  <div
+                    key={item.id}
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-pilot-grey-100 py-4 last:border-0"
+                  >
+                    <span className="min-w-0">
+                      <span className="block break-all text-xs font-semibold text-pilot-grey-900">
+                        {item.number}
+                      </span>
+                      <span className="mt-1 block text-[10px] text-pilot-grey-500">
+                        {new Date(item.occurredAt).toLocaleTimeString("hu-HU", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}{" "}
+                        · {item.performedByName ?? "—"} · {item.lineCount} tétel
+                      </span>
+                      <span className="mt-1 block break-words text-[11px] text-pilot-grey-700">
+                        {item.note}
+                      </span>
+                    </span>
+                    <span className="whitespace-nowrap text-xs font-semibold tabular-nums text-pilot-grey-900">
+                      {item.totalCost === null
+                        ? "ár nélkül"
+                        : formatMoney(item.totalCost, "HUF", {
+                            fractionDigits: 0,
+                          })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </PilotCard>
         </div>
 
         <div className="min-w-0 lg:sticky lg:top-16">
@@ -1014,12 +1174,23 @@ export function PilotPosTerminalPage() {
                   </span>
                 </div>
               </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-pilot-grey-600">Fizetendő</span>
-                <p className="text-[26px] font-semibold leading-tight tabular-nums text-pilot-grey-900">
-                  {formatMoney(payableGross, "HUF", { fractionDigits: 2 })}
+              {internalUse ? (
+                <p
+                  className="rounded-lg bg-pilot-grey-100 px-3 py-3 text-[11px] text-pilot-grey-700"
+                  data-testid="pos-internal-use-notice"
+                >
+                  Belső felhasználás: nem eladás, nincs fizetés, és a bevételbe
+                  nem számít. A készlet csökken, az érték beszerzési áron kerül
+                  a nyilvántartásba.
                 </p>
-              </div>
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-pilot-grey-600">Fizetendő</span>
+                  <p className="text-[26px] font-semibold leading-tight tabular-nums text-pilot-grey-900">
+                    {formatMoney(payableGross, "HUF", { fractionDigits: 2 })}
+                  </p>
+                </div>
+              )}
               <div>
                 <p className="mb-2 text-[11px] text-pilot-grey-600">
                   Fizetési mód
@@ -1029,10 +1200,37 @@ export function PilotPosTerminalPage() {
                 >
                   {checkoutOptions.map(renderCheckoutOption)}
                 </div>
-                <div className="mt-2 grid grid-cols-1 text-[11px] font-semibold">
+                <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] font-semibold">
                   {renderCheckoutOption(CASH_DESK_OPTION)}
+                  {renderCheckoutOption(INTERNAL_USE_OPTION)}
                 </div>
               </div>
+              {internalUse ? (
+                <label className="block text-[11px] text-pilot-grey-700">
+                  <span className="mb-1 block font-semibold">
+                    Miért vették ki? (kötelező)
+                  </span>
+                  <textarea
+                    value={internalNote}
+                    onChange={(event) => setInternalNote(event.target.value)}
+                    maxLength={POS_INTERNAL_USE_NOTE_MAX}
+                    rows={3}
+                    className="w-full rounded-lg border border-pilot-grey-200 bg-white px-3 py-2 text-xs text-pilot-grey-900 focus:border-pilot-aqua-600 focus:outline-none"
+                    placeholder="Például: a bemutató akváriumba, műhely, csere a vevőnek"
+                  />
+                  <span className="mt-1 block text-right text-[10px] text-pilot-grey-500">
+                    {internalNote.length} / {POS_INTERNAL_USE_NOTE_MAX}
+                  </span>
+                </label>
+              ) : null}
+              {internalUse && internalUseManualLines.length > 0 ? (
+                <Alert
+                  variant="danger"
+                  className="!px-3 !py-2 [&_p]:!text-[10px]"
+                  title="Kézi tétel nem lehet belső felhasználás"
+                  description={`Csak termék rögzíthető így; vedd ki a kosárból: ${internalUseManualLines.map((line) => line.productName).join(", ")}.`}
+                />
+              ) : null}
               {stockWarnings.length > 0 ? (
                 <div data-testid="pos-stock-warning">
                   <Alert
@@ -1083,6 +1281,25 @@ export function PilotPosTerminalPage() {
                     disabled={cart.length === 0 || missingVat.length > 0}
                   >
                     {`Tovább a számlához · ${formatMoney(payableGross, "HUF", { fractionDigits: 2 })}`}
+                  </PilotButton>
+                </div>
+              ) : internalUse && canManage ? (
+                <div className="text-xs font-semibold [&_button]:!h-[42px] [&_button]:!rounded-lg">
+                  <PilotButton
+                    variant="primary"
+                    size="regular"
+                    fullWidth
+                    onClick={recordInternalUse}
+                    disabled={
+                      cart.length === 0 ||
+                      checkingOut ||
+                      internalNoteMissing ||
+                      internalUseManualLines.length > 0
+                    }
+                  >
+                    {checkingOut
+                      ? "Rögzítés folyamatban…"
+                      : "Belső felhasználás rögzítése"}
                   </PilotButton>
                 </div>
               ) : !invoicing && canManage ? (

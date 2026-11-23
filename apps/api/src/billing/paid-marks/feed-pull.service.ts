@@ -1,6 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
 
+import { prisma } from "@acropora/database";
+
 import {
+  diagnoseQueryFailure,
+  ownNumberKnown,
   pullFromSzamlazz,
   type FeedPullDeps,
   type FeedPullLine,
@@ -42,12 +46,48 @@ export class FeedPullService {
     return lines;
   }
 
+  /** A kontroll bukásának diagnosztikája (csak olvas): lásd `diagnoseQueryFailure`. A hiba itt sem állítja meg a kört. */
+  async diagnose(number: string): Promise<string[]> {
+    try {
+      return await diagnoseQueryFailure(number, this.deps ?? this.live());
+    } catch (error) {
+      return [
+        `a diagnosztika nem futott le (${error instanceof Error ? error.name : "UNKNOWN"})`,
+      ];
+    }
+  }
+
+  /** Látja-e a kulcs az OS által kiállított számlát (`ownNumberKnown`); `null`, ha nem tudni (a hiba itt sem állítja meg a kört). */
+  async keyKnowsOwnNumber(): Promise<boolean | null> {
+    try {
+      return await ownNumberKnown(this.deps ?? this.live());
+    } catch {
+      return null;
+    }
+  }
+
   private live(): FeedPullDeps {
     const repository = new SzamlazzFeedsRepository();
     const feeds = new SzamlazzFeedsService(repository, {});
+    const client = new HttpSzamlazzAgentClient();
     return {
       agentKey: async () => (await this.credentials.resolve()).agentKey,
-      client: new HttpSzamlazzAgentClient(),
+      client,
+      pdf: client,
+      // az OS által, ügynökkel kiállított legutóbbi kimenő számla száma (a PDF-lekérés ezeken élesben működik)
+      ownIssuedNumber: async () =>
+        (
+          await prisma.invoice.findFirst({
+            where: {
+              direction: "OUTBOUND",
+              source: "SZAMLAZZ",
+              invoiceNumber: { not: null },
+              status: "ISSUED",
+            },
+            orderBy: { createdAt: "desc" },
+            select: { invoiceNumber: true },
+          })
+        )?.invoiceNumber ?? null,
       store: (input) => repository.storeRaw({ kind: "SZAMLAKI", ...input }),
       project: (externalId, sha256, body) =>
         feeds.intoBilling(externalId, sha256, body),

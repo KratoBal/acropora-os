@@ -941,6 +941,9 @@ export const ANONYMIZATION_REGISTER: Readonly<
   ServiceJobAsset: {
     notes: "freeText",
   },
+  ServiceJobLinkedWorksheet: {
+    linkedById: "identifier",
+  },
   WorksheetDepartment: {
     code: "business",
     name: "business",
@@ -1152,6 +1155,28 @@ export const ANONYMIZATION_REGISTER: Readonly<
     errorCode: "business",
   },
   SimplePaySyncRun: {
+    activeKey: "business",
+    errorCode: "business",
+  },
+  StripePayout: {
+    stripePayoutId: "identifier",
+    currency: "business",
+    errorCode: "business",
+  },
+  StripeTransactionLine: {
+    stripeTransactionId: "identifier",
+    type: "business",
+    reportingCategory: "business",
+    currency: "business",
+    paymentIntentId: "identifier",
+    chargeId: "identifier",
+    refundId: "identifier",
+    webshopOrderIds: "identifier",
+    orderNumbers: "identifier",
+    invoiceNumbers: "identifier",
+    errorCode: "business",
+  },
+  StripeSyncRun: {
     activeKey: "business",
     errorCode: "business",
   },
@@ -1527,6 +1552,21 @@ export const ANONYMIZATION_REGISTER: Readonly<
     reviewState: "business",
     suggestionDecisionRunId: "identifier",
     reviewedByUserId: "identifier",
+    acceptedByRuleId: "identifier",
+    ruleRefusal: "business",
+    ruleRefusalRuleId: "identifier",
+  },
+  // az ismert szállító szabálya: cégadat (adószám, név), egy tartomány, számok; vevő és magánszemély nincs benne
+  IncomingSupplierRule: {
+    kind: "business",
+    taxKey: "partyTaxNumber",
+    nameKey: "partyName",
+    senderDomain: "business",
+    label: "partyName",
+    grossCeilings: "json",
+    sourceDocumentId: "identifier",
+    createdByUserId: "identifier",
+    disabledByUserId: "identifier",
   },
   SupplierInvoiceMailMessage: {
     gmailMessageId: "identifier",
@@ -1602,6 +1642,15 @@ export const ANONYMIZATION_REGISTER: Readonly<
     referencedInvoiceNumber: "identifier",
     referencedProformaNumber: "identifier",
     sourceDocumentId: "identifier",
+  },
+  SupplierBankAccountFill: {
+    supplierKey: "identifier",
+    supplierName: "partyName",
+    supplierTaxNumber: "partyTaxNumber",
+    supplierEuTaxNumber: "partyTaxNumber",
+    account: "bankAccount",
+    evidenceIds: "identifier",
+    enteredByUserId: "identifier",
   },
   BankTransactionSourceKey: {
     key: "identifier",
@@ -1818,6 +1867,15 @@ export const ANONYMIZATION_REGISTER: Readonly<
   MortalityLocation: {
     name: "business",
   },
+  PosInternalUse: {
+    number: "identifier",
+    note: "freeText",
+  },
+  PosInternalUseLine: {
+    sku: "business",
+    productName: "business",
+    unit: "business",
+  },
   MortalityRecordDocument: {
     fileName: "freeText",
     contentType: "business",
@@ -1858,6 +1916,16 @@ export const ANONYMIZATION_REGISTER: Readonly<
   },
   PartnerOrderSetting: {
     id: "identifier",
+    updatedById: "identifier",
+  },
+  // the Lejáró számlák weekly mail (acrobot 58227, 58230): the recipients and the sender are e-mail addresses, the rest settings
+  DueInvoicesMailSetting: {
+    id: "identifier",
+    recipients: "email",
+    fromAddress: "email",
+    earliest: "business",
+    latest: "business",
+    lastSentDay: "business",
     updatedById: "identifier",
   },
   PartnerOrderDocument: {

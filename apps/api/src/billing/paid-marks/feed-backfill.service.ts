@@ -5,11 +5,15 @@ import {
   backfillSummary,
   feedGaps,
   feedSeries,
+  foreignSeries,
+  NOT_OUR_ACCOUNT,
   SETTLED_OUTCOMES,
+  type FeedControlResult,
   type FeedGapSeries,
 } from "../feed-backfill.js";
 import type { FeedPullLine } from "../feed-pull.js";
 import { FeedPullService } from "./feed-pull.service.js";
+import { NAV_SOURCE } from "../external-billing-one-row.js";
 
 /** A tárolt számla száma és fajtája, a hézagokhoz; a teszt cseréli. */
 export interface FeedBackfillStore {
@@ -17,25 +21,38 @@ export interface FeedBackfillStore {
     year: number,
   ): Promise<{ documentNumber: string; kindCode: string }[]>;
   checked(): Promise<{ number: string; series: string; outcome: string }[]>;
+  /** a sorozat "nem a mi fiókunk" ítéletének törlése (csak azt a kimenetet, a többi válasz marad); a törölt sorok száma */
+  clearForeign(series: string): Promise<number>;
   record(input: {
     number: string;
     series: string;
-    line: FeedPullLine;
+    line: { outcome: string; detail: string };
     userId: string;
     at: Date;
   }): Promise<void>;
 }
 
 export const prismaFeedBackfillStore: FeedBackfillStore = {
+  // a NAV-ból felvett számla is megvan (kártya 785dfea6): a CASHMAN számláit a Számlázz.hu soha nem adja ki (7-es kód), tehát a
+  // visszatöltés nem kérdezi őket újra; a sorozat legnagyobb száma is a NAV-val együtt értendő
   storedNumbers: (year) =>
     prisma.externalBillingDocument.findMany({
-      where: { source: "SZAMLAZZ", documentNumber: { contains: `${year}/` } },
+      where: {
+        source: { in: ["SZAMLAZZ", NAV_SOURCE] },
+        documentNumber: { contains: `${year}/` },
+      },
       select: { documentNumber: true, kindCode: true },
     }),
   checked: () =>
     prisma.szamlazzFeedBackfillNumber.findMany({
       select: { number: true, series: true, outcome: true },
     }),
+  async clearForeign(series) {
+    const result = await prisma.szamlazzFeedBackfillNumber.deleteMany({
+      where: { series, outcome: NOT_OUR_ACCOUNT },
+    });
+    return result.count;
+  },
   async record({ number, series, line, userId, at }) {
     const data = {
       series,
@@ -56,7 +73,15 @@ export const prismaFeedBackfillStore: FeedBackfillStore = {
 export type FeedBackfillStart =
   | { status: "started"; phase: "dry" | "apply"; total: number }
   | { status: "running" }
-  | { status: "nothing"; phase: "dry" | "apply" };
+  | { status: "nothing"; phase: "dry" | "apply" }
+  /** the control numbers (known to exist) were not found: nothing was asked or recorded, the reason is in `control` */
+  | { status: "control-failed"; control: FeedControlResult[] };
+
+/** Egy "nem a mi fiókunk" ítélet visszavonása: törölve, nincs ilyen ítélet, vagy épp kör fut. */
+export type FeedBackfillRecheck =
+  | { status: "cleared"; series: string }
+  | { status: "not-foreign"; series: string }
+  | { status: "running" };
 
 /** Ahogy a lap látja: fut-e, hol tart, sorozatonként a hézag és a Számlázz.hu válaszai. */
 export interface FeedBackfillStatus {
@@ -72,6 +97,8 @@ export interface FeedBackfillStatus {
     finishedAt: string;
     done: number;
   } | null;
+  /** a legutóbbi száraz kör kontrollja (a feedben lévő legnagyobb számok); `null`, amíg nem futott (újraindulás után is) */
+  control: { checkedAt: string; results: FeedControlResult[] } | null;
   year: number;
   series: { series: string; highest: string; missing: number }[];
   /** sorozatonként kimenetenként: WOULD_STORE, STORED, NOT_FOUND, ERROR, ... */
@@ -102,6 +129,7 @@ export class FeedBackfillService {
   private readonly logger = new Logger(FeedBackfillService.name);
   private running: FeedBackfillStatus["running"] = null;
   private last: FeedBackfillStatus["last"] = null;
+  private control: FeedBackfillStatus["control"] = null;
   /** a teszt cseréli */
   store: FeedBackfillStore = prismaFeedBackfillStore;
   delayMs = feedBackfillDelayMs();
@@ -119,6 +147,7 @@ export class FeedBackfillService {
     return {
       running: this.running,
       last: this.last,
+      control: this.control,
       year: now.getFullYear(),
       series: gaps.map((g) => ({
         series: g.series,
@@ -127,6 +156,31 @@ export class FeedBackfillService {
       })),
       checked: backfillSummary(await this.store.checked()),
     };
+  }
+
+  /**
+   * AZ ÍTÉLET VISSZAVONÁSA (acrobot 58207, barracuda 58157: a "nem a mi fiókunk" ítélet egyetlen megfigyelésből végleges, és a
+   * visszaállítása adatbázis-írás volt). Csak törli a sorozat ítéletét: NEM kérdez semmit a Számlázz.hu-tól, és nem indít
+   * kört. A következő "Ellenőrzés" a sorozatot újra kontrollálja, és ott dönt: újra idegen, vagy a számait kérdezi tovább.
+   * Kör közben nem fut (a kör a táblát és a célokat éppen használja).
+   */
+  async clearForeign(
+    series: string,
+    userId: string,
+  ): Promise<FeedBackfillRecheck> {
+    if (this.running) return { status: "running" };
+    const cleared = await this.store.clearForeign(series);
+    if (cleared === 0) return { status: "not-foreign", series };
+    // a memóriában tartott kontroll sem állíthatja tovább, hogy ez a sorozat idegen
+    if (this.control)
+      this.control = {
+        ...this.control,
+        results: this.control.results.filter((r) => r.series !== series),
+      };
+    this.logger.log(
+      `Feed-visszatöltés: a(z) ${series} sorozat "nem a mi fiókunk" ítélete törölve (user ${userId}); a következő ellenőrzés újra dönt`,
+    );
+    return { status: "cleared", series };
   }
 
   /** A behúzás után, a teszté: megvárja a kört. */
@@ -154,6 +208,33 @@ export class FeedBackfillService {
       this.running = null;
       return { status: "nothing", phase };
     }
+    if (phase === "dry") {
+      // a check that cannot fail proves nothing: ask the numbers that EXIST first, and ask nothing else if they are not found
+      let results: FeedControlResult[];
+      try {
+        results = await this.controlRound(userId, now, true);
+      } catch (error) {
+        this.running = null;
+        throw error;
+      }
+      // a series the control proved to be outside our account is not a failure: it drops out of the round (and for good)
+      if (results.some((r) => !r.passed && !r.foreign)) {
+        this.running = null;
+        return { status: "control-failed", control: results };
+      }
+      if (results.some((r) => r.foreign)) {
+        try {
+          targets = await this.targets(apply, now);
+        } catch (error) {
+          this.running = null;
+          throw error;
+        }
+        if (targets.length === 0) {
+          this.running = null;
+          return { status: "nothing", phase };
+        }
+      }
+    }
     this.running.total = targets.length;
     this.current = this.loop(phase, targets, userId).catch((error: unknown) =>
       this.logger.error(
@@ -171,11 +252,107 @@ export class FeedBackfillService {
         .filter((c) => SETTLED_OUTCOMES.has(c.outcome))
         .map((c) => c.number),
     );
+    const foreign = foreignSeries(checked);
     return apply
       ? checked.filter((c) => c.outcome === "WOULD_STORE").map((c) => c.number)
       : (await this.gaps(now))
+          .filter((g) => !foreign.has(g.series))
           .flatMap((g) => g.missing)
           .filter((n) => !settled.has(n));
+  }
+
+  /** One question per payable series: its highest stored number, which the feed holds, so Számlázz.hu has it. */
+  private async controlRound(
+    userId: string,
+    now: Date,
+    diagnose = false,
+  ): Promise<FeedControlResult[]> {
+    const results: FeedControlResult[] = [];
+    // a series already judged to be outside our account is not asked again
+    const foreign = foreignSeries(await this.store.checked());
+    const withGap = (await this.gaps(now)).filter(
+      (g) => g.missing.length > 0 && !foreign.has(g.series),
+    );
+    for (const [i, gap] of withGap.entries()) {
+      if (i > 0 && this.delayMs > 0)
+        await new Promise((r) => setTimeout(r, this.delayMs));
+      let line: FeedPullLine;
+      try {
+        [line] = (await this.feedPull.pull([gap.highest], false, userId)) as [
+          FeedPullLine,
+        ];
+      } catch (error) {
+        line = {
+          number: gap.highest,
+          outcome: "ERROR",
+          detail: `a lekérdezés nem futott le (${error instanceof Error ? error.name : "UNKNOWN"})`,
+        };
+      }
+      const passed = line.outcome === "WOULD_STORE";
+      results.push({
+        series: gap.series,
+        number: gap.highest,
+        outcome: line.outcome,
+        detail: line.detail,
+        passed,
+        // a bukott kontroll okát a három olvasó kérdés választja szét (`diagnoseQueryFailure`); a kör végi kontroll nem kérdezi
+        ...(!passed && diagnose && typeof this.feedPull.diagnose === "function"
+          ? { diagnostics: await this.feedPull.diagnose(gap.highest) }
+          : {}),
+      });
+    }
+    if (diagnose) await this.judgeForeignSeries(results, userId);
+    this.control = { checkedAt: new Date().toISOString(), results };
+    const failed = results.filter((r) => !r.passed && !r.foreign);
+    this.logger.log(
+      `Feed-visszatöltés kontroll (user ${userId}): ${results.length - failed.length}/${results.length} sorozat rendben${failed
+        .map(
+          (r) =>
+            `; ${r.number} ${r.outcome} ${r.detail}${
+              r.diagnostics?.length ? ` [${r.diagnostics.join(" | ")}]` : ""
+            }`,
+        )
+        .join("")}`,
+    );
+    return results;
+  }
+
+  /**
+   * A BUKOTT KONTROLL ÍTÉLETE (acrobot 58095): a 7-es válasz (`NOT_FOUND`) két dolgot jelenthet, és egyetlen kérdés választja
+   * szét őket: megtalálja-e UGYANEZ a kulcs az OS által kiállított számlát. Ha igen, a kérés alakja és a kulcs jó, a szám pedig
+   * nem ebben a fiókban él: a sorozat nem a mi Számlázz.hu fiókunkból való, és VÉGLEGESEN kimarad (`NOT_OUR_ACCOUNT`, a tábla
+   * őrzi, újraindítás után is). Ha nem (vagy nem tudni), a bukás marad kontroll-bukás. Egy kör egy kérdést tesz fel, nem
+   * sorozatonként egyet.
+   */
+  private async judgeForeignSeries(
+    results: FeedControlResult[],
+    userId: string,
+  ): Promise<void> {
+    const suspects = results.filter(
+      (r) => !r.passed && r.outcome === "NOT_FOUND",
+    );
+    if (
+      suspects.length === 0 ||
+      typeof this.feedPull.keyKnowsOwnNumber !== "function"
+    )
+      return;
+    if ((await this.feedPull.keyKnowsOwnNumber()) !== true) return;
+    for (const result of suspects) {
+      result.foreign = true;
+      await this.store.record({
+        number: result.number,
+        series: result.series,
+        line: {
+          outcome: NOT_OUR_ACCOUNT,
+          detail: `a kontroll szám 7-es választ kapott, az OS által kiállított számlát ugyanez a kulcs megtalálta: ${result.detail}`,
+        },
+        userId,
+        at: new Date(),
+      });
+    }
+    this.logger.log(
+      `Feed-visszatöltés: ${suspects.map((r) => r.series).join(", ")} nem a mi Számlázz.hu fiókunkból való, a sorozat kimarad`,
+    );
   }
 
   private async loop(
@@ -184,6 +361,7 @@ export class FeedBackfillService {
     userId: string,
   ): Promise<void> {
     const outcomes: Record<string, number> = {};
+    const noes: { number: string; series: string; detail: string }[] = [];
     try {
       for (const [i, number] of numbers.entries()) {
         if (i > 0 && this.delayMs > 0)
@@ -202,16 +380,28 @@ export class FeedBackfillService {
             detail: `a lekérdezés nem futott le (${error instanceof Error ? error.name : "UNKNOWN"})`,
           };
         }
+        const series = feedSeries(number) ?? "?";
+        // the BEHÚZÁS round runs no control: a 7 there is no proof of an unknown number, so it is not a final no
+        const recorded =
+          phase === "apply" && line.outcome === "NOT_FOUND"
+            ? {
+                outcome: "UNVERIFIED",
+                detail: `ellenőrzésre vár: a behúzó kör kontroll nélkül kapta (${line.detail})`,
+              }
+            : line;
         await this.store.record({
           number,
-          series: feedSeries(number) ?? "?",
-          line,
+          series,
+          line: recorded,
           userId,
           at: new Date(),
         });
-        outcomes[line.outcome] = (outcomes[line.outcome] ?? 0) + 1;
+        if (phase === "dry" && line.outcome === "NOT_FOUND")
+          noes.push({ number, series, detail: line.detail });
+        outcomes[recorded.outcome] = (outcomes[recorded.outcome] ?? 0) + 1;
         this.running!.done = i + 1;
       }
+      if (noes.length > 0) await this.revokeNoesIfBroken(noes, userId);
       this.logger.log(
         `Feed-visszatöltés ${phase === "apply" ? "BEHÚZÁS" : "száraz"} (user ${userId}): ${numbers.length} szám, ${Object.entries(
           outcomes,
@@ -228,5 +418,31 @@ export class FeedBackfillService {
         done,
       };
     }
+  }
+  /**
+   * The control measures the question's soundness at the start of the round, not during it. A key change or a fault on
+   * the Számlázz.hu side in the middle would still answer 7 and leave final noes. So the control is asked once more at
+   * the end, and if it fails, this round's noes lose their finality (UNVERIFIED) and the failure shows on the page.
+   */
+  private async revokeNoesIfBroken(
+    noes: readonly { number: string; series: string; detail: string }[],
+    userId: string,
+  ): Promise<void> {
+    const results = await this.controlRound(userId, new Date());
+    if (results.every((r) => r.passed)) return;
+    for (const no of noes)
+      await this.store.record({
+        number: no.number,
+        series: no.series,
+        line: {
+          outcome: "UNVERIFIED",
+          detail: `ellenőrzésre vár: a kör végi kontroll nem sikerült (${no.detail})`,
+        },
+        userId,
+        at: new Date(),
+      });
+    this.logger.warn(
+      `Feed-visszatöltés: a kör végi kontroll nem sikerült, ${noes.length} nem ellenőrzésre vár lett`,
+    );
   }
 }

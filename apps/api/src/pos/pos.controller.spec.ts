@@ -6,6 +6,7 @@ import { PERMISSIONS } from "@acropora/types";
 
 import { REQUIRED_PERMISSIONS_KEY } from "../auth/decorators/require-permissions.decorator.js";
 import { PosController } from "./pos.controller.js";
+import type { PosInternalUseService } from "./pos-internal-use.service.js";
 import type { PosProductSearchService } from "./pos-product-search.service.js";
 import type { PosSaleService } from "./pos-sale.service.js";
 
@@ -31,6 +32,34 @@ describe("PosController permissions", () => {
       PERMISSIONS.ORDERS_MANAGE,
     ]);
   });
+
+  it("the internal use (card ec51e614): the same rights as a sale, view to read, manage to record", () => {
+    assert.deepEqual(
+      [
+        permissionsFor(PosController.prototype.listInternalUses),
+        permissionsFor(PosController.prototype.getInternalUse),
+        permissionsFor(PosController.prototype.createInternalUse),
+      ],
+      [
+        [PERMISSIONS.ORDERS_VIEW],
+        [PERMISSIONS.ORDERS_VIEW],
+        [PERMISSIONS.ORDERS_MANAGE],
+      ],
+    );
+  });
+
+  // card ada14a7c: the monthly view reads with the right to read; it is declared before `:id`, or "summary" would match as an id
+  it("the internal-use summary needs orders.view and comes before the :id route", () => {
+    assert.deepEqual(
+      permissionsFor(PosController.prototype.internalUseSummary),
+      [PERMISSIONS.ORDERS_VIEW],
+    );
+    const order = Object.getOwnPropertyNames(PosController.prototype);
+    assert.ok(
+      order.indexOf("internalUseSummary") < order.indexOf("getInternalUse"),
+      order.join(", "),
+    );
+  });
 });
 
 describe("PosController delegation", () => {
@@ -49,6 +78,7 @@ describe("PosController delegation", () => {
           };
         },
       } as unknown as PosSaleService,
+      {} as PosInternalUseService,
     );
 
     await controller.createSale({ paymentMethod: "CASH", lines: [] }, {
@@ -68,10 +98,28 @@ describe("PosController delegation", () => {
         },
       } as unknown as PosProductSearchService,
       {} as PosSaleService,
+      {} as PosInternalUseService,
     );
 
     await controller.searchProducts({ q: "reef" });
 
     assert.equal(capturedQuery, "reef");
+  });
+
+  it("passes the current user's id when recording an internal use (card ec51e614)", async () => {
+    let captured: unknown[] = [];
+    const controller = new PosController(
+      {} as PosProductSearchService,
+      {} as PosSaleService,
+      {
+        create: async (input: unknown, userId: string) => {
+          captured = [input, userId];
+          return { detail: {}, stockWarnings: [] };
+        },
+      } as unknown as PosInternalUseService,
+    );
+    const input = { note: "x", lines: [{ variantId: "v", quantity: 1 }] };
+    await controller.createInternalUse(input, { id: "user-7" } as never);
+    assert.deepEqual(captured, [input, "user-7"]);
   });
 });

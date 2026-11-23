@@ -203,8 +203,11 @@ export interface BillingDocumentPdfState {
  * meg (a rendelésszám szerint), és ha abban visszatérítés is van, azt jelöljük
  * (acrobot 25979).
  */
-/** Egy külső kimenő bizonylat forrása. */
-export type ExternalBillingSource = "SZAMLAZZ" | "EBIZ";
+/**
+ * Egy külső kimenő bizonylat forrása. A `NAV` a NAV Online Számla kimenő lekérdezéséből jött sor (kártya 785dfea6): csak a számla
+ * LÉTEZÉSÉT tudjuk belőle (szám, kelt, összeg, vevő), fizetést és PDF-et nem; a Számlázz.hu és az eBIZ átveszi, ha ugyanazt hozza.
+ */
+export type ExternalBillingSource = "SZAMLAZZ" | "EBIZ" | "NAV";
 
 export type BillingPaymentSource =
   | "SZAMLAZZ"
@@ -224,7 +227,17 @@ export type BillingPaymentSource =
   /** egy banki jóváírás több saját számlára, a közleményből (kártya aeddb2c3) */
   | "MARK_BANK_TRANSFER"
   /** Bejövő számla: a Hiányzó számlák banki párosítása (acrobot 25988). */
-  | "BANK_PAIRING";
+  | "BANK_PAIRING"
+  /**
+   * Bejövő számla: a futár (Foxpost, GLS) levonta a díjszámláját az utánvét-utalásból (acrobot 58315, 58343): a díjszámlához nincs banki terhelés,
+   * a kifizetettséget az elszámolás és a hozzá tartozó jóváírás adja.
+   */
+  | "CARRIER_SETOFF"
+  /**
+   * Bejövő számla: a számlán álló fizetési mód pontosan „Fizetve” (a kiállító állítása, ma csak a SimplePay díjszámlái), és a Számlázz.hu nem ismer fizetést
+   * (acrobot 58529, 58530). A kifizetés napja nem ismert.
+   */
+  | "ISSUER_PAID";
 
 /**
  * EGY SAJÁT KIFIZETETT-JELÖLÉS, AMIT A SZÁMLÁZZ.HU ELFOGADOTT (acrobot 26027).

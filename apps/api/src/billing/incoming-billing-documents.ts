@@ -25,6 +25,8 @@ import {
   invoiceIdentity,
 } from "./invoice-identity.js";
 import { externalKindLabel as feedKindLabel } from "./billing-document-list.js";
+import { isIssuerPaid } from "./incoming-issuer-paid.js";
+import type { SetOffPayment } from "./incoming-set-off.js";
 
 /**
  * A POSTAFIÓKOS SZÁMLA SAJÁT TÍPUSKÓDJA (kártya e4c3b0fb, barracuda
@@ -206,6 +208,8 @@ export function incomingPaymentOf(
     | "grossAmount"
     | "currency"
     | "lastPaymentDate"
+    | "source"
+    | "paymentMethod"
   >,
   bankMatch: IncomingBankMatch,
   /** A párosított terhelések a teljes számlát fizetik (`DocumentPairing.paidInFull`). */
@@ -216,6 +220,11 @@ export function incomingPaymentOf(
    * forrás-jelölést nem kap (jóváhagyás előtt sem kapott).
    */
   manualPaid: ManualPurchasePayment | null = null,
+  /**
+   * A FUTÁR LEVONTA A DÍJSZÁMLÁT AZ UTÁNVÉT-UTALÁSBÓL (a Foxpost és a GLS, acrobot 58315, 58343; `incoming-set-off.ts`): a díjszámlához nincs banki
+   * terhelés, a kifizetettséget az elszámolás és a hozzá tartozó jóváírás adja. A sorrend: Számlázz.hu, banki párosítás, ez, kézi jelölés, a feed.
+   */
+  setOff: SetOffPayment | null = null,
 ): {
   paymentState: IncomingPaymentState;
   paidAmount: string;
@@ -241,6 +250,23 @@ export function incomingPaymentOf(
         .map((d) => d.bookingDate)
         .reduce((a, b) => (a > b ? a : b)),
       paymentSource: "BANK_PAIRING",
+      paymentConflict: false,
+    };
+  if (setOff)
+    return {
+      paymentState: "PAID",
+      paidAmount: money(row.grossAmount, row.currency),
+      lastPaymentDate: setOff.day,
+      paymentSource: "CARRIER_SETOFF",
+      paymentConflict: false,
+    };
+  // a számlán álló „Fizetve” (a kiállító állítása; a Számlázz.hu nem ismer fizetést): a nap nem ismert, ezért nincs
+  if (isIssuerPaid(row))
+    return {
+      paymentState: "PAID",
+      paidAmount: money(row.grossAmount, row.currency),
+      lastPaymentDate: null,
+      paymentSource: "ISSUER_PAID",
       paymentConflict: false,
     };
   if (manualPaid)
@@ -277,6 +303,8 @@ export function toIncomingListItem(
   collectedPdf = false,
   /** Lásd `ManualPurchasePayment`; csak a PURCHASE forrású sor kaphat ilyet. */
   manualPaid: ManualPurchasePayment | null = null,
+  /** A futár levonása (lásd `incomingPaymentOf`); csak a Számlázz.hu-ból érkezett sor kaphat ilyet. */
+  setOff: SetOffPayment | null = null,
 ): FeedListItem {
   const bankMatch = bankMatchOf(row, pairings);
   return {
@@ -310,6 +338,7 @@ export function toIncomingListItem(
       bankMatch,
       pairingOfRow(row, pairings)?.paidInFull ?? false,
       row.source === "PURCHASE" ? manualPaid : null,
+      row.source === "MAILBOX" || row.source === "PURCHASE" ? null : setOff,
     ),
     bankMatch,
     notBookable: row.notBookable,
@@ -699,10 +728,11 @@ export function toIncomingDetail(
   collectedPdf = false,
   manualPaid: ManualPurchasePayment | null = null,
   relatedDocuments: IncomingRelatedDocument[] = [],
+  setOff: SetOffPayment | null = null,
 ): IncomingDocumentDetail {
   const payments = row.payments as unknown as IncomingPayment[];
   return {
-    ...toIncomingListItem(row, pairings, collectedPdf, manualPaid),
+    ...toIncomingListItem(row, pairings, collectedPdf, manualPaid, setOff),
     relatedDocuments,
     exchangeBank: row.exchangeBank,
     supplier: {

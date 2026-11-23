@@ -37,8 +37,15 @@ export type SzamlazzQueryKey =
 export function buildSzamlazzQueryXml(input: {
   agentKey: string;
   key: SzamlazzQueryKey;
+  /**
+   * A DIAGNOSZTIKA ALAKJA: kiírt `<pdf>false</pdf>` elem az azonosító után (a séma szerinti helyén: szamlaszam, rendelesSzam,
+   * pdf, szamlaKulsoAzon). A mindennapi kérés NEM küldi (a kimenet a bizonylat XML-je, PDF nélkül); a kontroll bukásánál ezzel is
+   * megkérdezzük, hogy a Számlázz.hu a kérés elemeinek hiányára vagy a számra felel-e 7-essel.
+   */
+  pdfFlag?: boolean;
 }): string {
   const value = escapeXml(input.key.value);
+  const pdf = input.pdfFlag === undefined ? "" : `<pdf>${input.pdfFlag}</pdf>`;
   const identifier =
     input.key.by === "invoiceNumber"
       ? `<szamlaszam>${value}</szamlaszam>`
@@ -49,7 +56,8 @@ export function buildSzamlazzQueryXml(input: {
     'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ' +
     'xsi:schemaLocation="http://www.szamlazz.hu/xmlszamlaxml https://www.szamlazz.hu/szamla/docs/xsds/agentxml/xmlszamlaxml.xsd">' +
     `<szamlaagentkulcs>${escapeXml(input.agentKey)}</szamlaagentkulcs>` +
-    identifier +
+    // the schema order: szamlaszam, rendelesSzam, pdf, szamlaKulsoAzon (barracuda #2768): the flag follows a number, precedes an external id
+    (input.key.by === "invoiceNumber" ? identifier + pdf : pdf + identifier) +
     "</xmlszamlaxml>"
   );
 }
@@ -68,8 +76,12 @@ export type SzamlazzQueryResult =
       netTotal: string | null;
       grossTotal: string | null;
     }
-  | { outcome: "NOT_FOUND" }
-  | { outcome: "ERROR"; errorCode: string | null };
+  | { outcome: "NOT_FOUND"; errorMessage: string | null }
+  | {
+      outcome: "ERROR";
+      errorCode: string | null;
+      errorMessage: string | null;
+    };
 
 /**
  * A válasz értelmezése. Ismeretlen gyökérelem vagy hibás XML hibát dob
@@ -86,9 +98,12 @@ export function parseSzamlazzQueryResponse(body: string): SzamlazzQueryResult {
         "xmlszamlavalasz siker, de nem szamla dokumentum",
       );
     const errorCode = textAt(root, "hibakod");
+    // the message is the Számlázz.hu's own wording of WHY (it never carries the invoice's customer data); a 7 also covers
+    // "the request XML was not understood", so the text is what tells a real unknown number from a request it did not read
+    const errorMessage = textAt(root, "hibauzenet");
     return errorCode === SZAMLAZZ_NOT_FOUND_CODE
-      ? { outcome: "NOT_FOUND" }
-      : { outcome: "ERROR", errorCode };
+      ? { outcome: "NOT_FOUND", errorMessage }
+      : { outcome: "ERROR", errorCode, errorMessage };
   }
   if (root.name !== "szamla")
     throw new SzamlazzFeedParseError("ismeretlen gyökérelem");

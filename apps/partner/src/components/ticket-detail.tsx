@@ -22,6 +22,7 @@ import { partnerApi } from "@/lib/api";
 import { naploSor } from "@/lib/naplo-sor";
 import { TICKET_WORDING, ticketHref, ticketRoute } from "@/lib/ticket-kind";
 import { DocumentPanel } from "./document-panel";
+import { LinkedWorksheetsCard } from "./linked-worksheets-card";
 import { TicketConversation } from "./ticket-conversation";
 import { Message } from "./ticket-list";
 
@@ -126,6 +127,30 @@ export function TicketDetail({
   useEffect(() => {
     void load();
   }, [load]);
+  /*
+    A KAPCSOLÓDÓ MUNKALAPOK KÜLÖN KÉRÉS, KÜLÖN HIBÁVAL (kártya efe02c6f): csak a karbantartási lap útvonalán (a hibajegy nem fogad
+    hivatkozást), és a hibája a saját kártyáján marad, nem viszi el a lapot.
+  */
+  const [linked, setLinked] = useState<
+    Awaited<ReturnType<typeof partnerApi.linkedWorksheets>>["items"] | null
+  >(null);
+  const [linkedError, setLinkedError] = useState<string | null>(null);
+  const loadLinked = useCallback(async () => {
+    if (route !== "karbantartas") return;
+    setLinkedError(null);
+    try {
+      setLinked((await partnerApi.linkedWorksheets(id)).items);
+    } catch (cause) {
+      setLinkedError(
+        cause instanceof Error
+          ? cause.message
+          : "A kapcsolódó munkalapok nem tölthetők be.",
+      );
+    }
+  }, [id, route]);
+  useEffect(() => {
+    void loadLinked();
+  }, [loadLinked]);
   // a lap a SAJÁT útvonalán áll: egy másik fajta útvonalán megnyitva átirányít (a régi linkek így működnek tovább)
   const wrongRoute = ticket !== null && ticketRoute(ticket.kind) !== route;
   useEffect(() => {
@@ -373,6 +398,14 @@ export function TicketDetail({
               )}
             </div>
           </PilotCard>
+
+          {maintenance ? (
+            <LinkedWorksheetsCard
+              items={linked}
+              error={linkedError}
+              retry={loadLinked}
+            />
+          ) : null}
         </div>
 
         <div className="flex flex-col gap-5">

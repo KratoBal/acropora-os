@@ -261,6 +261,11 @@ export const MISSING_INVOICE_ACTIONS = [
   "PROVIDE_PREMIUM_NOTICE",
   /** Sztornózott vásárlás: a visszatérítés elmaradt, vissza kell kérni (acrobot 25933). */
   "CHASE_REFUND",
+  /**
+   * Nincs a partnertől számla, de az ÖSSZEGE egyezik néhány számláéval (a kiállító neve nem: közvetítőn át fizetés,
+   * kártyás vásárlás): előbb azokat kell megnézni, utána kérni a számlát (acrobot 58107 a).
+   */
+  "CHECK_AMOUNT_CANDIDATES",
 ] as const;
 export type MissingInvoiceAction = (typeof MISSING_INVOICE_ACTIONS)[number];
 
@@ -637,7 +642,34 @@ export interface InvoiceCollectionSuggestion {
   gross: string | null;
   currency: string | null;
   createdAt: string;
+  /**
+   * MIÉRT MARADT EMBERRE, HA EGY SZÁLLÍTÓI SZABÁLY ILLESZKEDETT (kártya e09190c8): az ok és a szabály neve, a begyűjtés (vagy az
+   * újraolvasás) idején. `null`: egy szabály kulcsa sem illeszkedett.
+   */
+  ruleRefusal: {
+    reason: SupplierRuleRefusalCode;
+    ruleLabel: string | null;
+  } | null;
 }
+
+/**
+ * A SZÁLLÍTÓI SZABÁLY ILLESZKEDETT, DE NEM FOGADOTT EL (kártya e09190c8):
+ * - `SENDER_MISMATCH`: más feladótól jött, mint a szabályé;
+ * - `UNTRUSTED_NAME_SENDER`: név-szabály, de a PDF a saját továbbítónkon át jött (a név-szabályhoz a szállító saját feladója kell);
+ * - `NOT_AUTHENTICATED`: a feladó tartománya nem hitelesített (nincs `dmarc=pass` a Gmail fejlécében, vagy Drive-fájl);
+ * - `NEW_CURRENCY`: ebben a pénznemben a szabály még nem fogadott el számlát;
+ * - `OUTLIER`: az összeg több, mint az eddig elfogadott legnagyobb háromszorosa;
+ * - `NO_AMOUNT`: az összeg nem olvasható;
+ * - `SAME_NUMBER`: ugyanilyen számú dokumentum már tárolva van.
+ */
+export type SupplierRuleRefusalCode =
+  | "SENDER_MISMATCH"
+  | "UNTRUSTED_NAME_SENDER"
+  | "NOT_AUTHENTICATED"
+  | "NEW_CURRENCY"
+  | "OUTLIER"
+  | "NO_AMOUNT"
+  | "SAME_NUMBER";
 
 export interface InvoiceCollectionSuggestionsResponse {
   items: InvoiceCollectionSuggestion[];
@@ -645,7 +677,87 @@ export interface InvoiceCollectionSuggestionsResponse {
   staleAfterDays: number;
   /** Hány `UNASSIGNED` fájl vár a határnál régebben döntésre (a napi számla-ellenőrzés ezt olvassa). */
   staleCount: number;
+  /**
+   * AZ ISMERT SZÁLLÍTÓ SZABÁLYAINAK KAPCSOLÓJA A FELÜLETNEK (nautilus 58009): a lap a szabály-felületet csak `live` mellett mutatja.
+   * `live`: az `INVOICE_SUPPLIER_RULES=live` fut; `amountlessAccepted`: az összeg nélküli PDF-et is elfogadja a szabály.
+   */
+  supplierRules: { live: boolean; amountlessAccepted: boolean };
 }
+
+/**
+ * AZ ISMERT SZÁLLÍTÓ SZABÁLYA (PDF-javaslatok 2. útja; acrobot 57881, 57884). Egy szállítót egy ember fogad el egyszer, és a
+ * szállító következő PDF-jét a begyűjtés magától elfogadja (naplózva, visszavonhatóan). `TAX`: a PDF-ből kiolvasott
+ * adószám/EU-adószám; `NAME`: a szállító jellemző neve a PDF szövegében, csak külső feladóval.
+ */
+export type SupplierRuleKind = "TAX" | "NAME";
+
+export interface SupplierRuleView {
+  id: string;
+  kind: SupplierRuleKind;
+  /** a szállító neve a lapon: amit az ember beírt, vagy az adószám */
+  label: string;
+  /** TAX: a normalizált adószám; NAME: a jellemző szavak */
+  key: string;
+  /** a feladó tartománya, vagy null: megbízott továbbítótól jött (csak TAX) */
+  senderDomain: string | null;
+  /** pénznemenként a legnagyobb elfogadott bruttó, centben */
+  grossCeilings: Record<string, number>;
+  acceptedCount: number;
+  createdAt: string;
+  /** null: él; különben mikor kapcsolták ki */
+  disabledAt: string | null;
+}
+
+/** Mit tehet az ember egy döntésre váró PDF-fel a szabály létrehozásához (`GET suggestions/:id/rule-preview`). */
+export interface SupplierRulePreview {
+  documentId: string;
+  /** a PDF-ből olvasható normalizált adószám, vagy null: nincs (név alapú szabály kell) */
+  taxKey: string | null;
+  /** igaz, ha a feladó külső (nem a begyűjtött postafiókunk tartománya): név alapú szabály csak ilyennel él */
+  externalSender: boolean;
+  senderDomain: string | null;
+  /** ugyanattól a külső feladótól álló függő PDF-ek KÜLÖNBÖZŐ adószámot hordoznak: valószínűleg olvasó-hiba, név alapú szabály javasolt */
+  taxLooksUnstable: boolean;
+  /** hány MÁSIK függő PDF fogadódna el azonnal, ha a szabály létrejönne (a mai szabály-egyeztetéssel) */
+  pendingCount: Record<SupplierRuleKind, number>;
+  /**
+   * Melyik szabály hozható létre ebből a PDF-ből (a szerver döntése, a kliens nem számolja újra): TAX kell hozzá olvasható adószám ÉS
+   * ismert, szabályos feladó-tartomány; NAME csak külső feladóval él (saját továbbítótól érkezett PDF-hez csak adószám-szabály lehet).
+   */
+  canCreate: Record<SupplierRuleKind, boolean>;
+}
+
+export interface AcceptWithRuleInput {
+  kind: SupplierRuleKind;
+  /** a szállító neve a PDF-en: a NAME kulcs forrása (kötelező), TAX-nál a lapon látszó név */
+  vendorName?: string;
+  /** a függő, a szabály alá eső többi PDF-et is elfogadja (az ember megerősítésével) */
+  alsoPending?: boolean;
+}
+
+export interface AcceptWithRuleResult {
+  ruleId: string;
+  /** hamis: már élt ugyanilyen szabály, azt használtuk */
+  created: boolean;
+  /** hány további függő PDF fogadódott el a szabály alapján */
+  alsoAccepted: number;
+}
+
+/** Egy, a szabály nevén elfogadott PDF a visszavonás listájához. */
+export interface AutoAcceptedView {
+  documentId: string;
+  fileName: string;
+  sender: string | null;
+  receivedAt: string | null;
+  acceptedAt: string;
+  ruleId: string;
+  invoiceNumber: string | null;
+  gross: string | null;
+  currency: string | null;
+}
+
+/** A visszavonás eredménye: UNDONE, vagy IN_USE (közben párosult/csatolták: előbb azt kell visszavonni). */
+export type AutoAcceptUndoResult = "UNDONE" | "IN_USE";
 
 /** A javaslat sorsa: elfogadva jelölt lesz, elvetve a dokumentum törlődik. */
 export type InvoiceCollectionSuggestionDecision = "ACCEPT" | "REJECT";

@@ -28,6 +28,9 @@ export interface SuggestionRow {
   suggestionDecisionRunId: string | null;
   textReading: Prisma.JsonValue;
   createdAt: Date;
+  /** a szállítói szabály oka, ha egy illeszkedett és emberre hagyta (`SupplierRuleRefusalCode`), és a szabály neve */
+  ruleRefusal: string | null;
+  ruleRefusalLabel: string | null;
 }
 
 /** Egy döntés eredménye: `false`, ha a javaslat már nem vár döntésre. */
@@ -46,8 +49,8 @@ export type SuggestionDecided = boolean;
 export class InvoiceCollectionSuggestionsRepository {
   private readonly database = prisma;
 
-  list(): Promise<SuggestionRow[]> {
-    return this.database.incomingSupplierDocument.findMany({
+  async list(): Promise<SuggestionRow[]> {
+    const rows = await this.database.incomingSupplierDocument.findMany({
       where: { reviewState: { in: PENDING_STATES } },
       orderBy: [{ receivedAt: "desc" }, { createdAt: "desc" }],
       select: {
@@ -61,8 +64,30 @@ export class InvoiceCollectionSuggestionsRepository {
         suggestionDecisionRunId: true,
         textReading: true,
         createdAt: true,
+        ruleRefusal: true,
+        ruleRefusalRuleId: true,
       },
     });
+    const ruleIds = [
+      ...new Set(rows.flatMap((row) => row.ruleRefusalRuleId ?? [])),
+    ];
+    // a szabály neve a lapnak: a kikapcsolt szabályé is (az ok a begyűjtéskor állt), egy törölt szabálynál null
+    const labels = new Map(
+      ruleIds.length === 0
+        ? []
+        : (
+            await this.database.incomingSupplierRule.findMany({
+              where: { id: { in: ruleIds } },
+              select: { id: true, label: true },
+            })
+          ).map((rule) => [rule.id, rule.label]),
+    );
+    return rows.map(({ ruleRefusalRuleId, ...row }) => ({
+      ...row,
+      ruleRefusalLabel: ruleRefusalRuleId
+        ? (labels.get(ruleRefusalRuleId) ?? null)
+        : null,
+    }));
   }
 
   /** A javasolt PDF, hogy a döntő lássa; csak döntésre váró dokumentumé. */

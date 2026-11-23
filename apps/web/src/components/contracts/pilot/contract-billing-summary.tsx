@@ -42,46 +42,48 @@ export function ContractBillingSummary({
         </PilotBadge>
       </div>
       {billing.state !== "NONE" ? (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-pilot-grey-400">
-              <th className="py-1 font-normal">Tétel</th>
-              <th className="py-1 text-right font-normal">Szerződés</th>
-              <th className="py-1 text-right font-normal">Számlázva</th>
-              <th className="py-1 text-right font-normal">Maradék</th>
-            </tr>
-          </thead>
-          <tbody>
-            {billing.items.map((row) => {
-              const item = byId.get(row.contractItemId);
-              const unit = item?.unitOfMeasure?.code ?? "";
-              return (
-                <tr
-                  key={row.contractItemId}
-                  className="border-t border-pilot-grey-100"
-                >
-                  <td className="py-1">
-                    {item?.description ?? "ismeretlen tétel"}
-                  </td>
-                  <td className="py-1 text-right">
-                    {formatHuNumber(row.quantity)} {unit}
-                  </td>
-                  <td className="py-1 text-right">
-                    {formatHuNumber(row.invoicedQuantity)} {unit}
-                    {row.overInvoiced ? (
-                      <span className="ml-1 text-pilot-amber-700">
-                        (több, mint a szerződés)
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="py-1 text-right">
-                    {formatHuNumber(row.remainingQuantity)} {unit}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-pilot-grey-400">
+                <th className="py-1 font-normal">Tétel</th>
+                <th className="py-1 text-right font-normal">Szerződés</th>
+                <th className="py-1 text-right font-normal">Számlázva</th>
+                <th className="py-1 text-right font-normal">Maradék</th>
+              </tr>
+            </thead>
+            <tbody>
+              {billing.items.map((row) => {
+                const item = byId.get(row.contractItemId);
+                const unit = item?.unitOfMeasure?.code ?? "";
+                return (
+                  <tr
+                    key={row.contractItemId}
+                    className="border-t border-pilot-grey-100"
+                  >
+                    <td className="py-1">
+                      {item?.description ?? "ismeretlen tétel"}
+                    </td>
+                    <td className="py-1 text-right">
+                      {formatHuNumber(row.quantity)} {unit}
+                    </td>
+                    <td className="py-1 text-right">
+                      {formatHuNumber(row.invoicedQuantity)} {unit}
+                      {row.overInvoiced ? (
+                        <span className="ml-1 text-pilot-amber-700">
+                          (több, mint a szerződés)
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="py-1 text-right">
+                      {formatHuNumber(row.remainingQuantity)} {unit}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       ) : null}
     </div>
   );

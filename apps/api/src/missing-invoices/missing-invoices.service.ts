@@ -37,6 +37,7 @@ import { SupplierInvoiceImportService } from "../purchasing/supplier-invoice-imp
 import { pdfTextLines } from "../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import {
   classifyTransaction,
+  isCardTransaction,
   NO_INVOICE_CATEGORIES,
   payrollNamesOf,
   type BankCategory,
@@ -55,6 +56,10 @@ import {
   type ItemState,
   type MatchOutcome,
 } from "./missing-invoice-matching.js";
+import {
+  parsePaymentIntermediaries,
+  type PaymentIntermediary,
+} from "./payment-intermediaries.js";
 import {
   FOXPOST_TAX_BASE,
   GLS_TAX_BASE,
@@ -75,6 +80,7 @@ import {
   paperOriginalOfRow,
   pairingNumberKeys,
 } from "../billing/incoming-billing-documents.js";
+import { isIssuerPaid } from "../billing/incoming-issuer-paid.js";
 import {
   type DebitAmount,
   identityCandidateMatch,
@@ -142,6 +148,13 @@ function shiftMonth(month: string, by: number): string {
   return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
 }
 
+/** A bank saját díj-levonása (a „BANK_FEE” besorolású terhelés): a nap, az összeg és a pénznem; sem partner, sem közlemény. */
+export interface BankFeeDebit {
+  bookingDate: string;
+  amount: string;
+  currency: string;
+}
+
 /** Egy forrás-dokumentum párosítása (a Számlázás „Bejövő számlák” nézetéhez). */
 export interface DocumentPairing {
   payee: CandidateDocument["payee"];
@@ -152,6 +165,11 @@ export interface DocumentPairing {
     currency: string;
     /** a bank által közölt eredeti összeg, ha a terhelés átváltott (az automatikus jóváhagyásnak) */
     original?: { amount: string; currency: string } | null;
+    /**
+     * Kártyás-e a terhelés (`isCardTransaction`): a Lejáró számlák „valószínűleg nem utalandó” szakasza ebből látja, hogy a szállító számláit kártyával fizettük.
+     * Hiányzó = nem kártyás (a hiányzó típus nem kártya).
+     */
+    card?: boolean;
   }[];
   /**
    * A TERHELÉSEK A TELJES SZÁMLÁT FIZETIK (murena lelete, 26014): minden
@@ -233,6 +251,25 @@ export class MissingInvoicesService {
     @Optional()
     private readonly jev?: MissingInvoiceJevService,
   ) {}
+
+  private intermediariesCache: readonly PaymentIntermediary[] | null = null;
+
+  /**
+   * A fizetési közvetítők a konfigból (`payment-intermediaries.ts`), egyszer olvasva. Egy hibás bejegyzés kimarad és
+   * a naplóba kerül (a többi marad), egy hibás egész érték üres listát ad: a szabály ilyenkor nem fut, nem téved.
+   */
+  private paymentIntermediaries(): readonly PaymentIntermediary[] {
+    if (this.intermediariesCache) return this.intermediariesCache;
+    const parsed = parsePaymentIntermediaries(
+      this.environment.MISSING_INVOICES_PAYMENT_INTERMEDIARIES,
+    );
+    for (const problem of parsed.problems)
+      this.logger.warn(
+        `MISSING_INVOICES_PAYMENT_INTERMEDIARIES skipped: ${problem}`,
+      );
+    this.intermediariesCache = parsed.intermediaries;
+    return parsed.intermediaries;
+  }
 
   async months(): Promise<MissingInvoiceMonthsResponse> {
     const computed = await this.compute();
@@ -532,7 +569,11 @@ export class MissingInvoicesService {
       action:
         item.state === "NO_INVOICE" && item.category === "INSURANCE"
           ? "PROVIDE_PREMIUM_NOTICE"
-          : ACTION[item.state],
+          : // a jelöltek közt van olyan, amelyiknek az összege pontosan egyezik: azt kell előbb megnézni, nem a
+            // számlát kérni (a név nem egyezik: közvetítőn át fizetés vagy kártyás vásárlás)
+            item.state === "NO_INVOICE" && outcome?.amountCandidates?.length
+            ? "CHECK_AMOUNT_CANDIDATES"
+            : ACTION[item.state],
       driveFolderUrl: httpsOrNull(
         this.environment.MISSING_INVOICES_DRIVE_FOLDER_URL,
       ),
@@ -582,7 +623,31 @@ export class MissingInvoicesService {
    * mellette a dokumentum vevő-ítélete és fajtája (a „nem párosítandó”-hoz).
    */
   async documentPairings(): Promise<Map<string, DocumentPairing>> {
+    return this.pairingsOf(await this.compute());
+  }
+
+  /**
+   * A LEJÁRÓ SZÁMLÁK BANKI BEMENETE EGY SZÁMÍTÁSBÓL (acrobot 58915): a párosítás ÉS a bank saját díj-levonásai (a „BANK_FEE” besorolású terhelések, a kézi átsorolással együtt). A `compute` nehéz
+   * (az összes dokumentumot és terhelést betölti), ezért a két bemenet EGY hívásból jön, nem kettőből.
+   */
+  async dueInvoicesBankData(): Promise<{
+    pairings: Map<string, DocumentPairing>;
+    bankFeeDebits: BankFeeDebit[];
+  }> {
     const computed = await this.compute();
+    return {
+      pairings: this.pairingsOf(computed),
+      bankFeeDebits: computed.classified
+        .filter(({ classification }) => classification.category === "BANK_FEE")
+        .map(({ debit }) => ({
+          bookingDate: debit.bookingDate.toISOString().slice(0, 10),
+          amount: debit.amount.toFixed(debit.currency === "HUF" ? 0 : 2),
+          currency: debit.currency,
+        })),
+    };
+  }
+
+  private pairingsOf(computed: Computed): Map<string, DocumentPairing> {
     const result = new Map<string, DocumentPairing>();
     const entry = (document: CandidateDocument) => {
       const ids = [document.id, ...(document.aliasIds ?? [])];
@@ -599,6 +664,11 @@ export class MissingInvoicesService {
       return pairing;
     };
     for (const document of computed.documents) entry(document);
+    const cardDebits = new Set(
+      computed.classified
+        .filter(({ debit }) => isCardTransaction(debit))
+        .map(({ debit }) => debit.id),
+    );
     for (const item of computed.items) {
       const outcome = computed.outcomes.get(item.id);
       const inFull =
@@ -614,6 +684,7 @@ export class MissingInvoicesService {
           amount: item.amount,
           currency: item.currency,
           original: item.original,
+          card: cardDebits.has(item.id),
         });
       }
     }
@@ -1409,11 +1480,12 @@ export class MissingInvoicesService {
           ],
           source: { kind: "ROW" as const, id: row.id },
           // a nulla összegű számlát (Telekom, Pólus, október) terhelés nem fizethet, tehát nem „kifizetetlen”; és amit az utánvét-elszámolás
-          // levon (Foxpost, GLS), azt sem bankból fizetik (settledByDeduction)
+          // levon (Foxpost, GLS), azt sem bankból fizetik (settledByDeduction); és amit a kiállító a számlán „Fizetve”-nek ír (SimplePay díjszámla)
           paid:
             itemId !== undefined ||
             row.grossAmount.isZero() ||
-            settledByDeduction(row),
+            settledByDeduction(row) ||
+            isIssuerPaid(row),
           itemIds: itemId ? [itemId] : [],
         };
       }),
@@ -1599,6 +1671,7 @@ export class MissingInvoicesService {
         asOf: [...debits, ...credits]
           .map((t) => dayOf(t.bookingDate))
           .reduce((a, b) => (a > b ? a : b)),
+        intermediaries: this.paymentIntermediaries(),
       });
     // a kézzel párosított, olvashatatlan feltöltés a számla sorával egy (7ff26bc9)
     const firstPass = mergeManualUploads(loaded, manual, matchable);
