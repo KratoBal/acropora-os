@@ -335,6 +335,29 @@ describe("buildTeachingSlides: a table, a lone last point, a title-like point (T
     assert.equal(first?.points.length, 8);
   });
 
+  it("a markdown table: the outer bars are no cells, the row of dashes is no data; a table without outer bars keeps its empty cells (barracuda on #2814)", () => {
+    const slides = content(
+      "| Lépés | Termék |\n|---|:---:|\n| 1. | AmmoMix |\n| 2. | Nitri-Bac |",
+    );
+    assert.equal(slides.length, 1);
+    assert.deepEqual(slides[0]?.table?.header, ["Lépés", "Termék"]);
+    assert.deepEqual(slides[0]?.table?.rows, [
+      ["1.", "AmmoMix"],
+      ["2.", "Nitri-Bac"],
+    ]);
+    // the source's own form: no outer bars on the first line, an empty first cell on the last ("Hatásos | NEM hatásos" / " | bakteriális fertőzések")
+    const own = content(
+      "Hatásos | NEM hatásos\ndarakór | bársonykór\n | bakteriális fertőzések",
+    );
+    assert.deepEqual(own[0]?.table?.rows[1], ["", "bakteriális fertőzések"]);
+    assert.equal(own[0]?.table?.rows.length, 2);
+    // a "--- | ---" line under the header is dropped without outer bars too
+    assert.deepEqual(
+      content("Faj | Megjegyzés\n--- | ---\nbohóchal | szívós")[0]?.table?.rows,
+      [["bohóchal", "szívós"]],
+    );
+  });
+
   it("the frame counts the text slides: a table slide is not counted, the text slides of the same sub-part still are", () => {
     const rows = Array.from(
       { length: 8 },
