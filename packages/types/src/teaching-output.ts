@@ -1,3 +1,4 @@
+import { fitTeachingTable } from "./teaching-table-fit.js";
 import {
   findTeachingReferences,
   type TeachingAudience,
@@ -116,10 +117,23 @@ export interface TeachingOverFrame {
   limit: number;
 }
 
+/** A table slide the estimate says does not fit its room even at the smallest font (see `fitTeachingTable`). */
+export interface TeachingTableOverflow {
+  partKey: string;
+  subpartKey: string | null;
+  /** The slide's number in the deck, from 1. */
+  slide: number;
+  title: string;
+  /** How far the table runs below its room, in inches, by the estimate. */
+  over: number;
+}
+
 export interface TeachingSlideDeck {
   kind: "SLIDES";
   stamp: TeachingOutputStamp;
   slides: TeachingSlide[];
+  /** Table slides that do not fit their room even at 9 pt: the editor splits the table or accepts it. Missing in a deck stored before it existed. */
+  tableOverflow?: TeachingTableOverflow[];
   /** Where a part did not fit its frame (its TEXT slides: a table slide is not counted); the editor splits it or accepts the longer deck. */
   overFrame: TeachingOverFrame[];
 }
@@ -557,6 +571,7 @@ export function buildTeachingSlides(
     },
   ];
   const overFrame: TeachingOverFrame[] = [];
+  const tableOverflow: TeachingTableOverflow[] = [];
   const content = (
     partKey: string,
     subpartKey: string | null,
@@ -565,17 +580,29 @@ export function buildTeachingSlides(
     limit: number,
   ) => {
     const bodies = layoutBlocks(blocks);
-    bodies.forEach((body, i) =>
+    bodies.forEach((body, i) => {
+      const slideTitle =
+        bodies.length > 1 ? `${title} (${i + 1}/${bodies.length})` : title;
       slides.push({
         kind: "CONTENT",
         partKey,
         subpartKey,
-        title:
-          bodies.length > 1 ? `${title} (${i + 1}/${bodies.length})` : title,
+        title: slideTitle,
         points: body.points,
         ...(body.table ? { table: body.table } : {}),
-      }),
-    );
+      });
+      if (body.table) {
+        const fit = fitTeachingTable(body.table);
+        if (!fit.fits)
+          tableOverflow.push({
+            partKey,
+            subpartKey,
+            slide: slides.length,
+            title: slideTitle,
+            over: Math.round(fit.over * 100) / 100,
+          });
+      }
+    });
     // THE FRAME COUNTS THE TEXT SLIDES (acrobot 59522, technical decision, korall 59519): a table slide is a table, and a table is not the
     // length the frame limits; the title's "(i/n)" still numbers every slide of the text
     const counted = bodies.filter((body) => !body.table).length;
@@ -631,7 +658,7 @@ export function buildTeachingSlides(
     title: source.title,
     points: [stamp.footer],
   });
-  return { kind: "SLIDES", stamp, slides, overFrame };
+  return { kind: "SLIDES", stamp, slides, overFrame, tableOverflow };
 }
 
 export function buildTeachingNarration(
@@ -718,10 +745,13 @@ export function buildTeachingOutput(
 /** What an output needs the editor's eye for, read off its body. */
 export function teachingOutputFlags(body: TeachingOutputBody): {
   overFrame: number;
+  tableOverflow: number;
   chaptersWithoutNarration: number;
 } {
   return {
     overFrame: body.kind === "SLIDES" ? body.overFrame.length : 0,
+    tableOverflow:
+      body.kind === "SLIDES" ? (body.tableOverflow ?? []).length : 0,
     chaptersWithoutNarration:
       body.kind === "NARRATION"
         ? body.chapters.filter((c) => c.text === null).length
@@ -748,6 +778,8 @@ export interface TeachingOutputSummary {
   /** This output was made from the version approved now. */
   approved: boolean;
   overFrame: number;
+  /** Table slides that do not fit their room even at the smallest font, by the estimate. */
+  tableOverflow: number;
   chaptersWithoutNarration: number;
   sent: TeachingOutputSent | null;
   /** Edited copies uploaded: the output "differs from the source" (T5.2, spec v2, point 3). */

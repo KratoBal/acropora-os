@@ -138,6 +138,7 @@ const output = (
   stale: false,
   approved: true,
   overFrame: 0,
+  tableOverflow: 0,
   chaptersWithoutNarration: 0,
   edits: 0,
   undecidedEdits: 0,
@@ -286,6 +287,16 @@ describe("TeachingSourcePage", () => {
     expect(
       screen.getAllByRole("button", { name: "Kiment rögzítése" }),
     ).toHaveLength(1);
+  });
+
+  it("an output with a table that does not fit says so, next to the over-the-frame badge (T5.2, barracuda on #2815)", async () => {
+    api.teachingOutputs.mockResolvedValue([
+      output({ id: "o1", tableOverflow: 2 }),
+      output({ id: "o2", kind: "PRINTABLE" }),
+    ]);
+    render(<TeachingSourcePage contentId="c1" />);
+    await screen.findByText("táblázat nem fér");
+    expect(screen.getAllByText("táblázat nem fér")).toHaveLength(1);
   });
 
   it("generates from an approved source", async () => {

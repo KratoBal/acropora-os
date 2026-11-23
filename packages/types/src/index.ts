@@ -2076,7 +2076,14 @@ export type {
   TeachingSlideDeck,
   TeachingSlideKind,
   TeachingSlideTable,
+  TeachingTableOverflow,
 } from "./teaching-output.js";
+export {
+  estimateTeachingTableHeight,
+  fitTeachingTable,
+  TEACHING_TABLE_FONT_SIZES,
+} from "./teaching-table-fit.js";
+export type { TeachingTableFit } from "./teaching-table-fit.js";
 export {
   cleanEditedSlides,
   compareTeachingDecks,
