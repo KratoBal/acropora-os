@@ -315,6 +315,27 @@ describe("the letter really came from cmfx", () => {
     );
   });
 
+  // 785dfea6, acrobot 59264: a storno's payable total is negative ("FIZETENDŐ BRUTTÓ VÉGÖSSZEG: -1 562 100"); the minus is part of the amount,
+  // so a negative row matches only a negative PDF, and a sign difference stays a mismatch. WHAT TURNS IT RED: the minus not read (the storno
+  // is "no payable line"), or read and dropped (a storno's PDF would match the invoice it cancels).
+  it("a storno's negative payable total matches its negative row, and only that", () => {
+    const line = (amount: string) =>
+      `HUF | FIZETENDŐ BRUTTÓ VÉGÖSSZEG: | ${amount}`;
+    assert.deepEqual(
+      [
+        pdfPayableMatches(line("-1 562 100"), "-1562100.00"),
+        pdfPayableMatches(line("\u2212169 990"), "-169990"),
+        pdfPayableMatches(line("- 1 714 500"), "-1714500.00"),
+        // the sign differs: a storno's PDF never fills the cancelled invoice's row, nor the other way round
+        pdfPayableMatches(line("-169 990"), "169990.00"),
+        pdfPayableMatches(line("169 990"), "-169990.00"),
+      ],
+      [true, true, true, false, false],
+    );
+    assert.equal(pdfPayableAmount(line("-1 562 100")), "-1562100");
+    assert.equal(pdfPayableAmount(line("63 373")), "63373");
+  });
+
   it("a forged PDF with our number and our tax number but another total is AMOUNT_MISMATCH, never stored", async () => {
     const r = recorder();
     const report = await fillExternalPdfsFromMail({
