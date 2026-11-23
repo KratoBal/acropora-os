@@ -133,14 +133,21 @@ function slideOrder(zip: PizZip): string[] {
   });
 }
 
-/** The paragraphs of one slide, in document order, empty ones left out. */
+/**
+ * The paragraphs of one slide, in document order, empty ones left out. A TABLE ROW is one paragraph: its cells joined with " | " (the
+ * form the generated points have for a table row, T5.2, card b731bd4d), so a deck with a table reads back as what was generated.
+ */
 function slideParagraphs(xml: string): string[] {
   const paragraphs: string[] = [];
   let current: string[] | null = null;
   let inText = false;
+  let row: string[] | null = null;
+  let cell: string[] | null = null;
   xmlEvents(xml, {
     open: (name) => {
-      if (name === "a:p") current = [];
+      if (name === "a:tr") row = [];
+      else if (name === "a:tc" && row) cell = [];
+      else if (name === "a:p") current = [];
       else if (name === "a:t") inText = true;
       else if (name === "a:br" && current) current.push(" ");
     },
@@ -148,8 +155,16 @@ function slideParagraphs(xml: string): string[] {
       if (name === "a:t") inText = false;
       else if (name === "a:p" && current) {
         const line = current.join("").replace(/\s+/g, " ").trim();
-        if (line) paragraphs.push(line);
+        if (cell) cell.push(line);
+        else if (line) paragraphs.push(line);
         current = null;
+      } else if (name === "a:tc" && row && cell) {
+        row.push(cell.filter(Boolean).join(" "));
+        cell = null;
+      } else if (name === "a:tr" && row) {
+        const line = row.join(" | ").trim();
+        if (line) paragraphs.push(line);
+        row = null;
       }
     },
     text: (t) => {

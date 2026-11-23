@@ -224,7 +224,61 @@ export async function renderTeachingPptx(
       color: "18353D",
       align: isTitle ? "center" : "left",
     });
-    if (slide.points.length)
+    if (slide.table) {
+      // A TABLE SLIDE (T5.2, card b731bd4d): the caption lines, the table, the note, in the order their text reads back as the points
+      // (readTeachingPptxText joins a row's cells with " | ").
+      const { header, rows, before, after } = slide.table;
+      let y = 1.15;
+      for (const line of before) {
+        s.addText(line, {
+          x: 0.5,
+          y,
+          w: 9,
+          h: 0.4,
+          fontSize: 16,
+          bold: true,
+          color: "18353D",
+          valign: "top",
+        });
+        y += 0.45;
+      }
+      const cell = (text: string, head: boolean) => ({
+        text,
+        options: {
+          bold: head,
+          fontSize: 12,
+          color: "18353D",
+          valign: "top" as const,
+          fill: head ? { color: "E3EEF0" } : undefined,
+          border: { type: "solid" as const, pt: 0.5, color: "9DB5BA" },
+        },
+      });
+      const columns = Math.max(header.length, 1);
+      s.addTable(
+        [
+          header.map((text) => cell(text, true)),
+          ...rows.map((row) => row.map((text) => cell(text, false))),
+        ],
+        {
+          x: 0.5,
+          y,
+          w: 9,
+          colW: Array<number>(columns).fill(9 / columns),
+          autoPage: false,
+        },
+      );
+      after.forEach((line, i) =>
+        s.addText(line, {
+          x: 0.5,
+          y: 4.6 + i * 0.4,
+          w: 9,
+          h: 0.4,
+          fontSize: 13,
+          color: "18353D",
+          valign: "top",
+        }),
+      );
+    } else if (slide.points.length)
       s.addText(
         slide.points.map((text) => ({
           text,
