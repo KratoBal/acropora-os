@@ -335,6 +335,41 @@ describe("buildTeachingSlides: a table, a lone last point, a title-like point (T
     assert.equal(first?.points.length, 8);
   });
 
+  it("the frame counts the text slides: a table slide is not counted, the text slides of the same sub-part still are", () => {
+    const rows = Array.from(
+      { length: 8 },
+      (_, i) => `${i + 1}. | A${i} | B${i}`,
+    ).join("\n");
+    const table = `Lépés | Termék | Adag\n${rows}`;
+    const deckOf = (subText: string) =>
+      buildTeachingSlides(
+        source({
+          parts: [
+            part({
+              key: "a",
+              title: "A rész",
+              subparts: [{ key: "a1", title: "Alrész", text: subText }],
+            }),
+          ],
+        }),
+        AT,
+      );
+    // an intro, a table of eight rows (two slides) and a closing paragraph: four slides, two of them text: within the frame of two
+    const within = deckOf(`${sentences(2)}\n\n${table}\n\n${sentences(3)}`);
+    const slides = within.slides.filter((s) => s.kind === "CONTENT");
+    assert.equal(slides.length, 4);
+    assert.equal(slides.filter((s) => s.table).length, 2);
+    assert.deepEqual(within.overFrame, []);
+    // the same sub-part with twelve sentences of text besides the table: three text slides, over the frame of two, counted as three
+    // (the last sentence is long: a short last point before a table would be its caption)
+    const closing =
+      "Ez egy hosszú záró mondat, amely biztosan nem felirat, mert jóval hosszabb nyolcvan karakternél, és nem kettősponttal végződik.";
+    const over = deckOf(`${sentences(11)} ${closing}\n\n${table}`);
+    assert.deepEqual(over.overFrame, [
+      { partKey: "a", subpartKey: "a1", slides: 3, limit: 2 },
+    ]);
+  });
+
   it("a lone last point joins the slide before it (six points), and no slide of a text run shows one point after another", () => {
     const sizes = (n: number) =>
       content(sentences(n)).map((s) => s.points.length);

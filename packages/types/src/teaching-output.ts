@@ -120,7 +120,7 @@ export interface TeachingSlideDeck {
   kind: "SLIDES";
   stamp: TeachingOutputStamp;
   slides: TeachingSlide[];
-  /** Where a part did not fit its frame; the editor splits it or accepts the longer deck. */
+  /** Where a part did not fit its frame (its TEXT slides: a table slide is not counted); the editor splits it or accepts the longer deck. */
   overFrame: TeachingOverFrame[];
 }
 
@@ -567,8 +567,11 @@ export function buildTeachingSlides(
         ...(body.table ? { table: body.table } : {}),
       }),
     );
-    if (bodies.length > limit)
-      overFrame.push({ partKey, subpartKey, slides: bodies.length, limit });
+    // THE FRAME COUNTS THE TEXT SLIDES (acrobot 59522, technical decision, korall 59519): a table slide is a table, and a table is not the
+    // length the frame limits; the title's "(i/n)" still numbers every slide of the text
+    const counted = bodies.filter((body) => !body.table).length;
+    if (counted > limit)
+      overFrame.push({ partKey, subpartKey, slides: counted, limit });
   };
 
   for (const part of source.parts) {
