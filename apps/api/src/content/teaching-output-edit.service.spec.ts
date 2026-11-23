@@ -77,6 +77,50 @@ describe("readTeachingPptxText", () => {
     assert.deepEqual(cleaned, generated);
   });
 
+  // T5.2 (card b731bd4d): a table slide is drawn as a table; its rows read back as one paragraph each, so an upload of the generated deck
+  // does not "differ" on the cells
+  it("reads a table slide back as its caption, its rows and its note, the cells of a row joined with a bar", async () => {
+    const withTable: TeachingOutputSource = {
+      ...source,
+      parts: [
+        {
+          key: "a",
+          title: "Protokoll",
+          text: "Protokoll\n\nLépés | Termék | Adag\n1. | AmmoMix | 5 ml\n2. | Nitri-Bac | 3 ml\nAdagolás |\n\nFontos: ne lépd túl.",
+          subparts: [],
+          checklist: [],
+          speakerNote: null,
+        },
+      ],
+    };
+    const deck = buildTeachingSlides(withTable, AT);
+    const tableSlide = deck.slides.find((s) => s.table);
+    assert.ok(tableSlide, "the source has a table, so a table slide");
+    assert.deepEqual(tableSlide.table?.before, ["Protokoll"]);
+    const bytes = await renderTeachingPptx(deck);
+    // a real table in the file, not bullets that look like one
+    const tables = new PizZip(bytes)
+      .file(/^ppt\/slides\/slide\d+\.xml$/)
+      .filter((f) => f.asText().includes("<a:tbl>")).length;
+    assert.equal(tables, 1, "one table slide, one table");
+    const read = readTeachingPptxText(bytes);
+    const cleaned = read.map((s) => ({
+      title: s.title,
+      points: s.points.filter((p) => p !== deck.stamp.footer),
+    }));
+    assert.deepEqual(cleaned, teachingDeckText(deck));
+    const slide = cleaned.find((s) => s.title === tableSlide.title);
+    assert.deepEqual(slide?.points, [
+      "Protokoll",
+      "Lépés | Termék | Adag",
+      "1. | AmmoMix | 5 ml",
+      "2. | Nitri-Bac | 3 ml",
+      // a short row is padded to the header's width: its empty cells are cells, and read back as such
+      "Adagolás |  |",
+      "Fontos: ne lépd túl.",
+    ]);
+  });
+
   it("takes the order from the presentation, not from the file names", async () => {
     const zip = new PizZip(
       await renderTeachingPptx(buildTeachingSlides(source, AT)),

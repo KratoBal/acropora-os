@@ -167,14 +167,16 @@ describe("teachingSentences", () => {
     );
   });
 
-  it("a soft-wrapped line continues its sentence, and a table row stays in the run of text it was", () => {
+  it("a soft-wrapped line continues its sentence, and a run of lines with a bar is a table, not sentences", () => {
     assert.deepEqual(
       teachingSentences(
         "Ez egy hosszú mondat, ami\na következő sorban folytatódik.\n\nAdagolás |\nAdag | hetente egyszer\n- Egy pont\nfolytatással.",
       ),
       [
         "Ez egy hosszú mondat, ami a következő sorban folytatódik.",
-        "Adagolás | Adag | hetente egyszer",
+        // the table: the header and the row as "a | b" lines (a reader without tables); the empty cell of "Adagolás |" is a cell
+        "Adagolás |",
+        "Adag | hetente egyszer",
         "Egy pont folytatással.",
       ],
     );
@@ -255,13 +257,13 @@ describe("buildTeachingSlides", () => {
 
   it("keeps every statement and flags the part over the frame (no sub-parts: 4 slides)", () => {
     const deck = buildTeachingSlides(
-      source({ parts: [part({ key: "a", text: sentences(21) })] }),
+      source({ parts: [part({ key: "a", text: sentences(22) })] }),
       AT,
     );
     const points = deck.slides
       .filter((s) => s.kind === "CONTENT")
       .flatMap((s) => s.points);
-    assert.equal(points.length, 21, "nothing dropped");
+    assert.equal(points.length, 22, "nothing dropped");
     assert.deepEqual(deck.overFrame, [
       { partKey: "a", subpartKey: null, slides: 5, limit: 4 },
     ]);
@@ -277,7 +279,7 @@ describe("buildTeachingSlides", () => {
             subparts: [
               { key: "l1", title: "1. lépés", text: sentences(3) },
               { key: "l2", title: "2. lépés", text: sentences(6) },
-              { key: "l3", title: "3. lépés", text: sentences(11) },
+              { key: "l3", title: "3. lépés", text: sentences(16) },
             ],
           }),
         ],
@@ -286,11 +288,82 @@ describe("buildTeachingSlides", () => {
     );
     assert.deepEqual(
       deck.slides.filter((s) => s.kind === "CONTENT").map((s) => s.subpartKey),
-      ["l1", "l2", "l2", "l3", "l3", "l3"],
+      // 6 sentences are one slide of six (a lone sixth is not a slide), 16 are 5, 5 and 5+1
+      ["l1", "l2", "l3", "l3", "l3"],
     );
     assert.deepEqual(deck.overFrame, [
       { partKey: "negy", subpartKey: "l3", slides: 3, limit: 2 },
     ]);
+  });
+});
+
+describe("buildTeachingSlides: a table, a lone last point, a title-like point (T5.2, card b731bd4d, korall 2026-11-23)", () => {
+  const content = (text: string) =>
+    buildTeachingSlides(
+      source({ parts: [part({ key: "a", text })] }),
+      AT,
+    ).slides.filter((s) => s.kind === "CONTENT");
+  const sentences = (n: number) =>
+    Array.from({ length: n }, (_, i) => `Állítás ${i + 1}.`).join(" ");
+
+  it("a table is one unit: its header and at most six rows on a slide, a caption before it and a note after it with it, the rows are no sentences", () => {
+    const slides = content(
+      [
+        "Bevezető mondat.",
+        "Protokoll",
+        "Lépés | Termék | Adag\n1. | AmmoMix | 5 ml\n2. | Nitri-Bac | 3 ml\n3. | A | 1\n4. | B | 2\n5. | C | 3\n6. | D | 4\n7. | E | 5",
+        "Fontos: ne lépd túl.",
+      ].join("\n\n"),
+    );
+    assert.equal(slides.length, 3, "the intro, then the table in two slides");
+    assert.deepEqual(slides[0]?.points, ["Bevezető mondat."]);
+    assert.equal(slides[0]?.table, undefined);
+    const [, first, second] = slides;
+    assert.deepEqual(first?.table?.header, ["Lépés", "Termék", "Adag"]);
+    assert.equal(first?.table?.rows.length, 6);
+    // the number of a row is a cell, not a list mark
+    assert.deepEqual(first?.table?.rows[0], ["1.", "AmmoMix", "5 ml"]);
+    assert.deepEqual(first?.table?.before, ["Protokoll"]);
+    assert.deepEqual(first?.table?.after, []);
+    // the long table goes on with the header again, and the note stands under its last rows
+    assert.deepEqual(second?.table?.header, ["Lépés", "Termék", "Adag"]);
+    assert.equal(second?.table?.rows.length, 1);
+    assert.deepEqual(second?.table?.after, ["Fontos: ne lépd túl."]);
+    // a reader without tables gets the caption, the header and the rows as text
+    assert.equal(first?.points[0], "Protokoll");
+    assert.equal(first?.points[1], "Lépés | Termék | Adag");
+    assert.equal(first?.points.length, 8);
+  });
+
+  it("a lone last point joins the slide before it (six points), and no slide of a text run shows one point after another", () => {
+    const sizes = (n: number) =>
+      content(sentences(n)).map((s) => s.points.length);
+    assert.deepEqual(sizes(5), [5]);
+    assert.deepEqual(sizes(6), [6], "a sixth point is not a slide of its own");
+    assert.deepEqual(sizes(11), [5, 6]);
+    assert.deepEqual(sizes(12), [5, 5, 2], "two points are not an orphan");
+  });
+
+  it("a title-like point does not end a slide: it goes with its explanation to the next one", () => {
+    const slides = content(
+      `${sentences(4)}\n\n1. Hatalmas felület. A korall nagy felületen ad otthont az élőlényeknek.`,
+    );
+    assert.deepEqual(
+      slides.map((s) => s.points.length),
+      [4, 2],
+    );
+    assert.equal(slides[1]?.points[0], "1. Hatalmas felület.");
+    // an opening sentence that is long is no title, and an item of one sentence has no explanation to go with
+    const long = `1. ${"Nagyon hosszú nyitó mondat, ami már nem címsor szerű, mert túl sok szóból áll."} Utána jön a magyarázat.`;
+    assert.deepEqual(
+      content(`${sentences(4)}\n\n${long}`).map((s) => s.points.length),
+      // five points on the slide, and the explanation alone after it would be a lone last point, so it joins: six
+      [6],
+    );
+    assert.deepEqual(
+      content(`${sentences(4)}\n\n1. Csak ennyi.`).map((s) => s.points.length),
+      [5],
+    );
   });
 });
 
@@ -369,7 +442,7 @@ describe("output records", () => {
       parts: [
         part({
           key: "a",
-          text: Array.from({ length: 21 }, (_, i) => `Állítás ${i}.`).join(" "),
+          text: Array.from({ length: 22 }, (_, i) => `Állítás ${i}.`).join(" "),
         }),
       ],
     });

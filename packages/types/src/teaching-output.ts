@@ -25,12 +25,19 @@ import {
 /** The mark next to an open-question number in a written output. */
 export const TEACHING_OPEN_MARK = "[nyitott kérdés]";
 
-/** At most this many points on one slide (spec v2, the slide frame). */
+/** At most this many points on one slide (spec v2, the slide frame); a lone last point of a text run is the one exception, see `TEACHING_SLIDE_POINTS_WITH_ORPHAN`. */
 export const TEACHING_SLIDE_POINTS = 5;
 /** A part without sub-parts: at most this many content slides before "over the frame". */
 export const TEACHING_PART_SLIDES = 4;
 /** A sub-part: at most this many slides. */
 export const TEACHING_SUBPART_SLIDES = 2;
+/** A table on a slide: at most this many rows besides the header (spec v2); a longer table continues on the next slide with the header again. */
+export const TEACHING_TABLE_ROWS = 6;
+/** A lone last point of a part joins the slide before it, which then shows this many points (still readable); it is never a slide of its own. */
+export const TEACHING_SLIDE_POINTS_WITH_ORPHAN = TEACHING_SLIDE_POINTS + 1;
+/** A caption before a table is at most this many characters (or ends in a colon and is at most `TEACHING_NOTE_MAX`); a note after it at most `TEACHING_NOTE_MAX`. */
+export const TEACHING_CAPTION_MAX = 80;
+export const TEACHING_NOTE_MAX = 160;
 
 export interface TeachingOutputSource extends TeachingSourceDocument {
   title: string;
@@ -77,12 +84,28 @@ export interface TeachingPrintable {
 
 export type TeachingSlideKind = "TITLE" | "CONTENT" | "CHECKLIST" | "CLOSING";
 
+/**
+ * A table of a source, on one slide: the header and at most `TEACHING_TABLE_ROWS` rows, every row as many cells as the header; and the
+ * caption line before it and the one note after it, when the text had them next to the table ("Protokoll", "Fontos: ...").
+ */
+export interface TeachingSlideTable {
+  header: string[];
+  rows: string[][];
+  before: string[];
+  after: string[];
+}
+
 export interface TeachingSlide {
   kind: TeachingSlideKind;
   partKey: string | null;
   subpartKey: string | null;
   title: string;
+  /**
+   * The slide's points. On a table slide they are the caption, the header, the rows and the note as text (the header and the rows as
+   * "a | b | c"), for a reader that does not draw the table; a renderer that does draws `table` and leaves the points.
+   */
   points: string[];
+  table?: TeachingSlideTable;
 }
 
 export interface TeachingOverFrame {
@@ -203,21 +226,23 @@ function paragraphs(text: string): string[] {
 /** A list item's mark at a line's start: "1." or "1)" (kept with the item), or a bullet "-", "–", "•", "*" (dropped: the slide has its own). */
 const LIST_ITEM = /^\s*(?:(\d{1,2}[.)])|[-–•*])\s+/;
 
-/**
- * A paragraph's items: a line that starts with a list mark starts its own item; any other line continues the item before it (a
- * soft-wrapped sentence, or a table row). The Akil pilot source (card b731bd4d) has 29 numbered lines, 37 bulleted ones and 120
- * table rows inside paragraphs, and no soft-wrapped line. TABLE ROWS STAY AS THEY WERE (one run of text): one point a row took the
- * pilot from 100 slides to 128 and from 7 over-frame parts to 20, and how a table belongs on a slide is the editor's question.
- */
-function paragraphItems(paragraph: string): string[] {
-  const items: string[] = [];
-  for (const line of paragraph.split("\n")) {
-    if (!line.trim()) continue;
-    if (!items.length || LIST_ITEM.test(line)) items.push(line);
-    else items[items.length - 1] += ` ${line}`;
-  }
-  return items;
+/** A point of a slide, with what the layout needs to know about it. */
+interface TeachingPoint {
+  text: string;
+  /**
+   * The first, short sentence of a list item that has more ("1. Hatalmas felület." and then its explanation): a title-like point
+   * never ends a slide, because the slide would end on a title and the explanation start the next one (korall, 2026-11-23, 13th slide).
+   */
+  keepWithNext: boolean;
 }
+
+/** A piece of a part's text: its points, or a table (a run of lines with "|" in them). */
+type TeachingBlock =
+  | { kind: "points"; points: TeachingPoint[] }
+  | { kind: "table"; header: string[]; rows: string[][] };
+
+/** A title-like first sentence: a numbered or bulleted item's short opening sentence (at most this many characters, mark included). */
+const TITLE_LIKE_MAX = 60;
 
 /**
  * Sentences, for the slide points. A sentence ends at . ! or ? followed by
@@ -227,31 +252,221 @@ function paragraphItems(paragraph: string): string[] {
  *
  * THE LINE STRUCTURE IS KEPT (T5.2, card b731bd4d, acrobot 59390; korall's finding on the stage, version 3 and 4): the paragraph
  * used to be one line, so a numbered list read "... megrepedhet. 3. Kapcsold ki ..." and split into "megrepedhet. 3." and a lone
- * "1.", and a bullet's "-" stood in the middle of a sentence. Each list item and table row is now its own point: a number stays
- * in front of its item's first sentence, a bullet mark is dropped.
+ * "1.", and a bullet's "-" stood in the middle of a sentence. Each list item is now its own point: a number stays in front of its
+ * item's first sentence, a bullet mark is dropped.
  */
+function itemPoints(item: string): TeachingPoint[] {
+  const mark = LIST_ITEM.exec(item);
+  const sentences = (mark ? item.slice(mark[0].length) : item)
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/(?<=[.!?])\s+(?=[A-ZÁÉÍÓÖŐÚÜŰ])/u)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+  if (mark?.[1] && sentences.length)
+    sentences[0] = `${mark[1]} ${sentences[0]}`;
+  return sentences.map((text, i) => ({
+    text,
+    keepWithNext:
+      Boolean(mark) &&
+      i === 0 &&
+      sentences.length > 1 &&
+      text.length <= TITLE_LIKE_MAX,
+  }));
+}
+
+/** A table row as text: its cells joined with " | ", trimmed (the form a .pptx table row reads back as). */
+const tableRowText = (row: readonly string[]): string => row.join(" | ").trim();
+
+/** A table row's cells: split at "|", trimmed; the empty first or last cell of " | x" and "x |" is a cell. */
+const tableCells = (line: string): string[] =>
+  line.split("|").map((cell) => cell.trim());
+
+/**
+ * A paragraph's blocks. A run of two or more lines that all hold a "|" is a TABLE (T5.2, card b731bd4d, korall 2026-11-23: a table is
+ * one unit of a slide, its header and rows together, and a row is not a sentence): the first line is the header, every row has as many
+ * cells as the widest line. The other lines are items as before.
+ */
+function paragraphBlocks(paragraph: string): TeachingBlock[] {
+  const blocks: TeachingBlock[] = [];
+  const lines = paragraph.split("\n").filter((line) => line.trim());
+  let at = 0;
+  const textRun: string[] = [];
+  const flushText = () => {
+    if (!textRun.length) return;
+    const items: string[] = [];
+    for (const line of textRun)
+      if (!items.length || LIST_ITEM.test(line)) items.push(line);
+      else items[items.length - 1] += ` ${line}`;
+    const points = items.flatMap(itemPoints);
+    if (points.length) blocks.push({ kind: "points", points });
+    textRun.length = 0;
+  };
+  while (at < lines.length) {
+    let end = at;
+    while (end < lines.length && (lines[end] ?? "").includes("|")) end += 1;
+    if (end - at >= 2) {
+      flushText();
+      const rows = lines.slice(at, end).map(tableCells);
+      const width = Math.max(...rows.map((row) => row.length));
+      const padded = rows.map((row) => [
+        ...row,
+        ...Array<string>(width - row.length).fill(""),
+      ]);
+      blocks.push({
+        kind: "table",
+        header: padded[0] ?? [],
+        rows: padded.slice(1),
+      });
+      at = end;
+    } else {
+      textRun.push(lines[at] ?? "");
+      at += 1;
+    }
+  }
+  flushText();
+  return blocks;
+}
+
+/** A part's text as blocks: its paragraphs' points and tables, in order. */
+function teachingBlocks(text: string): TeachingBlock[] {
+  return text.split(/\n\s*\n/).flatMap(paragraphBlocks);
+}
+
+/** The points of a text as plain sentences (a table's header and rows as "a | b | c" lines, for a reader that has no table). */
 export function teachingSentences(text: string): string[] {
-  return text
-    .split(/\n\s*\n/)
-    .flatMap(paragraphItems)
-    .flatMap((item) => {
-      const mark = LIST_ITEM.exec(item);
-      const sentences = (mark ? item.slice(mark[0].length) : item)
-        .replace(/\s+/g, " ")
-        .trim()
-        .split(/(?<=[.!?])\s+(?=[A-ZÁÉÍÓÖŐÚÜŰ])/u)
-        .map((s) => s.trim())
-        .filter(Boolean);
-      if (mark?.[1] && sentences.length)
-        sentences[0] = `${mark[1]} ${sentences[0]}`;
-      return sentences;
-    });
+  return teachingBlocks(text).flatMap((block) =>
+    block.kind === "points"
+      ? block.points.map((point) => point.text)
+      : [block.header, ...block.rows].map(tableRowText),
+  );
 }
 
 function chunk<T>(items: readonly T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size)
     out.push(items.slice(i, i + size));
+  return out;
+}
+
+/** What one slide holds: its points, and a table when the slide is a table. */
+interface SlideBody {
+  points: string[];
+  table?: TeachingSlideTable;
+}
+
+/**
+ * The points of a text run, cut into slides of at most `TEACHING_SLIDE_POINTS` (T5.2, card b731bd4d, korall 2026-11-23):
+ *  - a title-like point (`keepWithNext`) never ends a slide: it moves to the start of the next one, with its explanation;
+ *  - a last slide of ONE point is not a slide: the point joins the slide before it, which then shows
+ *    `TEACHING_SLIDE_POINTS_WITH_ORPHAN` points. (A run of one point is a slide.)
+ */
+function pointSlides(points: readonly TeachingPoint[]): SlideBody[] {
+  const groups: TeachingPoint[][] = [];
+  let current: TeachingPoint[] = [];
+  for (const point of points) {
+    current.push(point);
+    if (current.length === TEACHING_SLIDE_POINTS) {
+      if (point.keepWithNext) {
+        current.pop();
+        groups.push(current);
+        current = [point];
+      } else {
+        groups.push(current);
+        current = [];
+      }
+    }
+  }
+  if (current.length) groups.push(current);
+  const orphan = groups.length > 1 ? groups[groups.length - 1] : undefined;
+  if (orphan?.length === 1) {
+    groups.pop();
+    groups[groups.length - 1]?.push(...orphan);
+  }
+  return groups.map((group) => ({ points: group.map((point) => point.text) }));
+}
+
+/** A caption of a table: a short last point before it ("Protokoll"), or one that ends in a colon. */
+const isCaption = (text: string): boolean =>
+  text.length <= TEACHING_CAPTION_MAX ||
+  (text.endsWith(":") && text.length <= TEACHING_NOTE_MAX);
+
+type LayoutItem =
+  | { kind: "run"; points: TeachingPoint[] }
+  | {
+      kind: "table";
+      header: string[];
+      rows: string[][];
+      before: string[];
+      after: string[];
+    };
+
+/**
+ * A text's slides, in the order of its blocks: points are cut as `pointSlides` says; a table is its own slide, its header and at most
+ * `TEACHING_TABLE_ROWS` rows (a longer table goes on with the header again). The rows are not sentences: they do not fill a slide's
+ * points, and a table is one slide of the frame however many cells it has. A caption line right before a table, and one short note
+ * right after it, stay on the table's slide (a slide with only the caption, or only the note, is the orphan the layout avoids).
+ */
+function layoutBlocks(blocks: readonly TeachingBlock[]): SlideBody[] {
+  const items: LayoutItem[] = [];
+  for (const block of blocks) {
+    const last = items[items.length - 1];
+    if (block.kind === "points") {
+      if (last?.kind === "run") last.points.push(...block.points);
+      else items.push({ kind: "run", points: [...block.points] });
+    } else
+      items.push({
+        kind: "table",
+        header: block.header,
+        rows: block.rows,
+        before: [],
+        after: [],
+      });
+  }
+  // the caption first (the last point of the run before a table), then the note (the whole run after it, when it is one short point)
+  items.forEach((item, i) => {
+    const before = items[i - 1];
+    if (item.kind !== "table" || before?.kind !== "run") return;
+    const caption = before.points[before.points.length - 1];
+    if (caption && isCaption(caption.text)) {
+      before.points.pop();
+      item.before.push(caption.text);
+    }
+  });
+  items.forEach((item, i) => {
+    const next = items[i + 1];
+    if (item.kind !== "table" || next?.kind !== "run") return;
+    const [note] = next.points;
+    if (
+      next.points.length === 1 &&
+      note &&
+      note.text.length <= TEACHING_NOTE_MAX
+    ) {
+      next.points.shift();
+      item.after.push(note.text);
+    }
+  });
+  const out: SlideBody[] = [];
+  for (const item of items) {
+    if (item.kind === "run") {
+      out.push(...pointSlides(item.points));
+      continue;
+    }
+    const groups = chunk(item.rows, TEACHING_TABLE_ROWS);
+    if (!groups.length) groups.push([]);
+    groups.forEach((rows, i) => {
+      const before = i === 0 ? item.before : [];
+      const after = i === groups.length - 1 ? item.after : [];
+      out.push({
+        points: [
+          ...before,
+          ...[item.header, ...rows].map(tableRowText),
+          ...after,
+        ],
+        table: { header: item.header, rows, before, after },
+      });
+    });
+  }
   return out;
 }
 
@@ -318,7 +533,7 @@ export function buildTeachingSlides(
   openIds: ReadonlySet<string> = new Set(),
 ): TeachingSlideDeck {
   const fill = (t: string) =>
-    teachingSentences(
+    teachingBlocks(
       fillTeachingText(t, source.numbers, "written", openIds).text,
     );
   const slides: TeachingSlide[] = [
@@ -337,22 +552,23 @@ export function buildTeachingSlides(
     partKey: string,
     subpartKey: string | null,
     title: string,
-    points: string[],
+    blocks: readonly TeachingBlock[],
     limit: number,
   ) => {
-    const groups = chunk(points, TEACHING_SLIDE_POINTS);
-    groups.forEach((group, i) =>
+    const bodies = layoutBlocks(blocks);
+    bodies.forEach((body, i) =>
       slides.push({
         kind: "CONTENT",
         partKey,
         subpartKey,
         title:
-          groups.length > 1 ? `${title} (${i + 1}/${groups.length})` : title,
-        points: group,
+          bodies.length > 1 ? `${title} (${i + 1}/${bodies.length})` : title,
+        points: body.points,
+        ...(body.table ? { table: body.table } : {}),
       }),
     );
-    if (groups.length > limit)
-      overFrame.push({ partKey, subpartKey, slides: groups.length, limit });
+    if (bodies.length > limit)
+      overFrame.push({ partKey, subpartKey, slides: bodies.length, limit });
   };
 
   for (const part of source.parts) {

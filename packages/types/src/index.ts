@@ -2048,8 +2048,12 @@ export {
   TEACHING_OUTPUT_KINDS,
   TEACHING_SENT_TO_MAX,
   TEACHING_PART_SLIDES,
+  TEACHING_CAPTION_MAX,
+  TEACHING_NOTE_MAX,
   TEACHING_SLIDE_POINTS,
+  TEACHING_SLIDE_POINTS_WITH_ORPHAN,
   TEACHING_SUBPART_SLIDES,
+  TEACHING_TABLE_ROWS,
   teachingOutputFlags,
   teachingOutputStamp,
   teachingSentences,
@@ -2071,6 +2075,7 @@ export type {
   TeachingSlide,
   TeachingSlideDeck,
   TeachingSlideKind,
+  TeachingSlideTable,
 } from "./teaching-output.js";
 export {
   cleanEditedSlides,
