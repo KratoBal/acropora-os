@@ -15,6 +15,7 @@ import {
   readCapped,
   type PdfFetch,
 } from "../knowledge-base/extraction/pdf-full-text.js";
+import { driveReadonlyCredentials } from "../missing-invoices/collection/invoice-collection.config.js";
 import { supplierInvoiceMailCredentials } from "../purchasing/expected-arrivals/supplier-invoice-mail.config.js";
 import { pdfTextLines } from "../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
@@ -71,12 +72,20 @@ import {
  *
  *   node dist/billing/external-invoice-mail-pdf.cli.js --month ÉÉÉÉ-HH --mail-id 19c20725a72c042a [--apply]
  *
+ * EGY MEGNEVEZETT DRIVE-MAPPA (785dfea6, acrobot 59127, 59129): a flotta gépén álló PDF-ekhez az éles képben nincs út, a Drive-hoz
+ * viszont van. `--drive-folder <mappa-azonosító>` a `--dir` párja: a mappa (nem kukázott) PDF-jeit a meglévő, csak olvasó Drive-kulccsal
+ * (GOOGLE_DRIVE_*, ugyanaz, amivel a bejövő számla-begyűjtő a saját mappáját olvassa) tölti le, almappába nem megy. A mappát a
+ * futtató nevezi meg, tehát az eredet az övé, mint a `--dir`-nél; az `E-` előtagot a csomag-nevekre ráteszi, mint a `--mail-id`.
+ * A szám-, adószám- és végösszeg-próba ugyanaz. A túl nagy fájl kimarad, és a kimenet megnevezi.
+ *
+ *   node dist/billing/external-invoice-mail-pdf.cli.js --month ÉÉÉÉ-HH --drive-folder 1AbC...xyz [--apply]
+ *
  * Soronként: STORED / WOULD_STORE / NO_MAIL / NOT_PDF / NUMBER_NOT_IN_PDF / STORE_FAILED, utána a
  * levélben talált, de nem jelölt számok, okkal (már van PDF-je; másik hónap sora; NINCS SZÁMLA-SORA:
  * a feed nem hozta a számlát, a PDF megvan).
  *
  * Kilépés: 0 rendben (szárazon: nincs mit tárolni); 1 száraz futás, VAN mit tárolni; 2 rossz hónap,
- * hiányzó levélkulcs vagy `--apply` dokumentumtár nélkül; 3 legalább egy számla PDF-je megvolt, de
+ * hiányzó levél- vagy Drive-kulcs vagy `--apply` dokumentumtár nélkül; 3 legalább egy számla PDF-je megvolt, de
  * nem tárolódott (NOT_PDF, NUMBER_NOT_IN_PDF, NOT_OUR_INVOICE: a saját adószámunk nincs benne,
  * AMOUNT_MISMATCH: a fizetendő végösszeg nem a feed-soré,
  * STORE_FAILED), vagy csak hitelesítetlen levélben jött
@@ -105,6 +114,8 @@ export async function main(
     textOf?: (bytes: Uint8Array) => Promise<string[]>;
     /** The Gmail reader, for a spec; unset, the info@ key builds it. */
     google?: Pick<GoogleReadonlyClient, "gmailMessageIds" | "gmailPdfMessage">;
+    /** The Drive reader, for a spec; unset, the GOOGLE_DRIVE_* key builds it. */
+    drive?: Pick<GoogleReadonlyClient, "driveFolderPdfs" | "driveFile">;
   } = {},
   environment: NodeJS.ProcessEnv = process.env,
 ): Promise<number> {
@@ -157,6 +168,18 @@ export async function main(
     );
     return 2;
   }
+  const driveAt = argv.indexOf("--drive-folder");
+  const driveFolder = driveAt >= 0 ? (argv[driveAt + 1] ?? "") : null;
+  if (driveFolder !== null && !DRIVE_FOLDER_ID.test(driveFolder)) {
+    io.err("A --drive-folder után a Drive-mappa azonosítója kell.\n");
+    return 2;
+  }
+  if (driveFolder !== null && (mailId !== null || unasLink || dir !== null)) {
+    io.err(
+      "A --drive-folder, a --mail-id, a --unas-link és a --dir közül egyszerre csak az egyik.\n",
+    );
+    return 2;
+  }
   let mail =
     deps.mail ??
     (dir
@@ -174,6 +197,25 @@ export async function main(
               deps.sleep,
             )
         : undefined);
+  if (!mail && driveFolder !== null) {
+    const credentials = deps.drive
+      ? null
+      : driveReadonlyCredentials(environment);
+    if (!deps.drive && !credentials) {
+      io.err(
+        "A Drive csak olvasó kulcsa nincs beállítva (GOOGLE_DRIVE_*): a mappát nem lehet olvasni.\n",
+      );
+      return 2;
+    }
+    const drive =
+      deps.drive ??
+      new GoogleReadonlyClient({
+        credentials: credentials!,
+        requestGapMs: CLI_REQUEST_GAP_MS,
+        rateLimitDelaysMs: CLI_RATE_LIMIT_DELAYS_MS,
+      });
+    mail = () => readDriveFolder(drive, driveFolder, io.out);
+  }
   if (!mail) {
     const credentials = deps.google
       ? null
@@ -213,15 +255,17 @@ export async function main(
   io.out(
     dir
       ? `Fájl a ${dir} mappából (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`
-      : unasLink
-        ? `Link az UNAS-rendelésekből (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`
-        : mailId !== null
-          ? `A ${mailId} levél (${month}): ${pdfs.length} PDF, ${pdfs.some((p) => p.authenticated) ? "hiteles acropora.hu feladó" : "NEM hiteles acropora.hu feladó"}; PDF nélküli feed-sor: ${candidates.length}\n`
-          : `Levél a ${CMFX_SENDER} címről (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`,
+      : driveFolder !== null
+        ? `Fájl a ${driveFolder} Drive-mappából (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`
+        : unasLink
+          ? `Link az UNAS-rendelésekből (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`
+          : mailId !== null
+            ? `A ${mailId} levél (${month}): ${pdfs.length} PDF, ${pdfs.some((p) => p.authenticated) ? "hiteles acropora.hu feladó" : "NEM hiteles acropora.hu feladó"}; PDF nélküli feed-sor: ${candidates.length}\n`
+            : `Levél a ${CMFX_SENDER} címről (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`,
   );
   // the folder's files with their size and fingerprint: the person reviewing the dry run compares them with the
   // downloader's lines, through the copies between the fleet and the production container (barracuda #1786)
-  if (dir || unasLink || mailId !== null)
+  if (dir || driveFolder !== null || unasLink || mailId !== null)
     for (const pdf of pdfs)
       io.out(
         `FAJL ${pdf.fileName} ${pdf.buffer.length} bájt sha256:${createHash("sha256").update(pdf.buffer).digest("hex").slice(0, 16)}\n`,
@@ -700,6 +744,50 @@ export async function readOwnMail(
     buffer: pdf.buffer,
     authenticated,
   }));
+}
+
+/** A Drive-mappa azonosítója: ugyanaz az alak, amit a Drive-kliens elfogad (`driveFolderPdfs`). */
+const DRIVE_FOLDER_ID = /^[A-Za-z0-9_-]{10,128}$/;
+
+/**
+ * Egy megnevezett Drive-mappa PDF-jei a levél-út alakjában, név szerint rendezve. A mappát a futtató nevezi meg (`--drive-folder`),
+ * az eredetet ő igazolja, mint a `--dir`-nél, ezért `authenticated`; a szám, az adószám és az összeg ellenőrzése ettől még lefut.
+ * A név `E-` előtagot kap, ha nincs rajta (Luca csomag-nevei), és a vezérlőkarakter kikerül belőle: a név a kimenet egy sorába
+ * kerül. A túl nagy fájl kimarad, és a sora megnevezi; minden más Drive-hiba megállítja a futást. Exportálva, hogy a teszt hamis
+ * Drive-klienssel mérje.
+ */
+export async function readDriveFolder(
+  drive: Pick<GoogleReadonlyClient, "driveFolderPdfs" | "driveFile">,
+  folderId: string,
+  report: (line: string) => void = () => undefined,
+): Promise<MailPdf[]> {
+  const files = (await drive.driveFolderPdfs(folderId)).sort((a, b) =>
+    a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
+  );
+  const pdfs: MailPdf[] = [];
+  for (const file of files) {
+    const name = file.name.replace(/[\u0000-\u001f\u007f]/g, "?");
+    let buffer: Buffer;
+    try {
+      buffer = await drive.driveFile(file.id);
+    } catch (error) {
+      if (
+        error instanceof GoogleReadonlyError &&
+        error.code === "GOOGLE_FILE_TOO_LARGE"
+      ) {
+        report(`DRIVE ${name} túl nagy, kihagyva\n`);
+        continue;
+      }
+      throw error;
+    }
+    pdfs.push({
+      messageId: `drive:${file.id}`,
+      fileName: /^E-/i.test(name) ? name : `E-${name}`,
+      buffer,
+      authenticated: true,
+    });
+  }
+  return pdfs;
 }
 
 if (
