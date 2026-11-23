@@ -145,6 +145,40 @@ describe("teachingSentences", () => {
       ["Várj kb. 4 hetet.", "A só 1,026 SG legyen!", "Kész?", "Új bekezdés"],
     );
   });
+
+  // T5.2, card b731bd4d (acrobot 59390, korall's stage finding on version 3 and 4): the paragraph was one line, so "1." stood alone,
+  // "megrepedhet. 3." carried the next item's number, and a bullet's "-" stood mid-sentence. WHAT TURNS IT RED: any of the three back;
+  // a soft-wrapped line or a table row split off as its own point.
+  it("keeps a list item's number with it, drops a bullet mark, and starts a point at each list line", () => {
+    assert.deepEqual(
+      teachingSentences(
+        "Az okok:\n1. Készítsd elő a vizet. Keverd egy napig.\n2) Ellenőrizd a sót.\n3. A kő megrepedhet.\n- A felső réteg oxigéndús.\n– Lent kevés az oxigén.\n• Ez a harmadik.",
+      ),
+      [
+        "Az okok:",
+        "1. Készítsd elő a vizet.",
+        "Keverd egy napig.",
+        "2) Ellenőrizd a sót.",
+        "3. A kő megrepedhet.",
+        "A felső réteg oxigéndús.",
+        "Lent kevés az oxigén.",
+        "Ez a harmadik.",
+      ],
+    );
+  });
+
+  it("a soft-wrapped line continues its sentence, and a table row stays in the run of text it was", () => {
+    assert.deepEqual(
+      teachingSentences(
+        "Ez egy hosszú mondat, ami\na következő sorban folytatódik.\n\nAdagolás |\nAdag | hetente egyszer\n- Egy pont\nfolytatással.",
+      ),
+      [
+        "Ez egy hosszú mondat, ami a következő sorban folytatódik.",
+        "Adagolás | Adag | hetente egyszer",
+        "Egy pont folytatással.",
+      ],
+    );
+  });
 });
 
 describe("buildTeachingPrintable", () => {
