@@ -13,6 +13,10 @@ import {
   teachingSentences,
   type TeachingOutputSource,
 } from "./teaching-output.js";
+import {
+  estimateTeachingTableHeight,
+  fitTeachingTable,
+} from "./teaching-table-fit.js";
 import type { TeachingNumber, TeachingPart } from "./teaching-source.js";
 
 /*
@@ -509,6 +513,7 @@ describe("output records", () => {
       teachingOutputFlags(buildTeachingOutput("SLIDES", src, AT)),
       {
         overFrame: 1,
+        tableOverflow: 0,
         chaptersWithoutNarration: 0,
       },
     );
@@ -516,6 +521,7 @@ describe("output records", () => {
       teachingOutputFlags(buildTeachingOutput("NARRATION", src, AT)),
       {
         overFrame: 0,
+        tableOverflow: 0,
         chaptersWithoutNarration: 1,
       },
     );
@@ -540,5 +546,105 @@ describe("output records", () => {
       { to: "x".repeat(301), public: false },
     ])
       assert.equal(parseTeachingSentInput(bad).ok, false, JSON.stringify(bad));
+  });
+});
+
+/*
+  THE ROOM OF A TABLE SLIDE (T5.2, barracuda on #2814). What turns these red: a table that always draws at 12 pt however much it holds, so a
+  tall one runs over the note; a note that stays on a fixed line instead of following the table; an estimate that does not grow with the text.
+  The numbers are an estimate (see fitTeachingTable), the check that decides is a look at the slide.
+*/
+describe("fitTeachingTable", () => {
+  const cells = (n: number, text: string) =>
+    Array.from({ length: n }, (_, i) => `${text} ${i}`);
+  it("a small table keeps 12 pt and its note stands right under it", () => {
+    const table = {
+      header: ["Lépés", "Termék"],
+      rows: [
+        ["1.", "AmmoMix"],
+        ["2.", "Nitri-Bac"],
+      ],
+      before: [],
+      after: ["Fontos: ne lépd túl."],
+    };
+    const fit = fitTeachingTable(table);
+    assert.equal(fit.fontSize, 12);
+    assert.equal(fit.fits, true);
+    // the note follows the table (1.15 top), not a fixed line
+    assert.ok(Math.abs(fit.noteY - (1.15 + fit.height + 0.1)) < 1e-9);
+    assert.ok(fit.noteY < 3, "a short table leaves the note high on the slide");
+  });
+
+  it("a tall table gets a smaller font, and the estimate grows with the text and shrinks with the font", () => {
+    const long =
+      "Ez egy hosszú cella, amely több sorba tördelődik a keskeny oszlopban, mert sok szóból áll, és még ez a második fele is hozzátartozik a szöveghez.";
+    const table = {
+      header: ["Szakasz", "Időzítés", "Fő teendők"],
+      rows: Array.from({ length: 6 }, () => [long, long, long]),
+      before: [],
+      after: [],
+    };
+    const at12 = estimateTeachingTableHeight(table, 12);
+    const at9 = estimateTeachingTableHeight(table, 9);
+    assert.ok(at12 > 5, "six long rows at 12 pt do not fit a slide");
+    assert.ok(at9 < at12);
+    const fit = fitTeachingTable(table);
+    assert.ok(fit.fontSize < 12, "the font gets smaller");
+    const longer = estimateTeachingTableHeight(
+      { ...table, rows: table.rows.map((r) => r.map((c) => c + c)) },
+      12,
+    );
+    assert.ok(longer > at12);
+  });
+
+  it("a table that does not fit even at 9 pt says so (fits false, how far it runs over) and is drawn at 9 pt", () => {
+    const huge = "x".repeat(900);
+    const fit = fitTeachingTable({
+      header: ["A", "B"],
+      rows: Array.from({ length: 6 }, () => [huge, huge]),
+      before: ["Felirat"],
+      after: ["Megjegyzés"],
+    });
+    assert.equal(fit.fits, false);
+    assert.equal(fit.fontSize, 9);
+    assert.ok(fit.over > 0, "it runs below its room");
+    assert.equal(
+      fitTeachingTable({ header: ["A"], rows: [["b"]], before: [], after: [] })
+        .over,
+      0,
+    );
+    assert.ok(cells(1, "x").length === 1);
+  });
+});
+
+describe("buildTeachingSlides: the table that does not fit is in the deck (T5.2, barracuda on #2815)", () => {
+  const deckOf = (text: string) =>
+    buildTeachingSlides(
+      source({ parts: [part({ key: "a", title: "A rész", text })] }),
+      AT,
+    );
+  it("a table too big for 9 pt is listed with its slide number and how far it runs over, and the flag counts it", () => {
+    const huge = "x".repeat(900);
+    const big = `Szakasz | Idő\n${Array.from({ length: 6 }, () => `${huge} | ${huge}`).join("\n")}`;
+    // a long opening sentence: a short last point before a table would be its caption and stand on the table's slide
+    const intro =
+      "Ez egy hosszú bevezető mondat, amely biztosan nem felirat, mert jóval hosszabb nyolcvan karakternél, és nem kettősponttal végződik.";
+    const deck = deckOf(`${intro}\n\n${big}`);
+    assert.equal(deck.tableOverflow?.length, 1);
+    const entry = deck.tableOverflow?.[0];
+    // the title slide is the first, the intro the second, the table the third
+    assert.equal(entry?.slide, 3);
+    assert.equal(deck.slides[(entry?.slide ?? 0) - 1]?.title, entry?.title);
+    assert.equal(entry?.partKey, "a");
+    assert.ok((entry?.over ?? 0) > 0);
+    assert.equal(teachingOutputFlags(deck).tableOverflow, 1);
+  });
+
+  it("a table that fits is not listed, and a deck stored before the field existed counts zero", () => {
+    const deck = deckOf("Szakasz | Idő\nElőkészítés | 0. nap");
+    assert.deepEqual(deck.tableOverflow, []);
+    assert.equal(teachingOutputFlags(deck).tableOverflow, 0);
+    const { tableOverflow: _gone, ...old } = deck;
+    assert.equal(teachingOutputFlags(old).tableOverflow, 0);
   });
 });
