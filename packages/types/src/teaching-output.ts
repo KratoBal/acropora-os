@@ -307,7 +307,16 @@ function paragraphBlocks(paragraph: string): TeachingBlock[] {
     while (end < lines.length && (lines[end] ?? "").includes("|")) end += 1;
     if (end - at >= 2) {
       flushText();
-      const rows = lines.slice(at, end).map(tableCells);
+      const run = lines.slice(at, end);
+      // a markdown table ("| a | b |" on every line): the outer bars are not cells; a row of dashes ("|---|---|", "--- | ---") is the line under the
+      // header, not data (barracuda on #2814: the v4 source has neither, a source that comes from markdown would)
+      const outerBars = run.every(
+        (line) => line.trim().startsWith("|") && line.trim().endsWith("|"),
+      );
+      const rows = run
+        .map((line) => (outerBars ? line.trim().slice(1, -1) : line))
+        .map(tableCells)
+        .filter((cells) => !cells.every((cell) => /^:?-{3,}:?$/.test(cell)));
       const width = Math.max(...rows.map((row) => row.length));
       const padded = rows.map((row) => [
         ...row,
