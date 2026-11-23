@@ -16,7 +16,10 @@ import {
   cookieHeaderFrom,
   pdfAddressesIn,
 } from "./external-invoice-mail-pdf.cli.js";
-import { GoogleReadonlyError } from "../integrations/google/google-readonly.client.js";
+import {
+  GOOGLE_PDF_MAX_BYTES,
+  GoogleReadonlyError,
+} from "../integrations/google/google-readonly.client.js";
 import {
   authVerdictLine,
   cmfxMailAuthenticated,
@@ -1186,7 +1189,12 @@ describe("one named mail of our own domain (--mail-id)", () => {
 */
 describe("one named Drive folder (--drive-folder)", () => {
   const folder = "1AbCdEfGhIjKlMnOp_q-r";
-  type FakeFile = { name: string; body?: Buffer; error?: Error };
+  type FakeFile = {
+    name: string;
+    body?: Buffer;
+    error?: Error;
+    size?: number;
+  };
   const drive = (files: Record<string, FakeFile>, asked: string[] = []) => ({
     async driveFolderPdfs(id: string) {
       asked.push(id);
@@ -1194,7 +1202,7 @@ describe("one named Drive folder (--drive-folder)", () => {
         id: fileId,
         name: file.name,
         modifiedAt: null,
-        sizeBytes: null,
+        sizeBytes: file.size ?? null,
       }));
     },
     async driveFile(id: string) {
@@ -1234,6 +1242,23 @@ describe("one named Drive folder (--drive-folder)", () => {
     assert.deepEqual(lines, [
       "DRIVE nagy?WOULD_STORE.pdf túl nagy, kihagyva\n",
     ]);
+    // the listing's size decides before a download; a C1 control character and a line separator are taken out too (barracuda #2810)
+    const listed: string[] = [];
+    assert.deepEqual(
+      await readDriveFolder(
+        drive({
+          big: {
+            name: "nagy\u009b\u2028lista.pdf",
+            size: GOOGLE_PDF_MAX_BYTES + 1,
+            error: new Error("a listázás szerint túl nagy fájlt nem tölt le"),
+          },
+        }),
+        folder,
+        (line) => listed.push(line),
+      ),
+      [],
+    );
+    assert.deepEqual(listed, ["DRIVE nagy??lista.pdf túl nagy, kihagyva\n"]);
     await assert.rejects(
       readDriveFolder(
         drive({
@@ -1322,6 +1347,8 @@ describe("one named Drive folder (--drive-folder)", () => {
     for (const argv of [
       ["--month", "2026-01", "--drive-folder", "rovid"],
       ["--month", "2026-01", "--drive-folder", "--apply"],
+      // a flag long enough to pass the id's shape is still no folder (barracuda #2810)
+      ["--month", "2026-01", "--drive-folder", "--valami-hosszu"],
       ["--month", "2026-01", "--drive-folder"],
       ["--month", "2026-01", "--drive-folder", folder, "--dir", "/x"],
       ["--month", "2026-01", "--drive-folder", folder, "--unas-link"],
