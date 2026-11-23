@@ -1,0 +1,23 @@
+<!-- A favicon: az apps/web/public/acropora-logo.svg JELE (a ket iv, a kek negyzet es a narancs alak; path2, path3, path12, path13) a felirat nelkul, negyzetes vagassal, SZINVALTOZAS NELKUL (acrobot 60068; a kek iv kontrasztja Balazs dontese). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="64.7 97.5 687.7 687.7">
+<path
+       id="path2"
+       d="M 0,0 C 0,0 326,203 318,0"
+       style="fill:none;stroke:#f46e20;stroke-width:16.18;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:10;stroke-dasharray:none;stroke-opacity:1"
+       transform="matrix(1.3333333,0,0,-1.3333333,101.09307,468.21613)" />
+<path
+       id="path3"
+       d="M 0,0 C 0,0 -326,-203 -318,0"
+       style="fill:none;stroke:#28429c;stroke-width:16.18;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:10;stroke-dasharray:none;stroke-opacity:1"
+       transform="matrix(1.3333333,0,0,-1.3333333,715.95307,414.58653)" />
+<path
+       id="path12"
+       d="m 0,0 c 0,-4.143 -3.357,-7.5 -7.5,-7.5 -4.143,0 -7.5,3.357 -7.5,7.5 0,4.142 3.357,7.5 7.5,7.5 C -3.357,7.5 0,4.142 0,0"
+       style="fill:#28429c;fill-opacity:1;fill-rule:nonzero;stroke:none"
+       transform="matrix(1.3333333,0,0,-1.3333333,463.75787,401.6152)" />
+<path
+       id="path13"
+       d="m 0,0 c 0,-4.142 -3.357,-7.5 -7.5,-7.5 -4.143,0 -7.5,3.358 -7.5,7.5 0,4.142 3.357,7.5 7.5,7.5 C -3.357,7.5 0,4.142 0,0"
+       style="fill:#f46e20;fill-opacity:1;fill-rule:evenodd;stroke:none"
+       transform="matrix(1.3333333,0,0,-1.3333333,377.09373,480.44787)" />
+</svg>
