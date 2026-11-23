@@ -193,6 +193,9 @@ export function textCarriesOurTaxNumber(text: string): boolean {
  * nélkül; a `HUF` külön cellában. Ugyanez a szám az áfa-sorban is előfordulhat, ezért NEM elég, hogy a
  * szöveg valahol tartalmazza: a felirat UTÁNI első számcsoport számít (a sorba rendezett szövegben a
  * cellák között ` | ` áll). Egy nem egész feed-összeg (devizás számla) nem kerekítődik: nem egyezik.
+ * A STORNÓ VÉGÖSSZEGE NEGATÍV (785dfea6, acrobot 59264: a 2026/00043, 00044 és 00080 stornó-okirat éles futása AMOUNT_MISMATCH
+ * lett „nincs fizetendő-sor" okkal, a feed-sor -1 562 100, -1 714 500 és -169 990). A felirat utáni mínuszjel (`-` vagy `−`) az
+ * összeg része: a negatív sor csak negatív PDF-összeggel egyezik, az előjel-eltérés továbbra is eltérés.
  */
 export function pdfPayableMatches(text: string, grossAmount: string): boolean {
   // the group is greedy and read as a whole number: a longer number, or a fractional feed amount, is unequal
@@ -206,10 +209,11 @@ export function pdfPayableMatches(text: string, grossAmount: string): boolean {
  * számot csak a parancs kimenete adhatja).
  */
 export function pdfPayableAmount(text: string): string | null {
-  const match = /FIZETENDŐ\s+BRUTTÓ\s+VÉGÖSSZEG:[\s|]*(\d(?:[\d ]*\d)?)/.exec(
-    text,
-  );
-  return match ? match[1]!.replace(/ /g, "") : null;
+  const match =
+    /FIZETENDŐ\s+BRUTTÓ\s+VÉGÖSSZEG:[\s|]*([-\u2212])?\s*(\d(?:[\d ]*\d)?)/.exec(
+      text,
+    );
+  return match ? `${match[1] ? "-" : ""}${match[2]!.replace(/ /g, "")}` : null;
 }
 
 export type MailPdfOutcome =
