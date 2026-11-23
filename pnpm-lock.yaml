@@ -6,8 +6,8 @@ settings:
   injectWorkspacePackages: true
 
 overrides:
-  brace-expansion@1.1.16: 1.1.20
-  brace-expansion@2.0.2: 2.1.6
+  brace-expansion@1.1.16: 1.1.22
+  brace-expansion@2.0.2: 2.1.8
   brace-expansion@5.0.7: 5.0.11
   picomatch@4.0.3: 4.0.4
   sigstore@3.1.0: 4.1.1
@@ -2246,11 +2246,11 @@ packages:
     resolution: {integrity: sha512-Ifk1KcLrxaGt1occQagQNFNNOqRt1LFuehEnHHzB8Z6cRgIxRU1TBaiIsUiCdA+gy5PL7Y1IX31DNKkRmxtXjQ==}
     engines: {node: '>=18'}
 
-  brace-expansion@1.1.20:
-    resolution: {integrity: sha512-5/qk29RyvatwgzNMrvGjkIhKYzpJ0OUnPK+9TU+zS/CMJqzmb+UD0irWu42JfpUvO636fxd8IstgiydZRM/76A==}
+  brace-expansion@1.1.22:
+    resolution: {integrity: sha512-CKLDTuSsN0+r1ThM0WkzzBI7dnPI6xEGfa/JnVYIK9JNBA1N1NyPwXVHor//NKD/y3sDxp764sZdLhFK7pH8XQ==}
 
-  brace-expansion@2.1.6:
-    resolution: {integrity: sha512-pi/WFpBvCBmB/NsURt7hW5sDvuOqvJaDMDai7CrlT9xoehzWRzo/dhQRKqOhpPvlnicVaTzHCbzGnnTgpvMTFw==}
+  brace-expansion@2.1.8:
+    resolution: {integrity: sha512-BnlDzDYQoplTsZSvPi86CNzmbcb07X8ufR8fk1zivaiEJlXJkiq1MQyDCVmlWcsWbj6aWXqHnrwwevbrm/Saig==}
 
   brace-expansion@5.0.11:
     resolution: {integrity: sha512-awigjhi6cLTh90bdw6+QJ9CtmJmyYhEIi70iCbc8Rozn04Fw9FeQIBjv/E22FFGuCGx1bLJyUfB64x/szUSXUg==}
@@ -3499,12 +3499,8 @@ packages:
   pure-rand@6.1.0:
     resolution: {integrity: sha512-bVWawvoZoBYpp6yIoQtQXHZjmz35RSVHnUOTefl8Vcjr8snTPY1wnpSPMWekcFwbxI6gtmT7rSYPFvz71ldiOA==}
 
-  qs@6.15.3:
-    resolution: {integrity: sha512-O9gl3zCl5h5blw1KGUzQKhA5oUXSl8rwUIM5o0S3nCXMliSvy5Dzx7/DJcI+SwgICv+IneSZwhBh1oSyEHA71A==}
-    engines: {node: '>=0.6'}
-
-  qs@6.16.1:
-    resolution: {integrity: sha512-5Px6J7rfHBAGUhNQ3es4YzcOdBBw0SDcVtThJml4RdnKw4tKs2epA0kPZ+K8X+WiHktT93RHVcQ/3ym5aTCgtg==}
+  qs@6.17.1:
+    resolution: {integrity: sha512-jd3COkaKVgGUW+ZHyEHCG9bH7RoaaiWuMgzsIBjUMVjLAaWGWpoUAVwljVvBHxRu/2qEHnadLGZrkutYUBPQJA==}
     engines: {node: '>=0.6'}
 
   range-parser@1.3.0:
@@ -5784,18 +5780,18 @@ snapshots:
       http-errors: 2.0.1
       iconv-lite: 0.7.3
       on-finished: 2.4.1
-      qs: 6.16.1
+      qs: 6.17.1
       raw-body: 3.0.2
       type-is: 2.1.0
     transitivePeerDependencies:
       - supports-color
 
-  brace-expansion@1.1.20:
+  brace-expansion@1.1.22:
     dependencies:
       balanced-match: 1.0.2
       concat-map: 0.0.1
 
-  brace-expansion@2.1.6:
+  brace-expansion@2.1.8:
     dependencies:
       balanced-match: 1.0.2
 
@@ -6237,7 +6233,7 @@ snapshots:
       once: 1.4.0
       parseurl: 1.3.3
       proxy-addr: 2.0.8
-      qs: 6.15.3
+      qs: 6.17.1
       range-parser: 1.3.0
       router: 2.2.0
       send: 1.2.1
@@ -6707,11 +6703,11 @@ snapshots:
 
   minimatch@3.1.5:
     dependencies:
-      brace-expansion: 1.1.20
+      brace-expansion: 1.1.22
 
   minimatch@5.1.9:
     dependencies:
-      brace-expansion: 2.1.6
+      brace-expansion: 2.1.8
 
   minimist@1.2.8: {}
 
@@ -7023,12 +7019,7 @@ snapshots:
 
   pure-rand@6.1.0: {}
 
-  qs@6.15.3:
-    dependencies:
-      es-define-property: 1.0.1
-      side-channel: 1.1.1
-
-  qs@6.16.1:
+  qs@6.17.1:
     dependencies:
       es-define-property: 1.0.1
       side-channel: 1.1.1
