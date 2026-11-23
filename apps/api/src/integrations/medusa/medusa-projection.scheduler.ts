@@ -1337,16 +1337,20 @@ export class MedusaProjectionScheduler
     ];
     if (!sorok.length) return [];
 
-    const kotesek = await this.db.externalReference.findMany({
-      where: {
-        ...MEDUSA_PRODUCT_REFERENCE,
-        entityId: { in: sorok.map((sor) => sor.productId) },
-      },
-      select: { entityId: true, lastSyncedAt: true },
-    });
-    const utoljara = new Map(
-      kotesek.map((sor) => [sor.entityId, sor.lastSyncedAt]),
-    );
+    // szeletenként és egyedi azonosítókkal (barracuda, #2735): a futó akció ága minden körben az ÖSSZES futó akciót
+    // visszaadja, egy termék több változata pedig többször szerepel: az `in` lista se nőjön a határig, se ismétlődjön
+    const azonositok = [...new Set(sorok.map((sor) => sor.productId))];
+    const utoljara = new Map<string, Date | null>();
+    for (let i = 0; i < azonositok.length; i += KOTES_SZELET) {
+      const kotesek = await this.db.externalReference.findMany({
+        where: {
+          ...MEDUSA_PRODUCT_REFERENCE,
+          entityId: { in: azonositok.slice(i, i + KOTES_SZELET) },
+        },
+        select: { entityId: true, lastSyncedAt: true },
+      });
+      for (const sor of kotesek) utoljara.set(sor.entityId, sor.lastSyncedAt);
+    }
 
     return (
       sorok

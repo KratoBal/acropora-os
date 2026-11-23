@@ -1101,6 +1101,49 @@ describe("MedusaProjectionScheduler, a futó akció egyszeri újra-vetítése", 
     assert.deepEqual(kapott, [["nyitott"]]);
   });
 
+  it("a kötések lekérdezése szeletenként megy, egyedi azonosítókkal: sok futó akció sem ad egy óriási in listát", async () => {
+    const sok = Array.from({ length: 2500 }, (_, i) => futo(`p${i}`));
+    // az első termék két változata: kétszer szerepel a sorok között, a listában egyszer
+    sok.push(futo("p0"));
+    const { db, hivasok } = adatbazis(
+      [],
+      vetitve(...sok.map((s) => s.productId)),
+      undefined,
+      sok,
+    );
+    const { run, kapott } = futtato();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: {
+        ...BEKAPCSOLVA,
+        MEDUSA_PROJECTION_SCHEDULE_BATCH_SIZE: "3",
+      } as NodeJS.ProcessEnv,
+      logger: naplo().logger,
+      now: () => MOST_ORA,
+    });
+    await scheduler.runOnce();
+    const kotesLekerdezesek = hivasok
+      .filter((h) => h.metodus === "externalReference.findMany")
+      .map(
+        (h) =>
+          (h.args as { where: { entityId?: { in?: string[] } } }).where.entityId
+            ?.in,
+      )
+      .filter((lista): lista is string[] => Array.isArray(lista));
+    // az akció ágának szeletei: 1000 + 1000 + 500 egyedi azonosító
+    const akcioSzeletek = kotesLekerdezesek.filter((l) => l.length > 100);
+    assert.deepEqual(
+      akcioSzeletek.map((l) => l.length),
+      [1000, 1000, 500],
+    );
+    for (const szelet of akcioSzeletek)
+      assert.equal(new Set(szelet).size, szelet.length);
+    // és a döntés ugyanaz: a keret (3) viszi az első hármat
+    assert.deepEqual(kapott, [["p0", "p1", "p2"]]);
+  });
+
   it("a keret által levágott futó akció a következő körben jön, a vitt nem ismétlődik", async () => {
     const kapott = await korok(
       1,
