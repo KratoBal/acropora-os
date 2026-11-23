@@ -200,19 +200,52 @@ function paragraphs(text: string): string[] {
     .filter(Boolean);
 }
 
+/** A list item's mark at a line's start: "1." or "1)" (kept with the item), or a bullet "-", "–", "•", "*" (dropped: the slide has its own). */
+const LIST_ITEM = /^\s*(?:(\d{1,2}[.)])|[-–•*])\s+/;
+
+/**
+ * A paragraph's items: a line that starts with a list mark starts its own item; any other line continues the item before it (a
+ * soft-wrapped sentence, or a table row). The Akil pilot source (card b731bd4d) has 29 numbered lines, 37 bulleted ones and 120
+ * table rows inside paragraphs, and no soft-wrapped line. TABLE ROWS STAY AS THEY WERE (one run of text): one point a row took the
+ * pilot from 100 slides to 128 and from 7 over-frame parts to 20, and how a table belongs on a slide is the editor's question.
+ */
+function paragraphItems(paragraph: string): string[] {
+  const items: string[] = [];
+  for (const line of paragraph.split("\n")) {
+    if (!line.trim()) continue;
+    if (!items.length || LIST_ITEM.test(line)) items.push(line);
+    else items[items.length - 1] += ` ${line}`;
+  }
+  return items;
+}
+
 /**
  * Sentences, for the slide points. A sentence ends at . ! or ? followed by
  * space and an upper-case letter, so "kb. 4 hét" and "1,026" do not split.
  * A shortened name ("Dr. Kovács") would; the slide then shows two points,
  * and no statement is lost either way.
+ *
+ * THE LINE STRUCTURE IS KEPT (T5.2, card b731bd4d, acrobot 59390; korall's finding on the stage, version 3 and 4): the paragraph
+ * used to be one line, so a numbered list read "... megrepedhet. 3. Kapcsold ki ..." and split into "megrepedhet. 3." and a lone
+ * "1.", and a bullet's "-" stood in the middle of a sentence. Each list item and table row is now its own point: a number stays
+ * in front of its item's first sentence, a bullet mark is dropped.
  */
 export function teachingSentences(text: string): string[] {
-  return paragraphs(text).flatMap((p) =>
-    p
-      .split(/(?<=[.!?])\s+(?=[A-ZÁÉÍÓÖŐÚÜŰ])/u)
-      .map((s) => s.trim())
-      .filter(Boolean),
-  );
+  return text
+    .split(/\n\s*\n/)
+    .flatMap(paragraphItems)
+    .flatMap((item) => {
+      const mark = LIST_ITEM.exec(item);
+      const sentences = (mark ? item.slice(mark[0].length) : item)
+        .replace(/\s+/g, " ")
+        .trim()
+        .split(/(?<=[.!?])\s+(?=[A-ZÁÉÍÓÖŐÚÜŰ])/u)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (mark?.[1] && sentences.length)
+        sentences[0] = `${mark[1]} ${sentences[0]}`;
+      return sentences;
+    });
 }
 
 function chunk<T>(items: readonly T[], size: number): T[][] {
