@@ -61,6 +61,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   // the OCR of a scanned asset document (card 126f9b92): exactly "true" turns it on, a boolean, not a secret
   "ASSET_DOCUMENT_OCR",
   "BILLING_ISSUE_ENABLED",
+  // the loyalty point line's shape on the webshop invoice (card e62a1a64): `discount` or `payment`, a switch, not a secret
+  "WEBSHOP_LOYALTY_INVOICE_SHAPE",
   // the daily buyer tax-number check of the issued invoices (card aaf4f09d): a switch, not a secret
   "BUYER_TAX_CHECK_ENABLED",
   // the one-partner-register duplicate measurement (step 1): a switch, not a secret
