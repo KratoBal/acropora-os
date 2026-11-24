@@ -566,6 +566,17 @@ export interface WebshopOrderDetail {
   };
   /** A kártyás fizetés útja (zárolás, feloldás, fizetési link); más fizetésnél `null`. */
   cardPayment: WebshopOrderCardPayment | null;
+  /**
+   * KÉZI VISSZATÉRÍTÉS KELL (commerce #895, kártya 527ba41e): a sikertelen lezárás a pontot és az ajándékkártyát visszaadta, de a
+   * kártyán RÖGZÍTETT összeget nem térítette vissza (a feladott csomag fulfillmentjét a webshop nem mondja le, így a rendelés sem
+   * mondható le). `amount` a rögzített, vissza nem térített összeg a rendelés pénznemében, `creditLines` a visszaadott jóváírás-sorok
+   * száma, `at` a jelölés ideje. `null` vagy hiányzó: nincs ilyen teendő. Opcionális: a régebbi kliensek nem ismerik.
+   */
+  manualRefund?: {
+    amount: number;
+    creditLines: number;
+    at: string | null;
+  } | null;
   /** A rendelés aktív csomagja az OS-ben (Rendelések, 5. PR), ha van. */
   parcel: WebshopOrderParcel | null;
   /**

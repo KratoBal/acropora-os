@@ -9,6 +9,7 @@ import {
   addressOf,
   historyOf,
   linesOf,
+  manualRefundOf,
   shippingOf,
   stepsOf,
   TRANSFER_INVOICE_STEP,
@@ -585,6 +586,69 @@ describe("the GLS point's kind", () => {
         foxpost_pickup_point: { id: "1", name: "Y", variant: "FOXPOST A-BOX" },
       }),
       "FOXPOST automata",
+    );
+  });
+});
+
+/*
+  A KÉZI KÁRTYA-VISSZATÉRÍTÉS JELZÉSE (kártya 527ba41e; commerce #895). MI PIROSÍT: a sikertelen lezárás nyoma a rendelés metaadatán nem
+  jut el az adatlapra, így a vissza nem térített, rögzített kártyás összegről csak egy naplósor szól; jelzés nulla vagy hiányzó összegnél
+  (nyom nélküli, régi vagy pont-only rendelésen); a nyom hibás alakja kivételt dob az adatlapra; az összeg nem a nyomé.
+*/
+describe("the manual refund notice", () => {
+  const mark = (over: Record<string, unknown> = {}) => ({
+    unsuccessful_close_credits_given_back: {
+      credit_lines: 1,
+      captured_unrefunded: 40700,
+      at: "2026-11-24T20:11:59.000Z",
+      ...over,
+    },
+  });
+
+  it("carries the captured, unrefunded amount from the order's metadata to the detail", () => {
+    assert.deepEqual(manualRefundOf(mark()), {
+      amount: 40700,
+      creditLines: 1,
+      at: "2026-11-24T20:11:59.000Z",
+    });
+    const result = toDetail({
+      order: order({ metadata: mark() }),
+      status: status("closed_unsuccessfully"),
+      facts: NO_FACTS,
+      customerOrderCount: 1,
+      relatedDisplayId: null,
+      now: NOW,
+    });
+    assert.deepEqual(result.manualRefund, {
+      amount: 40700,
+      creditLines: 1,
+      at: "2026-11-24T20:11:59.000Z",
+    });
+  });
+
+  it("is null without a trace, with a zero or a broken amount: nothing to refund by hand", () => {
+    assert.equal(manualRefundOf(null), null);
+    assert.equal(manualRefundOf(undefined), null);
+    assert.equal(manualRefundOf({}), null);
+    assert.equal(
+      manualRefundOf({ unsuccessful_close_credits_given_back: "x" }),
+      null,
+    );
+    assert.equal(manualRefundOf(mark({ captured_unrefunded: 0 })), null);
+    assert.equal(manualRefundOf(mark({ captured_unrefunded: -5 })), null);
+    assert.equal(
+      manualRefundOf(mark({ captured_unrefunded: "nem szám" })),
+      null,
+    );
+    assert.equal(detail().manualRefund, null);
+  });
+
+  it("tolerates a trace without the time or the credit lines", () => {
+    assert.deepEqual(
+      manualRefundOf({
+        unsuccessful_close_credits_given_back: { captured_unrefunded: 1200 },
+      }),
+      { amount: 1200, creditLines: 0, at: null },
     );
   });
 });

@@ -418,6 +418,32 @@ export function unfinishedSplitOf(
   return null;
 }
 
+/**
+ * A KÉZI KÁRTYA-VISSZATÉRÍTÉS JELZÉSE (kártya 527ba41e). A webshop a sikertelen lezáráskor, ha a rendelést nem tudja lemondani (feladott
+ * csomag: nyitott fulfillment), a pontot és az ajándékkártyát közvetlenül adja vissza, és a rendelés metaadatán nyomot hagy
+ * (`unsuccessful_close_credits_given_back`: `credit_lines`, `captured_unrefunded`, `at`). A kártyán rögzített összeget ilyenkor senki nem
+ * téríti vissza, és eddig csak egy naplósor szólt róla. Itt lesz belőle a rendelés-oldal jelzése: CSAK akkor, ha tényleg van vissza nem
+ * térített rögzített összeg (> 0); a nyom nélküli vagy nulla összegű rendelés `null`.
+ */
+export function manualRefundOf(
+  metadata: Record<string, unknown> | null | undefined,
+): { amount: number; creditLines: number; at: string | null } | null {
+  const mark = metadata?.unsuccessful_close_credits_given_back;
+  if (!mark || typeof mark !== "object") return null;
+  const { captured_unrefunded, credit_lines, at } = mark as Record<
+    string,
+    unknown
+  >;
+  const amount = Number(captured_unrefunded);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  const lines = Number(credit_lines);
+  return {
+    amount,
+    creditLines: Number.isFinite(lines) && lines > 0 ? lines : 0,
+    at: typeof at === "string" ? at : null,
+  };
+}
+
 export function toDetail(input: {
   order: MedusaOrderDetailRow;
   status: MedusaOrderBusinessStatus | null;
@@ -509,6 +535,7 @@ export function toDetail(input: {
     externalInvoice: input.externalInvoice ?? null,
     parcel: facts.parcel,
     cardPayment: cardPaymentOf(input.orderPayment ?? null, code, now),
+    manualRefund: manualRefundOf(order.metadata),
     osCustomer: input.osCustomer ?? null,
     internalNote: input.internalNote ?? null,
     notes: notesOf(order.metadata),
