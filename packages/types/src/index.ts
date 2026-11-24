@@ -2461,6 +2461,18 @@ export type {
   WebshopShippingSettings,
 } from "./webshop-shipping-settings.js";
 export {
+  parseWebshopPriceRulesInput,
+  WEBSHOP_PRICE_RULE_SECTIONS,
+  WEBSHOP_PRICE_RULES,
+} from "./webshop-price-rules.js";
+export type {
+  WebshopPriceRuleField,
+  WebshopPriceRules,
+  WebshopPriceRulesParse,
+  WebshopPriceRuleSection,
+  WebshopPriceRuleValues,
+} from "./webshop-price-rules.js";
+export {
   parseWebshopGiftCardIssueInput,
   WEBSHOP_GIFT_CARD_LIMITS,
   WEBSHOP_GIFT_CARD_TRANSACTION_LABELS,

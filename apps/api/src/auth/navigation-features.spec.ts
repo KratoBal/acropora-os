@@ -78,6 +78,7 @@ describe("the production switches before the 40524dac release (acrobot 34365)", 
     assert.equal(off.has("reefclub-linking"), false);
     assert.equal(off.has("webshop-coupons"), false);
     assert.equal(off.has("webshop-shipping-settings"), false);
+    assert.equal(off.has("webshop-price-rules"), false);
     assert.equal(off.has("webshop-gift-cards"), false);
     const on = navigationFeatures(
       {
@@ -86,6 +87,7 @@ describe("the production switches before the 40524dac release (acrobot 34365)", 
         REEFCLUB_LINKING_ENABLED: "true",
         MEDUSA_WEBSHOP_COUPONS: "true",
         MEDUSA_WEBSHOP_SHIPPING_SETTINGS: "true",
+        MEDUSA_WEBSHOP_PRICE_RULES: "true",
         MEDUSA_WEBSHOP_GIFT_CARDS: "true",
       },
       "u1",
@@ -94,6 +96,7 @@ describe("the production switches before the 40524dac release (acrobot 34365)", 
     assert.equal(on.has("reefclub-linking"), true);
     assert.equal(on.has("webshop-coupons"), true);
     assert.equal(on.has("webshop-shipping-settings"), true);
+    assert.equal(on.has("webshop-price-rules"), true);
     assert.equal(on.has("webshop-gift-cards"), true);
     assert.equal(
       navigationFeatures(

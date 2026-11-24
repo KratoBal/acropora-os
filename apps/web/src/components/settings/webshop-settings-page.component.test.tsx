@@ -92,6 +92,8 @@ describe("Webshop beállítások", () => {
       "/webshop/ajandekkartyak",
       // the shipping fees and payment methods (card e0e2378b): behind their own served switch
       "/webshop/szallitas-fizetes",
+      // the loyalty redemption and the Omnibus threshold (acrobot 60467): behind their own served switch
+      "/webshop/arszabalyok",
       "/admin/kezdolap",
     ]);
     expect(links.filter((link) => !existsSync(oldalFajlja(link.href)))).toEqual(
@@ -111,6 +113,7 @@ describe("Webshop beállítások", () => {
     expect(without).not.toContain("/webshop/egyedi-kedvezmenyek");
     expect(without).not.toContain("/webshop/szallitas-fizetes");
     expect(without).not.toContain("/webshop/ajandekkartyak");
+    expect(without).not.toContain("/webshop/arszabalyok");
     expect(without).toContain("/admin/integrations/medusa/connection");
   });
 
@@ -119,6 +122,7 @@ describe("Webshop beállítások", () => {
       { id: "homepage-content" },
       { id: "webshop-coupons" },
       { id: "webshop-shipping-settings" },
+      { id: "webshop-price-rules" },
       { id: "webshop-gift-cards" },
     ];
     render(<WebshopSettingsPage />);
@@ -132,6 +136,7 @@ describe("Webshop beállítások", () => {
       { id: "homepage-content" },
       { id: "webshop-coupons" },
       { id: "webshop-shipping-settings" },
+      { id: "webshop-price-rules" },
       { id: "webshop-gift-cards" },
     ];
     for (const role of USER_ROLES) {
