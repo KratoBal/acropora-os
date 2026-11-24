@@ -33,6 +33,9 @@ vi.mock("@/lib/api/webshop-price-rules", () => ({
 
 const rules = (over: Partial<WebshopPriceRules> = {}): WebshopPriceRules => ({
   values: {
+    loyaltyAccrualEnabled: 0,
+    loyaltyAccrualPercent: 3,
+    loyaltyAccrualOnSaleItems: 0,
     loyaltyRedemptionEnabled: 0,
     loyaltyPointValueHuf: 1,
     loyaltyMinOrderHuf: 30000,
@@ -41,6 +44,9 @@ const rules = (over: Partial<WebshopPriceRules> = {}): WebshopPriceRules => ({
     omnibusMinHistoryDays: 15,
   },
   sources: {
+    loyaltyAccrualEnabled: "row",
+    loyaltyAccrualPercent: "row",
+    loyaltyAccrualOnSaleItems: "row",
     loyaltyRedemptionEnabled: "default",
     loyaltyPointValueHuf: "default",
     loyaltyMinOrderHuf: "default",
@@ -66,6 +72,9 @@ describe("WebshopPriceRulesPage", () => {
     expect(
       ((await screen.findByLabelText(OMNIBUS)) as HTMLInputElement).value,
     ).toBe("15");
+    expect(
+      screen.getByRole("heading", { name: "Hűségpont gyűjtése" }),
+    ).toBeTruthy();
     expect(
       screen.getByRole("heading", { name: "Hűségpont beváltása" }),
     ).toBeTruthy();
@@ -111,9 +120,21 @@ describe("WebshopPriceRulesPage", () => {
       target: { value: "20" },
     });
     fireEvent.click(screen.getByLabelText("Pontbeváltás a pénztárban"));
+    fireEvent.click(
+      screen.getByLabelText("Pontgyűjtés a lezárt rendelés után"),
+    );
+    fireEvent.change(
+      screen.getByLabelText(
+        "A tételek bruttó értékének ennyi százaléka jár pontban (0: nem jár pont)",
+      ),
+      { target: { value: "5" } },
+    );
     fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
     await waitFor(() =>
       expect(api.save).toHaveBeenCalledWith("token", {
+        loyaltyAccrualEnabled: 1,
+        loyaltyAccrualPercent: 5,
+        loyaltyAccrualOnSaleItems: 0,
         loyaltyRedemptionEnabled: 1,
         loyaltyPointValueHuf: 1,
         loyaltyMinOrderHuf: 30000,

@@ -5,12 +5,19 @@
  *
  * A BEVÁLTÁS ÉRTÉKEI NEM CSAK A TÁROLT SORBÓL JÖNNEK (barracuda, #2824): a webshop mezőnként a tárolt sort, aztán a környezetet
  * (`LOYALTY_*`, így van bekapcsolva a teszt kirakat), aztán az alapértéket nézi. Ezért az öt beváltási mező a webshop
- * `GET /admin/loyalty-settings` válaszából jön, a forrással együtt (`loyaltyField` a válasz mezője), és a mentés csak azt
+ * `GET /admin/loyalty-settings` válaszából jön, a forrással együtt (`shopField` a válasz része és mezője), és a mentés csak azt
  * írja, amit valaki a mutatott értékhez képest megváltoztatott: egy környezetből jövő érték így nem íródik felül egy olyan
- * sorral, amit senki nem kért.
+ * sorral, amit senki nem kért. A pontgyűjtés három mezője (commerce #882) ugyanennek a válasznak az `accrual` részéből jön;
+ * környezeti forrása nincs.
  */
 
 export const WEBSHOP_PRICE_RULE_SECTIONS = [
+  {
+    id: "accrual",
+    title: "Hűségpont gyűjtése",
+    description:
+      "A lezárt rendelés után a vevő pontot kap. A jóváírás pillanata a „Megrendelés lezárva” állapot, ez nem beállítás. A gyűjtés alapból ki van kapcsolva.",
+  },
   {
     id: "redemption",
     title: "Hűségpont beváltása",
@@ -30,9 +37,43 @@ export type WebshopPriceRuleSection =
 /** A mezők a webshop kulcsaival és határaival, abban a sorrendben, ahogy a lap mutatja. */
 export const WEBSHOP_PRICE_RULES = [
   {
+    field: "loyaltyAccrualEnabled",
+    key: "loyalty_accrual_enabled",
+    shopField: { part: "accrual", name: "enabled" },
+    section: "accrual",
+    kind: "switch",
+    min: 0,
+    max: 1,
+    unit: "",
+    label: "Pontgyűjtés a lezárt rendelés után",
+  },
+  {
+    field: "loyaltyAccrualPercent",
+    key: "loyalty_accrual_percent",
+    shopField: { part: "accrual", name: "percent" },
+    section: "accrual",
+    kind: "number",
+    min: 0,
+    max: 100,
+    unit: "%",
+    label:
+      "A tételek bruttó értékének ennyi százaléka jár pontban (0: nem jár pont)",
+  },
+  {
+    field: "loyaltyAccrualOnSaleItems",
+    key: "loyalty_accrual_on_sale_items",
+    shopField: { part: "accrual", name: "onSaleItems" },
+    section: "accrual",
+    kind: "switch",
+    min: 0,
+    max: 1,
+    unit: "",
+    label: "Akciós áron vett tételre is jár pont",
+  },
+  {
     field: "loyaltyRedemptionEnabled",
     key: "loyalty_redemption_enabled",
-    loyaltyField: "enabled",
+    shopField: { part: "redemption", name: "enabled" },
     section: "redemption",
     kind: "switch",
     min: 0,
@@ -43,7 +84,7 @@ export const WEBSHOP_PRICE_RULES = [
   {
     field: "loyaltyPointValueHuf",
     key: "loyalty_point_value_huf",
-    loyaltyField: "value",
+    shopField: { part: "redemption", name: "value" },
     section: "redemption",
     kind: "number",
     min: 1,
@@ -54,7 +95,7 @@ export const WEBSHOP_PRICE_RULES = [
   {
     field: "loyaltyMinOrderHuf",
     key: "loyalty_min_order_huf",
-    loyaltyField: "minOrder",
+    shopField: { part: "redemption", name: "minOrder" },
     section: "redemption",
     kind: "number",
     min: 0,
@@ -66,7 +107,7 @@ export const WEBSHOP_PRICE_RULES = [
   {
     field: "loyaltyMinPoints",
     key: "loyalty_min_points",
-    loyaltyField: "minPoints",
+    shopField: { part: "redemption", name: "minPoints" },
     section: "redemption",
     kind: "number",
     min: 1,
@@ -77,7 +118,7 @@ export const WEBSHOP_PRICE_RULES = [
   {
     field: "loyaltyMaxPercent",
     key: "loyalty_max_percent",
-    loyaltyField: "maxPercent",
+    shopField: { part: "redemption", name: "maxPercent" },
     section: "redemption",
     kind: "number",
     min: 1,
@@ -88,7 +129,7 @@ export const WEBSHOP_PRICE_RULES = [
   {
     field: "omnibusMinHistoryDays",
     key: "omnibus_min_history_days",
-    loyaltyField: null,
+    shopField: null,
     section: "omnibus",
     kind: "number",
     min: 15,

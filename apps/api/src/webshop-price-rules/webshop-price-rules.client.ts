@@ -7,13 +7,21 @@ import type { MedusaCommerceSetting } from "../webshop-shipping-settings/webshop
 export type MedusaLoyaltyField =
   "enabled" | "value" | "minOrder" | "minPoints" | "maxPercent";
 
+/** The accrual's fields as the shop names them in the same answer's `accrual` part (commerce #882). */
+export type MedusaLoyaltyAccrualField = "enabled" | "percent" | "onSaleItems";
+
 /**
  * What the shop's checkout actually uses for the redemption, and where each value comes from: `row`, `env`, `default`,
  * `row_invalid`, `read_failed` (commerce #881, `GET /admin/loyalty-settings`). `enabled` is a boolean, the rest numbers.
+ * `accrual` is the same for the points earned (commerce #882; no environment source); a shop from before #882 has none.
  */
 export type MedusaLoyaltySettings = {
   settings: Record<MedusaLoyaltyField, number | boolean>;
   sources: Record<MedusaLoyaltyField, string>;
+  accrual?: {
+    settings: Record<MedusaLoyaltyAccrualField, number | boolean>;
+    sources: Record<MedusaLoyaltyAccrualField, string>;
+  };
 };
 
 /** The calls the price rules need from the Medusa admin: one setting key read and written at a time, and the redemption as used. */
