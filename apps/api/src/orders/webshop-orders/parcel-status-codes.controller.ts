@@ -9,7 +9,10 @@ import { ParcelStatusCodesService } from "./parcel-status-codes.service.js";
 /**
  * THE CARRIERS' STATUS CODES ON REAL PARCELS, READ ONLY (cards ef84489d and 17fe0cfd). A POST, because it calls the
  * carrier: one tracking call per parcel, nothing written here or there. Codes and counts only (see
- * `parcel-status-codes.ts`). Behind the same permission as the sync's status (`health/parcel-status-sync`).
+ * `parcel-status-codes.ts`).
+ *
+ * BEHIND `orders.manage`, NOT A VIEW PERMISSION (barracuda, #2823): one request can start up to 50 calls to the
+ * carrier's live system, so it takes the permission that may already make a parcel there (`POST :id/parcel`).
  */
 @Controller("parcel-status-codes")
 export class ParcelStatusCodesController {
@@ -17,7 +20,7 @@ export class ParcelStatusCodesController {
 
   @Post("observe")
   @HttpCode(200)
-  @RequirePermissions(PERMISSIONS.INVENTORY_VIEW)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
   observe(
     @Query() query: ParcelStatusCodesObserveQueryDto,
   ): Promise<ParcelStatusCodeObservation> {

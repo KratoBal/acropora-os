@@ -51,6 +51,8 @@ export async function newestSettledParcelNumbers(
 /**
  * The read-only status code observer (cards ef84489d and 17fe0cfd). One run at a time, and only against a real
  * carrier system: in stub mode the stub's own codes would come back, which look like an answer and are not one.
+ * The run lock is this process's own (barracuda, #2823): with one API instance, as today, that is one run at a
+ * time; with several, each would take its own.
  */
 @Injectable()
 export class ParcelStatusCodesService {
