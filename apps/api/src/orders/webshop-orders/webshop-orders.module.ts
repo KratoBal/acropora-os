@@ -27,6 +27,8 @@ import { WebshopOrdersController } from "./webshop-orders.controller.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
 import { WebshopParcelStatusHealthController } from "./webshop-parcel-status-health.controller.js";
+import { ParcelStatusCodesController } from "./parcel-status-codes.controller.js";
+import { ParcelStatusCodesService } from "./parcel-status-codes.service.js";
 import { WebshopParcelStatusScheduler } from "./webshop-parcel-status.scheduler.js";
 import { WebshopParcelStatusService } from "./webshop-parcel-status.service.js";
 import { WebshopProblemReportPullScheduler } from "./webshop-problem-report-pull.scheduler.js";
@@ -50,11 +52,13 @@ import { WebshopMailOutboxService } from "./webshop-mail-outbox.service.js";
     WebshopOrderShortagesController,
     WebshopMailOutboxController,
     WebshopParcelStatusHealthController,
+    ParcelStatusCodesController,
   ],
   providers: [
     WebshopOrdersService,
     WebshopParcelStatusService,
     WebshopParcelStatusScheduler,
+    ParcelStatusCodesService,
     WebshopProblemReportPullService,
     WebshopProblemReportPullScheduler,
     WebshopWithdrawalPullService,
