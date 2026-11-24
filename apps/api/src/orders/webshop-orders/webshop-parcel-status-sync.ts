@@ -131,7 +131,56 @@ export interface ParcelStatusSyncReport {
   truncated: boolean;
 }
 
-const errorCode = (error: unknown): string => {
+/** The (code, short description) pairs seen so far, each counted once per parcel. */
+export type ObservedTally = Map<
+  string,
+  { code: string; description: string; parcels: number }
+>;
+
+/** Adds one parcel's events to the tally: a pair counts once per parcel, however often the parcel repeats it. */
+export function tallyParcelEvents(
+  seen: ObservedTally,
+  events: readonly TrackingEvent[],
+): void {
+  const pairs = new Set<string>();
+  for (const event of events) {
+    const description = shortDescription(event.statusText);
+    const key = `${event.status}\u0000${description}`;
+    if (pairs.has(key)) continue;
+    pairs.add(key);
+    const entry = seen.get(key) ?? {
+      code: event.status,
+      description,
+      parcels: 0,
+    };
+    entry.parcels += 1;
+    seen.set(key, entry);
+  }
+}
+
+/**
+ * The tally as it may be shown: a description only where it repeats on `OBSERVED_DESCRIPTION_MIN_PARCELS` parcels,
+ * the rest counted under their code with no text; most parcels first. One rule for the sync and the code observer
+ * (`parcel-status-codes.ts`), so a recipient's name never reaches either.
+ */
+export function observedFromTally(
+  seen: ObservedTally,
+): ParcelStatusSyncReport["observed"] {
+  const shown: ParcelStatusSyncReport["observed"] = [];
+  const hidden = new Map<string, number>();
+  for (const entry of seen.values()) {
+    if (entry.parcels >= OBSERVED_DESCRIPTION_MIN_PARCELS) shown.push(entry);
+    else hidden.set(entry.code, (hidden.get(entry.code) ?? 0) + entry.parcels);
+  }
+  for (const [code, parcels] of hidden)
+    shown.push({ code, description: "", parcels });
+  return shown.sort(
+    (a, b) => b.parcels - a.parcels || a.code.localeCompare(b.code),
+  );
+}
+
+/** A carrier or shop failure as a short code (the carrier error's code, or the HTTP status): never a message. */
+export const parcelErrorCode = (error: unknown): string => {
   if (error && typeof error === "object") {
     const code = (error as { code?: unknown }).code;
     if (typeof code === "string" && /^[A-Z0-9_]+$/.test(code)) return code;
@@ -169,28 +218,12 @@ export async function syncParcelStatuses(
     notifyCustomer,
     truncated,
   };
-  const seen = new Map<
-    string,
-    { code: string; description: string; parcels: number }
-  >();
+  const seen: ObservedTally = new Map();
   for (const orderId of orderIds) {
     report.checked += 1;
     try {
       const events = await deps.tracking(orderId);
-      const pairs = new Set<string>();
-      for (const event of events) {
-        const description = shortDescription(event.statusText);
-        const key = `${event.status}\u0000${description}`;
-        if (pairs.has(key)) continue;
-        pairs.add(key);
-        const entry = seen.get(key) ?? {
-          code: event.status,
-          description,
-          parcels: 0,
-        };
-        entry.parcels += 1;
-        seen.set(key, entry);
-      }
+      tallyParcelEvents(seen, events);
       const delivered =
         codes.size > 0 && events.some((event) => codes.has(event.status));
       if (!delivered) {
@@ -213,20 +246,10 @@ export async function syncParcelStatuses(
       await deps.transition(orderId, "closed", notifyCustomer);
       report.closed.push(orderId);
     } catch (error) {
-      report.failed.push({ orderId, error: errorCode(error) });
+      report.failed.push({ orderId, error: parcelErrorCode(error) });
     }
   }
-  const shown: ParcelStatusSyncReport["observed"] = [];
-  const hidden = new Map<string, number>();
-  for (const entry of seen.values()) {
-    if (entry.parcels >= OBSERVED_DESCRIPTION_MIN_PARCELS) shown.push(entry);
-    else hidden.set(entry.code, (hidden.get(entry.code) ?? 0) + entry.parcels);
-  }
-  for (const [code, parcels] of hidden)
-    shown.push({ code, description: "", parcels });
-  report.observed = shown.sort(
-    (a, b) => b.parcels - a.parcels || a.code.localeCompare(b.code),
-  );
+  report.observed = observedFromTally(seen);
   return report;
 }
 

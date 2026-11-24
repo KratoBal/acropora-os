@@ -37,6 +37,8 @@ const CONTROLLERS = [
   "src/operations-log/operations-partner.controller.ts",
   "src/operations-log/operations-log.controller.ts",
   "src/worksheets/worksheets.controller.ts",
+  // The carriers' status code observer (cards ef84489d, 17fe0cfd): it calls the carrier, behind inventory.view.
+  "src/orders/webshop-orders/parcel-status-codes.controller.ts",
   "src/suppliers/suppliers.controller.ts",
   /*
     A TERMEK-MODUL VEZERLOI, 2026-09-07-tol.
