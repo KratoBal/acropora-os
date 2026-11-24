@@ -2604,6 +2604,21 @@ function OrderBody({
                     </span>
                   </Field>
                 ) : null}
+                {order.manualRefund ? (
+                  <p
+                    role="alert"
+                    data-testid="manual-refund-notice"
+                    className="rounded-lg bg-pilot-red-50 p-3 text-sm text-pilot-red-700"
+                  >
+                    Kézi visszatérítés kell: {money(order.manualRefund.amount)}.
+                    A sikertelen lezáráskor a pont és az ajándékkártya
+                    visszajárt, de a kártyán rögzített összeget a rendszer nem
+                    térítette vissza (a feladott csomag miatt a rendelés nem
+                    mondható le). Térítsd vissza a kártyás összeget a webshop
+                    adminjában: onnan megy a Stripe-ba, és a jelzés is onnan
+                    tűnik el.
+                  </p>
+                ) : null}
                 {order.cardPayment ? (
                   <CardPaymentSection
                     order={order}

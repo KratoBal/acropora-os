@@ -1800,6 +1800,31 @@ describe("WebshopOrderDetailPage", () => {
     },
   });
 
+  it("a closed-unsuccessfully order with a captured card amount nobody refunded says so, with the amount (card 527ba41e)", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      cardPayment: null,
+      manualRefund: {
+        amount: 40700,
+        creditLines: 1,
+        at: "2026-11-24T20:11:59.000Z",
+      },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const notice = await screen.findByTestId("manual-refund-notice");
+    expect(notice.getAttribute("role")).toBe("alert");
+    expect(notice.textContent).toMatch(/Kézi visszatérítés kell/);
+    expect(notice.textContent).toMatch(/40\s?700/);
+    expect(notice.textContent).toMatch(/nem térítette vissza/);
+  });
+
+  it("an order with nothing to refund by hand shows no such notice", async () => {
+    api.detail.mockResolvedValue({ ...detail, manualRefund: null });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    await screen.findByRole("region", { name: "Fizetés" });
+    expect(screen.queryByTestId("manual-refund-notice")).toBeNull();
+  });
+
   it("warns from the 5th day, and Csúszik a szállítás asks first, then releases with the notify choice", async () => {
     api.detail.mockResolvedValue(card({}));
     api.releaseHold.mockResolvedValue({

@@ -9,6 +9,8 @@ import {
   addressOf,
   historyOf,
   linesOf,
+  manualRefundOf,
+  outstandingCapturedOf,
   shippingOf,
   stepsOf,
   TRANSFER_INVOICE_STEP,
@@ -586,5 +588,137 @@ describe("the GLS point's kind", () => {
       }),
       "FOXPOST automata",
     );
+  });
+});
+
+/*
+  A KÉZI KÁRTYA-VISSZATÉRÍTÉS JELZÉSE (kártya 527ba41e; commerce #895). MI PIROSÍT: a sikertelen lezárás nyoma a rendelés metaadatán nem
+  jut el az adatlapra, így a vissza nem térített, rögzített kártyás összegről csak egy naplósor szól; jelzés nulla vagy hiányzó összegnél
+  (nyom nélküli, régi vagy pont-only rendelésen); a nyom hibás alakja kivételt dob az adatlapra; az összeg nem a nyomé.
+*/
+describe("the manual refund notice", () => {
+  const mark = (over: Record<string, unknown> = {}) => ({
+    unsuccessful_close_credits_given_back: {
+      credit_lines: 1,
+      captured_unrefunded: 40700,
+      at: "2026-11-24T20:11:59.000Z",
+      ...over,
+    },
+  });
+
+  it("carries the captured, unrefunded amount from the order's metadata to the detail", () => {
+    assert.deepEqual(manualRefundOf(mark()), {
+      amount: 40700,
+      creditLines: 1,
+      at: "2026-11-24T20:11:59.000Z",
+    });
+    const result = toDetail({
+      order: order({
+        metadata: mark(),
+        payment_collections: [
+          {
+            status: "captured",
+            amount: 40700,
+            authorized_amount: 40700,
+            captured_amount: 40700,
+            refunded_amount: null,
+            payments: [],
+          },
+        ],
+      } as never),
+      status: status("closed_unsuccessfully"),
+      facts: NO_FACTS,
+      customerOrderCount: 1,
+      relatedDisplayId: null,
+      now: NOW,
+    });
+    assert.deepEqual(result.manualRefund, {
+      amount: 40700,
+      creditLines: 1,
+      at: "2026-11-24T20:11:59.000Z",
+    });
+  });
+
+  it("is null without a trace, with a zero or a broken amount: nothing to refund by hand", () => {
+    assert.equal(manualRefundOf(null), null);
+    assert.equal(manualRefundOf(undefined), null);
+    assert.equal(manualRefundOf({}), null);
+    assert.equal(
+      manualRefundOf({ unsuccessful_close_credits_given_back: "x" }),
+      null,
+    );
+    assert.equal(manualRefundOf(mark({ captured_unrefunded: 0 })), null);
+    assert.equal(manualRefundOf(mark({ captured_unrefunded: -5 })), null);
+    assert.equal(
+      manualRefundOf(mark({ captured_unrefunded: "nem szám" })),
+      null,
+    );
+    assert.equal(detail().manualRefund, null);
+  });
+
+  it("tolerates a trace without the time or the credit lines", () => {
+    assert.deepEqual(
+      manualRefundOf({
+        unsuccessful_close_credits_given_back: { captured_unrefunded: 1200 },
+      }),
+      { amount: 1200, creditLines: 0, at: null },
+    );
+  });
+
+  it("the notice goes away when the refund is made through the shop: the amount is the smaller of the mark and what is still outstanding (barracuda, OS #2833)", () => {
+    const m = mark();
+    assert.equal(manualRefundOf(m, 40700)?.amount, 40700);
+    assert.equal(manualRefundOf(m, 10000)?.amount, 10000);
+    assert.equal(manualRefundOf(m, 0), null);
+    assert.equal(manualRefundOf(m, -5), null);
+    // the figures not readable: the mark's amount stays
+    assert.equal(manualRefundOf(m, null)?.amount, 40700);
+    assert.equal(manualRefundOf(m)?.amount, 40700);
+    // an outstanding larger than the mark does not raise it
+    assert.equal(manualRefundOf(m, 99999)?.amount, 40700);
+  });
+
+  it("outstandingCapturedOf is captured minus refunded over the shop's payments, null when there are none", () => {
+    assert.equal(outstandingCapturedOf(undefined), null);
+    assert.equal(outstandingCapturedOf([]), null);
+    assert.equal(
+      outstandingCapturedOf([
+        { captured_amount: 40700, refunded_amount: null },
+      ] as never),
+      40700,
+    );
+    assert.equal(
+      outstandingCapturedOf([
+        { captured_amount: 40700, refunded_amount: 40700 },
+      ] as never),
+      0,
+    );
+  });
+
+  it("through toDetail: a fully refunded payment clears the notice, a still captured one keeps it", () => {
+    const run = (refunded: number | null) =>
+      toDetail({
+        order: order({
+          metadata: mark(),
+          payment_collections: [
+            {
+              status: "captured",
+              amount: 40700,
+              authorized_amount: 40700,
+              captured_amount: 40700,
+              refunded_amount: refunded,
+              payments: [],
+            },
+          ],
+        } as never),
+        status: status("closed_unsuccessfully"),
+        facts: NO_FACTS,
+        customerOrderCount: 1,
+        relatedDisplayId: null,
+        now: NOW,
+      }).manualRefund;
+    assert.equal(run(null)?.amount, 40700);
+    assert.equal(run(40700), null);
+    assert.equal(run(700)?.amount, 40000);
   });
 });

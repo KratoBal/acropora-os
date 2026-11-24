@@ -418,6 +418,58 @@ export function unfinishedSplitOf(
   return null;
 }
 
+/**
+ * A KÉZI KÁRTYA-VISSZATÉRÍTÉS JELZÉSE (kártya 527ba41e). A webshop a sikertelen lezáráskor, ha a rendelést nem tudja lemondani (feladott
+ * csomag: nyitott fulfillment), a pontot és az ajándékkártyát közvetlenül adja vissza, és a rendelés metaadatán nyomot hagy
+ * (`unsuccessful_close_credits_given_back`: `credit_lines`, `captured_unrefunded`, `at`). A kártyán rögzített összeget ilyenkor senki nem
+ * téríti vissza, és eddig csak egy naplósor szólt róla. Itt lesz belőle a rendelés-oldal jelzése: CSAK akkor, ha tényleg van vissza nem
+ * térített rögzített összeg (> 0); a nyom nélküli vagy nulla összegű rendelés `null`.
+ *
+ * A JELZÉS ELTŰNIK, AMIKOR A TEENDŐ MEGVAN (barracuda, OS #2833): a nyom a lezárás PILLANATÁNAK összegét őrzi, ezért az összeg a webshop
+ * fizetésének mostani állásából is számolódik: a rögzített mínusz a visszatérített (`outstanding`). A jelzett összeg a kettő KISEBBIKE, és
+ * 0-nál a jelzés megszűnik. Így egy a webshopon át (a Medusa adminból) indított visszatérítés kioltja; a Stripe irányítópultján indított
+ * visszatérítést a webshop nem látja, azt egy külön „Visszatérítve” jelölés oldaná meg (külön kártya). Ha a fizetés összegei nem
+ * olvashatók (`outstanding` hiányzik), a nyom összege marad.
+ */
+export function manualRefundOf(
+  metadata: Record<string, unknown> | null | undefined,
+  outstanding?: number | null,
+): { amount: number; creditLines: number; at: string | null } | null {
+  const mark = metadata?.unsuccessful_close_credits_given_back;
+  if (!mark || typeof mark !== "object") return null;
+  const { captured_unrefunded, credit_lines, at } = mark as Record<
+    string,
+    unknown
+  >;
+  const marked = Number(captured_unrefunded);
+  if (!Number.isFinite(marked) || marked <= 0) return null;
+  const amount =
+    typeof outstanding === "number" && Number.isFinite(outstanding)
+      ? Math.min(marked, outstanding)
+      : marked;
+  if (!(amount > 0)) return null;
+  const lines = Number(credit_lines);
+  return {
+    amount,
+    creditLines: Number.isFinite(lines) && lines > 0 ? lines : 0,
+    at: typeof at === "string" ? at : null,
+  };
+}
+
+/** A webshop fizetéseinek vissza nem térített, rögzített összege; `null`: nem olvasható (nincs fizetési gyűjtemény). */
+export function outstandingCapturedOf(
+  collections: MedusaOrderDetailRow["payment_collections"] | undefined,
+): number | null {
+  if (!collections?.length) return null;
+  let captured = 0;
+  let refunded = 0;
+  for (const collection of collections) {
+    captured += Number(collection.captured_amount ?? 0);
+    refunded += Number(collection.refunded_amount ?? 0);
+  }
+  return captured - refunded;
+}
+
 export function toDetail(input: {
   order: MedusaOrderDetailRow;
   status: MedusaOrderBusinessStatus | null;
@@ -509,6 +561,10 @@ export function toDetail(input: {
     externalInvoice: input.externalInvoice ?? null,
     parcel: facts.parcel,
     cardPayment: cardPaymentOf(input.orderPayment ?? null, code, now),
+    manualRefund: manualRefundOf(
+      order.metadata,
+      outstandingCapturedOf(order.payment_collections),
+    ),
     osCustomer: input.osCustomer ?? null,
     internalNote: input.internalNote ?? null,
     notes: notesOf(order.metadata),
