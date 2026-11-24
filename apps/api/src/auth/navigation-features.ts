@@ -4,6 +4,7 @@ import { homepageProjectionAllowed } from "../homepage-content/homepage-content.
 import { couponsAllowed } from "../webshop-coupons/webshop-coupons.service.js";
 import { shippingSettingsAllowed } from "../webshop-shipping-settings/webshop-shipping-settings.service.js";
 import { priceRulesAllowed } from "../webshop-price-rules/webshop-price-rules.service.js";
+import { customerTextsAllowed } from "../webshop-customer-texts/webshop-customer-texts.service.js";
 import { giftCardsAllowed } from "../webshop-gift-cards/webshop-gift-cards.service.js";
 import {
   enrichmentAvailabilityFor,
@@ -42,6 +43,10 @@ export const NAVIGATION_ENV = Symbol("NAVIGATION_ENV");
  *                            threshold: the environment may write the test shop
  *                            (`MEDUSA_WEBSHOP_PRICE_RULES=true`). The endpoints
  *                            follow the same switch (404 off).
+ *   webshop-customer-texts   the web shop's customer texts: the environment may
+ *                            write the test shop's overrides
+ *                            (`MEDUSA_WEBSHOP_CUSTOMER_TEXTS=true`). The endpoints
+ *                            follow the same switch (404 off).
  *   webshop-gift-cards       the web shop's gift cards: issuing, the list, the
  *                            ledger, disabling (`MEDUSA_WEBSHOP_GIFT_CARDS=true`).
  *                            The endpoints follow the same switch (404 off).
@@ -59,6 +64,7 @@ export function navigationFeatures(
   if (couponsAllowed(env)) features.add("webshop-coupons");
   if (shippingSettingsAllowed(env)) features.add("webshop-shipping-settings");
   if (priceRulesAllowed(env)) features.add("webshop-price-rules");
+  if (customerTextsAllowed(env)) features.add("webshop-customer-texts");
   if (giftCardsAllowed(env)) features.add("webshop-gift-cards");
   return features;
 }
