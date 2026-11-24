@@ -226,6 +226,7 @@ const detail: WebshopOrderDetail = {
     discount: 0,
     shipping: 1490,
     codFee: 450,
+    credits: [],
     total: 20840,
   },
   payment: {
@@ -377,6 +378,53 @@ describe("WebshopOrderDetailPage", () => {
     expect(
       screen.getByRole("link", { name: "Hívás" }).getAttribute("href"),
     ).toBe("tel:+36305550137");
+  });
+
+  it("shows every credit between the totals, so the rows add up to the total (card e62a1a64)", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      totals: {
+        ...detail.totals,
+        credits: [
+          {
+            id: "cl_p",
+            kind: "loyalty",
+            label: "Hűségpont",
+            amount: 400,
+            points: 400,
+          },
+          {
+            id: "cl_g",
+            kind: "gift_card",
+            label: "Ajándékkártya",
+            amount: 5000,
+            points: null,
+          },
+        ],
+        total: 15440,
+      },
+    });
+    api.shortages.mockResolvedValue([]);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    await screen.findByRole("heading", { name: "#38" });
+    const labels = (await screen.findAllByTestId("order-credit-label")).map(
+      (node) => node.textContent,
+    );
+    const amounts = screen
+      .getAllByTestId("order-credit-amount")
+      .map((node) => node.textContent?.replace(/\s/g, " "));
+    expect(labels).toEqual(["Hűségpont (400 pont)", "Ajándékkártya"]);
+    expect(amounts).toHaveLength(2);
+    expect(amounts[0]).toMatch(/^−.*400/);
+    expect(amounts[1]).toMatch(/^−.*5\s?000/);
+  });
+
+  it("an order without a credit shows no credit row", async () => {
+    api.detail.mockResolvedValue(detail);
+    api.shortages.mockResolvedValue([]);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    await screen.findByRole("heading", { name: "#38" });
+    expect(screen.queryAllByTestId("order-credit-label")).toHaveLength(0);
   });
 
   it("carries the stock shortage card under the lines, loaded for this order", async () => {

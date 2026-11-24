@@ -26,6 +26,7 @@ import {
 } from "./webshop-order-address.rules.js";
 import { cardPaymentOf } from "./webshop-order-card-payment.rules.js";
 import { lineEditRefusal } from "./webshop-order-lines.rules.js";
+import { orderCreditsOf } from "./webshop-order-credits.rules.js";
 import {
   isStorePickupMethod,
   storePickupOptionIdFrom,
@@ -495,6 +496,7 @@ export function toDetail(input: {
       discount: Number(order.discount_total ?? 0),
       shipping: Number(order.shipping_total ?? 0),
       codFee: feeTotal,
+      credits: orderCreditsOf(order),
       total,
     },
     payment,

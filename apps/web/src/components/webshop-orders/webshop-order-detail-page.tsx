@@ -42,7 +42,13 @@ import {
   type WebshopInvoiceSummary,
 } from "@acropora/types";
 import Link from "next/link";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import {
   PilotButton,
@@ -2521,6 +2527,25 @@ function OrderBody({
                 <dd className="text-right">{money(order.totals.shipping)}</dd>
                 <dt className="text-pilot-grey-500">Utánvét kezelési díj</dt>
                 <dd className="text-right">{money(order.totals.codFee)}</dd>
+                {/* A JÓVÁÍRÁSOK (kártya e62a1a64): a beváltott pont és az ajándékkártya a végösszeget csökkenti, enélkül a sorok nem adják ki */}
+                {order.totals.credits.map((credit) => (
+                  <Fragment key={credit.id}>
+                    <dt
+                      className="text-pilot-grey-500"
+                      data-testid="order-credit-label"
+                    >
+                      {credit.points
+                        ? `${credit.label} (${credit.points} pont)`
+                        : credit.label}
+                    </dt>
+                    <dd
+                      className="text-right"
+                      data-testid="order-credit-amount"
+                    >
+                      {`−${money(credit.amount)}`}
+                    </dd>
+                  </Fragment>
+                ))}
                 <dt className="pt-2 font-semibold text-pilot-grey-900">
                   Végösszeg
                 </dt>

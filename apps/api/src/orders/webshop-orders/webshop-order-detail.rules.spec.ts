@@ -206,6 +206,7 @@ describe("the detail", () => {
       discount: 0,
       shipping: 1490,
       codFee: 450,
+      credits: [],
       total: 26390,
     });
     assert.deepEqual(

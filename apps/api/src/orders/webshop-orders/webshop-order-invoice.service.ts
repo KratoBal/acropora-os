@@ -41,6 +41,7 @@ import {
   proformaDraftOf,
   proformaRefusal,
 } from "./webshop-order-invoice.rules.js";
+import { loyaltyInvoiceShapeOf } from "./webshop-order-credits.rules.js";
 import {
   BANK_TRANSFER_PROVIDER_ID,
   orderPaymentProviderId,
@@ -205,7 +206,11 @@ export class WebshopOrderInvoiceService {
       throw new ConflictException("A rendelés OS-partnere nem található.");
     const mismatch = buyerMismatch(order, buyer);
     if (mismatch) throw new ConflictException(mismatch);
-    const draft = proformaDraftOf(order, { customerId, now });
+    const draft = proformaDraftOf(order, {
+      customerId,
+      now,
+      loyaltyShape: loyaltyInvoiceShapeOf(),
+    });
     if (!draft.ok) throw new UnprocessableEntityException(draft.message);
     const saved: BillingDocumentDetail = proforma
       ? await this.documents.update(
@@ -487,7 +492,11 @@ export class WebshopOrderInvoiceService {
       throw new ConflictException("A rendelés OS-partnere nem található.");
     const mismatch = buyerMismatch(order, buyer);
     if (mismatch) throw new ConflictException(mismatch);
-    const draft = invoiceDraftOf(order, { customerId, now });
+    const draft = invoiceDraftOf(order, {
+      customerId,
+      now,
+      loyaltyShape: loyaltyInvoiceShapeOf(),
+    });
     if (!draft.ok) throw new UnprocessableEntityException(draft.message);
 
     const saved: BillingDocumentDetail = existing
