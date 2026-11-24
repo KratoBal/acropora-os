@@ -2470,6 +2470,7 @@ export type {
   WebshopPriceRules,
   WebshopPriceRulesParse,
   WebshopPriceRuleSection,
+  WebshopPriceRuleSource,
   WebshopPriceRuleValues,
 } from "./webshop-price-rules.js";
 export {

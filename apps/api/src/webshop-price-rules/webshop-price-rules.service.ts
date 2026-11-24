@@ -15,18 +15,18 @@ import { MedusaAdminHttpError } from "../integrations/medusa/medusa-admin.client
 import { MedusaConnectionError } from "../integrations/medusa/medusa-connection.types.js";
 import { describeCredentialFailure } from "../integrations/medusa/medusa-projection.credentials.js";
 import { medusaMessage } from "../webshop-coupons/webshop-coupons.service.js";
-import type { MedusaShippingSettingsClient } from "../webshop-shipping-settings/webshop-shipping-settings.client.js";
-import { settingAmount } from "../webshop-shipping-settings/webshop-shipping-settings.rules.js";
+import type { PriceRulesClient } from "./webshop-price-rules.client.js";
 import { toPriceRules } from "./webshop-price-rules.rules.js";
+
+/** The rule read by its own setting key, not from the redemption's answer: the Omnibus threshold (it has no environment source). */
+const OMNIBUS_KEY = WEBSHOP_PRICE_RULES.find(
+  (rule) => rule.loyaltyField === null,
+)!.key;
 
 export const PRICE_RULES_CLIENT = Symbol("PRICE_RULES_CLIENT");
 export const PRICE_RULES_ENVIRONMENT = Symbol("PRICE_RULES_ENVIRONMENT");
 
-/** The two calls these rules need: one `commerce-settings` key read and written at a time (the shipping settings' client). */
-export type PriceRulesClient = Pick<
-  MedusaShippingSettingsClient,
-  "getSetting" | "setSetting"
->;
+export type { PriceRulesClient } from "./webshop-price-rules.client.js";
 /** A kliens gyára: a tárolt hitelesítő adatot csak akkor oldja fel, ha tényleg kell (a kapcsoló be van kapcsolva). */
 export type PriceRulesClientFactory = () => Promise<PriceRulesClient>;
 
@@ -90,11 +90,11 @@ export class WebshopPriceRulesService {
   }
 
   private async read(client: PriceRulesClient): Promise<WebshopPriceRules> {
-    return toPriceRules(
-      await Promise.all(
-        WEBSHOP_PRICE_RULES.map(({ key }) => client.getSetting(key)),
-      ),
-    );
+    const [loyalty, omnibus] = await Promise.all([
+      client.getLoyaltySettings(),
+      client.getSetting(OMNIBUS_KEY),
+    ]);
+    return toPriceRules(loyalty, omnibus);
   }
 
   async get(): Promise<WebshopPriceRules> {
@@ -103,8 +103,11 @@ export class WebshopPriceRulesService {
   }
 
   /**
-   * Az értékek mentése: csak a megváltozottak (vagy az alapértéken állók) mennek, egyenként (a webshop kulcsonként tárol). Ha
-   * egy közben elbukik, a korábbiak már mentve vannak: a hiba megy vissza, és a lap újraolvasva a tényleges állapotot mutatja.
+   * CSAK AZT ÍRJA, AMIT VALAKI MEGVÁLTOZTATOTT (barracuda, #2824). A mentés előtt újraolvassa, amit a webshop használ, és csak
+   * az attól eltérő mezőt írja, kulcsonként. Egy környezetből (`LOYALTY_*`) vagy alapértékből jövő érték így nem kap tárolt
+   * sort csak azért, mert valaki egy MÁSIK mezőt mentett: a tárolt sor a környezet fölött nyer, és például a teszt kirakat
+   * környezetből bekapcsolt beváltását csendben kikapcsolná. Ha egy írás közben elbukik, a korábbiak már mentve vannak: a hiba
+   * megy vissza, és a lap újraolvasva a tényleges állapotot mutatja.
    */
   async save(raw: unknown): Promise<WebshopPriceRules> {
     this.requireAllowed();
@@ -115,12 +118,9 @@ export class WebshopPriceRulesService {
         errors: parsed.errors,
       });
     return this.call(async (client) => {
+      const shown = await this.read(client);
       for (const { field, key } of WEBSHOP_PRICE_RULES) {
-        const current = await client.getSetting(key);
-        if (
-          settingAmount(current) !== parsed.value[field] ||
-          current.is_configured === false
-        )
+        if (parsed.value[field] !== shown.values[field])
           await client.setSetting(key, parsed.value[field]);
       }
       return this.read(client);

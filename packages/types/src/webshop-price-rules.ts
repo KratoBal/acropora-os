@@ -1,8 +1,13 @@
 /**
  * A WEBSHOP HŰSÉGPONT- ÉS ÁRSZABÁLYAI AZ OS-BŐL (acrobot 60467; Balázs, 2026-11-24: „minden szám és kapcsoló adminból állítható”).
- * A webshopban mind `commerce-settings` kulcs (commerce #880 az Omnibus-küszöb, #881 a hűségpont beváltása); ez az OS felülete
- * hozzájuk, ugyanazon az úton, mint a szállítási díjaké (`webshop-shipping-settings.ts`). A határok a webshopéval egyeznek:
- * ott a döntő ellenőrzés, itt az űrlapé, hogy a hiba már a mentés előtt látsszon.
+ * A webshopban mind `commerce-settings` kulcs (commerce #880 az Omnibus-küszöb, #881 a hűségpont beváltása); ide ezekbe ír az
+ * OS. A határok a webshopéval egyeznek: ott a döntő ellenőrzés, itt az űrlapé, hogy a hiba már a mentés előtt látsszon.
+ *
+ * A BEVÁLTÁS ÉRTÉKEI NEM CSAK A TÁROLT SORBÓL JÖNNEK (barracuda, #2824): a webshop mezőnként a tárolt sort, aztán a környezetet
+ * (`LOYALTY_*`, így van bekapcsolva a teszt kirakat), aztán az alapértéket nézi. Ezért az öt beváltási mező a webshop
+ * `GET /admin/loyalty-settings` válaszából jön, a forrással együtt (`loyaltyField` a válasz mezője), és a mentés csak azt
+ * írja, amit valaki a mutatott értékhez képest megváltoztatott: egy környezetből jövő érték így nem íródik felül egy olyan
+ * sorral, amit senki nem kért.
  */
 
 export const WEBSHOP_PRICE_RULE_SECTIONS = [
@@ -27,6 +32,7 @@ export const WEBSHOP_PRICE_RULES = [
   {
     field: "loyaltyRedemptionEnabled",
     key: "loyalty_redemption_enabled",
+    loyaltyField: "enabled",
     section: "redemption",
     kind: "switch",
     min: 0,
@@ -37,6 +43,7 @@ export const WEBSHOP_PRICE_RULES = [
   {
     field: "loyaltyPointValueHuf",
     key: "loyalty_point_value_huf",
+    loyaltyField: "value",
     section: "redemption",
     kind: "number",
     min: 1,
@@ -47,6 +54,7 @@ export const WEBSHOP_PRICE_RULES = [
   {
     field: "loyaltyMinOrderHuf",
     key: "loyalty_min_order_huf",
+    loyaltyField: "minOrder",
     section: "redemption",
     kind: "number",
     min: 0,
@@ -58,6 +66,7 @@ export const WEBSHOP_PRICE_RULES = [
   {
     field: "loyaltyMinPoints",
     key: "loyalty_min_points",
+    loyaltyField: "minPoints",
     section: "redemption",
     kind: "number",
     min: 1,
@@ -68,6 +77,7 @@ export const WEBSHOP_PRICE_RULES = [
   {
     field: "loyaltyMaxPercent",
     key: "loyalty_max_percent",
+    loyaltyField: "maxPercent",
     section: "redemption",
     kind: "number",
     min: 1,
@@ -78,6 +88,7 @@ export const WEBSHOP_PRICE_RULES = [
   {
     field: "omnibusMinHistoryDays",
     key: "omnibus_min_history_days",
+    loyaltyField: null,
     section: "omnibus",
     kind: "number",
     min: 15,
@@ -96,10 +107,17 @@ export type WebshopPriceRuleValues = Record<
   number | null
 >;
 
+/**
+ * HONNAN JÖN A MUTATOTT ÉRTÉK (a webshop szavai, commerce #881): `row` valaki tárolta, `env` a webshop környezete, `default`
+ * senki nem állította, `row_invalid` van tárolt sor, de a határokon kívül esik, ezért a webshop a környezetét vagy az
+ * alapértékét használja, `read_failed` a beállítások olvasása elbukott (a kapcsoló ilyenkor KI).
+ */
+export type WebshopPriceRuleSource =
+  "row" | "env" | "default" | "row_invalid" | "read_failed";
+
 export type WebshopPriceRules = {
   values: WebshopPriceRuleValues;
-  /** A mezők, amelyeknél a webshop a saját alapértékét használja (nincs tárolt sor). */
-  defaults: WebshopPriceRuleField[];
+  sources: Record<WebshopPriceRuleField, WebshopPriceRuleSource>;
 };
 
 export type WebshopPriceRulesParse =

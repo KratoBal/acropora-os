@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 
-import { shippingSettingsClientFactory } from "../webshop-shipping-settings/webshop-shipping-settings.module.js";
+import { priceRulesClientFromStoredCredential } from "./webshop-price-rules.client.js";
 import { WebshopPriceRulesController } from "./webshop-price-rules.controller.js";
 import {
   PRICE_RULES_CLIENT,
@@ -9,9 +9,9 @@ import {
   type PriceRulesClientFactory,
 } from "./webshop-price-rules.service.js";
 
-/** The same client as the shipping settings': the stored Medusa credential, resolved per call. */
-const priceRulesClientFactory: PriceRulesClientFactory =
-  shippingSettingsClientFactory;
+/** The stored Medusa credential, resolved per call, as the shipping settings do it. */
+const priceRulesClientFactory: PriceRulesClientFactory = () =>
+  priceRulesClientFromStoredCredential();
 
 @Module({
   controllers: [WebshopPriceRulesController],

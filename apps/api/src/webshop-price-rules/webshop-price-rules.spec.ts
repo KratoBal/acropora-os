@@ -5,63 +5,71 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import { WEBSHOP_PRICE_RULES } from "@acropora/types";
 
 import { MedusaAdminHttpError } from "../integrations/medusa/medusa-admin.client.js";
 import type { MedusaCommerceSetting } from "../webshop-shipping-settings/webshop-shipping-settings.client.js";
+import type {
+  MedusaLoyaltySettings,
+  PriceRulesClient,
+} from "./webshop-price-rules.client.js";
 import { toPriceRules } from "./webshop-price-rules.rules.js";
-import {
-  WebshopPriceRulesService,
-  type PriceRulesClient,
-} from "./webshop-price-rules.service.js";
+import { WebshopPriceRulesService } from "./webshop-price-rules.service.js";
 
 /*
   A WEBSHOP HŰSÉGPONT- ÉS ÁRSZABÁLYAI (acrobot 60467; commerce #880, #881). MI PIROSÍT: kapcsoló nélkül a webshophoz nyúl; a
-  tárolt szöveg vagy az alapérték nem számként jön vissza; egy határon kívüli tárolt érték számként jelenik meg (a lap egy
-  olyan számot mutatna, amit a webshop nem fogadna el); a mentés a változatlan értékeket is újraírja, vagy egy alapértéket nem
-  rögzít; hibás bemenet a webshopig jut; egy régebbi webshop (404) "nincs ilyen" hibának látszik; a webshop elutasítása nem a
-  webshop szavával jön vissza.
+  beváltás nem azt mutatja, amit a webshop használ (a teszt kirakaton a környezet kapcsolja be: barracuda, #2824); a forrás
+  elvész; egy határon kívüli érték számként jelenik meg; a mentés olyan mezőt is ír, amit senki nem változtatott meg (egy
+  környezetből jövő bekapcsolást így csendben kikapcsolna); hibás bemenet a webshopig jut; egy régebbi webshop (404) "nincs
+  ilyen" hibának látszik; a webshop elutasítása nem a webshop szavával jön vissza.
 */
 
-const stored = (key: string, value: string): MedusaCommerceSetting => ({
-  key,
-  value,
-  is_configured: true,
+/** The test shop as barracuda measured it: the redemption switched on by `LOYALTY_REDEMPTION_ENABLED=true`, one stored row. */
+const testShopLoyalty = (): MedusaLoyaltySettings => ({
+  settings: {
+    enabled: true,
+    value: 1,
+    minOrder: 30000,
+    minPoints: 100,
+    maxPercent: 40,
+  },
+  sources: {
+    enabled: "env",
+    value: "default",
+    minOrder: "default",
+    minPoints: "default",
+    maxPercent: "row",
+  },
 });
-const byDefault = (key: string, value: number): MedusaCommerceSetting => ({
-  key,
-  value,
+const omnibusDefault = (): MedusaCommerceSetting => ({
+  key: "omnibus_min_history_days",
+  value: 15,
   is_default: true,
   is_configured: false,
 });
 
-/** A test shop right after #880 and #881: the switch stored on, the rest on the shop's defaults. */
-const shopSettings = (): Record<string, MedusaCommerceSetting> => ({
-  loyalty_redemption_enabled: stored("loyalty_redemption_enabled", "1"),
-  loyalty_point_value_huf: byDefault("loyalty_point_value_huf", 1),
-  loyalty_min_order_huf: byDefault("loyalty_min_order_huf", 30000),
-  loyalty_min_points: byDefault("loyalty_min_points", 100),
-  loyalty_max_percent: stored("loyalty_max_percent", "40"),
-  omnibus_min_history_days: byDefault("omnibus_min_history_days", 15),
-});
-
 function fakeClient(state: {
-  settings: Record<string, MedusaCommerceSetting>;
+  loyalty: MedusaLoyaltySettings;
+  omnibus: MedusaCommerceSetting;
   failSet?: MedusaAdminHttpError;
-  failGet?: MedusaAdminHttpError;
+  failLoyalty?: MedusaAdminHttpError;
 }) {
   const calls: string[] = [];
   const client: PriceRulesClient = {
     getSetting: async (key) => {
       calls.push(`get:${key}`);
-      if (state.failGet) throw state.failGet;
-      return state.settings[key]!;
+      return state.omnibus;
     },
     setSetting: async (key, value) => {
       calls.push(`set:${key}=${value}`);
       if (state.failSet) throw state.failSet;
-      state.settings[key] = stored(key, String(value));
-      return state.settings[key]!;
+      if (key === "omnibus_min_history_days")
+        state.omnibus = { key, value: String(value), is_configured: true };
+      return { key, value: String(value), is_configured: true };
+    },
+    getLoyaltySettings: async () => {
+      calls.push("loyalty");
+      if (state.failLoyalty) throw state.failLoyalty;
+      return state.loyalty;
     },
   };
   return { client, calls };
@@ -74,7 +82,8 @@ const service = (
   },
 ) => new WebshopPriceRulesService(async () => client, env);
 
-const input = {
+/** What the test shop shows, as the form sends it back unchanged. */
+const shown = {
   loyaltyRedemptionEnabled: 1,
   loyaltyPointValueHuf: 1,
   loyaltyMinOrderHuf: 30000,
@@ -84,80 +93,106 @@ const input = {
 };
 
 describe("toPriceRules", () => {
-  it("reads stored text and defaults as numbers, and names the fields on a default", () => {
-    const settings = shopSettings();
-    assert.deepEqual(
-      toPriceRules(WEBSHOP_PRICE_RULES.map(({ key }) => settings[key]!)),
-      {
-        values: input,
-        defaults: [
-          "loyaltyPointValueHuf",
-          "loyaltyMinOrderHuf",
-          "loyaltyMinPoints",
-          "omnibusMinHistoryDays",
-        ],
+  it("shows what the shop uses, the switch as 1, with each value's source", () => {
+    assert.deepEqual(toPriceRules(testShopLoyalty(), omnibusDefault()), {
+      values: shown,
+      sources: {
+        loyaltyRedemptionEnabled: "env",
+        loyaltyPointValueHuf: "default",
+        loyaltyMinOrderHuf: "default",
+        loyaltyMinPoints: "default",
+        loyaltyMaxPercent: "row",
+        omnibusMinHistoryDays: "default",
       },
-    );
+    });
   });
 
-  it("shows a value outside the field's bounds, or not a whole number, as not set", () => {
-    const settings: Record<string, MedusaCommerceSetting> = {
-      ...shopSettings(),
-      omnibus_min_history_days: stored("omnibus_min_history_days", "10"),
-      loyalty_max_percent: stored("loyalty_max_percent", "40.5"),
-      loyalty_min_points: {
-        key: "loyalty_min_points",
-        value: null,
-        is_configured: false,
-      },
-    };
-    const rules = toPriceRules(
-      WEBSHOP_PRICE_RULES.map(({ key }) => settings[key]!),
-    );
-    assert.equal(rules.values.omnibusMinHistoryDays, null);
+  it("a value outside the bounds is not set; an unknown source is the least it can claim; a failed read keeps its word", () => {
+    const loyalty = testShopLoyalty();
+    loyalty.settings.maxPercent = 140;
+    loyalty.settings.enabled = false;
+    loyalty.sources.enabled = "read_failed";
+    loyalty.sources.minPoints = "from_the_future";
+    const rules = toPriceRules(loyalty, {
+      key: "omnibus_min_history_days",
+      value: "10",
+      is_configured: true,
+    });
     assert.equal(rules.values.loyaltyMaxPercent, null);
-    assert.equal(rules.values.loyaltyMinPoints, null);
-    assert.ok(!rules.defaults.includes("loyaltyMinPoints"));
+    assert.equal(rules.values.loyaltyRedemptionEnabled, 0);
+    assert.equal(rules.sources.loyaltyRedemptionEnabled, "read_failed");
+    assert.equal(rules.sources.loyaltyMinPoints, "default");
+    assert.equal(rules.values.omnibusMinHistoryDays, null);
+    assert.equal(rules.sources.omnibusMinHistoryDays, "row");
   });
 });
 
 describe("WebshopPriceRulesService", () => {
   it("without the switch it touches nothing and answers 404", async () => {
-    const { client, calls } = fakeClient({ settings: shopSettings() });
+    const { client, calls } = fakeClient({
+      loyalty: testShopLoyalty(),
+      omnibus: omnibusDefault(),
+    });
     for (const env of [{}, { MEDUSA_WEBSHOP_PRICE_RULES: "1" }]) {
       await assert.rejects(service(client, env).get(), NotFoundException);
-      await assert.rejects(service(client, env).save(input), NotFoundException);
+      await assert.rejects(service(client, env).save(shown), NotFoundException);
     }
     assert.deepEqual(calls, []);
   });
 
-  it("saves only what changed, and pins the values on a default", async () => {
-    const settings = shopSettings();
-    const { client, calls } = fakeClient({ settings });
+  it("saving only the Omnibus days writes only that key: the switch on from the environment gets no row (barracuda, #2824)", async () => {
+    const { client, calls } = fakeClient({
+      loyalty: testShopLoyalty(),
+      omnibus: omnibusDefault(),
+    });
     const saved = await service(client).save({
-      ...input,
-      loyaltyMaxPercent: 50,
+      ...shown,
       omnibusMinHistoryDays: 20,
     });
     assert.deepEqual(
       calls.filter((call) => call.startsWith("set:")),
-      [
-        "set:loyalty_point_value_huf=1",
-        "set:loyalty_min_order_huf=30000",
-        "set:loyalty_min_points=100",
-        "set:loyalty_max_percent=50",
-        "set:omnibus_min_history_days=20",
-      ],
+      ["set:omnibus_min_history_days=20"],
     );
-    assert.equal(saved.values.loyaltyMaxPercent, 50);
+    assert.equal(saved.values.loyaltyRedemptionEnabled, 1);
+    assert.equal(saved.sources.loyaltyRedemptionEnabled, "env");
     assert.equal(saved.values.omnibusMinHistoryDays, 20);
-    assert.deepEqual(saved.defaults, []);
+  });
+
+  it("a changed redemption field is written, as a number, and nothing else", async () => {
+    const { client, calls } = fakeClient({
+      loyalty: testShopLoyalty(),
+      omnibus: omnibusDefault(),
+    });
+    await service(client).save({
+      ...shown,
+      loyaltyRedemptionEnabled: 0,
+      loyaltyMaxPercent: 50,
+    });
+    assert.deepEqual(
+      calls.filter((call) => call.startsWith("set:")),
+      ["set:loyalty_redemption_enabled=0", "set:loyalty_max_percent=50"],
+    );
+  });
+
+  it("an unchanged save writes nothing", async () => {
+    const { client, calls } = fakeClient({
+      loyalty: testShopLoyalty(),
+      omnibus: omnibusDefault(),
+    });
+    await service(client).save(shown);
+    assert.deepEqual(
+      calls.filter((call) => call.startsWith("set:")),
+      [],
+    );
   });
 
   it("refuses a bad input before the shop, naming the field", async () => {
-    const { client, calls } = fakeClient({ settings: shopSettings() });
+    const { client, calls } = fakeClient({
+      loyalty: testShopLoyalty(),
+      omnibus: omnibusDefault(),
+    });
     await assert.rejects(
-      service(client).save({ ...input, omnibusMinHistoryDays: 14 }),
+      service(client).save({ ...shown, omnibusMinHistoryDays: 14 }),
       (error: unknown) =>
         error instanceof BadRequestException &&
         Object.keys(
@@ -169,8 +204,9 @@ describe("WebshopPriceRulesService", () => {
 
   it("an older shop (404) is a 503 that says so; a refusal (400) carries the shop's words", async () => {
     const old = fakeClient({
-      settings: shopSettings(),
-      failGet: new MedusaAdminHttpError(404, "Not Found"),
+      loyalty: testShopLoyalty(),
+      omnibus: omnibusDefault(),
+      failLoyalty: new MedusaAdminHttpError(404, "Not Found"),
     });
     await assert.rejects(
       service(old.client).get(),
@@ -179,14 +215,15 @@ describe("WebshopPriceRulesService", () => {
         /régebbi változaton/.test(error.message),
     );
     const refused = fakeClient({
-      settings: shopSettings(),
+      loyalty: testShopLoyalty(),
+      omnibus: omnibusDefault(),
       failSet: new MedusaAdminHttpError(
         400,
         JSON.stringify({ message: "omnibus_min_history_days: from 15 to 30" }),
       ),
     });
     await assert.rejects(
-      service(refused.client).save({ ...input, omnibusMinHistoryDays: 30 }),
+      service(refused.client).save({ ...shown, omnibusMinHistoryDays: 30 }),
       (error: unknown) =>
         error instanceof BadRequestException &&
         /from 15 to 30/.test(error.message),

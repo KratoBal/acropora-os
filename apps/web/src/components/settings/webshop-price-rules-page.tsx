@@ -14,6 +14,7 @@ import {
   WEBSHOP_PRICE_RULE_SECTIONS,
   WEBSHOP_PRICE_RULES,
   type WebshopPriceRuleField,
+  type WebshopPriceRuleSource,
   type WebshopPriceRules,
 } from "@acropora/types";
 import { useCallback, useEffect, useState } from "react";
@@ -23,9 +24,21 @@ import { webshopPriceRulesApi } from "@/lib/api/webshop-price-rules";
 
 /**
  * HŰSÉGPONT ÉS ÁRSZABÁLYOK (acrobot 60467; Balázs, 2026-11-24: „minden szám és kapcsoló adminból állítható”). A pontbeváltás
- * kapcsolója és számai (commerce #881) és az Omnibus ár-előzmény küszöbe (commerce #880), a webshop határaival. Egy mentés
- * az egész lapot viszi: a webshop kulcsonként tárol, és csak a megváltozott értékek mennek. Csak a teszt OS-en látszik.
+ * kapcsolója és számai (commerce #881) és az Omnibus ár-előzmény küszöbe (commerce #880), a webshop határaival. A lap azt
+ * mutatja, amit a webshop TÉNYLEGESEN használ, és hogy honnan (tárolt sor, a webshop környezete, alapérték): a teszt kirakat
+ * beváltását a környezet kapcsolja be (barracuda, #2824). Egy mentés az egész lapot viszi, de a webshopba csak a
+ * megváltoztatott érték íródik. Csak a teszt OS-en látszik.
  */
+
+/** A forrás az ember nyelvén; a `row` (valaki tárolta) nem kap megjegyzést. */
+const SOURCE_NOTES: Partial<Record<WebshopPriceRuleSource, string>> = {
+  default: "A webshop alapértéke.",
+  env: "A webshop környezeti beállításából jön; csak akkor íródik felül, ha itt megváltoztatod.",
+  row_invalid:
+    "A tárolt érték a határokon kívül esik, ezért a webshop ezt használja helyette.",
+  read_failed:
+    "A webshop nem tudta olvasni a beállításait, ezért a beváltás ki van kapcsolva.",
+};
 
 type Draft = Record<WebshopPriceRuleField, string>;
 
@@ -190,9 +203,16 @@ export function WebshopPriceRulesPage() {
                       <span className="text-xs text-pilot-grey-500">
                         A webshopban nincs beállítva.
                       </span>
-                    ) : rules.defaults.includes(rule.field) ? (
-                      <span className="text-xs text-pilot-grey-500">
-                        A webshop alapértéke; mentéskor rögzül.
+                    ) : SOURCE_NOTES[rules.sources[rule.field]] ? (
+                      <span
+                        className={
+                          rules.sources[rule.field] === "row_invalid" ||
+                          rules.sources[rule.field] === "read_failed"
+                            ? "text-xs text-pilot-red-700"
+                            : "text-xs text-pilot-grey-500"
+                        }
+                      >
+                        {SOURCE_NOTES[rules.sources[rule.field]]}
                       </span>
                     ) : null}
                     {fieldErrors[rule.field] ? (

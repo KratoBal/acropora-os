@@ -7,7 +7,7 @@ import { WebshopPriceRulesPage } from "./webshop-price-rules-page";
 
 /*
   A HŰSÉGPONT ÉS ÁRSZABÁLYOK LAPJA (acrobot 60467; commerce #880, #881). MI PIROSÍT: a kapcsoló nem 0 vagy 1 alakban megy; egy
-  határon kívüli érték (14 napos Omnibus-küszöb) az API-ig jut; az értékek nem a beírt számokkal mennek; a webshop alapértéke
+  határon kívüli érték (14 napos Omnibus-küszöb) az API-ig jut; az értékek nem a beírt számokkal mennek; az érték forrása
   vagy a hiányzó érték nem látszik; a beállítások joga nélkül a lap betölt.
 */
 const api = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn() }));
@@ -37,10 +37,17 @@ const rules = (over: Partial<WebshopPriceRules> = {}): WebshopPriceRules => ({
     loyaltyPointValueHuf: 1,
     loyaltyMinOrderHuf: 30000,
     loyaltyMinPoints: null,
-    loyaltyMaxPercent: 100,
+    loyaltyMaxPercent: 40,
     omnibusMinHistoryDays: 15,
   },
-  defaults: ["omnibusMinHistoryDays"],
+  sources: {
+    loyaltyRedemptionEnabled: "default",
+    loyaltyPointValueHuf: "default",
+    loyaltyMinOrderHuf: "default",
+    loyaltyMinPoints: "default",
+    loyaltyMaxPercent: "env",
+    omnibusMinHistoryDays: "row",
+  },
   ...over,
 });
 
@@ -54,7 +61,7 @@ beforeEach(() => {
 });
 
 describe("WebshopPriceRulesPage", () => {
-  it("shows the values in their sections, the unset and the default one marked", async () => {
+  it("shows the values in their sections, and where each comes from: unset, default, the shop's environment", async () => {
     render(createElement(WebshopPriceRulesPage));
     expect(
       ((await screen.findByLabelText(OMNIBUS)) as HTMLInputElement).value,
@@ -77,15 +84,16 @@ describe("WebshopPriceRulesPage", () => {
       ).value,
     ).toBe("");
     expect(screen.getByText("A webshopban nincs beállítva.")).toBeTruthy();
+    expect(screen.getAllByText("A webshop alapértéke.")).toHaveLength(3);
     expect(
-      screen.getByText("A webshop alapértéke; mentéskor rögzül."),
+      screen.getByText(
+        "A webshop környezeti beállításából jön; csak akkor íródik felül, ha itt megváltoztatod.",
+      ),
     ).toBeTruthy();
   });
 
   it("a value outside its bounds stops at the form; the switch goes as 1, the numbers as typed", async () => {
-    api.save.mockImplementation(async (_t, values) =>
-      rules({ values, defaults: [] }),
-    );
+    api.save.mockImplementation(async (_t, values) => rules({ values }));
     render(createElement(WebshopPriceRulesPage));
     await screen.findByLabelText(OMNIBUS);
     fireEvent.change(
@@ -110,7 +118,7 @@ describe("WebshopPriceRulesPage", () => {
         loyaltyPointValueHuf: 1,
         loyaltyMinOrderHuf: 30000,
         loyaltyMinPoints: 100,
-        loyaltyMaxPercent: 100,
+        loyaltyMaxPercent: 40,
         omnibusMinHistoryDays: 20,
       }),
     );
