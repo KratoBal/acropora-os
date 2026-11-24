@@ -237,6 +237,7 @@ export {
   WEBSHOP_STATUS_TEMPLATES,
   mailForint,
   mailDay,
+  mailMinutes,
   hungarianDay,
   isWebshopMailTemplate,
   parseWebshopMailFacts,

@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   WEBSHOP_MAIL_KEYS,
   WEBSHOP_MAIL_SAMPLE_FACTS,
+  mailMinutes,
   parseWebshopMailFacts,
   webshopAcclimationValue,
   type WebshopMailFacts,
@@ -292,6 +293,92 @@ describe("renderWebshopMail", () => {
     assert.match(en.text, /The link works until 16 November 2026\./);
     assert.match(en.html, />Confirm subscription<\/a>/);
     assert.match(en.html, />unsubscribe<\/a>/);
+  });
+
+  it("the password reset: the button sets the new password, the link's lifetime and that it works once are said, in both languages (card 7bfca4eb)", () => {
+    const facts: WebshopMailFacts = {
+      template: "password-reset",
+      customer_name: "Kiss Anna",
+      order_created_at: null,
+      order_view_url: null,
+      reset_url: "https://shop.example/hu/uj-jelszo?token=AbC_9.x-y",
+      valid_minutes: 15,
+    };
+    const hu = renderWebshopMail(template("WEBSHOP_PASSWORD_RESET"), facts);
+    assert.equal(hu.ok, true);
+    if (!hu.ok) return;
+    assert.equal(hu.subject, "Új jelszó beállítása");
+    assert.match(
+      hu.html,
+      /<a href="https:\/\/shop\.example\/hu\/uj-jelszo\?token=AbC_9\.x-y"[^>]*>Új jelszó beállítása<\/a>/,
+    );
+    assert.match(
+      hu.text,
+      /A link egyszer használható, és 15 perc múlva lejár\./,
+    );
+    assert.match(hu.text, /Ha nem te kérted, nincs teendőd/);
+    assert.doesNotMatch(hu.html, /ACROPORABLOCK|\{\{/);
+    const en = renderWebshopMail(template("WEBSHOP_PASSWORD_RESET_EN"), {
+      ...facts,
+      locale: "en",
+    });
+    assert.equal(en.ok, true);
+    if (!en.ok) return;
+    assert.equal(en.subject, "Set a new password");
+    assert.match(en.text, /The link works once and expires after 15 minutes\./);
+    assert.match(en.html, />Set a new password<\/a>/);
+    // the lifetime is the shop's number, not a fixed word of the text: another value is said as it is
+    const hour = renderWebshopMail(template("WEBSHOP_PASSWORD_RESET"), {
+      ...facts,
+      valid_minutes: 60,
+    });
+    assert.equal(hour.ok, true);
+    if (hour.ok) assert.match(hour.text, /1 óra múlva lejár/);
+  });
+
+  it("the password reset is refused without a clean https link or a sane lifetime: a mail without them is never sent", () => {
+    const base = {
+      customer_name: null,
+      order_created_at: null,
+      locale: "hu",
+      order_view_url: null,
+      reset_url: "https://shop.example/hu/uj-jelszo?token=a",
+      valid_minutes: 15,
+    };
+    for (const reset_url of [
+      "http://shop.example/hu/uj-jelszo?token=a",
+      "javascript:alert(1)",
+      'https://shop.example/x?token=a"onmouseover="x',
+      "",
+    ]) {
+      const parsed = parseWebshopMailFacts("password-reset", {
+        ...base,
+        reset_url,
+      });
+      assert.equal(parsed.ok, false, reset_url);
+      if (!parsed.ok) assert.match(parsed.error, /facts\.reset_url/);
+    }
+    for (const valid_minutes of [0, -5, 1.5, 1441, "15", null]) {
+      const parsed = parseWebshopMailFacts("password-reset", {
+        ...base,
+        valid_minutes,
+      });
+      assert.equal(parsed.ok, false, String(valid_minutes));
+      if (!parsed.ok) assert.match(parsed.error, /facts\.valid_minutes/);
+    }
+    // the control: the same facts pass
+    assert.equal(parseWebshopMailFacts("password-reset", base).ok, true);
+  });
+
+  it("mailMinutes says a lifetime in whole minutes, or whole hours when it is one, in both languages", () => {
+    assert.equal(mailMinutes(15, "hu"), "15 perc");
+    assert.equal(mailMinutes(15, "en"), "15 minutes");
+    assert.equal(mailMinutes(1, "en"), "1 minute");
+    assert.equal(mailMinutes(60, "hu"), "1 óra");
+    assert.equal(mailMinutes(120, "en"), "2 hours");
+    assert.equal(mailMinutes(90, "hu"), "90 perc");
+    assert.equal(mailMinutes(0, "hu"), "1 perc");
+    assert.equal(mailMinutes(15, undefined), "15 perc");
   });
 
   it("the stock alert's confirmation: what was asked for, the button, the link's last day, the leaving link, in both languages", () => {
