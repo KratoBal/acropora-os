@@ -55,9 +55,74 @@ const dayFormat = new Intl.DateTimeFormat("sv-SE", {
 });
 export const day = (at: Date) => dayFormat.format(at);
 
-/** The key's value for one variant: the JSON text, or "" (the key is cleared) when no reduction runs or there is no price to name. */
-export function omnibusMetadataValue(lowest: LowestPrice | null): string {
+/**
+ * THE LEAST PRICE HISTORY A REDUCTION NEEDS TO BE ANNOUNCED (card 90c54873; Balázs, 2026-11-24 10:06 UTC: "mehet a 15", and the
+ * number is a setting, default 15). The web shop's setting is `omnibus_min_history_days` (commerce #880), whole days from 15 to
+ * 30; 15 is the floor of 4/2009. (I. 30.) NFGM-SZMM rendelet 2/A. § for a product on the market for less than 30 days, 30 the
+ * general rule. A history that reaches back the full 30 days is complete and always passes; a YOUNG one (its first known price
+ * falls inside the 30-day window) must span at least this many days before the reduction began, or the key is not written and
+ * the shop shows only the price to pay. THE DEFAULT HERE MIRRORS THE SHOP'S DEFINITION (`DEFAULT_OMNIBUS_MIN_HISTORY_DAYS`).
+ */
+export const OMNIBUS_MIN_HISTORY_DAYS_DEFAULT = 15;
+export const OMNIBUS_MIN_HISTORY_DAYS_MIN = 15;
+export const OMNIBUS_MIN_HISTORY_DAYS_MAX = 30;
+export const OMNIBUS_MIN_HISTORY_DAYS_SETTING_KEY = "omnibus_min_history_days";
+
+/**
+ * THE SETTING AS THE SHOP ANSWERS IT, READ ONCE PER RUN. A stored row's value is text, a default is a number; anything that
+ * is not a whole number from 15 to 30 (an unreadable, missing or out-of-bounds answer, a shop that does not know the key yet)
+ * reads as the DEFAULT, 15, the decree's floor and never lower: a broken read must not make the OS announce more reductions
+ * than the least it is ever allowed to. A person's stricter value (up to 30) is lost for that run when the read fails, and the
+ * run says so (`warn`).
+ */
+export async function readOmnibusMinHistoryDays(
+  getSetting: (key: string) => Promise<{ value: string | number | null }>,
+  warn: (message: string) => void,
+): Promise<number> {
+  try {
+    const { value } = await getSetting(OMNIBUS_MIN_HISTORY_DAYS_SETTING_KEY);
+    const number =
+      typeof value === "string" && value.trim() !== "" ? Number(value) : value;
+    if (
+      typeof number === "number" &&
+      Number.isInteger(number) &&
+      number >= OMNIBUS_MIN_HISTORY_DAYS_MIN &&
+      number <= OMNIBUS_MIN_HISTORY_DAYS_MAX
+    )
+      return number;
+    warn(
+      `omnibus: a(z) ${OMNIBUS_MIN_HISTORY_DAYS_SETTING_KEY} beállítás értéke nem használható (${JSON.stringify(value)}), ${OMNIBUS_MIN_HISTORY_DAYS_DEFAULT} nap érvényes`,
+    );
+  } catch (error) {
+    warn(
+      `omnibus: a(z) ${OMNIBUS_MIN_HISTORY_DAYS_SETTING_KEY} beállítás nem olvasható (${error instanceof Error ? error.message : String(error)}), ${OMNIBUS_MIN_HISTORY_DAYS_DEFAULT} nap érvényes`,
+    );
+  }
+  return OMNIBUS_MIN_HISTORY_DAYS_DEFAULT;
+}
+
+/** Whole calendar days from one YYYY-MM-DD day to a later one (pure calendar arithmetic, no time zone). */
+const daysFromTo = (from: string, to: string): number =>
+  Math.round(
+    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) /
+      86_400_000,
+  );
+
+/**
+ * The key's value for one variant: the JSON text, or "" (the key is cleared) when no reduction runs, there is no price to name,
+ * or the history is younger than `minHistoryDays` (a young history, not a complete one: see `OMNIBUS_MIN_HISTORY_DAYS_DEFAULT`).
+ */
+export function omnibusMetadataValue(
+  lowest: LowestPrice | null,
+  minHistoryDays: number = OMNIBUS_MIN_HISTORY_DAYS_DEFAULT,
+): string {
   if (lowest === null || lowest.unknownInWindow) return "";
+  if (
+    !lowest.complete &&
+    daysFromTo(day(lowest.historyBegins), day(lowest.reductionStart)) <
+      minHistoryDays
+  )
+    return "";
   return JSON.stringify({
     amount: lowest.amount.toString(),
     currency: lowest.currency ?? MEDUSA_CURRENCY_CODE,
@@ -97,6 +162,8 @@ export async function omnibusInputsFor(
   env: Record<string, string | undefined>,
   /** whether a variant's own sale runs: the same "now" as its price decision */
   now: Date = new Date(),
+  /** the setting `omnibus_min_history_days`, read once per run by the caller */
+  minHistoryDays: number = OMNIBUS_MIN_HISTORY_DAYS_DEFAULT,
 ): Promise<VariantOmnibusInput[] | undefined> {
   if (!omnibusProjectionEnabled(env)) return undefined;
   return Promise.all(
@@ -108,7 +175,7 @@ export async function omnibusInputsFor(
       );
       return {
         sku: variant.sku,
-        value: omnibusMetadataValue(lowest),
+        value: omnibusMetadataValue(lowest, minHistoryDays),
         ...(lowest?.unknownInWindow ? { gap: true } : {}),
       };
     }),

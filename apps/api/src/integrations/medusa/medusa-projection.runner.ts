@@ -54,7 +54,12 @@ import {
   deriveLivestockKind,
   liveAnimalKindSubtrees,
 } from "./medusa-livestock.policy.js";
-import { omnibusInputsFor } from "./medusa-variant-omnibus.js";
+import { shippingSettingsClientFromEnvironment } from "../../webshop-shipping-settings/webshop-shipping-settings.client.js";
+import {
+  omnibusInputsFor,
+  omnibusProjectionEnabled,
+  readOmnibusMinHistoryDays,
+} from "./medusa-variant-omnibus.js";
 import {
   betoltTiltoLista,
   tiltottKodBarmelyikValtozaton,
@@ -593,6 +598,24 @@ export async function runProjectionCli(
     (db === (prisma as unknown as ProjectionDatabase)
       ? () => loadOldShopLinkRules(prisma)
       : null);
+  /**
+   * AZ OMNIBUS ELŐZMÉNY-KÜSZÖB (a webshop `omnibus_min_history_days` beállítása, card 90c54873, Balázs 2026-11-24): FUTÁSONKÉNT EGYSZER
+   * olvassa a Medusa admin API-ról, és csak ha az Omnibus-vetítés be van kapcsolva. Olvashatatlan vagy határon kívüli válasznál a 15 nap
+   * (a rendelet alsó határa) érvényes, és a futás kimondja.
+   */
+  let omnibusKuszob: Promise<number> | undefined;
+  const omnibusKuszobMost = (): Promise<number> =>
+    (omnibusKuszob ??= readOmnibusMinHistoryDays(
+      async (key) => {
+        const resolved = await credentials.resolve();
+        return shippingSettingsClientFromEnvironment(
+          resolved.apiKey,
+          env,
+          fetchImpl,
+        ).getSetting(key);
+      },
+      (message) => out.stderr(`${message}\n`),
+    ));
   /** `undefined`: még nem töltöttük; `null`: nincs (nincs betöltő, vagy elbukott): a linkek érintetlenek. */
   let linkSzabalyKeszlet: OldShopLinkRules | null | undefined;
   const linkSzabalyokMost = async (): Promise<OldShopLinkRules | null> => {
@@ -1665,6 +1688,8 @@ export async function runProjectionCli(
       db as unknown as LowestPriceDatabase,
       product.variants,
       env,
+      undefined,
+      omnibusProjectionEnabled(env) ? await omnibusKuszobMost() : undefined,
     );
     // a UNAS-leírás régi-bolt linkjei a Commerce-címre (a jóváhagyott termékismeret-szöveget nem érinti)
     const linkSzabaly = await linkSzabalyokMost();
