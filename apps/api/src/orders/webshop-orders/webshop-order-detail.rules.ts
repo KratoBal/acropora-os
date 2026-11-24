@@ -458,7 +458,7 @@ export function manualRefundOf(
 
 /** A webshop fizetéseinek vissza nem térített, rögzített összege; `null`: nem olvasható (nincs fizetési gyűjtemény). */
 export function outstandingCapturedOf(
-  collections: MedusaOrderDetailRow["payment_collections"],
+  collections: MedusaOrderDetailRow["payment_collections"] | undefined,
 ): number | null {
   if (!collections?.length) return null;
   let captured = 0;
