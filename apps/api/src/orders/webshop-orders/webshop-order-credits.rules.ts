@@ -66,24 +66,17 @@ export const creditTotalOf = (credits: readonly WebshopOrderCredit[]): number =>
   100;
 
 /**
- * A HŰSÉGPONT SORÁNAK ALAKJA A SZÁMLÁN (lásd `creditLinesOf` a `webshop-order-invoice.rules.ts`-ben): `payment` (alap, B: fizetés, az ÁFA
- * a teljes árból marad) vagy `discount` (A: árengedmény, az ÁFA-alap csökken). A döntés a könyvelőé és Balázsé; váltáskor ezt az egy
- * környezeti változót kell átírni az OS API-n: `WEBSHOP_LOYALTY_INVOICE_SHAPE=discount`. Bármi más érték vagy a hiánya: lásd `loyaltyInvoiceShapeOf`.
+ * A HŰSÉGPONT SORÁNAK ALAKJA A SZÁMLÁN (lásd `creditLinesOf` a `webshop-order-invoice.rules.ts`-ben): `discount` (ALAP, A: árengedmény,
+ * az ÁFA-alap csökken) vagy `payment` (B: fizetés, az ÁFA a teljes árból marad). BALÁZS DÖNTÖTT, 2026-11-24 13:10 UTC (Eldöntendő szál,
+ * msg 1574774095386775627): az UNAS-ban a beváltott pont külön tételként „kedvezmény” sorként került a számlára (10 000 Ft bruttó kosár,
+ * 1000 pont: „kedvezmény 1000 Ft”, a végösszeg 9000), tehát az A az alap. A B kapcsolható marad: `WEBSHOP_LOYALTY_INVOICE_SHAPE=payment`.
+ * Bármi más érték vagy a hiánya `discount`.
  */
-export type LoyaltyInvoiceShape = "payment" | "discount" | "undecided";
+export type LoyaltyInvoiceShape = "payment" | "discount";
 export const LOYALTY_INVOICE_SHAPE_ENV = "WEBSHOP_LOYALTY_INVOICE_SHAPE";
-/**
- * AZ ALAK ÉLŐ KIÁLLÍTÁSNÁL CSAK KIMONDVA ÉRVÉNYES (barracuda, #2826: a 0 százalékos negatív sor NAV/Számlázz.hu alakja a könyvelő
- * válaszáig nem eldöntött). A teszt-szerveren (álszámlázó, `stub`) és kikapcsolt kiállításnál a beállítás hiánya `payment` (B); ÉLŐ
- * kiállításnál (`live`) a hiánya `undecided`: a beváltott pontos rendelés számlája NEM készül el, amíg valaki ki nem mondja
- * (`WEBSHOP_LOYALTY_INVOICE_SHAPE=payment` vagy `discount`). Így egy nem egyeztetett sor nem kerülhet véletlenül élő számlára.
- */
 export const loyaltyInvoiceShapeOf = (
   env: Record<string, string | undefined> = process.env,
-  issueMode?: "live" | "stub" | "off" | "conflict",
-): LoyaltyInvoiceShape => {
-  const value = env[LOYALTY_INVOICE_SHAPE_ENV]?.trim().toLowerCase();
-  if (value === "discount") return "discount";
-  if (value === "payment") return "payment";
-  return issueMode === "live" ? "undecided" : "payment";
-};
+): LoyaltyInvoiceShape =>
+  env[LOYALTY_INVOICE_SHAPE_ENV]?.trim().toLowerCase() === "payment"
+    ? "payment"
+    : "discount";

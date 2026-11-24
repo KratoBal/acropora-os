@@ -574,10 +574,11 @@ describe("a rendelés jóváírásai a számlán", () => {
     lines: { unitNet: string; quantity: string; vatRatePercent: string }[],
   ) => lines.map((line) => szamlazzLineAmounts({ ...line, currency: "HUF" }));
 
-  it("a beváltott pont `payment` alakban (alap): negatív, 0 százalékos sor, a számla bruttója a fizetendő végösszeg", () => {
+  it("a beváltott pont `payment` alakban (B, kapcsolható): negatív, 0 százalékos sor, a számla bruttója a fizetendő végösszeg", () => {
     const result = invoiceDraftOf(withCredit([points(400)], 26440), {
       customerId: "c",
       now: NOW,
+      loyaltyShape: "payment",
     });
     assert.ok(result.ok, !result.ok ? result.message : "");
     const credit = result.draft.lines.at(-1)!;
@@ -596,18 +597,14 @@ describe("a rendelés jóváírásai a számlán", () => {
     );
   });
 
-  it("`discount` alakban a pont az ÁFA-kulcsok szerint, a bruttó arányában oszlik meg: az ÁFA-alap is csökken", () => {
+  it("alapból (A, Balázs döntése) a pont az ÁFA-kulcsok szerint, a bruttó arányában oszlik meg, negatív „Hűségpont kedvezmény” sorban: az ÁFA-alap is csökken", () => {
     const result = invoiceDraftOf(withCredit([points(400)], 26440), {
       customerId: "c",
       now: NOW,
-      loyaltyShape: "discount",
     });
     assert.ok(result.ok, !result.ok ? result.message : "");
     const credit = result.draft.lines.slice(-1)[0]!;
-    assert.match(
-      credit.description,
-      /^Hűségpont-kedvezmény \(400 pont, 27%\)$/,
-    );
+    assert.equal(credit.description, "Hűségpont kedvezmény (400 pont)");
     assert.equal(credit.vatRatePercent, "27");
     assert.match(credit.unitNet, /^-/);
     assert.equal(Math.abs(result.difference) < 1, true);
@@ -636,45 +633,24 @@ describe("a rendelés jóváírásai a számlán", () => {
     });
     assert.ok(result.ok, !result.ok ? result.message : "");
     const credits = result.draft.lines.filter((line) =>
-      line.description.startsWith("Hűségpont-kedvezmény"),
+      line.description.startsWith("Hűségpont kedvezmény"),
     );
     assert.deepEqual(
       credits.map((line) => line.vatRatePercent),
       ["5", "27"],
+    );
+    assert.deepEqual(
+      credits.map((line) => line.description),
+      [
+        "Hűségpont kedvezmény (300 pont, 5% ÁFA)",
+        "Hűségpont kedvezmény (300 pont, 27% ÁFA)",
+      ],
     );
     const gross = grossOf(credits).reduce(
       (sum, amounts) => sum + (amounts.ok ? Number(amounts.grossAmount) : 0),
       0,
     );
     assert.equal(Math.round(gross), -300);
-  });
-
-  it("`undecided` alakban (élő kiállítás, kimondatlan beállítás) a beváltott pontos rendelés számlája NEM készül el, az ajándékkártyás igen", () => {
-    const refused = invoiceDraftOf(withCredit([points(400)], 26440), {
-      customerId: "c",
-      now: NOW,
-      loyaltyShape: "undecided",
-    });
-    assert.equal(refused.ok, false);
-    assert.match(
-      !refused.ok ? refused.message : "",
-      /WEBSHOP_LOYALTY_INVOICE_SHAPE/,
-    );
-    const gift = invoiceDraftOf(
-      order({ credit_lines: [giftCard(5000)], total: 21840 }),
-      {
-        customerId: "c",
-        now: NOW,
-        loyaltyShape: "undecided",
-      },
-    );
-    assert.ok(gift.ok);
-    const plain = invoiceDraftOf(order(), {
-      customerId: "c",
-      now: NOW,
-      loyaltyShape: "undecided",
-    });
-    assert.ok(plain.ok);
   });
 
   it("az ajándékkártya mindig fizetés (0 százalékos sor), a kapcsoló nem érinti", () => {
@@ -699,7 +675,7 @@ describe("a rendelés jóváírásai a számlán", () => {
     assert.ok(result.ok, !result.ok ? result.message : "");
     assert.deepEqual(
       result.draft.lines.slice(-2).map((line) => line.description),
-      ["Hűségpontból kifizetve (400 pont)", "Ajándékkártyával kifizetve"],
+      ["Hűségpont kedvezmény (400 pont)", "Ajándékkártyával kifizetve"],
     );
   });
 
@@ -711,7 +687,7 @@ describe("a rendelés jóváírásai a számlán", () => {
     assert.ok(result.ok);
     assert.equal(
       result.draft.lines.at(-1)!.description,
-      "Hűségpontból kifizetve",
+      "Hűségpont kedvezmény",
     );
   });
 
@@ -768,7 +744,7 @@ describe("a rendelés jóváírásai a számlán", () => {
     assert.equal(result.draft.documentType, "PROFORMA");
     assert.equal(
       result.draft.lines.at(-1)!.description,
-      "Hűségpontból kifizetve (400 pont)",
+      "Hűségpont kedvezmény (400 pont)",
     );
   });
 });

@@ -385,17 +385,28 @@ function sourceLinesOf(order: MedusaOrderDetailRow): SourceLine[] {
  * bruttója a rendelés végösszege (a vevő által pénzben fizetendő) legyen.
  *
  * AZ ALAK KAPCSOLHATÓ, mert a döntés (és a könyvelő válasza) még nincs meg:
- *   `payment` (ALAP, B): a jóváírás FIZETÉS. A negatív sor 0 százalékos ÁFA-kulccsal áll, tehát az ÁFA-alap a teljes ár marad, csak a
+ *   `payment` (B): a jóváírás FIZETÉS. A negatív sor 0 százalékos ÁFA-kulccsal áll, tehát az ÁFA-alap a teljes ár marad, csak a
  *     fizetendő bruttó csökken. A leírás megmondja, mivel fizették ki.
- *   `discount` (A): a hűségpont ÁRENGEDMÉNY. A negatív sorok a tételek ÁFA-kulcsai szerint, a bruttójuk arányában oszlanak meg, tehát az
+ *   `discount` (ALAP, A; Balázs döntése 2026-11-24): a hűségpont ÁRENGEDMÉNY. A negatív sorok a tételek ÁFA-kulcsai szerint, a bruttójuk arányában oszlanak meg, tehát az
  *     ÁFA-alap is csökken.
  * Az AJÁNDÉKKÁRTYA mindig fizetés (az `payment` alak), a kapcsoló csak a hűségpontra vonatkozik. Ismeretlen jóváírást NEM találgatunk:
  * a számla nem készül el, mert nem tudjuk, adóalapot csökkent-e.
- * Váltás A-ra: a `WEBSHOP_LOYALTY_INVOICE_SHAPE=discount` környezeti változó az OS API-n (lásd `loyaltyInvoiceShapeOf`).
+ * Váltás B-re: a `WEBSHOP_LOYALTY_INVOICE_SHAPE=payment` környezeti változó az OS API-n (lásd `loyaltyInvoiceShapeOf`).
  */
 type CreditLinesResult =
   | { ok: true; lines: BillingDocumentLineInput[]; gross: number }
   | { ok: false; message: string };
+
+/** A kedvezmény-sor neve: „Hűségpont kedvezmény” (a régi bolt „kedvezmény”-t írt); több ÁFA-kulcsnál a kulcs is áll rajta. */
+const discountDescription = (
+  points: number | null,
+  rate: number,
+  rateCount: number,
+) =>
+  `Hűségpont kedvezmény (${[points ? `${points} pont` : null, rateCount > 1 ? `${rate}% ÁFA` : null].filter(Boolean).join(", ")})`.replace(
+    / \(\)$/,
+    "",
+  );
 
 function creditLinesOf(
   order: MedusaOrderDetailRow,
@@ -411,15 +422,6 @@ function creditLinesOf(
     return {
       ok: false,
       message: `A rendelésen ismeretlen jóváírás áll („${unknown.label}”, ${unknown.amount} ${currency}), ezért a számla nem készül el: nem tudjuk, az ÁFA-alapot csökkenti-e.`,
-    };
-  if (
-    shape === "undecided" &&
-    credits.some((credit) => credit.kind === "loyalty")
-  )
-    return {
-      ok: false,
-      message:
-        "A beváltott hűségpont számlasorának alakja még nincs eldöntve (a könyvelő válaszára vár), ezért élő kiállításnál a számla nem készül el. Állítsd be a WEBSHOP_LOYALTY_INVOICE_SHAPE értékét (payment vagy discount) az OS API-n.",
     };
   const paymentLine = (description: string, amount: number) => {
     lines.push({
@@ -437,7 +439,7 @@ function creditLinesOf(
   for (const credit of credits) {
     if (credit.kind === "gift_card") {
       paymentLine("Ajándékkártyával kifizetve", credit.amount);
-    } else if (shape !== "discount") {
+    } else if (shape === "payment") {
       paymentLine(
         credit.points
           ? `Hűségpontból kifizetve (${credit.points} pont)`
@@ -480,9 +482,7 @@ function creditLinesOf(
           amounts && amounts.ok ? Number(amounts.grossAmount) : share;
         lines.push({
           productId: null,
-          description: credit.points
-            ? `Hűségpont-kedvezmény (${credit.points} pont, ${rate}%)`
-            : `Hűségpont-kedvezmény (${rate}%)`,
+          description: discountDescription(credit.points, rate, rates.length),
           quantity: "1",
           unit: null,
           unitNet: `-${unitNet}`,
@@ -519,7 +519,7 @@ export function invoiceDraftOf(
   input: {
     customerId: string;
     now: Date;
-    /** A hűségpont sorának alakja (kártya e62a1a64); alap `payment`, lásd `creditLinesOf`. */
+    /** A hűségpont sorának alakja (kártya e62a1a64); alap `discount` (Balázs döntése), lásd `creditLinesOf`. */
     loyaltyShape?: LoyaltyInvoiceShape;
   },
 ): InvoiceDraftResult {
@@ -575,7 +575,7 @@ export function invoiceDraftOf(
   const credit = creditLinesOf(
     order,
     itemParts,
-    input.loyaltyShape ?? "payment",
+    input.loyaltyShape ?? "discount",
     currency,
   );
   if (!credit.ok) return { ok: false, message: credit.message };

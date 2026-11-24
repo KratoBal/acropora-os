@@ -111,49 +111,23 @@ describe("orderCreditsOf", () => {
 });
 
 describe("loyaltyInvoiceShapeOf", () => {
-  it("alapból `payment` (B) a teszt-szerveren és kikapcsolt kiállításnál; csak a pontos `discount` kapcsol A-ra", () => {
-    for (const mode of [undefined, "stub", "off", "conflict"] as const)
-      assert.equal(loyaltyInvoiceShapeOf({}, mode), "payment");
-    assert.equal(
-      loyaltyInvoiceShapeOf({ WEBSHOP_LOYALTY_INVOICE_SHAPE: "discount" }),
-      "discount",
-    );
-    assert.equal(
-      loyaltyInvoiceShapeOf(
-        { WEBSHOP_LOYALTY_INVOICE_SHAPE: "  DISCOUNT " },
-        "stub",
-      ),
-      "discount",
-    );
-    for (const other of ["", "arengedmeny", "1", "true"])
+  it("alapból `discount` (A, Balázs döntése 2026-11-24: az UNAS „kedvezmény” sorként írta a pontot a számlára)", () => {
+    assert.equal(loyaltyInvoiceShapeOf({}), "discount");
+    for (const other of ["", "discount", "arengedmeny", "1", "true", "talan"])
       assert.equal(
-        loyaltyInvoiceShapeOf({ WEBSHOP_LOYALTY_INVOICE_SHAPE: other }, "stub"),
-        "payment",
+        loyaltyInvoiceShapeOf({ WEBSHOP_LOYALTY_INVOICE_SHAPE: other }),
+        "discount",
       );
   });
 
-  it("ÉLŐ kiállításnál a beállítás hiánya (vagy értelmetlen érték) `undecided`: nem találgat", () => {
-    assert.equal(loyaltyInvoiceShapeOf({}, "live"), "undecided");
+  it("csak a pontos `payment` (kis- és nagybetűtől és szóköztől függetlenül) kapcsol B-re", () => {
     assert.equal(
-      loyaltyInvoiceShapeOf({ WEBSHOP_LOYALTY_INVOICE_SHAPE: "talan" }, "live"),
-      "undecided",
-    );
-  });
-
-  it("élőben is érvényes, ha kimondták: payment és discount", () => {
-    assert.equal(
-      loyaltyInvoiceShapeOf(
-        { WEBSHOP_LOYALTY_INVOICE_SHAPE: "payment" },
-        "live",
-      ),
+      loyaltyInvoiceShapeOf({ WEBSHOP_LOYALTY_INVOICE_SHAPE: "payment" }),
       "payment",
     );
     assert.equal(
-      loyaltyInvoiceShapeOf(
-        { WEBSHOP_LOYALTY_INVOICE_SHAPE: "discount" },
-        "live",
-      ),
-      "discount",
+      loyaltyInvoiceShapeOf({ WEBSHOP_LOYALTY_INVOICE_SHAPE: "  PAYMENT " }),
+      "payment",
     );
   });
 });
