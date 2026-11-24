@@ -111,20 +111,49 @@ describe("orderCreditsOf", () => {
 });
 
 describe("loyaltyInvoiceShapeOf", () => {
-  it("alapból `payment` (B); csak a pontos `discount` (kis- és nagybetűtől és szóköztől függetlenül) kapcsol A-ra", () => {
-    assert.equal(loyaltyInvoiceShapeOf({}), "payment");
+  it("alapból `payment` (B) a teszt-szerveren és kikapcsolt kiállításnál; csak a pontos `discount` kapcsol A-ra", () => {
+    for (const mode of [undefined, "stub", "off", "conflict"] as const)
+      assert.equal(loyaltyInvoiceShapeOf({}, mode), "payment");
     assert.equal(
       loyaltyInvoiceShapeOf({ WEBSHOP_LOYALTY_INVOICE_SHAPE: "discount" }),
       "discount",
     );
     assert.equal(
-      loyaltyInvoiceShapeOf({ WEBSHOP_LOYALTY_INVOICE_SHAPE: "  DISCOUNT " }),
+      loyaltyInvoiceShapeOf(
+        { WEBSHOP_LOYALTY_INVOICE_SHAPE: "  DISCOUNT " },
+        "stub",
+      ),
       "discount",
     );
-    for (const other of ["", "payment", "arengedmeny", "1", "true"])
+    for (const other of ["", "arengedmeny", "1", "true"])
       assert.equal(
-        loyaltyInvoiceShapeOf({ WEBSHOP_LOYALTY_INVOICE_SHAPE: other }),
+        loyaltyInvoiceShapeOf({ WEBSHOP_LOYALTY_INVOICE_SHAPE: other }, "stub"),
         "payment",
       );
+  });
+
+  it("ÉLŐ kiállításnál a beállítás hiánya (vagy értelmetlen érték) `undecided`: nem találgat", () => {
+    assert.equal(loyaltyInvoiceShapeOf({}, "live"), "undecided");
+    assert.equal(
+      loyaltyInvoiceShapeOf({ WEBSHOP_LOYALTY_INVOICE_SHAPE: "talan" }, "live"),
+      "undecided",
+    );
+  });
+
+  it("élőben is érvényes, ha kimondták: payment és discount", () => {
+    assert.equal(
+      loyaltyInvoiceShapeOf(
+        { WEBSHOP_LOYALTY_INVOICE_SHAPE: "payment" },
+        "live",
+      ),
+      "payment",
+    );
+    assert.equal(
+      loyaltyInvoiceShapeOf(
+        { WEBSHOP_LOYALTY_INVOICE_SHAPE: "discount" },
+        "live",
+      ),
+      "discount",
+    );
   });
 });

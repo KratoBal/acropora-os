@@ -209,7 +209,10 @@ export class WebshopOrderInvoiceService {
     const draft = proformaDraftOf(order, {
       customerId,
       now,
-      loyaltyShape: loyaltyInvoiceShapeOf(),
+      loyaltyShape: loyaltyInvoiceShapeOf(
+        process.env,
+        this.issuing.issueMode(),
+      ),
     });
     if (!draft.ok) throw new UnprocessableEntityException(draft.message);
     const saved: BillingDocumentDetail = proforma
@@ -495,7 +498,10 @@ export class WebshopOrderInvoiceService {
     const draft = invoiceDraftOf(order, {
       customerId,
       now,
-      loyaltyShape: loyaltyInvoiceShapeOf(),
+      loyaltyShape: loyaltyInvoiceShapeOf(
+        process.env,
+        this.issuing.issueMode(),
+      ),
     });
     if (!draft.ok) throw new UnprocessableEntityException(draft.message);
 

@@ -649,6 +649,34 @@ describe("a rendelés jóváírásai a számlán", () => {
     assert.equal(Math.round(gross), -300);
   });
 
+  it("`undecided` alakban (élő kiállítás, kimondatlan beállítás) a beváltott pontos rendelés számlája NEM készül el, az ajándékkártyás igen", () => {
+    const refused = invoiceDraftOf(withCredit([points(400)], 26440), {
+      customerId: "c",
+      now: NOW,
+      loyaltyShape: "undecided",
+    });
+    assert.equal(refused.ok, false);
+    assert.match(
+      !refused.ok ? refused.message : "",
+      /WEBSHOP_LOYALTY_INVOICE_SHAPE/,
+    );
+    const gift = invoiceDraftOf(
+      order({ credit_lines: [giftCard(5000)], total: 21840 }),
+      {
+        customerId: "c",
+        now: NOW,
+        loyaltyShape: "undecided",
+      },
+    );
+    assert.ok(gift.ok);
+    const plain = invoiceDraftOf(order(), {
+      customerId: "c",
+      now: NOW,
+      loyaltyShape: "undecided",
+    });
+    assert.ok(plain.ok);
+  });
+
   it("az ajándékkártya mindig fizetés (0 százalékos sor), a kapcsoló nem érinti", () => {
     for (const loyaltyShape of ["payment", "discount"] as const) {
       const result = invoiceDraftOf(

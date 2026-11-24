@@ -16,7 +16,6 @@ import {
 } from "@acropora/types";
 
 import {
-  creditTotalOf,
   orderCreditsOf,
   type LoyaltyInvoiceShape,
 } from "./webshop-order-credits.rules.js";
@@ -413,6 +412,15 @@ function creditLinesOf(
       ok: false,
       message: `A rendelésen ismeretlen jóváírás áll („${unknown.label}”, ${unknown.amount} ${currency}), ezért a számla nem készül el: nem tudjuk, az ÁFA-alapot csökkenti-e.`,
     };
+  if (
+    shape === "undecided" &&
+    credits.some((credit) => credit.kind === "loyalty")
+  )
+    return {
+      ok: false,
+      message:
+        "A beváltott hűségpont számlasorának alakja még nincs eldöntve (a könyvelő válaszára vár), ezért élő kiállításnál a számla nem készül el. Állítsd be a WEBSHOP_LOYALTY_INVOICE_SHAPE értékét (payment vagy discount) az OS API-n.",
+    };
   const paymentLine = (description: string, amount: number) => {
     lines.push({
       productId: null,
@@ -429,7 +437,7 @@ function creditLinesOf(
   for (const credit of credits) {
     if (credit.kind === "gift_card") {
       paymentLine("Ajándékkártyával kifizetve", credit.amount);
-    } else if (shape === "payment") {
+    } else if (shape !== "discount") {
       paymentLine(
         credit.points
           ? `Hűségpontból kifizetve (${credit.points} pont)`

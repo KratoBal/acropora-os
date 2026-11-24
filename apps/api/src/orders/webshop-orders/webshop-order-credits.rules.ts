@@ -68,13 +68,22 @@ export const creditTotalOf = (credits: readonly WebshopOrderCredit[]): number =>
 /**
  * A HŰSÉGPONT SORÁNAK ALAKJA A SZÁMLÁN (lásd `creditLinesOf` a `webshop-order-invoice.rules.ts`-ben): `payment` (alap, B: fizetés, az ÁFA
  * a teljes árból marad) vagy `discount` (A: árengedmény, az ÁFA-alap csökken). A döntés a könyvelőé és Balázsé; váltáskor ezt az egy
- * környezeti változót kell átírni az OS API-n: `WEBSHOP_LOYALTY_INVOICE_SHAPE=discount`. Bármi más érték (és a hiánya) `payment`.
+ * környezeti változót kell átírni az OS API-n: `WEBSHOP_LOYALTY_INVOICE_SHAPE=discount`. Bármi más érték vagy a hiánya: lásd `loyaltyInvoiceShapeOf`.
  */
-export type LoyaltyInvoiceShape = "payment" | "discount";
+export type LoyaltyInvoiceShape = "payment" | "discount" | "undecided";
 export const LOYALTY_INVOICE_SHAPE_ENV = "WEBSHOP_LOYALTY_INVOICE_SHAPE";
+/**
+ * AZ ALAK ÉLŐ KIÁLLÍTÁSNÁL CSAK KIMONDVA ÉRVÉNYES (barracuda, #2826: a 0 százalékos negatív sor NAV/Számlázz.hu alakja a könyvelő
+ * válaszáig nem eldöntött). A teszt-szerveren (álszámlázó, `stub`) és kikapcsolt kiállításnál a beállítás hiánya `payment` (B); ÉLŐ
+ * kiállításnál (`live`) a hiánya `undecided`: a beváltott pontos rendelés számlája NEM készül el, amíg valaki ki nem mondja
+ * (`WEBSHOP_LOYALTY_INVOICE_SHAPE=payment` vagy `discount`). Így egy nem egyeztetett sor nem kerülhet véletlenül élő számlára.
+ */
 export const loyaltyInvoiceShapeOf = (
   env: Record<string, string | undefined> = process.env,
-): LoyaltyInvoiceShape =>
-  env[LOYALTY_INVOICE_SHAPE_ENV]?.trim().toLowerCase() === "discount"
-    ? "discount"
-    : "payment";
+  issueMode?: "live" | "stub" | "off" | "conflict",
+): LoyaltyInvoiceShape => {
+  const value = env[LOYALTY_INVOICE_SHAPE_ENV]?.trim().toLowerCase();
+  if (value === "discount") return "discount";
+  if (value === "payment") return "payment";
+  return issueMode === "live" ? "undecided" : "payment";
+};
