@@ -72,7 +72,9 @@ export type NavigationVisibility =
  * `webshop-coupons` is `MEDUSA_WEBSHOP_COUPONS=true`: the coupon list and entry write the TEST shop's promotions
  * (card 393ae5cb), so they exist only where the OS may write it. `webshop-shipping-settings` is
  * `MEDUSA_WEBSHOP_SHIPPING_SETTINGS=true`: the shipping fees and the payment methods per shipping method write the TEST
- * shop's settings (card e0e2378b), so they exist only where the OS may write it.
+ * shop's settings (card e0e2378b), so they exist only where the OS may write it. `webshop-price-rules` is
+ * `MEDUSA_WEBSHOP_PRICE_RULES=true`: the loyalty redemption and the Omnibus threshold write the TEST shop's settings
+ * (acrobot 60467; commerce #880, #881), so they exist only where the OS may write it.
  * `webshop-gift-cards` is `MEDUSA_WEBSHOP_GIFT_CARDS=true`: issuing a gift card writes money into the TEST shop (card
  * 495c0007), so the page exists only where the OS may write it.
  *
@@ -89,6 +91,7 @@ export const NAVIGATION_FEATURES = [
   "reefclub-linking",
   "webshop-coupons",
   "webshop-shipping-settings",
+  "webshop-price-rules",
   "webshop-gift-cards",
 ] as const;
 export type NavigationFeature = (typeof NAVIGATION_FEATURES)[number];
@@ -646,6 +649,17 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
     feature: "webshop-shipping-settings",
+  },
+  {
+    /**
+     * A WEBSHOP HŰSÉGPONT- ÉS ÁRSZABÁLYAI (/webshop/arszabalyok; acrobot 60467): a pontbeváltás és az Omnibus-küszöb. Nem
+     * menüpont: a Webshop beállítások lap kártyája. Ugyanaz a jog, mint a végpontoké (`settings.manage`), és csak ahol az OS
+     * a teszt-webshopba írhat (`webshop-price-rules`).
+     */
+    id: "webshop-price-rules",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+    feature: "webshop-price-rules",
   },
   {
     /**

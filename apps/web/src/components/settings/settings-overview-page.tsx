@@ -404,6 +404,19 @@ export const WEBSHOP_SETTINGS_AREAS: SettingsArea[] = [
     ],
   },
   {
+    title: "Hűségpont és árszabályok",
+    icon: "star",
+    links: [
+      {
+        label: "Hűségpont-beváltás és Omnibus-küszöb",
+        description:
+          "A pontbeváltás kapcsolója, a pont értéke és a beváltás határai, és hány napos ár-előzmény kell egy áthúzott árhoz.",
+        href: "/webshop/arszabalyok",
+        entryId: "webshop-price-rules",
+      },
+    ],
+  },
+  {
     title: "Kezdőlap",
     icon: "store",
     links: [

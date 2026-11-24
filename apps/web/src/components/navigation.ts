@@ -377,6 +377,7 @@ const mainNavigationGroups: AppNavigationGroup[] = [
           "/webshop/kuponok",
           "/webshop/egyedi-kedvezmenyek",
           "/webshop/szallitas-fizetes",
+          "/webshop/arszabalyok",
           "/webshop/ajandekkartyak",
         ],
       },
