@@ -20,7 +20,7 @@ import { toPriceRules } from "./webshop-price-rules.rules.js";
 
 /** The rule read by its own setting key, not from the redemption's answer: the Omnibus threshold (it has no environment source). */
 const OMNIBUS_KEY = WEBSHOP_PRICE_RULES.find(
-  (rule) => rule.loyaltyField === null,
+  (rule) => rule.shopField === null,
 )!.key;
 
 export const PRICE_RULES_CLIENT = Symbol("PRICE_RULES_CLIENT");

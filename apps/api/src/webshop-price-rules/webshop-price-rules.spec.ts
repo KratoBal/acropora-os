@@ -39,6 +39,10 @@ const testShopLoyalty = (): MedusaLoyaltySettings => ({
     minPoints: "default",
     maxPercent: "row",
   },
+  accrual: {
+    settings: { enabled: false, percent: 3, onSaleItems: false },
+    sources: { enabled: "default", percent: "default", onSaleItems: "row" },
+  },
 });
 const omnibusDefault = (): MedusaCommerceSetting => ({
   key: "omnibus_min_history_days",
@@ -84,6 +88,9 @@ const service = (
 
 /** What the test shop shows, as the form sends it back unchanged. */
 const shown = {
+  loyaltyAccrualEnabled: 0,
+  loyaltyAccrualPercent: 3,
+  loyaltyAccrualOnSaleItems: 0,
   loyaltyRedemptionEnabled: 1,
   loyaltyPointValueHuf: 1,
   loyaltyMinOrderHuf: 30000,
@@ -97,6 +104,9 @@ describe("toPriceRules", () => {
     assert.deepEqual(toPriceRules(testShopLoyalty(), omnibusDefault()), {
       values: shown,
       sources: {
+        loyaltyAccrualEnabled: "default",
+        loyaltyAccrualPercent: "default",
+        loyaltyAccrualOnSaleItems: "row",
         loyaltyRedemptionEnabled: "env",
         loyaltyPointValueHuf: "default",
         loyaltyMinOrderHuf: "default",
@@ -124,6 +134,16 @@ describe("toPriceRules", () => {
     assert.equal(rules.sources.loyaltyMinPoints, "default");
     assert.equal(rules.values.omnibusMinHistoryDays, null);
     assert.equal(rules.sources.omnibusMinHistoryDays, "row");
+  });
+
+  it("a shop from before the accrual (#882) gives no accrual part: those fields are not set, the rest is read", () => {
+    const old = testShopLoyalty();
+    delete old.accrual;
+    const rules = toPriceRules(old, omnibusDefault());
+    assert.equal(rules.values.loyaltyAccrualEnabled, null);
+    assert.equal(rules.values.loyaltyAccrualPercent, null);
+    assert.equal(rules.sources.loyaltyAccrualPercent, "default");
+    assert.equal(rules.values.loyaltyRedemptionEnabled, 1);
   });
 });
 
@@ -171,6 +191,22 @@ describe("WebshopPriceRulesService", () => {
     assert.deepEqual(
       calls.filter((call) => call.startsWith("set:")),
       ["set:loyalty_redemption_enabled=0", "set:loyalty_max_percent=50"],
+    );
+  });
+
+  it("switching the accrual on at 5 percent writes those two keys only (commerce #882)", async () => {
+    const { client, calls } = fakeClient({
+      loyalty: testShopLoyalty(),
+      omnibus: omnibusDefault(),
+    });
+    await service(client).save({
+      ...shown,
+      loyaltyAccrualEnabled: 1,
+      loyaltyAccrualPercent: 5,
+    });
+    assert.deepEqual(
+      calls.filter((call) => call.startsWith("set:")),
+      ["set:loyalty_accrual_enabled=1", "set:loyalty_accrual_percent=5"],
     );
   });
 

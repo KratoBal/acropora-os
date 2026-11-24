@@ -8,12 +8,15 @@ import {
 } from "./webshop-price-rules.js";
 
 /*
-  A HŰSÉGPONT- ÉS ÁRSZABÁLYOK BEMENETE (acrobot 60467; commerce #880, #881). MI PIROSÍT: egy hiányzó, tört vagy határon kívüli
+  A HŰSÉGPONT- ÉS ÁRSZABÁLYOK BEMENETE (acrobot 60467; commerce #880, #881, #882). MI PIROSÍT: egy hiányzó, tört vagy határon kívüli
   érték átjut; a kapcsoló 0-n és 1-en kívül mást is elfogad; az Omnibus-küszöb 15 alatt vagy 30 fölött átjut (a webshop is
-  elutasítaná, de a hiba itt látsszon); egy mező a webshop kulcsától eltérő kulcsra mutat; egy mező olyan szakaszban áll, ami
+  elutasítaná, de a hiba itt látsszon); a pontgyűjtés 0 százaléka (nem jár pont) nem jut át; egy mező a webshop kulcsától eltérő kulcsra mutat; egy mező olyan szakaszban áll, ami
   nincs a lapon.
 */
 const rules = {
+  loyaltyAccrualEnabled: 0,
+  loyaltyAccrualPercent: 3,
+  loyaltyAccrualOnSaleItems: 0,
   loyaltyRedemptionEnabled: 0,
   loyaltyPointValueHuf: 1,
   loyaltyMinOrderHuf: 30000,
@@ -33,6 +36,9 @@ describe("parseWebshopPriceRulesInput", () => {
   it("accepts the edges: switch on, no order minimum, 1 percent, 30 days", () => {
     const edges = {
       ...rules,
+      loyaltyAccrualEnabled: 1,
+      loyaltyAccrualPercent: 0,
+      loyaltyAccrualOnSaleItems: 1,
       loyaltyRedemptionEnabled: 1,
       loyaltyMinOrderHuf: 0,
       loyaltyMaxPercent: 1,
@@ -46,6 +52,10 @@ describe("parseWebshopPriceRulesInput", () => {
 
   it("refuses each field outside its bounds, missing, or not a whole number, naming the field", () => {
     const bad: [string, unknown, RegExp][] = [
+      ["loyaltyAccrualEnabled", 2, /1 vagy 0/],
+      ["loyaltyAccrualPercent", -1, /0 és 100 között/],
+      ["loyaltyAccrualPercent", 101, /0 és 100 között/],
+      ["loyaltyAccrualOnSaleItems", true, /1 vagy 0/],
       ["loyaltyRedemptionEnabled", 2, /1 vagy 0/],
       ["loyaltyRedemptionEnabled", true, /1 vagy 0/],
       ["loyaltyPointValueHuf", 0, /1 és 1 000 000 között/],
@@ -72,6 +82,9 @@ describe("parseWebshopPriceRulesInput", () => {
     assert.deepEqual(
       WEBSHOP_PRICE_RULES.map((rule) => rule.key),
       [
+        "loyalty_accrual_enabled",
+        "loyalty_accrual_percent",
+        "loyalty_accrual_on_sale_items",
         "loyalty_redemption_enabled",
         "loyalty_point_value_huf",
         "loyalty_min_order_huf",
