@@ -74,7 +74,9 @@ export type NavigationVisibility =
  * `MEDUSA_WEBSHOP_SHIPPING_SETTINGS=true`: the shipping fees and the payment methods per shipping method write the TEST
  * shop's settings (card e0e2378b), so they exist only where the OS may write it. `webshop-price-rules` is
  * `MEDUSA_WEBSHOP_PRICE_RULES=true`: the loyalty redemption and the Omnibus threshold write the TEST shop's settings
- * (acrobot 60467; commerce #880, #881), so they exist only where the OS may write it.
+ * (acrobot 60467; commerce #880, #881), so they exist only where the OS may write it. `webshop-customer-texts` is
+ * `MEDUSA_WEBSHOP_CUSTOMER_TEXTS=true`: the customer texts write the TEST shop's overrides (card 7bfca4eb; commerce #888,
+ * #889), so the page exists only where the OS may write it.
  * `webshop-gift-cards` is `MEDUSA_WEBSHOP_GIFT_CARDS=true`: issuing a gift card writes money into the TEST shop (card
  * 495c0007), so the page exists only where the OS may write it.
  *
@@ -92,6 +94,7 @@ export const NAVIGATION_FEATURES = [
   "webshop-coupons",
   "webshop-shipping-settings",
   "webshop-price-rules",
+  "webshop-customer-texts",
   "webshop-gift-cards",
 ] as const;
 export type NavigationFeature = (typeof NAVIGATION_FEATURES)[number];
@@ -660,6 +663,17 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
     feature: "webshop-price-rules",
+  },
+  {
+    /**
+     * A WEBSHOP VEVŐI SZÖVEGEI (/webshop/vevoi-szovegek; kártya 7bfca4eb): a kirakat vevőnek szóló szövegei a vevő útja szerint.
+     * Nem menüpont: a Webshop beállítások lap kártyája. Ugyanaz a jog, mint a végpontoké (`settings.manage`), és csak ahol az OS
+     * a teszt-webshopba írhat (`webshop-customer-texts`).
+     */
+    id: "webshop-customer-texts",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+    feature: "webshop-customer-texts",
   },
   {
     /**

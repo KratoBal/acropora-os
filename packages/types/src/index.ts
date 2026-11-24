@@ -2475,6 +2475,24 @@ export type {
   WebshopPriceRuleValues,
 } from "./webshop-price-rules.js";
 export {
+  customerTextProblem,
+  customerTextSlots,
+  parseWebshopCustomerTextInput,
+  searchWebshopCustomerTexts,
+  WEBSHOP_CUSTOMER_MAIL_TEMPLATES_HREF,
+  WEBSHOP_CUSTOMER_TEXT_GROUPS,
+  WEBSHOP_CUSTOMER_TEXT_LOCALES,
+  WEBSHOP_CUSTOMER_TEXT_MAX_LENGTH,
+} from "./webshop-customer-texts.js";
+export type {
+  WebshopCustomerText,
+  WebshopCustomerTextGroup,
+  WebshopCustomerTextInput,
+  WebshopCustomerTextLocale,
+  WebshopCustomerTextParse,
+  WebshopCustomerTexts,
+} from "./webshop-customer-texts.js";
+export {
   parseWebshopGiftCardIssueInput,
   WEBSHOP_GIFT_CARD_LIMITS,
   WEBSHOP_GIFT_CARD_TRANSACTION_LABELS,

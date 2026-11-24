@@ -417,6 +417,19 @@ export const WEBSHOP_SETTINGS_AREAS: SettingsArea[] = [
     ],
   },
   {
+    title: "Vevői szövegek",
+    icon: "mail",
+    links: [
+      {
+        label: "A kirakat vevőnek szóló szövegei",
+        description:
+          "Pénztár, rendelés, elállás, hibabejelentés, fiók, hírlevél és süti-ablak szövegei a vevő útja szerint, kereséssel; a levelek a Levélsablonok között.",
+        href: "/webshop/vevoi-szovegek",
+        entryId: "webshop-customer-texts",
+      },
+    ],
+  },
+  {
     title: "Kezdőlap",
     icon: "store",
     links: [

@@ -94,6 +94,8 @@ describe("Webshop beállítások", () => {
       "/webshop/szallitas-fizetes",
       // the loyalty redemption and the Omnibus threshold (acrobot 60467): behind their own served switch
       "/webshop/arszabalyok",
+      // the customer texts (card 7bfca4eb): behind their own served switch
+      "/webshop/vevoi-szovegek",
       "/admin/kezdolap",
     ]);
     expect(links.filter((link) => !existsSync(oldalFajlja(link.href)))).toEqual(
@@ -114,6 +116,7 @@ describe("Webshop beállítások", () => {
     expect(without).not.toContain("/webshop/szallitas-fizetes");
     expect(without).not.toContain("/webshop/ajandekkartyak");
     expect(without).not.toContain("/webshop/arszabalyok");
+    expect(without).not.toContain("/webshop/vevoi-szovegek");
     expect(without).toContain("/admin/integrations/medusa/connection");
   });
 
@@ -123,6 +126,7 @@ describe("Webshop beállítások", () => {
       { id: "webshop-coupons" },
       { id: "webshop-shipping-settings" },
       { id: "webshop-price-rules" },
+      { id: "webshop-customer-texts" },
       { id: "webshop-gift-cards" },
     ];
     render(<WebshopSettingsPage />);
@@ -137,6 +141,7 @@ describe("Webshop beállítások", () => {
       { id: "webshop-coupons" },
       { id: "webshop-shipping-settings" },
       { id: "webshop-price-rules" },
+      { id: "webshop-customer-texts" },
       { id: "webshop-gift-cards" },
     ];
     for (const role of USER_ROLES) {
