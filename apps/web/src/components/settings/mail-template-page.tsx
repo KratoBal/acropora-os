@@ -15,7 +15,9 @@ import {
   sanitizeRichHtml,
 } from "@acropora/rich-text";
 import {
+  isNavigationEntryVisible,
   MAIL_TEMPLATE_EVENTS,
+  servedNavigationFeatures,
   WEBSHOP_MAIL_SAMPLE_FACTS,
   misplacedBlockVariables,
   renderMailTemplate,
@@ -33,6 +35,7 @@ import {
   EmailRichEditor,
   type EmailRichEditorHandle,
 } from "@acropora/ui/email-rich-editor";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -177,6 +180,18 @@ type Kilepes =
 export function MailTemplatePage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
+  /*
+    A KIRAKAT TÖBBI VEVŐI SZÖVEGE EGY KATTINTÁSRA (kártya 7bfca4eb; Balázs, 2026-11-24: egy felület, „ne összevissza legyenek”).
+    A Vevői szövegek lap Levelek csoportja ide visz; a Webshop fül vissza oda, ugyanazzal a láthatósággal, mint a lap (jog és a
+    `webshop-customer-texts` kapcsoló): ahol a lap nincs, a link sincs.
+  */
+  const vevoiSzovegekLathato = session?.user
+    ? isNavigationEntryVisible(
+        "webshop-customer-texts",
+        session.user,
+        servedNavigationFeatures(session.navigation),
+      )
+    : false;
 
   /*
     A WEBSHOP BEÁLLÍTÁSOK GYŰJTŐOLDALÁRÓL (`?csoport=webshop`) a Webshop fül
@@ -302,6 +317,21 @@ export function MailTemplatePage() {
           </button>
         ))}
       </div>
+
+      {group === "WEBSHOP" && vevoiSzovegekLathato ? (
+        <p
+          className="text-sm text-pilot-grey-600"
+          data-testid="vevoi-szovegek-link"
+        >
+          A kirakat többi vevői szövege (pénztár, rendelés, fiók, hírlevél):{" "}
+          <Link
+            href="/webshop/vevoi-szovegek"
+            className="font-medium text-pilot-aqua-700 underline"
+          >
+            Vevői szövegek
+          </Link>
+        </p>
+      ) : null}
 
       {group === "WEBSHOP" ? (
         <WebshopStuckMails
