@@ -2614,8 +2614,9 @@ function OrderBody({
                     A sikertelen lezáráskor a pont és az ajándékkártya
                     visszajárt, de a kártyán rögzített összeget a rendszer nem
                     térítette vissza (a feladott csomag miatt a rendelés nem
-                    mondható le). Térítsd vissza a kártyás összeget a
-                    Stripe-ban.
+                    mondható le). Térítsd vissza a kártyás összeget a webshop
+                    adminjában: onnan megy a Stripe-ba, és a jelzés is onnan
+                    tűnik el.
                   </p>
                 ) : null}
                 {order.cardPayment ? (

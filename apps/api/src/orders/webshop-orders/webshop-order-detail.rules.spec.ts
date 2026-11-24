@@ -10,6 +10,7 @@ import {
   historyOf,
   linesOf,
   manualRefundOf,
+  outstandingCapturedOf,
   shippingOf,
   stepsOf,
   TRANSFER_INVOICE_STEP,
@@ -612,7 +613,19 @@ describe("the manual refund notice", () => {
       at: "2026-11-24T20:11:59.000Z",
     });
     const result = toDetail({
-      order: order({ metadata: mark() }),
+      order: order({
+        metadata: mark(),
+        payment_collections: [
+          {
+            status: "captured",
+            amount: 40700,
+            authorized_amount: 40700,
+            captured_amount: 40700,
+            refunded_amount: null,
+            payments: [],
+          },
+        ],
+      } as never),
       status: status("closed_unsuccessfully"),
       facts: NO_FACTS,
       customerOrderCount: 1,
@@ -650,5 +663,62 @@ describe("the manual refund notice", () => {
       }),
       { amount: 1200, creditLines: 0, at: null },
     );
+  });
+
+  it("the notice goes away when the refund is made through the shop: the amount is the smaller of the mark and what is still outstanding (barracuda, OS #2833)", () => {
+    const m = mark();
+    assert.equal(manualRefundOf(m, 40700)?.amount, 40700);
+    assert.equal(manualRefundOf(m, 10000)?.amount, 10000);
+    assert.equal(manualRefundOf(m, 0), null);
+    assert.equal(manualRefundOf(m, -5), null);
+    // the figures not readable: the mark's amount stays
+    assert.equal(manualRefundOf(m, null)?.amount, 40700);
+    assert.equal(manualRefundOf(m)?.amount, 40700);
+    // an outstanding larger than the mark does not raise it
+    assert.equal(manualRefundOf(m, 99999)?.amount, 40700);
+  });
+
+  it("outstandingCapturedOf is captured minus refunded over the shop's payments, null when there are none", () => {
+    assert.equal(outstandingCapturedOf(undefined), null);
+    assert.equal(outstandingCapturedOf([]), null);
+    assert.equal(
+      outstandingCapturedOf([
+        { captured_amount: 40700, refunded_amount: null },
+      ] as never),
+      40700,
+    );
+    assert.equal(
+      outstandingCapturedOf([
+        { captured_amount: 40700, refunded_amount: 40700 },
+      ] as never),
+      0,
+    );
+  });
+
+  it("through toDetail: a fully refunded payment clears the notice, a still captured one keeps it", () => {
+    const run = (refunded: number | null) =>
+      toDetail({
+        order: order({
+          metadata: mark(),
+          payment_collections: [
+            {
+              status: "captured",
+              amount: 40700,
+              authorized_amount: 40700,
+              captured_amount: 40700,
+              refunded_amount: refunded,
+              payments: [],
+            },
+          ],
+        } as never),
+        status: status("closed_unsuccessfully"),
+        facts: NO_FACTS,
+        customerOrderCount: 1,
+        relatedDisplayId: null,
+        now: NOW,
+      }).manualRefund;
+    assert.equal(run(null)?.amount, 40700);
+    assert.equal(run(40700), null);
+    assert.equal(run(700)?.amount, 40000);
   });
 });
