@@ -545,3 +545,206 @@ describe("the language of the customer's mail (d5c6befd, P4)", () => {
       assert.equal(orderLanguageOf(metadata), "hu", JSON.stringify(metadata));
   });
 });
+
+/*
+  A JÓVÁÍRÁSOK A SZÁMLÁN ÉS A DÍJBEKÉRŐN (kártya e62a1a64). MI PIROSÍT: a beváltott pontos rendelésre ismét 422 (a negatív sor hiánya); a
+  számla bruttója nem a rendelés végösszege (a vevő által pénzben fizetendő); az alap (`payment`) alak az ÁFA-alapot is csökkenti, vagy az
+  `discount` alak NEM csökkenti; az ajándékkártya árengedményként számolódik; ismeretlen jóváírással mégis készül számla; a díjbekérő a
+  jóváírást nem viszi; egy jóváírás nélküli rendelés vázlata megváltozik.
+*/
+describe("a rendelés jóváírásai a számlán", () => {
+  const points = (amount: number, count: number | null = amount) => ({
+    id: "cl_p",
+    amount,
+    reference: "loyalty_points",
+    reference_id: "cus_1",
+    metadata: count === null ? null : { points: count },
+  });
+  const giftCard = (amount: number) => ({
+    id: "cl_g",
+    amount,
+    reference: "gift_card",
+    reference_id: "gc_1",
+    metadata: null,
+  });
+  // 26 840 Ft a tételek és a szállítás, a jóváírás UTÁN a végösszeg
+  const withCredit = (credits: ReturnType<typeof points>[], total: number) =>
+    order({ credit_lines: credits, total });
+  const grossOf = (
+    lines: { unitNet: string; quantity: string; vatRatePercent: string }[],
+  ) => lines.map((line) => szamlazzLineAmounts({ ...line, currency: "HUF" }));
+
+  it("a beváltott pont `payment` alakban (B, kapcsolható): negatív, 0 százalékos sor, a számla bruttója a fizetendő végösszeg", () => {
+    const result = invoiceDraftOf(withCredit([points(400)], 26440), {
+      customerId: "c",
+      now: NOW,
+      loyaltyShape: "payment",
+    });
+    assert.ok(result.ok, !result.ok ? result.message : "");
+    const credit = result.draft.lines.at(-1)!;
+    assert.equal(credit.description, "Hűségpontból kifizetve (400 pont)");
+    assert.equal(credit.vatRatePercent, "0");
+    assert.equal(credit.unitNet, "-400");
+    assert.equal(credit.quantity, "1");
+    assert.equal(Math.abs(result.difference) < 1, true);
+    // az ÁFA-alap a teljes ár marad: a 27 százalékos sorok összege ugyanaz, mint jóváírás nélkül
+    const without = invoiceDraftOf(order(), { customerId: "c", now: NOW });
+    assert.ok(without.ok);
+    assert.deepEqual(
+      result.draft.lines.slice(0, -1),
+      without.draft.lines,
+      "a tételsorok nem változnak",
+    );
+  });
+
+  it("alapból (A, Balázs döntése) a pont az ÁFA-kulcsok szerint, a bruttó arányában oszlik meg, negatív „Hűségpont kedvezmény” sorban: az ÁFA-alap is csökken", () => {
+    const result = invoiceDraftOf(withCredit([points(400)], 26440), {
+      customerId: "c",
+      now: NOW,
+    });
+    assert.ok(result.ok, !result.ok ? result.message : "");
+    const credit = result.draft.lines.slice(-1)[0]!;
+    assert.equal(credit.description, "Hűségpont kedvezmény (400 pont)");
+    assert.equal(credit.vatRatePercent, "27");
+    assert.match(credit.unitNet, /^-/);
+    assert.equal(Math.abs(result.difference) < 1, true);
+    // a kedvezmény-sor nettója a bruttó 400 Ft-ból számolt, nem 400
+    const [amounts] = grossOf([{ ...credit, unitNet: credit.unitNet }]);
+    assert.ok(amounts && amounts.ok);
+    assert.equal(Math.round(Number(amounts.grossAmount)), -400);
+    assert.notEqual(credit.unitNet, "-400");
+  });
+
+  it("`discount` alakban több ÁFA-kulcs: a pont kulcsonként oszlik, és a bruttók összege a pont", () => {
+    const base = order();
+    const mixed = order({
+      items: [
+        { ...base.items[0]!, total: 10000, tax_lines: rate(27) },
+        { ...base.items[1]!, total: 5000, tax_lines: rate(5) },
+      ],
+      shipping_methods: [],
+      credit_lines: [points(300)],
+      total: 14700,
+    });
+    const result = invoiceDraftOf(mixed, {
+      customerId: "c",
+      now: NOW,
+      loyaltyShape: "discount",
+    });
+    assert.ok(result.ok, !result.ok ? result.message : "");
+    const credits = result.draft.lines.filter((line) =>
+      line.description.startsWith("Hűségpont kedvezmény"),
+    );
+    assert.deepEqual(
+      credits.map((line) => line.vatRatePercent),
+      ["5", "27"],
+    );
+    assert.deepEqual(
+      credits.map((line) => line.description),
+      [
+        "Hűségpont kedvezmény (300 pont, 5% ÁFA)",
+        "Hűségpont kedvezmény (300 pont, 27% ÁFA)",
+      ],
+    );
+    const gross = grossOf(credits).reduce(
+      (sum, amounts) => sum + (amounts.ok ? Number(amounts.grossAmount) : 0),
+      0,
+    );
+    assert.equal(Math.round(gross), -300);
+  });
+
+  it("az ajándékkártya mindig fizetés (0 százalékos sor), a kapcsoló nem érinti", () => {
+    for (const loyaltyShape of ["payment", "discount"] as const) {
+      const result = invoiceDraftOf(
+        order({ credit_lines: [giftCard(5000)], total: 21840 }),
+        { customerId: "c", now: NOW, loyaltyShape },
+      );
+      assert.ok(result.ok, !result.ok ? result.message : "");
+      const credit = result.draft.lines.at(-1)!;
+      assert.equal(credit.description, "Ajándékkártyával kifizetve");
+      assert.equal(credit.vatRatePercent, "0");
+      assert.equal(credit.unitNet, "-5000");
+    }
+  });
+
+  it("pont és ajándékkártya együtt: két sor, a bruttó a végösszeg", () => {
+    const result = invoiceDraftOf(
+      order({ credit_lines: [points(400), giftCard(5000)], total: 21440 }),
+      { customerId: "c", now: NOW },
+    );
+    assert.ok(result.ok, !result.ok ? result.message : "");
+    assert.deepEqual(
+      result.draft.lines.slice(-2).map((line) => line.description),
+      ["Hűségpont kedvezmény (400 pont)", "Ajándékkártyával kifizetve"],
+    );
+  });
+
+  it("ha a sor nem mondja a pontok számát, a leírás csak a Hűségpont, és a számla ettől még elkészül", () => {
+    const result = invoiceDraftOf(
+      order({ credit_lines: [points(400, null)], total: 26440 }),
+      { customerId: "c", now: NOW },
+    );
+    assert.ok(result.ok);
+    assert.equal(
+      result.draft.lines.at(-1)!.description,
+      "Hűségpont kedvezmény",
+    );
+  });
+
+  it("ismeretlen hivatkozású jóváírásra NEM készül számla, és az üzenet megnevezi", () => {
+    const result = invoiceDraftOf(
+      order({
+        credit_lines: [
+          {
+            id: "cl_x",
+            amount: 100,
+            reference: "valami_mas",
+            reference_id: null,
+            metadata: null,
+          },
+        ],
+        total: 26740,
+      }),
+      { customerId: "c", now: NOW },
+    );
+    assert.equal(result.ok, false);
+    assert.match(
+      !result.ok ? result.message : "",
+      /ismeretlen jóváírás.*valami_mas/,
+    );
+  });
+
+  it("a jóváírás összege nem egyezik a végösszeggel: továbbra is 422-es üzenet (a sor nem takar el hibát)", () => {
+    const result = invoiceDraftOf(withCredit([points(400)], 26000), {
+      customerId: "c",
+      now: NOW,
+    });
+    assert.equal(result.ok, false);
+    assert.match(
+      !result.ok ? result.message : "",
+      /nem adják ki a rendelés végösszegét/,
+    );
+  });
+
+  it("jóváírás nélkül a vázlat pontosan a régi (nincs új sor)", () => {
+    const result = invoiceDraftOf(order(), { customerId: "c", now: NOW });
+    assert.ok(result.ok);
+    assert.equal(
+      result.draft.lines.some((line) => line.vatRatePercent === "0"),
+      false,
+    );
+  });
+
+  it("a díjbekérő is viszi a jóváírást: a fizetendő összeg a végösszeg", () => {
+    const result = proformaDraftOf(withCredit([points(400)], 26440), {
+      customerId: "c",
+      now: NOW,
+    });
+    assert.ok(result.ok, !result.ok ? result.message : "");
+    assert.equal(result.draft.documentType, "PROFORMA");
+    assert.equal(
+      result.draft.lines.at(-1)!.description,
+      "Hűségpont kedvezmény (400 pont)",
+    );
+  });
+});

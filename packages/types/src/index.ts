@@ -1702,6 +1702,7 @@ export type {
   WebshopOrderAttentionItem,
   WebshopOrderAttentionKind,
   WebshopOrderAttentionResponse,
+  WebshopOrderCredit,
   WebshopOrderDetail,
   WebshopOrderProforma,
   WebshopTransferReceipt,

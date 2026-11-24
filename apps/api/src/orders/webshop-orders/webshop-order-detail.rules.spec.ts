@@ -195,6 +195,35 @@ describe("the detail", () => {
     assert.equal(wire.includes("client_secret"), false);
   });
 
+  it("the credits (points, gift card) are listed in the totals, so the rows add up to the total (card e62a1a64)", () => {
+    const result = detail({
+      credit_lines: [
+        {
+          id: "cl_p",
+          amount: 400,
+          reference: "loyalty_points",
+          reference_id: "cus_1",
+          metadata: { points: 400 },
+        },
+        {
+          id: "cl_g",
+          amount: 5000,
+          reference: "gift_card",
+          reference_id: "gc_1",
+          metadata: null,
+        },
+      ],
+    } as unknown as Partial<MedusaOrderDetailRow>);
+    assert.deepEqual(
+      result.totals.credits.map((credit) => [credit.kind, credit.amount]),
+      [
+        ["loyalty", 400],
+        ["gift_card", 5000],
+      ],
+    );
+    assert.equal(result.totals.credits[0]!.points, 400);
+  });
+
   it("the cash-on-delivery fee is its own total line, never a product, and not in the subtotal", () => {
     const result = detail();
     assert.deepEqual(
@@ -206,6 +235,7 @@ describe("the detail", () => {
       discount: 0,
       shipping: 1490,
       codFee: 450,
+      credits: [],
       total: 26390,
     });
     assert.deepEqual(

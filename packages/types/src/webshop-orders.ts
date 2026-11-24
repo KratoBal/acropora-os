@@ -411,6 +411,17 @@ export interface WebshopOrderStatusChangeResult {
   personalDelivery?: boolean;
 }
 
+/** Egy jóváírás a rendelésen: a Medusa `credit_lines` sora (kártya e62a1a64). `other`: ismeretlen hivatkozás, nem találgatjuk. */
+export interface WebshopOrderCredit {
+  id: string;
+  kind: "loyalty" | "gift_card" | "other";
+  label: string;
+  /** a jóváírt összeg (pozitív, a végösszeget csökkenti) */
+  amount: number;
+  /** a beváltott pontok száma (csak hűségpontnál, ha a sor megmondja) */
+  points: number | null;
+}
+
 export interface WebshopOrderDetail {
   id: string;
   displayId: number;
@@ -470,6 +481,11 @@ export interface WebshopOrderDetail {
     shipping: number;
     /** Az utánvét kezelési díja (külön díjsor a webshopban). */
     codFee: number;
+    /**
+     * A rendelés jóváírásai (kártya e62a1a64): a beváltott hűségpont és az ajándékkártya. A `total` ezek UTÁN számolt összeg, tehát
+     * `subtotal + shipping + codFee - discount - a jóváírások = total`; enélkül a sorok nem adják ki a végösszeget.
+     */
+    credits: WebshopOrderCredit[];
     total: number;
   };
   payment: {

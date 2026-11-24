@@ -15,6 +15,10 @@ import {
   type WebshopOrderStatus,
 } from "@acropora/types";
 
+import {
+  orderCreditsOf,
+  type LoyaltyInvoiceShape,
+} from "./webshop-order-credits.rules.js";
 import type {
   MedusaOrderAddressRow,
   MedusaOrderDetailRow,
@@ -375,6 +379,124 @@ function sourceLinesOf(order: MedusaOrderDetailRow): SourceLine[] {
   return lines;
 }
 
+/**
+ * A JÓVÁÍRÁSOK SORAI A SZÁMLÁN ÉS A DÍJBEKÉRŐN (kártya e62a1a64; Balázs 2026-11-24: a B-hez is kell munka). A rendelés végösszege a
+ * jóváírások UTÁN számolt, a tételek és a szállítás összege nélkülük adja ki: a különbséget egy negatív sor viszi, hogy a számla
+ * bruttója a rendelés végösszege (a vevő által pénzben fizetendő) legyen.
+ *
+ * AZ ALAK KAPCSOLHATÓ, mert a döntés (és a könyvelő válasza) még nincs meg:
+ *   `payment` (B): a jóváírás FIZETÉS. A negatív sor 0 százalékos ÁFA-kulccsal áll, tehát az ÁFA-alap a teljes ár marad, csak a
+ *     fizetendő bruttó csökken. A leírás megmondja, mivel fizették ki.
+ *   `discount` (ALAP, A; Balázs döntése 2026-11-24): a hűségpont ÁRENGEDMÉNY. A negatív sorok a tételek ÁFA-kulcsai szerint, a bruttójuk arányában oszlanak meg, tehát az
+ *     ÁFA-alap is csökken.
+ * Az AJÁNDÉKKÁRTYA mindig fizetés (az `payment` alak), a kapcsoló csak a hűségpontra vonatkozik. Ismeretlen jóváírást NEM találgatunk:
+ * a számla nem készül el, mert nem tudjuk, adóalapot csökkent-e.
+ * Váltás B-re: a `WEBSHOP_LOYALTY_INVOICE_SHAPE=payment` környezeti változó az OS API-n (lásd `loyaltyInvoiceShapeOf`).
+ */
+type CreditLinesResult =
+  | { ok: true; lines: BillingDocumentLineInput[]; gross: number }
+  | { ok: false; message: string };
+
+/** A kedvezmény-sor neve: „Hűségpont kedvezmény” (a régi bolt „kedvezmény”-t írt); több ÁFA-kulcsnál a kulcs is áll rajta. */
+const discountDescription = (
+  points: number | null,
+  rate: number,
+  rateCount: number,
+) =>
+  `Hűségpont kedvezmény (${[points ? `${points} pont` : null, rateCount > 1 ? `${rate}% ÁFA` : null].filter(Boolean).join(", ")})`.replace(
+    / \(\)$/,
+    "",
+  );
+
+function creditLinesOf(
+  order: MedusaOrderDetailRow,
+  itemParts: { rate: number; gross: number }[],
+  shape: LoyaltyInvoiceShape,
+  currency: string,
+): CreditLinesResult {
+  const credits = orderCreditsOf(order);
+  const lines: BillingDocumentLineInput[] = [];
+  let gross = 0;
+  const unknown = credits.find((credit) => credit.kind === "other");
+  if (unknown)
+    return {
+      ok: false,
+      message: `A rendelésen ismeretlen jóváírás áll („${unknown.label}”, ${unknown.amount} ${currency}), ezért a számla nem készül el: nem tudjuk, az ÁFA-alapot csökkenti-e.`,
+    };
+  const paymentLine = (description: string, amount: number) => {
+    lines.push({
+      productId: null,
+      description,
+      quantity: "1",
+      unit: null,
+      unitNet: `-${decimalText(amount)}`,
+      vatRatePercent: "0",
+      discountPercent: null,
+      comment: null,
+    });
+    gross = Math.round((gross - amount) * 100) / 100;
+  };
+  for (const credit of credits) {
+    if (credit.kind === "gift_card") {
+      paymentLine("Ajándékkártyával kifizetve", credit.amount);
+    } else if (shape === "payment") {
+      paymentLine(
+        credit.points
+          ? `Hűségpontból kifizetve (${credit.points} pont)`
+          : "Hűségpontból kifizetve",
+        credit.amount,
+      );
+    } else {
+      // ÁRENGEDMÉNY: kulcsonként, a tételek bruttójának arányában; az utolsó kulcs viszi a kerekítési maradékot
+      const byRate = new Map<number, number>();
+      for (const part of itemParts)
+        byRate.set(part.rate, (byRate.get(part.rate) ?? 0) + part.gross);
+      const rates = [...byRate.keys()].sort((a, b) => a - b);
+      const base = rates.reduce((sum, rate) => sum + byRate.get(rate)!, 0);
+      if (!(base > 0))
+        return {
+          ok: false,
+          message:
+            "A hűségpont árengedményét nincs mire felosztani: a rendelésnek nincs adóköteles tétele.",
+        };
+      let left = credit.amount;
+      rates.forEach((rate, index) => {
+        const share =
+          index === rates.length - 1
+            ? left
+            : Math.round(((credit.amount * byRate.get(rate)!) / base) * 100) /
+              100;
+        left = Math.round((left - share) * 100) / 100;
+        if (!(share > 0)) return;
+        const amounts = rate
+          ? szamlazzUnitNetFromGross({
+              grossAmount: decimalText(share),
+              quantity: "1",
+              vatRatePercent: decimalText(rate),
+              currency,
+            })
+          : null;
+        const unitNet =
+          amounts && amounts.ok ? amounts.unitNet : decimalText(share);
+        const lineGross =
+          amounts && amounts.ok ? Number(amounts.grossAmount) : share;
+        lines.push({
+          productId: null,
+          description: discountDescription(credit.points, rate, rates.length),
+          quantity: "1",
+          unit: null,
+          unitNet: `-${unitNet}`,
+          vatRatePercent: decimalText(rate),
+          discountPercent: null,
+          comment: null,
+        });
+        gross = Math.round((gross - lineGross) * 100) / 100;
+      });
+    }
+  }
+  return { ok: true, lines, gross };
+}
+
 export type InvoiceDraftResult =
   | {
       ok: true;
@@ -394,10 +516,16 @@ export type InvoiceDraftResult =
  */
 export function invoiceDraftOf(
   order: MedusaOrderDetailRow,
-  input: { customerId: string; now: Date },
+  input: {
+    customerId: string;
+    now: Date;
+    /** A hűségpont sorának alakja (kártya e62a1a64); alap `discount` (Balázs döntése), lásd `creditLinesOf`. */
+    loyaltyShape?: LoyaltyInvoiceShape;
+  },
 ): InvoiceDraftResult {
   const currency = (order.currency_code ?? "huf").toUpperCase();
   const lines: BillingDocumentLineInput[] = [];
+  const itemParts: { rate: number; gross: number }[] = [];
   let invoiceGross = 0;
   for (const source of sourceLinesOf(order)) {
     const rate = rateOf(source.taxLines);
@@ -429,6 +557,7 @@ export function invoiceDraftOf(
       };
     invoiceGross =
       Math.round((invoiceGross + Number(amounts.grossAmount)) * 100) / 100;
+    itemParts.push({ rate: Number(rate), gross: Number(amounts.grossAmount) });
     lines.push({
       productId: null,
       description: source.description,
@@ -442,6 +571,16 @@ export function invoiceDraftOf(
   }
   if (!lines.length)
     return { ok: false, message: "A rendelésnek nincs számlázható tétele." };
+  // A JÓVÁÍRÁSOK (hűségpont, ajándékkártya) negatív sorai: a számla bruttója a rendelés végösszege (a pénzben fizetendő) legyen
+  const credit = creditLinesOf(
+    order,
+    itemParts,
+    input.loyaltyShape ?? "discount",
+    currency,
+  );
+  if (!credit.ok) return { ok: false, message: credit.message };
+  lines.push(...credit.lines);
+  invoiceGross = Math.round((invoiceGross + credit.gross) * 100) / 100;
   const orderTotal = amountOf(order.total);
   if (orderTotal === null)
     return {
@@ -453,7 +592,7 @@ export function invoiceDraftOf(
   if (Math.abs(difference) >= 1)
     return {
       ok: false,
-      message: `A számla tételei (${invoiceGross} ${currency}) nem adják ki a rendelés végösszegét (${orderTotal} ${currency}). Valószínűleg kedvezmény vagy jóváírás áll a rendelésen, amit a tételek nem viselnek; a számla nem készül el.`,
+      message: `A számla tételei (${invoiceGross} ${currency}) nem adják ki a rendelés végösszegét (${orderTotal} ${currency}). Valószínűleg kedvezmény áll a rendelésen, amit a tételek nem viselnek; a számla nem készül el.`,
     };
   const today = budapestDayKey(input.now);
   // a fizetési mód a rendelés fizetési gyűjtőjének szolgáltatójából jön (`invoicePaymentMethodOf`)
@@ -546,7 +685,11 @@ export function buyerMismatch(
  */
 export function proformaDraftOf(
   order: MedusaOrderDetailRow,
-  input: { customerId: string; now: Date },
+  input: {
+    customerId: string;
+    now: Date;
+    loyaltyShape?: LoyaltyInvoiceShape;
+  },
 ): InvoiceDraftResult {
   const invoice = invoiceDraftOf(order, input);
   if (!invoice.ok) return invoice;

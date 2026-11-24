@@ -821,6 +821,19 @@ export interface MedusaOrderDetailRow {
   subtotal: number;
   discount_total: number;
   shipping_total: number;
+  /**
+   * A JÓVÁÍRÁSOK (kártya e62a1a64): a beváltott hűségpont (`loyalty_points`) és az ajándékkártya (`gift_card`) a rendelés
+   * credit line-ja; a `total` ezek UTÁN számolt összeg. Régi válaszból hiányozhat.
+   */
+  credit_lines?:
+    | {
+        id: string;
+        amount: number | string | null;
+        reference: string | null;
+        reference_id: string | null;
+        metadata: Record<string, unknown> | null;
+      }[]
+    | null;
   shipping_address: MedusaOrderAddressRow | null;
   billing_address: MedusaOrderAddressRow | null;
   items: {
@@ -2006,6 +2019,11 @@ export const ORDER_DETAIL_FIELDS = [
   "subtotal",
   "discount_total",
   "shipping_total",
+  "credit_lines.id",
+  "credit_lines.amount",
+  "credit_lines.reference",
+  "credit_lines.reference_id",
+  "credit_lines.metadata",
   "shipping_address.*",
   "billing_address.*",
   "items.id",
