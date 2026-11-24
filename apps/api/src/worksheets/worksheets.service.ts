@@ -1286,7 +1286,8 @@ export class WorksheetsService {
      *
      * A BELSŐ KOLLÉGA ÚTJÁN A JEGYET A RENDSZER NYITJA MEG (Luca és Balázs, 2026-11-20; `worksheet-auto-ticket.ts`):
      * a gépelt névvel rögzített, a saját és a mobilról jövő aláírás is ide fut. A kapu ott a tranzakcióban áll, és
-     * csak a karbantartási laphoz kötött lapnál állít meg (`NO_TICKET`, lent). A PARTNER útja változatlan: neki egy
+     * csak a partner útján állít meg (`NO_TICKET`, lent); a karbantartási laphoz kötött lap jegy nélkül is aláírható
+     * (Balázs, 2026-11-24: Luca KAR-2026-021 lapja). A PARTNER útja változatlan: neki egy
      * „nyiss hibajegyet" mondat olyan teendőt adna, amihez nincs jogosultsága, és jegyet sem nyit.
      */
     const gate = mayWorksheetBeSigned({
@@ -1339,12 +1340,9 @@ export class WorksheetsService {
     if (!result.ok) {
       if (result.reason === "NOT_FOUND")
         throw new NotFoundException("A munkalap nem található.");
+      // a belső út jegyet nyit, vagy karbantartási lapon jegy nélkül is aláír: ide csak a partner jut el (a kapu lent a kérés elején megállítja)
       if (result.reason === "NO_TICKET")
-        throw new BadRequestException(
-          scope.kind === "internal"
-            ? "Ez a munkalap egy karbantartási laphoz kapcsolódik, ezért nem nyílik hozzá automatikusan hibajegy, és jegy nélkül nem írható alá. Csatold egy hibajegyhez, és utána írasd alá."
-            : PARTNER_NO_TICKET_MESSAGE,
-        );
+        throw new BadRequestException(PARTNER_NO_TICKET_MESSAGE);
       /*
         KET OK, KET MONDAT, MERT KET KULONBOZO TEENDOT AD.
 
@@ -1386,7 +1384,12 @@ export class WorksheetsService {
      * FIRE AND FORGET, a haz mintaja szerint: az alairas valasza NEM fugghet
      * attol, hogy a levelezo eppen elerheto-e.
      */
-    const jegyId = worksheet.serviceJob?.id ?? null;
+    /*
+      A JEGY NÉLKÜLI, KT-HEZ KÖTÖTT LAP ÉRTESÍTÉSE A KT FELADAT NYITÓJÁHOZ MEGY (Balázs, 2026-11-24: az aláírás, a lap és az
+      értesítés ugyanúgy, mint a jegyes lapnál): a levél a feladat fajtájához igazodik (`ticketTemplateForKind`), a címzett
+      a feladat nyitója (a döntés az aláíróra nem néz, ahogy a jegyes lapnál sem).
+    */
+    const jegyId = worksheet.serviceJob?.id ?? result.maintenanceJobId ?? null;
     /*
       AZ ERTEK `ACCEPTED`, NEM `SIGNED` -- es ezt a fordito javitotta ki.
       A VERZIO allapota lesz `SIGNED`, a DONTES bemenete viszont

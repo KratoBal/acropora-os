@@ -605,22 +605,47 @@ describe("WorksheetsService", () => {
     assert.equal(called, false);
   });
 
-  it("a karbantartasi laphoz kotott lap a tarbol NO_TICKET-tel jon vissza: a belso kollega a KT-mondatot kapja", async () => {
+  it("a karbantartasi laphoz kotott lap jegy nelkul alairhato, es az ertesites a KT feladat nyitojahoz megy", async () => {
+    const ertesitesek: unknown[] = [];
     const service = new WorksheetsService(
-      repository({ sign: async () => ({ ok: false, reason: "NO_TICKET" }) }),
+      repository({
+        sign: async () => ({
+          ok: true,
+          autoTicket: null,
+          maintenanceJobId: "kt-job-1",
+        }),
+      }),
+      undefined,
+      undefined,
+      {
+        notifyWorksheetSigned: (bemenet: unknown) => {
+          ertesitesek.push(bemenet);
+        },
+      } as never,
     );
-    await assert.rejects(
-      service.sign(
-        "worksheet-1",
-        { decision: "ACCEPTED", signerName: "Kovács Béla" },
-        BELSOS_KERO,
-      ),
-      (hiba: unknown) =>
-        hiba instanceof BadRequestException &&
-        /karbantartási laphoz kapcsolódik, ezért nem nyílik hozzá automatikusan hibajegy/.test(
-          hiba.message,
-        ),
+    await service.sign(
+      "worksheet-1",
+      { decision: "ACCEPTED", signerName: "Kovács Béla" },
+      BELSOS_KERO,
     );
+    assert.deepEqual(ertesitesek, [
+      { serviceJobId: "kt-job-1", actorUserId: "user-1" },
+    ]);
+  });
+
+  it("jegy es KT-kotes nelkul az alairas nem kuld ertesitest", async () => {
+    const ertesitesek: unknown[] = [];
+    const service = new WorksheetsService(repository(), undefined, undefined, {
+      notifyWorksheetSigned: (bemenet: unknown) => {
+        ertesitesek.push(bemenet);
+      },
+    } as never);
+    await service.sign(
+      "worksheet-1",
+      { decision: "ACCEPTED", signerName: "Kovács Béla" },
+      BELSOS_KERO,
+    );
+    assert.deepEqual(ertesitesek, []);
   });
 
   it("reports a missing worksheet as not found", async () => {

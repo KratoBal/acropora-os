@@ -106,7 +106,16 @@ export type WorksheetAmendResult =
 export type AutoOpenedTicket = { id: string; jobNumber: string } | null;
 
 export type WorksheetSignResult =
-  | { ok: true; autoTicket: AutoOpenedTicket }
+  | {
+      ok: true;
+      autoTicket: AutoOpenedTicket;
+      /**
+       * A KARBANTARTÁSI (KT) LAP, AMIHEZ A LAP HIVATKOZÁSSAL KÖTÖTT, ha van ilyen (és csak akkor van a kulcs). Az ilyen lap
+       * jegy nélkül íródik alá (Balázs, 2026-11-18, kártya e2651523: a karbantartási lap munkalapként él, KT sorozat, hibajegy
+       * NÉLKÜL), ezért az aláírás értesítése nem a lap jegyének, hanem a KT feladatnak a nyitójához megy.
+       */
+      maintenanceJobId?: string;
+    }
   | {
       ok: false;
       /**
@@ -120,7 +129,7 @@ export type WorksheetSignResult =
        * Amig csak az elso letezett, a lezaras MAGA tette alairhatova a lapot --
        * es a portalon MINDEN lezart lap alairhatonak latszott.
        */
-      /** `NO_TICKET`: a lapnak nincs jegye, és ezen az úton nem nyílhat (a partner útja, vagy KT-hoz kötött lap). */
+      /** `NO_TICKET`: a lapnak nincs jegye, és ezen az úton nem nyílhat (a partner útja). A KT-hoz kötött lap jegy nélkül is aláírható. */
       reason: "NOT_FOUND" | "NOT_AWAITING_SIGNATURE" | "NOT_SENT" | "NO_TICKET";
     };
 
@@ -2101,10 +2110,14 @@ export class WorksheetsRepository extends Repository {
           serviceJobId: sheet.serviceJobId,
           linkedJobId: sheet.linkedToJob?.serviceJobId ?? null,
         });
-        if (
-          decision === "maintenance-link" ||
-          (decision === "open" && !input.openTicketIfMissing)
-        )
+        /*
+          A KT-HOZ KÖTÖTT LAP JEGY NÉLKÜL IS ALÁÍRHATÓ (Balázs, 2026-11-24 10:49 UTC, Luca KAR-2026-021 lapja; a 2026-11-18-i
+          döntés, e2651523: a karbantartási lap munkalapként él, hibajegy NÉLKÜL). Eddig itt `maintenance-link` is NO_TICKET volt
+          (6f374841, 2026-11-20: a KT-hoz kötött lap nem kap mellé javítási jegyet): a jegyet jól nem nyitotta, de az aláírást is
+          megtagadta, és a kiküldés jegy nélkül ment, tehát egy lap kiküldhető volt, de aláírhatatlan. A jegy-kapu a jegy NÉLKÜLI,
+          de KT-hez nem kötött lapon áll (a partner útján `open`, és nem nyithat).
+        */
+        if (decision === "open" && !input.openTicketIfMissing)
           return { ok: false, reason: "NO_TICKET" } as const;
 
         /*
@@ -2204,6 +2217,9 @@ export class WorksheetsRepository extends Repository {
           autoTicket: autoTicket
             ? { id: autoTicket.id, jobNumber: autoTicket.jobNumber }
             : null,
+          ...(decision === "maintenance-link" && sheet.linkedToJob
+            ? { maintenanceJobId: sheet.linkedToJob.serviceJobId }
+            : {}),
         } as const;
       }),
     );
