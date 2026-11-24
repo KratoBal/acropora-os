@@ -165,6 +165,32 @@ describe("WebshopCustomerTextsPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("a {hely}-ek előre látszanak, és gépelés közben megmondja, melyik hiányzik; hely nélküli szövegnél nincs sor", async () => {
+    render(<WebshopCustomerTextsPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Hibabejelentés/ }),
+    );
+    const row = screen.getByTestId("vevoi-szoveg-guestOrder.problem.done");
+    fireEvent.click(within(row).getByRole("button", { name: "Szerkesztés" }));
+    const helyek = within(row).getByTestId("helyek-hu");
+    expect(helyek.textContent).toContain(
+      "Ezeknek a helyeknek a szövegben kell maradniuk: {id}",
+    );
+    expect(helyek.textContent).not.toContain("hiányzik");
+    fireEvent.change(within(row).getByLabelText("Magyar szöveg"), {
+      target: { value: "Megkaptuk a bejelentést" },
+    });
+    expect(within(row).getByTestId("helyek-hu").textContent).toContain(
+      "most hiányzik: {id}",
+    );
+    expect(api.save).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Pénztár/ }));
+    const kosar = screen.getByTestId("vevoi-szoveg-cart.add");
+    fireEvent.click(within(kosar).getByRole("button", { name: "Szerkesztés" }));
+    expect(within(kosar).queryByTestId("helyek-hu")).toBeNull();
+  });
+
   it("a beállítások joga nélkül nem tölt", async () => {
     auth.role = "WAREHOUSE";
     render(<WebshopCustomerTextsPage />);

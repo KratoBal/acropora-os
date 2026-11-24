@@ -10,6 +10,7 @@ import {
 } from "@acropora/ui";
 import {
   customerTextProblem,
+  customerTextSlots,
   hasPermission,
   PERMISSIONS,
   searchWebshopCustomerTexts,
@@ -53,6 +54,37 @@ const edited = (text: WebshopCustomerText) =>
 
 const message = (cause: unknown, fallback: string) =>
   cause instanceof Error ? cause.message : fallback;
+
+/**
+ * A {HELY}-EK ELŐRE (kártya 7bfca4eb, acrobot 61027): a kirakat ezeket tölti ki (rendelésszám, ügyszám, darabszám), és a webshop
+ * csak akkor fogadja el a szöveget, ha mind megmarad (`customerTextProblem`). Eddig ez csak a mentés után, hibaként derült ki;
+ * itt a mező alatt áll, és gépelés közben megmondja, melyik hiányzik. Hely nélküli szövegnél nincs sor.
+ */
+function HelyekSor({
+  alap,
+  szoveg,
+  locale,
+}: {
+  alap: string;
+  szoveg: string;
+  locale: WebshopCustomerTextLocale;
+}) {
+  const helyek = customerTextSlots(alap);
+  if (!helyek.length) return null;
+  const megvan = new Set(customerTextSlots(szoveg));
+  const hianyzik = helyek.filter((hely) => !megvan.has(hely));
+  return (
+    <p className="text-xs text-pilot-grey-600" data-testid={`helyek-${locale}`}>
+      Ezeknek a helyeknek a szövegben kell maradniuk: {helyek.join(", ")}
+      {hianyzik.length ? (
+        <span className="text-pilot-red-700">
+          {" "}
+          (most hiányzik: {hianyzik.join(", ")})
+        </span>
+      ) : null}
+    </p>
+  );
+}
 
 function TextEditor({
   text,
@@ -124,6 +156,11 @@ function TextEditor({
           <p className="text-xs text-pilot-grey-500">
             Alapérték: {text.defaults[locale]}
           </p>
+          <HelyekSor
+            alap={text.defaults[locale]}
+            szoveg={draft[locale]}
+            locale={locale}
+          />
           {problems[locale] ? (
             <p className="text-xs text-pilot-red-700">{problems[locale]}</p>
           ) : null}
