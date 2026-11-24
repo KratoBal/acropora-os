@@ -1460,7 +1460,7 @@ describe(
         );
       });
 
-      it("a karbantartási laphoz kötött lap nem kap jegyet: aláírásnál NO_TICKET, kiküldésnél jegy nélkül megy", async () => {
+      it("a karbantartási laphoz kötött lap nem kap jegyet, mégis aláírható (Balázs, 2026-11-24): kiküldésnél és aláírásnál jegy nélkül megy", async () => {
         const kt = await prisma.serviceJob.create({
           data: {
             jobNumber: `${TEST_JOB_PREFIX}KT${suffix}`,
@@ -1489,7 +1489,6 @@ describe(
           },
           select: { id: true },
         });
-        const signed = await sign(id);
         const sent = await repository.sendForSignature({
           worksheetId: id,
           signerUserId: vevo.id,
@@ -1497,16 +1496,21 @@ describe(
           openTicketIfMissing: true,
           now: new Date(),
         });
+        const signed = await sign(id);
         assert.deepEqual(
           {
             signed,
             sentTicket: sent.ok ? sent.autoTicket : "nem ment ki",
             ticket: (await ticketOf(id)).serviceJob,
+            signatures: await prisma.worksheetVersionSignature.count({
+              where: { worksheetVersion: { worksheetId: id } },
+            }),
           },
           {
-            signed: { ok: false, reason: "NO_TICKET" },
+            signed: { ok: true, autoTicket: null, maintenanceJobId: kt.id },
             sentTicket: null,
             ticket: null,
+            signatures: 1,
           },
         );
       });
