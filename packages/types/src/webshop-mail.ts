@@ -1589,13 +1589,17 @@ function order(v: unknown, path: string): WebshopMailOrder {
   };
 }
 
+/** The longest link the password-reset mail may carry (the reset token is a JWT: 405 characters for a normal address, 704 at worst). */
+export const PASSWORD_RESET_URL_MAX_LENGTH = 1000;
+
 /**
  * THE GUEST ORDER PAGE'S ADDRESS, if it is one a mail may carry: a plain https address, no credentials, no spaces or
  * control characters, at most 300 characters. Anything else is null (no link): the value goes into a customer's mail
  * as it stands, so only an address that looks like an address is let through. Not a check that the page exists.
  */
-export function safeOrderViewUrl(v: unknown): string | null {
-  if (typeof v !== "string" || v.length === 0 || v.length > 300) return null;
+export function safeOrderViewUrl(v: unknown, maxLength = 300): string | null {
+  if (typeof v !== "string" || v.length === 0 || v.length > maxLength)
+    return null;
   if (/[\s\u0000-\u001f\u007f<>"']/.test(v)) return null;
   try {
     const url = new URL(v);
@@ -1873,7 +1877,13 @@ function parseTemplateFacts(
     }
     case "password-reset": {
       // the link goes into an href: a clean https address or the mail is refused (422), never sent without it
-      const reset_url = safeOrderViewUrl(f.reset_url);
+      // LONGER THAN THE OTHER LINKS (measured on the test shop 2026-11-24, the first reset mail the OS refused for good: `permanent`):
+      // the link carries Medusa's reset token, a JWT, which is 350 characters for a normal address and the whole link 405, and 704 in the
+      // worst case (a 254-character address in the token); the general limit of 300 refused every one. A thousand covers the worst case.
+      const reset_url = safeOrderViewUrl(
+        f.reset_url,
+        PASSWORD_RESET_URL_MAX_LENGTH,
+      );
       if (!reset_url)
         throw new FactsError("facts.reset_url: tiszta https cím kell");
       // how long the link lives: a whole number of minutes, one to a day (Medusa's reset token is a fixed 15)

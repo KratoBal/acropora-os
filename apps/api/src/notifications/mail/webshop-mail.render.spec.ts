@@ -370,6 +370,62 @@ describe("renderWebshopMail", () => {
     assert.equal(parseWebshopMailFacts("password-reset", base).ok, true);
   });
 
+  it("the password reset accepts a link as long as a REAL Medusa reset token makes it (405 characters; 704 at worst), and refuses past a thousand; the other links keep 300", () => {
+    const b64 = (o: unknown) =>
+      Buffer.from(JSON.stringify(o)).toString("base64url");
+    const token = (email: string) =>
+      [
+        b64({ alg: "HS256", typ: "JWT" }),
+        b64({
+          entity_id: email,
+          provider: "emailpass",
+          actor_type: "customer",
+          purpose: "reset",
+          iat: 1795533748,
+          exp: 1795534648,
+          jti: "3f9c1a2e-7b4d-4c1e-9a55-0d6f2b8e41aa",
+        }),
+        "x".repeat(43),
+      ].join(".");
+    const base = {
+      customer_name: null,
+      order_created_at: null,
+      locale: "hu",
+      order_view_url: null,
+      valid_minutes: 15,
+    };
+    const normal = `https://shop-staging.acropora.hu/hu/uj-jelszo?token=${token("teszt.huseg-bonusz-1795532290580@example.com")}`;
+    const worst = `https://shop-staging.acropora.hu/en-hu/uj-jelszo?token=${token(`${"x".repeat(240)}@example.com`)}`;
+    assert.ok(normal.length > 300, "a normal reset link is longer than 300");
+    assert.ok(worst.length > 600 && worst.length <= 1000, String(worst.length));
+    for (const reset_url of [normal, worst]) {
+      const parsed = parseWebshopMailFacts("password-reset", {
+        ...base,
+        reset_url,
+      });
+      assert.equal(parsed.ok, true, String(reset_url.length));
+    }
+    const tooLong = `https://shop.example/hu/uj-jelszo?token=${"a".repeat(1000)}`;
+    assert.equal(
+      parseWebshopMailFacts("password-reset", { ...base, reset_url: tooLong })
+        .ok,
+      false,
+    );
+    // the other mails' links keep the general 300: a newsletter link of 405 characters is still refused
+    assert.equal(
+      parseWebshopMailFacts("newsletter-confirm", {
+        customer_name: null,
+        order_created_at: null,
+        locale: "hu",
+        order_view_url: null,
+        confirm_url: normal,
+        unsubscribe_url: "https://shop.example/hu/hirlevel/leiratkozas?token=b",
+        expires_at: "2026-11-16T15:00:00.000Z",
+      }).ok,
+      false,
+    );
+  });
+
   it("mailMinutes says a lifetime in whole minutes, or whole hours when it is one, in both languages", () => {
     assert.equal(mailMinutes(15, "hu"), "15 perc");
     assert.equal(mailMinutes(15, "en"), "15 minutes");

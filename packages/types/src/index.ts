@@ -241,6 +241,7 @@ export {
   hungarianDay,
   isWebshopMailTemplate,
   parseWebshopMailFacts,
+  PASSWORD_RESET_URL_MAX_LENGTH,
   safeOrderViewUrl,
   safeBuyerCompany,
   safeLegalUrls,
