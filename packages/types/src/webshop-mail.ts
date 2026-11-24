@@ -311,6 +311,20 @@ type WebshopTemplateFacts =
     }
   | {
       /**
+       * The customer's password-reset link (`auth.password_reset`, commerce
+       * card 7bfca4eb): the link to the storefront's new-password page with the
+       * token in the query, and how long it lives (Medusa's fixed 15 minutes),
+       * so the mail can say it. There is no order behind it: the common
+       * `order_created_at` and `order_view_url` are null, `customer_name` is the
+       * account's name when it has one. The text is a proposal; the shop sends
+       * it only behind ACROPORA_PASSWORD_RESET_MAIL on the test shop.
+       */
+      readonly template: "password-reset";
+      readonly reset_url: string;
+      readonly valid_minutes: number;
+    }
+  | {
+      /**
        * The stock alert's confirmation ("Szólj, ha jön hasonló", commerce
        * card 0c1265d2, acropora-commerce #701): the newsletter's double
        * opt-in, plus what the address signed up for (`subject_label`, a
@@ -374,6 +388,7 @@ export const WEBSHOP_MAIL_KEYS = {
   "problem-report-received": "WEBSHOP_PROBLEM_REPORT_RECEIVED",
   "withdrawal-received": "WEBSHOP_WITHDRAWAL_RECEIVED",
   "newsletter-confirm": "WEBSHOP_NEWSLETTER_CONFIRM",
+  "password-reset": "WEBSHOP_PASSWORD_RESET",
   "stock-alert-confirm": "WEBSHOP_STOCK_ALERT_CONFIRM",
   "stock-alert-arrival": "WEBSHOP_STOCK_ALERT_ARRIVAL",
 } as const satisfies Record<WebshopMailTemplate, string>;
@@ -416,6 +431,26 @@ export function mailDay(
     month: "long",
     day: "numeric",
   }).format(new Date(iso));
+}
+
+/**
+ * A link's lifetime as the mail says it: "15 perc" / "15 minutes" (whole minutes; one hour or more as whole hours: "1 óra" / "1 hour").
+ * The password-reset link lives for minutes, not days, so `mailDay` cannot name it.
+ */
+export function mailMinutes(
+  minutes: number,
+  locale: WebshopMailLocale | undefined,
+): string {
+  const whole = Math.max(1, Math.round(minutes));
+  if (whole >= 60 && whole % 60 === 0) {
+    const hours = whole / 60;
+    return locale === "en"
+      ? `${hours} ${hours === 1 ? "hour" : "hours"}`
+      : `${hours} óra`;
+  }
+  return locale === "en"
+    ? `${whole} ${whole === 1 ? "minute" : "minutes"}`
+    : `${whole} perc`;
 }
 
 function escapeHtml(value: string): string {
@@ -1188,6 +1223,15 @@ function templateContent(
         blocks: {},
       };
 
+    case "password-reset":
+      return {
+        values: {
+          jelszo_visszaallito_link: facts.reset_url,
+          jelszo_link_ervenyesseg: mailMinutes(facts.valid_minutes, locale),
+        },
+        blocks: {},
+      };
+
     case "stock-alert-confirm":
       return {
         values: {
@@ -1379,6 +1423,14 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
     confirm_url: "https://shop.example/hu/hirlevel/megerosites?token=minta",
     unsubscribe_url: "https://shop.example/hu/hirlevel/leiratkozas?token=minta",
     expires_at: "2026-10-12T09:21:00.000Z",
+  },
+  "password-reset": {
+    ...SAMPLE_COMMON,
+    order_created_at: null,
+    order_view_url: null,
+    template: "password-reset",
+    reset_url: "https://shop.example/hu/uj-jelszo?token=minta",
+    valid_minutes: 15,
   },
   "stock-alert-confirm": {
     ...SAMPLE_COMMON,
@@ -1818,6 +1870,23 @@ function parseTemplateFacts(
       if (!subject_label)
         throw new FactsError("facts.subject_label: nem lehet üres");
       return { template, ...links, subject_label };
+    }
+    case "password-reset": {
+      // the link goes into an href: a clean https address or the mail is refused (422), never sent without it
+      const reset_url = safeOrderViewUrl(f.reset_url);
+      if (!reset_url)
+        throw new FactsError("facts.reset_url: tiszta https cím kell");
+      // how long the link lives: a whole number of minutes, one to a day (Medusa's reset token is a fixed 15)
+      const valid_minutes = num(f.valid_minutes, "facts.valid_minutes");
+      if (
+        !Number.isInteger(valid_minutes) ||
+        valid_minutes < 1 ||
+        valid_minutes > 1440
+      )
+        throw new FactsError(
+          "facts.valid_minutes: 1 és 1440 közötti egész kell",
+        );
+      return { template, reset_url, valid_minutes };
     }
     case "stock-alert-arrival": {
       // the product's page and the leaving link go into an href: a clean https address or the mail is refused (422)

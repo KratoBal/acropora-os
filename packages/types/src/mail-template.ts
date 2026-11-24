@@ -374,6 +374,17 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
     kind: "link",
   },
   {
+    name: "jelszo_visszaallito_link",
+    description:
+      "A jelszó-visszaállító link: az új jelszót megadó oldalra visz. Egyszer használható, és csak rövid ideig él (lásd: jelszo_link_ervenyesseg).",
+    kind: "link",
+  },
+  {
+    name: "jelszo_link_ervenyesseg",
+    description:
+      "Meddig működik a jelszó-visszaállító link, a kérés pillanatától, például 15 perc.",
+  },
+  {
     name: "ertesites_megerosito_link",
     description:
       "A „Szólj, ha jön hasonló” értesítés-kérés megerősítő linkje. Egyszer használható, a lejáratig.",
@@ -866,6 +877,21 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "hirlevel_megerosito_link",
       "megerosites_lejarat",
       "hirlevel_leiratkozo_link",
+    ],
+  },
+  {
+    id: "WEBSHOP_PASSWORD_RESET",
+    group: "WEBSHOP",
+    name: "Jelszó-visszaállítás",
+    description:
+      "Amikor egy fiókos vevő az „Elfelejtett jelszó” oldalon új jelszót kér: a link, amelyen az újat beállíthatja. A link egyszer használható és rövid ideig él, ezt a levélnek ki kell mondania. Ha a címhez nincs fiók, levél nem megy.",
+    // rendeles_datum and rendeles_megtekintes_mondat are every webshop mail's; here they are always empty (no order)
+    variables: [
+      "ugyfel_neve",
+      "rendeles_datum",
+      "rendeles_megtekintes_mondat",
+      "jelszo_visszaallito_link",
+      "jelszo_link_ervenyesseg",
     ],
   },
   {

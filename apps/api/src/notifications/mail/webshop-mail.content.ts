@@ -214,6 +214,15 @@ const RAW: Readonly<
       `<p>Ha később nem kérsz több levelet, itt bármikor leiratkozhatsz: <a href="{{hirlevel_leiratkozo_link}}">leiratkozás</a>.</p>`,
     ].join(""),
   },
+  WEBSHOP_PASSWORD_RESET: {
+    subject: "Új jelszó beállítása",
+    bodyHtml: [
+      "<p>Új jelszót kértél az Acropora webshop fiókodhoz.</p>",
+      `<p data-cta=""><a href="{{jelszo_visszaallito_link}}">Új jelszó beállítása</a></p>`,
+      `<p>A link egyszer használható, és ${v("jelszo_link_ervenyesseg")} múlva lejár. Ha lejárt, kérj újat az „Elfelejtett jelszó” oldalon.</p>`,
+      "<p>Ha nem te kérted, nincs teendőd: a jelszavad addig nem változik, amíg a fenti linken új jelszót nem adsz meg.</p>",
+    ].join(""),
+  },
   WEBSHOP_STOCK_ALERT_CONFIRM: {
     subject: "Erősítsd meg az értesítés-kérésedet",
     bodyHtml: [
@@ -391,6 +400,15 @@ const RAW_EN: typeof RAW = {
       `<p data-cta=""><a href="{{hirlevel_megerosito_link}}">Confirm subscription</a></p>`,
       `<p>The link works until ${v("megerosites_lejarat")}. If you did not subscribe, there is nothing to do: without a confirmation, no newsletter goes to your address.</p>`,
       `<p>If you no longer want our mails later, you can leave at any time here: <a href="{{hirlevel_leiratkozo_link}}">unsubscribe</a>.</p>`,
+    ].join(""),
+  },
+  WEBSHOP_PASSWORD_RESET: {
+    subject: "Set a new password",
+    bodyHtml: [
+      "<p>You asked for a new password for your Acropora webshop account.</p>",
+      `<p data-cta=""><a href="{{jelszo_visszaallito_link}}">Set a new password</a></p>`,
+      `<p>The link works once and expires after ${v("jelszo_link_ervenyesseg")}. If it has expired, ask for a new one on the "Forgot password" page.</p>`,
+      "<p>If it was not you, there is nothing to do: your password does not change until you set a new one through the link above.</p>",
     ].join(""),
   },
   WEBSHOP_STOCK_ALERT_CONFIRM: {
