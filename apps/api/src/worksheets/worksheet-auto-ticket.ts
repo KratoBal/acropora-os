@@ -36,7 +36,7 @@ import { firstLineStep } from "./first-line-ticket-step.js";
  * AMIRE NEM VONATKOZIK:
  *   - a partner (portál) útja: ott a régi mondat marad, jegyet nem nyit (a hívó dönt, nem ez a függvény);
  *   - a karbantartási (KT) lap: a KT alá tartozó lapnak már van jegye, a KT-hoz csak HIVATKOZÁSSAL kötött
- *     (`ServiceJobLinkedWorksheet`) lap pedig NEM kap mellé javítási jegyet. Az ilyen lapnál a régi kapu-mondat marad.
+ *     (`ServiceJobLinkedWorksheet`) lap pedig NEM kap mellé javítási jegyet, és JEGY NÉLKÜL is aláírható (Balázs, 2026-11-24, KAR-2026-021: a karbantartási lap jegy nélkül él): az aláírás átmegy, az értesítés a KT feladat nyitójához megy.
  *   - értesítés nem megy: a jegyet az nyitja, aki épp a lapot zárja le aláírással, tehát neki nincs miről szólni.
  */
 
@@ -61,7 +61,7 @@ export interface AutoTicketFacts {
  * KELL-E JEGYET NYITNI, ÉS HA NEM, MIÉRT. Tiszta függvény: az adatbázis nélkül mérhető.
  *
  *   has-ticket        a lapnak van jegye: nincs teendő, a kapu átengedi
- *   maintenance-link  KT-hoz kötött lap: javítási jegyet nem kap, a kapu megállítja
+ *   maintenance-link  KT-hoz kötött lap: javítási jegyet nem kap, de jegy nélkül is aláírható (a kapu átengedi)
  *   open              nyitni kell
  */
 export function autoTicketDecision(
