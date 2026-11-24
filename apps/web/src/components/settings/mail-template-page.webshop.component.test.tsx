@@ -135,7 +135,7 @@ beforeEach(() => {
 });
 
 describe("Levélsablonok: Szerviz és Webshop", () => {
-  it("the Webshop tab lists its sixteen templates with their status", async () => {
+  it("the Webshop tab lists its seventeen templates with their status", async () => {
     await megjelenit();
     expect(
       screen
@@ -144,8 +144,16 @@ describe("Levélsablonok: Szerviz és Webshop", () => {
     ).toBe("true");
     await webshopFul();
     const lista = screen.getByRole("list", { name: "Sablonok" });
-    /* sixteen Hungarian mails (the fifteenth: the withdrawal acknowledgement, a draft; the sixteenth: the stock alert's arrival), and the sixteen English twins next to them (card d5c6befd) */
-    expect(within(lista).getAllByRole("button")).toHaveLength(32);
+    /* seventeen Hungarian mails (the sixteenth: the stock alert's arrival; the seventeenth: the password reset, card 7bfca4eb), and the seventeen English twins next to them (card d5c6befd) */
+    expect(within(lista).getAllByRole("button")).toHaveLength(34);
+    // the password reset (card 7bfca4eb) is listed and still the shipped default until someone edits it
+    expect(
+      within(
+        within(lista).getByRole("button", {
+          name: /Jelszó-visszaállítás(?! \(angol\))/,
+        }),
+      ).getByText("Alapértelmezett"),
+    ).toBeTruthy();
     // the draft is listed like any other: the owner edits its wording in the editor, so it must be reachable there
     expect(
       within(lista).getByRole("button", {
