@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { AuthenticatedUser } from "@acropora/types";
+import {
+  SERVICE_JOB_LIST_SORT_FIELDS,
+  type AuthenticatedUser,
+} from "@acropora/types";
 
 import { listOrderBy } from "../common/list-sort.js";
 import { SERVICE_JOB_LIST_SORT } from "./service-job-list-sort.js";
@@ -203,7 +206,9 @@ describe("a hibajegy-lista rendezése", () => {
     }
   });
 
-  it("az állapot és az öröklött kulcs nincs a fehér-listán: az alapsorrend jön", () => {
+  it("az állapot nem `orderBy` (a saját útja van, `service-job-list-status-sort.spec.ts`), az öröklött kulcs nincs a fehér-listán: az alapsorrend jön", () => {
+    assert.ok(SERVICE_JOB_LIST_SORT_FIELDS.includes("status"));
+    assert.equal(Object.hasOwn(SERVICE_JOB_LIST_SORT.fields, "status"), false);
     for (const bad of ["status", "title", "constructor"])
       assert.deepEqual(
         listOrderBy(SERVICE_JOB_LIST_SORT, bad as never, "asc"),
