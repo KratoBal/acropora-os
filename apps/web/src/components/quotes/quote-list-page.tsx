@@ -7,6 +7,7 @@ import {
   PilotBadge,
   PilotButton,
   PilotDataTable,
+  PilotDateField,
   PilotInput,
   PilotPageHeader,
   PilotSelect,
@@ -20,6 +21,7 @@ import {
   type QuoteListItemDto,
   type QuoteListResponse,
   type QuoteStatusValue,
+  budapestDayKey,
 } from "@acropora/types";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -37,6 +39,7 @@ import {
   QUOTE_CLOSE_REASON,
   QUOTE_STATUS,
 } from "./quote-format";
+import { nextSortParams, QUOTE_SORT_COLUMNS, sortOf } from "./quote-list-sort";
 
 export const QUOTES_PATH = "/ajanlatok";
 const PAGE_SIZE = 25;
@@ -66,6 +69,10 @@ export function QuoteListPage() {
   const statusFilter = params.get("status") ?? "";
   const expiredOnly = params.get("expired") === "1";
   const reasonFilter = params.get("closeReason") ?? "";
+  // Luca (card 7e5d3658): the creation day, from and to; the sort lives in the URL too (Balázs, card 2f6369a4)
+  const createdFrom = params.get("createdFrom") ?? "";
+  const createdTo = params.get("createdTo") ?? "";
+  const sort = sortOf(params);
   const [search, setSearch] = useState(appliedSearch);
   const [data, setData] = useState<QuoteListResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -91,8 +98,23 @@ export function QuoteListPage() {
     if (statusFilter) value.set("status", statusFilter);
     if (expiredOnly) value.set("expired", "1");
     if (reasonFilter) value.set("closeReason", reasonFilter);
+    if (createdFrom) value.set("createdFrom", createdFrom);
+    if (createdTo) value.set("createdTo", createdTo);
+    if (sort) {
+      value.set("sort", QUOTE_SORT_COLUMNS[sort.id]!);
+      value.set("direction", sort.direction);
+    }
     return value;
-  }, [appliedSearch, page, statusFilter, expiredOnly, reasonFilter]);
+  }, [
+    appliedSearch,
+    page,
+    statusFilter,
+    expiredOnly,
+    reasonFilter,
+    createdFrom,
+    createdTo,
+    sort,
+  ]);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -121,7 +143,8 @@ export function QuoteListPage() {
     {
       id: "quote",
       header: "Ajánlat",
-      width: "32%",
+      width: "28%",
+      sortable: true,
       cell: (row) => (
         <div className="min-w-0">
           <p className="font-semibold text-pilot-grey-900">{row.quoteNumber}</p>
@@ -154,6 +177,7 @@ export function QuoteListPage() {
       id: "status",
       header: "Állapot",
       width: "12%",
+      sortable: true,
       cell: (row) => (
         <span className="flex flex-wrap gap-1">
           <PilotBadge variant={QUOTE_STATUS[row.status].variant}>
@@ -166,9 +190,19 @@ export function QuoteListPage() {
       ),
     },
     {
+      id: "created",
+      header: "Készítve",
+      width: "10%",
+      nowrap: true,
+      sortable: true,
+      // the Budapest calendar day of the creation instant (not the UTC date: an evening quote stays on its day)
+      cell: (row) => formatQuoteDay(budapestDayKey(row.createdAt)),
+    },
+    {
       id: "valid",
       header: "Érvényes",
-      width: "12%",
+      width: "10%",
+      nowrap: true,
       cell: (row) => formatQuoteDay(row.latestVersion?.validUntil ?? null),
     },
     {
@@ -258,6 +292,35 @@ export function QuoteListPage() {
           />
           Csak a lejártak
         </label>
+        <div
+          className="flex flex-wrap items-center gap-2 text-sm text-pilot-grey-700"
+          role="group"
+          aria-label="Készítés napja"
+        >
+          <span>Készítve</span>
+          <PilotDateField
+            aria-label="Készítve ettől a naptól"
+            value={createdFrom}
+            max={createdTo || undefined}
+            onChange={(day) => {
+              // gépelés közben a félig beírt nap üres értéket ad: az nem szűrőváltozás
+              if (day !== createdFrom)
+                update({ createdFrom: day || null, page: null });
+            }}
+            className="w-40"
+          />
+          <span aria-hidden="true">–</span>
+          <PilotDateField
+            aria-label="Készítve eddig a napig"
+            value={createdTo}
+            min={createdFrom || undefined}
+            onChange={(day) => {
+              if (day !== createdTo)
+                update({ createdTo: day || null, page: null });
+            }}
+            className="w-40"
+          />
+        </div>
       </div>
 
       {error ? (
@@ -287,6 +350,10 @@ export function QuoteListPage() {
             rowKey={(row) => row.id}
             rowLabel={(row) => `${row.quoteNumber} · ${row.title}`}
             onRowActivate={(row) => router.push(`${QUOTES_PATH}/${row.id}`)}
+            sort={sort}
+            onSort={(columnId) =>
+              update({ ...nextSortParams(sort, columnId), page: null })
+            }
           />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-pilot-grey-600">

@@ -14,6 +14,7 @@ import {
 } from "@acropora/ui";
 
 import { partnerApi } from "@/lib/api";
+import { megerositesEgyezik, megerositesHiba } from "@/lib/megerosites";
 import { Message } from "./ticket-list";
 
 /**
@@ -68,8 +69,17 @@ const MEGJELENES_ERTEK: Record<string, ThemePreference> = {
  */
 export function Settings() {
   const { preference, setPreference } = useThemePreference();
-  const [password, setPassword] = useState({ current: "", next: "" });
-  const [signing, setSigning] = useState({ current: "", code: "" });
+  // az új érték kétszer (kártya e0980428): `confirm` a megerősítés
+  const [password, setPassword] = useState({
+    current: "",
+    next: "",
+    confirm: "",
+  });
+  const [signing, setSigning] = useState({
+    current: "",
+    code: "",
+    confirm: "",
+  });
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,7 +89,7 @@ export function Settings() {
     setMessage(null);
     try {
       await partnerApi.changePassword(password.current, password.next);
-      setPassword({ current: "", next: "" });
+      setPassword({ current: "", next: "", confirm: "" });
       setMessage("A jelszó megváltozott.");
     } catch (cause) {
       setError(
@@ -95,7 +105,7 @@ export function Settings() {
     setMessage(null);
     try {
       await partnerApi.changeSigningCode(signing.current, signing.code);
-      setSigning({ current: "", code: "" });
+      setSigning({ current: "", code: "", confirm: "" });
       setMessage("Az aláírókód megváltozott.");
     } catch (cause) {
       setError(
@@ -107,8 +117,13 @@ export function Settings() {
   }
 
   const passwordValid =
-    password.current.length > 0 && password.next.length >= 8;
-  const signingValid = signing.current.length > 0 && signing.code.length === 4;
+    password.current.length > 0 &&
+    password.next.length >= 8 &&
+    megerositesEgyezik(password.next, password.confirm);
+  const signingValid =
+    signing.current.length > 0 &&
+    signing.code.length === 4 &&
+    megerositesEgyezik(signing.code, signing.confirm);
 
   return (
     <PilotThemeRoot className="flex min-h-screen flex-col bg-pilot-grey-50">
@@ -183,6 +198,22 @@ export function Settings() {
                   }
                 />
               </PilotFormField>
+              <PilotFormField
+                label="Új jelszó még egyszer"
+                required
+                error={
+                  megerositesHiba("jelszo", password.next, password.confirm) ??
+                  undefined
+                }
+              >
+                <PilotInput
+                  type="password"
+                  value={password.confirm}
+                  onChange={(value) =>
+                    setPassword({ ...password, confirm: value })
+                  }
+                />
+              </PilotFormField>
               <div>
                 <PilotButton type="submit" disabled={!passwordValid}>
                   Jelszó módosítása
@@ -221,6 +252,25 @@ export function Settings() {
                     setSigning({
                       ...signing,
                       code: value.replace(/\D/g, "").slice(0, 4),
+                    })
+                  }
+                />
+              </PilotFormField>
+              <PilotFormField
+                label="Új aláírókód még egyszer"
+                required
+                error={
+                  megerositesHiba("alairokod", signing.code, signing.confirm) ??
+                  undefined
+                }
+              >
+                <PilotInput
+                  inputMode="numeric"
+                  value={signing.confirm}
+                  onChange={(value) =>
+                    setSigning({
+                      ...signing,
+                      confirm: value.replace(/\D/g, "").slice(0, 4),
                     })
                   }
                 />
