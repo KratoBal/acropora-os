@@ -1,0 +1,245 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import {
+  COMMON_SERVICE_STATUSES,
+  commonJobStatus,
+  commonServiceStateText,
+  commonServiceStateTone,
+  commonWorksheetStatus,
+  partnerStatusFromCommon,
+  type CommonJobWorksheetFacts,
+  type CommonServiceState,
+} from "./common-service-status.js";
+import {
+  ALL_SERVICE_JOB_STATUS_VALUES,
+  partnerVisibleStatus,
+  type ServiceJobStatusValue,
+} from "./service-job-management.js";
+import type { WorksheetVersionStatus } from "./worksheet-management.js";
+
+const lap = (
+  currentVersionStatus: WorksheetVersionStatus | null,
+  handedOver = false,
+): CommonJobWorksheetFacts => ({ currentVersionStatus, handedOver });
+
+/**
+ * A MUNKALAP-TÉNYEK MINDEN MA ELŐFORDULÓ ALAKJA, NÉVVEL. Egy lapos és vegyes
+ * esetek: a levezetés a „mindegyik" feltételen és az okok sorrendjén múlik,
+ * tehát a vegyes sorok a lényeg.
+ */
+const LAPOK: Record<string, readonly CommonJobWorksheetFacts[]> = {
+  "nincs lap": [],
+  piszkozat: [lap("DRAFT")],
+  "verzió nélküli": [lap(null)],
+  elutasított: [lap("REJECTED")],
+  "aláírásra vár": [lap("AWAITING_SIGNATURE")],
+  "aláírva, nincs átadva": [lap("SIGNED")],
+  "aláírva és átadva": [lap("SIGNED", true)],
+  "aláírásra vár + aláírva és átadva": [
+    lap("AWAITING_SIGNATURE"),
+    lap("SIGNED", true),
+  ],
+  "aláírva és átadva + aláírva, nincs átadva": [
+    lap("SIGNED", true),
+    lap("SIGNED"),
+  ],
+  "aláírva és átadva + piszkozat": [lap("SIGNED", true), lap("DRAFT")],
+  "aláírásra vár + elutasított": [lap("AWAITING_SIGNATURE"), lap("REJECTED")],
+  "aláírva és átadva + verzió nélküli": [lap("SIGNED", true), lap(null)],
+};
+
+const ALLAPOT = (
+  status: CommonServiceState["status"],
+  reason: CommonServiceState["reason"] = null,
+): CommonServiceState => ({ status, reason });
+
+/** Az IN_PROGRESS jegy: az egyetlen, ahol a lapok számítanak. */
+const FOLYAMATBAN_VART: Record<keyof typeof LAPOK, CommonServiceState> = {
+  "nincs lap": ALLAPOT("IN_PROGRESS"),
+  piszkozat: ALLAPOT("IN_PROGRESS"),
+  "verzió nélküli": ALLAPOT("IN_PROGRESS"),
+  elutasított: ALLAPOT("IN_PROGRESS"),
+  "aláírásra vár": ALLAPOT("DONE", "AWAITING_SIGNATURE"),
+  "aláírva, nincs átadva": ALLAPOT("DONE", "AWAITING_HANDOVER"),
+  "aláírva és átadva": ALLAPOT("DONE", "READY_TO_CLOSE"),
+  "aláírásra vár + aláírva és átadva": ALLAPOT("DONE", "AWAITING_SIGNATURE"),
+  "aláírva és átadva + aláírva, nincs átadva": ALLAPOT(
+    "DONE",
+    "AWAITING_HANDOVER",
+  ),
+  "aláírva és átadva + piszkozat": ALLAPOT("IN_PROGRESS"),
+  "aláírásra vár + elutasított": ALLAPOT("IN_PROGRESS"),
+  "aláírva és átadva + verzió nélküli": ALLAPOT("IN_PROGRESS"),
+};
+
+/**
+ * A TÖBBI HÉT ÁLLAPOT: a lapoktól FÜGGETLEN eredmény. `Record`, tehát egy új
+ * tárolt állapot a fordításnál hiányzik innen, nem a felületen.
+ */
+const LAPTOL_FUGGETLEN: Record<
+  Exclude<ServiceJobStatusValue, "IN_PROGRESS">,
+  CommonServiceState
+> = {
+  NEW: ALLAPOT("NEW"),
+  TRIAGED: ALLAPOT("IN_PROGRESS"),
+  SCHEDULED: ALLAPOT("IN_PROGRESS"),
+  WAITING_FOR_PARTS: ALLAPOT("WAITING", "PARTS"),
+  WAITING_FOR_CUSTOMER: ALLAPOT("WAITING", "CUSTOMER"),
+  COMPLETED: ALLAPOT("CLOSED"),
+  CANCELLED: ALLAPOT("CLOSED", "CANCELLED"),
+};
+
+describe("hibajegy közös állapota", () => {
+  for (const [nev, lapok] of Object.entries(LAPOK)) {
+    it(`IN_PROGRESS, ${nev}`, () => {
+      assert.deepEqual(
+        commonJobStatus("IN_PROGRESS", lapok),
+        FOLYAMATBAN_VART[nev],
+      );
+    });
+  }
+
+  for (const [status, vart] of Object.entries(LAPTOL_FUGGETLEN)) {
+    it(`${status}: minden lap-alakon ugyanaz`, () => {
+      for (const [nev, lapok] of Object.entries(LAPOK)) {
+        assert.deepEqual(
+          commonJobStatus(status as ServiceJobStatusValue, lapok),
+          vart,
+          `${status}, ${nev}`,
+        );
+      }
+    });
+  }
+
+  it("a két tábla együtt minden tárolt állapotot lefed", () => {
+    const lefedett = new Set([...Object.keys(LAPTOL_FUGGETLEN), "IN_PROGRESS"]);
+    assert.deepEqual(
+      [...ALL_SERVICE_JOB_STATUS_VALUES].sort(),
+      [...lefedett].sort(),
+    );
+  });
+
+  // Terv 8/a: a lezárt lap egy Új jegyen NEM Elkészült. NEW alól nincs
+  // COMPLETED, tehát a Lezárás gomb zsákutca lenne; a csatolás a 2. szeletben
+  // lépteti IN_PROGRESS-be a jegyet.
+  it("8/a: Új jegy lezárt lappal Új marad", () => {
+    assert.deepEqual(
+      commonJobStatus("NEW", [lap("SIGNED", true)]),
+      ALLAPOT("NEW"),
+    );
+  });
+
+  // Terv 8/b: a várakozás oka erősebb jel, mint a kész lap.
+  it("8/b: ügyfélre váró jegy aláírásra váró lappal Vár valamire marad", () => {
+    assert.deepEqual(
+      commonJobStatus("WAITING_FOR_CUSTOMER", [
+        lap("AWAITING_SIGNATURE"),
+        lap("AWAITING_SIGNATURE"),
+      ]),
+      ALLAPOT("WAITING", "CUSTOMER"),
+    );
+  });
+});
+
+describe("munkalap közös állapota", () => {
+  const SOROK: [WorksheetVersionStatus, number, CommonServiceState][] = [
+    ["DRAFT", 0, ALLAPOT("NEW")],
+    ["DRAFT", 3, ALLAPOT("IN_PROGRESS")],
+    ["REJECTED", 0, ALLAPOT("IN_PROGRESS", "REJECTED")],
+    ["REJECTED", 3, ALLAPOT("IN_PROGRESS", "REJECTED")],
+    ["AWAITING_SIGNATURE", 0, ALLAPOT("DONE", "AWAITING_SIGNATURE")],
+    ["AWAITING_SIGNATURE", 3, ALLAPOT("DONE", "AWAITING_SIGNATURE")],
+    ["SIGNED", 0, ALLAPOT("CLOSED")],
+    ["SIGNED", 3, ALLAPOT("CLOSED")],
+  ];
+  for (const [status, sorok, vart] of SOROK) {
+    it(`${status}, ${sorok} sor`, () => {
+      assert.deepEqual(commonWorksheetStatus(status, sorok), vart);
+    });
+  }
+});
+
+describe("felirat és szín", () => {
+  it("az öt állapot a folyamat sorrendjében", () => {
+    assert.deepEqual(COMMON_SERVICE_STATUSES, [
+      "NEW",
+      "IN_PROGRESS",
+      "WAITING",
+      "DONE",
+      "CLOSED",
+    ]);
+  });
+
+  it("a jelvény szövege az ok mellé", () => {
+    assert.equal(commonServiceStateText(ALLAPOT("NEW")), "Új");
+    assert.equal(
+      commonServiceStateText(ALLAPOT("WAITING", "PARTS")),
+      "Vár valamire · alkatrészre",
+    );
+    assert.equal(
+      commonServiceStateText(ALLAPOT("DONE", "AWAITING_SIGNATURE")),
+      "Elkészült · aláírásra vár",
+    );
+    assert.equal(
+      commonServiceStateText(ALLAPOT("CLOSED", "CANCELLED")),
+      "Lezárt · meghiúsult",
+    );
+    assert.equal(
+      commonServiceStateText(ALLAPOT("IN_PROGRESS", "REJECTED")),
+      "Folyamatban · elutasítva",
+    );
+  });
+
+  it("az elutasított munkalap piros, a többi az állapot színe", () => {
+    assert.equal(
+      commonServiceStateTone(ALLAPOT("IN_PROGRESS", "REJECTED")),
+      "red",
+    );
+    assert.equal(commonServiceStateTone(ALLAPOT("IN_PROGRESS")), "purple");
+    assert.equal(commonServiceStateTone(ALLAPOT("WAITING", "PARTS")), "amber");
+    assert.equal(
+      commonServiceStateTone(ALLAPOT("DONE", "READY_TO_CLOSE")),
+      "green",
+    );
+    assert.equal(
+      commonServiceStateTone(ALLAPOT("CLOSED", "CANCELLED")),
+      "neutral",
+    );
+  });
+});
+
+/**
+ * A PARTNER RÖVIDÍTÉSE A MAI `partnerVisibleStatus` MELLETT. A szándékos
+ * eltérések név szerint állnak; minden más eltérés piros.
+ */
+describe("partner-rövidítés a közösből", () => {
+  const SZANDEKOS: Record<string, [string, string]> = {
+    // Lezárt = aláírva és átadva (emlék 890): a partner is Lezárvát lát.
+    COMPLETED: ["COMPLETED", "CLOSED"],
+  };
+
+  it("lap nélkül csak a COMPLETED tér el a mai leképezéstől", () => {
+    const elteres: Record<string, [string, string]> = {};
+    for (const status of ALL_SERVICE_JOB_STATUS_VALUES) {
+      const ma = partnerVisibleStatus(status);
+      const uj = partnerStatusFromCommon(commonJobStatus(status, []).status);
+      if (ma !== uj) elteres[status] = [ma, uj];
+    }
+    assert.deepEqual(elteres, SZANDEKOS);
+  });
+
+  it("a kész lapú IN_PROGRESS jegy a partnernek Elkészült (ma Feldolgozás alatt)", () => {
+    assert.equal(partnerVisibleStatus("IN_PROGRESS"), "IN_PROGRESS");
+    assert.equal(
+      partnerStatusFromCommon(
+        commonJobStatus("IN_PROGRESS", [lap("AWAITING_SIGNATURE")]).status,
+      ),
+      "COMPLETED",
+    );
+  });
+
+  it("a Vár valamire a partnernek Feldolgozás alatt", () => {
+    assert.equal(partnerStatusFromCommon("WAITING"), "IN_PROGRESS");
+  });
+});

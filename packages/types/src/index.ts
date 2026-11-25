@@ -339,6 +339,23 @@ export type {
   WebshopStuckMailList,
 } from "./webshop-mail.js";
 export {
+  COMMON_SERVICE_STATUSES,
+  commonJobStatus,
+  commonServiceReasonLabel,
+  commonServiceStateText,
+  commonServiceStateTone,
+  commonServiceStatusLabel,
+  commonWorksheetStatus,
+  partnerStatusFromCommon,
+} from "./common-service-status.js";
+export type {
+  CommonJobWorksheetFacts,
+  CommonServiceState,
+  CommonServiceStatus,
+  CommonServiceStatusReason,
+  CommonServiceTone,
+} from "./common-service-status.js";
+export {
   worksheetStatusLabel,
   worksheetStatusTone,
   worksheetDisplayStatus,
