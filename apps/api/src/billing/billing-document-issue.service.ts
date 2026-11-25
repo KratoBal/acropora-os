@@ -34,7 +34,8 @@ import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import { budapestDayKey } from "../dashboard/budapest-day.js";
 import {
-  advancePaidByProforma,
+  proformaPaidOf,
+  webshopOverbillingProblem,
   billingIssueSummary,
   buildIssueInput,
   finalInvoiceIssueProblem,
@@ -174,18 +175,27 @@ export class BillingDocumentIssueService {
     return contractOverbillingProblem(facts.items, facts.billed, draft);
   }
 
-  /**
-   * IS THE PROFORMA THIS ADVANCE INVOICE IS MADE FROM PAID IN FULL (card 00926d89). Only an advance invoice with a proforma asks; the
-   * answer is the Számlázz.hu feed's payment compared with THIS invoice's gross (`advancePaidByProforma`): a part payment, another
-   * currency, a cancelled proforma or an unknown state is "not paid" and the invoice goes out as before.
-   */
-  private async proformaPaidOf(row: BillingDocumentRow): Promise<boolean> {
-    const number = row.proformaInvoice?.invoiceNumber;
-    if (row.documentType !== "ADVANCE_INVOICE" || !number) return false;
-    return advancePaidByProforma(
-      row,
-      await this.documents.proformaPaymentFacts(number),
+  /** The webshop order's other invoices against this one (`webshopOverbillingProblem`); other sources pass. */
+  private async webshopOverbilling(row: {
+    id: string;
+    documentType: string;
+    sourceType: string | null;
+    sourceId: string | null;
+  }): Promise<string | null> {
+    if (row.sourceType !== "WEBSHOP_ORDER" || !row.sourceId) return null;
+    return webshopOverbillingProblem(
+      row.documentType,
+      await this.documents.webshopOrderInvoices(row.sourceId, row.id),
     );
+  }
+
+  /**
+   * IS THE PROFORMA THIS DOCUMENT SETTLES PAID: an advance invoice by the Számlázz.hu feed (card 00926d89), a webshop order's
+   * invoice by the OS transfer receipt (card d31a66a3, S1). The shared reading (`proformaPaidOf`), so the window, the preview
+   * and the issue cannot disagree.
+   */
+  private proformaPaidOf(row: BillingDocumentRow): Promise<boolean> {
+    return proformaPaidOf(row, this.documents);
   }
 
   /**
@@ -282,6 +292,9 @@ export class BillingDocumentIssueService {
     // egy szerződés-tétel sem léphet túl a még nem számlázott mennyiségen
     const contractProblem = await this.contractOverbilling(row);
     if (contractProblem) throw new BadRequestException(contractProblem);
+    // EGY WEBSHOP RENDELÉS EGYSZER (kártya d31a66a3, S1): vagy egy számla, vagy előleg- és végszámla, a kettő együtt nem
+    const webshopProblem = await this.webshopOverbilling(row);
+    if (webshopProblem) throw new ConflictException(webshopProblem);
 
     // WHAT THE WINDOW SHOWED IS WHAT THE INVOICE CARRIES (card 7ba97e0d): the same summary again, the shown values
     // compared by their digest, the three dates checked by the shared rule and put into the invoice
@@ -383,6 +396,12 @@ export class BillingDocumentIssueService {
     if (contractRace) {
       await this.repository.markFailed(id, contractRace);
       throw new BadRequestException(contractRace);
+    }
+    // ugyanez a webshop rendelésre (d31a66a3, S1): a másik bizonylat foglalása (ISSUING) már számít
+    const webshopRace = await this.webshopOverbilling(row);
+    if (webshopRace) {
+      await this.repository.markFailed(id, webshopRace);
+      throw new ConflictException(webshopRace);
     }
 
     let response;

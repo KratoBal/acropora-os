@@ -105,6 +105,12 @@ function setup(
     sendFails?: boolean;
     /** The NAV check of the order's tax number (c977aed2, P2); alapból NONE. */
     taxCheck?: WebshopOrderTaxCheck;
+    /** The prepaid order's recorded transfer (d31a66a3, S1); absent: none recorded. */
+    receipt?: { amount: string; advance?: boolean; receivedOn?: string };
+    /** Számlázz.hu feed invoices of the order not issued by the OS (the Autokassza check). */
+    foreign?: string[];
+    /** The saved draft's gross (alapból 18900.00). */
+    gross?: string;
   } = {},
 ) {
   const calls: string[] = [];
@@ -161,6 +167,44 @@ function setup(
       return customerId;
     },
     customerBuyer: async () => over.buyer ?? SAME_BUYER,
+    transferReceipts: async (ids: string[]) => {
+      calls.push("transferReceipts");
+      return new Map(
+        over.receipt
+          ? [
+              [
+                ids[0]!,
+                {
+                  source: "MANUAL",
+                  receivedOn: over.receipt.receivedOn ?? "2026-10-03",
+                  reference: "UT-38",
+                  amount: over.receipt.amount,
+                  currency: "HUF",
+                  recordedBy: "Teszt Elek",
+                  advance: over.receipt.advance ?? false,
+                },
+              ],
+            ]
+          : [],
+      );
+    },
+    transferReceiptProforma: async () => ({
+      id: "proforma_38",
+      number: "D-ACR-2026-12",
+      reference: "Webshop rendelés #38",
+      issuedOn: new Date("2026-10-01T09:00:00.000Z"),
+    }),
+    foreignFeedInvoices: async (
+      orderId: string,
+      proforma: { number: string },
+    ) => {
+      calls.push(`foreignFeedInvoices ${orderId} ${proforma.number}`);
+      return over.foreign ?? [];
+    },
+    linkInvoiceProforma: async (invoiceId: string, proformaId: string) => {
+      calls.push(`link proforma ${proformaId} to ${invoiceId}`);
+      return true;
+    },
   } as unknown as WebshopOrdersRepository;
   const customers = {
     create: async (input: { displayName: string }) => {
@@ -170,16 +214,32 @@ function setup(
     },
   } as unknown as CustomersRepository;
   const doc = (id: string) =>
-    ({ id, updatedAt: "2026-10-05T12:00:01.000Z" }) as BillingDocumentDetail;
+    ({
+      id,
+      updatedAt: "2026-10-05T12:00:01.000Z",
+      currency: "HUF",
+      totals: {
+        netAmount: "14882.00",
+        vatAmount: "4018.00",
+        grossAmount: over.gross ?? "18900.00",
+      },
+    }) as BillingDocumentDetail;
+  const drafts: { fulfillmentDate: string; dueDate: string }[] = [];
   const documents = {
     create: async (input: {
       id: string;
       customerId: string;
       sourceId: string;
+      fulfillmentDate: string;
+      dueDate: string;
     }) => {
       calls.push(
         `create draft ${input.id} for ${input.customerId} from ${input.sourceId}`,
       );
+      drafts.push({
+        fulfillmentDate: input.fulfillmentDate,
+        dueDate: input.dueDate,
+      });
       return doc(input.id);
     },
     detail: async (id: string) => doc(id),
@@ -233,6 +293,7 @@ function setup(
     calls,
     confirmations,
     sent,
+    drafts,
     service: new WebshopOrderInvoiceService(
       orders,
       repository,
@@ -360,16 +421,78 @@ describe("WebshopOrderInvoiceService", () => {
   });
 
   /*
-    ELŐRE UTALÁSNÁL A SZÁMLÁT A SZÁMLÁZZ.HU ÁLLÍTJA KI (bb3a6bd5; Balázs,
-    2026-10-06 18:22 UTC). MI PIROSÍT: az OS is kiállít mellé egyet.
+    ELŐRE UTALÁSNÁL AZ OS ÁLLÍTJA KI, A BEÉRKEZÉS UTÁN (d31a66a3, S1; az Autokassza ki van kapcsolva). MI PIROSÍT: beérkezés
+    nélkül, előleg-beérkezésre vagy egy már meglévő, nem OS-es Számlázz.hu-számla mellé kiállít, vagy közben partnert hoz
+    létre; a kifizetett számla nem a beérkezés napjával, nem a díjbekérőre hivatkozva, vagy más összeggel megy ki.
   */
-  it("a prepaid order gets no OS invoice: Számlázz.hu issues it", async () => {
-    const { calls, service } = setup({ provider: "pp_acropora_transfer" });
+  const TRANSFER = "pp_acropora_transfer";
+
+  it("a prepaid order without a recorded transfer gets no invoice, and no partner", async () => {
+    const { calls, service } = setup({ provider: TRANSFER });
     await assert.rejects(service.issue("order_38", USER, NOW), {
       status: 409,
-      message: /Számlázz\.hu állítja ki/,
+      message: /beérkezése után állítható ki/,
     });
-    assert.deepEqual(calls, ["source"]);
+    assert.deepEqual(calls, ["source", "transferReceipts"]);
+  });
+
+  it("an advance transfer is not invoiced as the whole order", async () => {
+    const { calls, service } = setup({
+      provider: TRANSFER,
+      receipt: { amount: "5670.0000", advance: true },
+    });
+    await assert.rejects(service.issue("order_38", USER, NOW), {
+      status: 409,
+      message: /előleg érkezett/,
+    });
+    assert.deepEqual(calls, ["source", "transferReceipts"]);
+  });
+
+  it("a Számlázz.hu invoice the OS did not issue stops it, by its number", async () => {
+    const { calls, service } = setup({
+      provider: TRANSFER,
+      receipt: { amount: "18900.0000" },
+      foreign: ["E-ACR-2026-77"],
+    });
+    await assert.rejects(service.issue("order_38", USER, NOW), {
+      status: 409,
+      message: /E-ACR-2026-77/,
+    });
+    assert.deepEqual(calls, [
+      "source",
+      "transferReceipts",
+      "foreignFeedInvoices order_38 D-ACR-2026-12",
+    ]);
+  });
+
+  it("a paid transfer is invoiced on its day, settling the proforma", async () => {
+    const { calls, drafts, service } = setup({
+      provider: TRANSFER,
+      receipt: { amount: "18900.0000", receivedOn: "2026-10-03" },
+    });
+    await service.issue("order_38", USER, NOW);
+    assert.deepEqual(drafts, [
+      { fulfillmentDate: "2026-10-03", dueDate: "2026-10-03" },
+    ]);
+    assert.deepEqual(calls.slice(-4), [
+      "create draft webshop-order_38 for cust_new from order_38",
+      "link proforma proforma_38 to webshop-order_38",
+      "issue webshop-order_38 2026-10-05T12:00:01.000Z",
+      "detail order_38",
+    ]);
+  });
+
+  it("a draft whose gross is not the transfer is not issued", async () => {
+    const { calls, service } = setup({
+      provider: TRANSFER,
+      receipt: { amount: "18900.0000" },
+      gross: "19350.00",
+    });
+    await assert.rejects(service.issue("order_38", USER, NOW), {
+      status: 409,
+      message: /nem egyezik a beérkezett utalással \(18900 HUF\)/,
+    });
+    assert.ok(!calls.some((call) => call.startsWith("issue ")));
   });
 
   it("an unconfirmed order is refused before any partner is made", async () => {

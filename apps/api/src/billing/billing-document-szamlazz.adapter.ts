@@ -62,7 +62,8 @@ export interface BillingDocumentForIssue {
   /** A díjbekérő Számlázz.hu-s száma, ha ebből készül. */
   proformaNumber: string | null;
   /**
-   * A díjbekérő, amelyből ez készül, KI VAN FIZETVE (a Számlázz.hu feedje szerint). Csak az előlegszámlán számít: ott a kérésbe
+   * A díjbekérő, amelyből ez készül, KI VAN FIZETVE (előlegszámlán a Számlázz.hu feedje, webshop-számlán az OS-ben rögzített
+   * beérkezés szerint: `proformaPaidOf`). Az előlegszámlán és a számlán számít (`settlesPaidProforma`): ott a kérésbe
    * `fizetve=true` kerül és a fizetési határidő a kiállítás napja. Hiányzó vagy hamis: semmi nem változik.
    */
   proformaPaid?: boolean;
@@ -161,6 +162,25 @@ function orderedLines(
   ]);
 }
 
+/**
+ * THE DOCUMENT SETTLES A PAID PROFORMA, so it goes out with `fizetve=true` and is due on its issue day: an advance invoice whose
+ * proforma the feed shows paid (card 00926d89), or a webshop invoice whose proforma the recorded transfer paid (card d31a66a3,
+ * S1). Who decides "paid" is `proformaPaidOf`; this only says which document types may carry it.
+ */
+export function settlesPaidProforma(
+  document: Pick<
+    BillingDocumentForIssue,
+    "documentType" | "proformaNumber" | "proformaPaid"
+  >,
+): boolean {
+  return (
+    (document.documentType === "ADVANCE_INVOICE" ||
+      document.documentType === "INVOICE") &&
+    document.proformaNumber !== null &&
+    document.proformaPaid === true
+  );
+}
+
 export function toSzamlazzAgentInput(
   document: BillingDocumentForIssue,
   options: {
@@ -187,12 +207,9 @@ export function toSzamlazzAgentInput(
     throw new BillingDocumentAdapterError("BILLING_LANGUAGE_NOT_SUPPORTED");
 
   const { showsPaymentFields } = getDocumentCapabilities(document.documentType);
-  // KIFIZETETT DÍJBEKÉRŐBŐL KÉSZÜLŐ ELŐLEGSZÁMLA (kártya 00926d89): fizetve=true, és a határidő a kiállítás napja (a megerősített kelte,
-  // előnézetben a mai nap). Más bizonylaton és fizetetlen díjbekérőn ez az ág nem fut.
-  const advancePaid =
-    document.documentType === "ADVANCE_INVOICE" &&
-    document.proformaNumber !== null &&
-    document.proformaPaid === true;
+  // KIFIZETETT DÍJBEKÉRŐBŐL KÉSZÜLŐ ELŐLEGSZÁMLA (kártya 00926d89) ÉS A BEÉRKEZETT ELŐRE UTALÁS SZÁMLÁJA (d31a66a3, S1): fizetve=true,
+  // és a határidő a kiállítás napja (a megerősített kelte, előnézetben a mai nap). Más bizonylaton és fizetetlen díjbekérőn ez az ág nem fut.
+  const advancePaid = settlesPaidProforma(document);
   const baseDueDate = showsPaymentFields
     ? document.dueDate
     : (document.dueDate ?? document.fulfillmentDate);

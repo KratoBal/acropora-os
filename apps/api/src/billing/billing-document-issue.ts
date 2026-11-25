@@ -16,7 +16,10 @@ import {
 import { Prisma } from "@acropora/database";
 
 import { missingAddressParts } from "../customers/address-parts.js";
-import type { BillingDocumentForIssue } from "./billing-document-szamlazz.adapter.js";
+import {
+  settlesPaidProforma,
+  type BillingDocumentForIssue,
+} from "./billing-document-szamlazz.adapter.js";
 import type { BillingDocumentRow } from "./billing-documents.repository.js";
 
 /**
@@ -328,6 +331,119 @@ export interface ProformaPaymentFacts {
   cancelled: boolean;
 }
 
+/** Another invoice of the same webshop order (`BillingDocumentsRepository.webshopOrderInvoices`). */
+export interface WebshopOrderInvoiceFact {
+  documentType: "INVOICE" | "ADVANCE_INVOICE" | "FINAL_INVOICE";
+  status: "ISSUED" | "ISSUING";
+  number: string | null;
+  /** Cancelled by an issued OS storno, or on the Számlázz.hu site: it no longer counts. */
+  cancelled: boolean;
+}
+
+const WEBSHOP_INVOICE_NAMES: Record<
+  WebshopOrderInvoiceFact["documentType"],
+  string
+> = {
+  INVOICE: "számla",
+  ADVANCE_INVOICE: "előlegszámla",
+  FINAL_INVOICE: "végszámla",
+};
+
+/**
+ * NO WEBSHOP ORDER IS INVOICED TWICE (card d31a66a3, S1). An order is settled EITHER by one invoice for the whole of it, OR by
+ * advance invoices and a final invoice: never both. So an invoice stops when the order already has another invoice, an advance
+ * or a final invoice, and an advance or final invoice stops when the order already has its invoice. One being issued counts
+ * (its result is not known yet); a cancelled one does not. Until now only the order's own fixed invoice id kept a second one
+ * away, and only from the order page: a copy in the billing editor, or an advance made from the order's proforma, passed.
+ */
+export function webshopOverbillingProblem(
+  documentType: string,
+  others: readonly WebshopOrderInvoiceFact[],
+): string | null {
+  const blocking = others.filter(
+    (other) =>
+      !other.cancelled &&
+      (documentType === "INVOICE" ||
+        ((documentType === "ADVANCE_INVOICE" ||
+          documentType === "FINAL_INVOICE") &&
+          other.documentType === "INVOICE")),
+  );
+  if (
+    !blocking.length ||
+    !["INVOICE", "ADVANCE_INVOICE", "FINAL_INVOICE"].includes(documentType)
+  )
+    return null;
+  const named = blocking
+    .map(
+      (other) =>
+        `${WEBSHOP_INVOICE_NAMES[other.documentType]} ${other.number ?? (other.status === "ISSUING" ? "(kiállítás alatt)" : "(szám nélkül)")}`,
+    )
+    .join(", ");
+  return `Ennek a webshop rendelésnek már van kiállított bizonylata (${named}). Egy rendelést vagy egy számla, vagy előleg- és végszámla rendez, a kettő együtt nem: ez a bizonylat nem állítható ki.`;
+}
+
+/** The webshop transfer that paid a proforma (`BillingDocumentsRepository.webshopTransferFacts`). */
+export interface WebshopTransferFacts {
+  amount: Prisma.Decimal;
+  currency: string;
+  /** The proforma was an advance one: the transfer paid part of the order. */
+  advance: boolean;
+}
+
+/**
+ * IS THIS WEBSHOP INVOICE THE MONEY THAT CAME IN (card d31a66a3, S1). A prepaid webshop order's invoice is made from its
+ * proforma once the transfer is recorded in the OS: Számlázz.hu does not know about that payment (its Autokassza is off), so
+ * the feed cannot say "paid" here, the OS receipt does. Paid only when the receipt paid THIS invoice's proforma, it was not
+ * an advance, and it covers this invoice's own gross in the same currency; anything else goes out as before, unpaid.
+ */
+export function invoicePaidByTransfer(
+  row: BillingDocumentRow,
+  facts: WebshopTransferFacts | null,
+): boolean {
+  if (row.documentType !== "INVOICE" || facts === null || facts.advance)
+    return false;
+  if (facts.currency.trim().toUpperCase() !== row.currency.trim().toUpperCase())
+    return false;
+  const input = buildIssueInput(row);
+  if (!input.ok) return false;
+  return facts.amount.gte(new Prisma.Decimal(input.totals.grossAmount));
+}
+
+/**
+ * THE ONE READING OF "THE PROFORMA THIS DOCUMENT SETTLES IS PAID", for the window, the preview and the issue alike: an advance
+ * invoice by the Számlázz.hu feed (card 00926d89), a webshop order's invoice by the OS transfer receipt (card d31a66a3, S1).
+ */
+export async function proformaPaidOf(
+  row: BillingDocumentRow,
+  documents: {
+    proformaPaymentFacts(
+      documentNumber: string,
+    ): Promise<ProformaPaymentFacts | null>;
+    webshopTransferFacts(
+      orderId: string,
+      proformaId: string,
+    ): Promise<WebshopTransferFacts | null>;
+  },
+): Promise<boolean> {
+  const proforma = row.proformaInvoice;
+  if (!proforma?.invoiceNumber) return false;
+  if (row.documentType === "ADVANCE_INVOICE")
+    return advancePaidByProforma(
+      row,
+      await documents.proformaPaymentFacts(proforma.invoiceNumber),
+    );
+  if (
+    row.documentType === "INVOICE" &&
+    row.sourceType === "WEBSHOP_ORDER" &&
+    row.sourceId
+  )
+    return invoicePaidByTransfer(
+      row,
+      await documents.webshopTransferFacts(row.sourceId, proforma.id),
+    );
+  return false;
+}
+
 /**
  * IS THIS ADVANCE INVOICE FULLY COVERED BY ITS PROFORMA'S PAYMENT (card 00926d89, barracuda on #2638). `fizetve=true` states that the
  * invoice is SETTLED, so "the proforma has a payment on it" is not enough: the feed's paid amount must reach the advance invoice's own
@@ -375,7 +491,7 @@ export function billingIssueSummary(
   today: string,
   paymentDueDays?: number,
   sendTo?: string | null,
-  /** The proforma this advance invoice is made from is PAID (the feed says so): the due date is the issue day (card 00926d89). */
+  /** The proforma this document settles is PAID (`proformaPaidOf`): the due date is the issue day (cards 00926d89, d31a66a3 S1). */
   proformaPaid?: boolean,
 ):
   | { ok: true; summary: BillingIssueSummary }
@@ -387,10 +503,7 @@ export function billingIssueSummary(
   const paymentMethod = showsPaymentFields ? document.paymentMethod : null;
   const email =
     (sendTo === undefined ? document.buyer.email : sendTo)?.trim() || null;
-  const advancePaid =
-    document.documentType === "ADVANCE_INVOICE" &&
-    document.proformaNumber !== null &&
-    proformaPaid === true;
+  const advancePaid = settlesPaidProforma({ ...document, proformaPaid });
   return {
     ok: true,
     summary: {

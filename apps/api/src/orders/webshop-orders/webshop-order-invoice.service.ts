@@ -521,21 +521,12 @@ export class WebshopOrderInvoiceService {
     const { order, status } = await this.orders.source(orderId);
     const refusal = invoiceRefusal(statusOf(status?.status));
     if (refusal) throw new ConflictException(refusal);
-    /*
-      ELŐRE UTALÁSNÁL AZ OS NEM ÁLLÍT KI SZÁMLÁT (bb3a6bd5; Balázs, 2026-10-06
-      18:22 UTC: „be van kapcsolva az automatikus szamlazas ha kifizetik a
-      dijbekerot”). A Számlázz.hu Autokassza a kifizetett díjbekérőből maga
-      állítja ki, és a kimenő továbbítás behozza: egy második, OS-ből
-      kiállított valódi számla kettős számlázás lenne.
-    */
-    if (
+    const paid =
       orderPaymentProviderId(
         primaryPaymentCollection(order.payment_collections),
       ) === BANK_TRANSFER_PROVIDER_ID
-    )
-      throw new ConflictException(
-        "Előre utalásnál a számlát a Számlázz.hu állítja ki a díjbekérő kifizetésekor, és a rendelésen magától megjelenik. Az OS nem állít ki mellé másikat.",
-      );
+        ? await this.paidTransfer(orderId)
+        : null;
 
     /*
       A NAV ÁLTAL ISMERETLEN VAGY HIBÁS ALAKÚ ADÓSZÁMRA NEM ÁLLÍTUNK KI SZÁMLÁT (kártya c977aed2, P2). A vevő létrehozása ELŐTT áll: egy hibás adószámmal ne maradjon utána OS-partner. A kirakat pénztára a céges vásárlás adószámát
@@ -555,10 +546,11 @@ export class WebshopOrderInvoiceService {
       customerId,
       now,
       loyaltyShape: loyaltyInvoiceShapeOf(),
+      ...(paid ? { paidOn: paid.receivedOn } : {}),
     });
     if (!draft.ok) throw new UnprocessableEntityException(draft.message);
 
-    const saved: BillingDocumentDetail = existing
+    let saved: BillingDocumentDetail = existing
       ? await this.documents.update(
           existing.id,
           this.dto({
@@ -569,7 +561,74 @@ export class WebshopOrderInvoiceService {
           }),
         )
       : await this.documents.create(this.dto(draft.draft), user);
+    if (paid) {
+      // the invoice names the proforma it settles; a write moves `updatedAt`, so the issue goes on with the fresh draft
+      if (await this.repository.linkInvoiceProforma(saved.id, paid.proformaId))
+        saved = await this.documents.detail(saved.id);
+      /*
+        THE INVOICE IS THE MONEY THAT CAME IN (S1): it goes out paid, so its gross must be the transfer, to the fillér. An
+        order changed since the proforma (a line edit) would issue a paid invoice for an amount nobody paid.
+      */
+      if (
+        Math.round(Number(saved.totals.grossAmount) * 100) !==
+          Math.round(Number(paid.amount) * 100) ||
+        saved.currency.toUpperCase() !== paid.currency.toUpperCase()
+      )
+        throw new ConflictException(
+          `A számla bruttója (${Number(saved.totals.grossAmount)} ${saved.currency}) nem egyezik a beérkezett utalással (${Number(paid.amount)} ${paid.currency}): a rendelés a díjbekérő óta változott. A számla nem készül el; nézd meg a rendelést és a díjbekérőt.`,
+        );
+    }
     return { kind: "draft", saved, order };
+  }
+
+  /**
+   * ELŐRE UTALÁSNÁL AZ OS ÁLLÍTJA KI A SZÁMLÁT, A BEÉRKEZÉS UTÁN (kártya d31a66a3, S1; acrobot 61615). A Számlázz.hu
+   * „Díjbekérő automatikus számlázása” (Autokassza) KI van kapcsolva (emlék 2954, 2955), tehát a kifizetett díjbekérőből
+   * nem készül magától számla: eddig az OS 409-cel elutasított, és így senki nem számlázott.
+   *
+   * Három kapu, a vevő és a vázlat ELŐTT, hogy egy elutasításnál ne maradjon utána semmi:
+   * - beérkezés nélkül nincs számla (a pénz még nincs itt);
+   * - előleg-díjbekérő beérkezésére nem a teljes számla jár, hanem előleg- és végszámla (S2, S4);
+   * - ha a Számlázz.hu-n már van NEM az OS által kiállított számla ehhez a rendeléshez (az Autokassza visszakapcsolva, vagy
+   *   kézzel kiállítva), a kiállítás megáll a számával: két számla ugyanarra a pénzre sztornót jelent.
+   */
+  private async paidTransfer(orderId: string): Promise<{
+    receivedOn: string;
+    amount: string;
+    currency: string;
+    proformaId: string;
+  }> {
+    const receipt = (await this.repository.transferReceipts([orderId])).get(
+      orderId,
+    );
+    if (!receipt)
+      throw new ConflictException(
+        "Előre utalásnál a számla az utalás beérkezése után állítható ki: előbb rögzítsd a beérkezést.",
+      );
+    if (receipt.advance)
+      throw new ConflictException(
+        "Erre a rendelésre előleg érkezett: az előlegre előlegszámla, a hátralékra végszámla jár, nem egy teljes számla. Ezeket az adatlap még nem állítja ki.",
+      );
+    const proforma = await this.repository.transferReceiptProforma(orderId);
+    if (!proforma?.number)
+      throw new ConflictException(
+        "A beérkezéshez rögzített díjbekérő nem található, vagy nincs száma, ezért a számla nem köthető hozzá.",
+      );
+    const foreign = await this.repository.foreignFeedInvoices(orderId, {
+      number: proforma.number,
+      reference: proforma.reference,
+      issuedOn: proforma.issuedOn,
+    });
+    if (foreign.length)
+      throw new ConflictException(
+        `A Számlázz.hu-n már van számla ehhez a rendeléshez, amit nem az OS állított ki (${foreign.join(", ")}). Az OS nem állít ki mellé másikat: nézd meg a Számlázásban, ez-e a rendelés számlája.`,
+      );
+    return {
+      receivedOn: receipt.receivedOn,
+      amount: receipt.amount,
+      currency: receipt.currency,
+      proformaId: proforma.id,
+    };
   }
 
   /**

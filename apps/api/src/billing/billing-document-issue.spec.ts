@@ -7,7 +7,11 @@ import { buildSzamlazzAgentInvoiceXml } from "../integrations/szamlazz/szamlazz-
 import {
   buildIssueInput,
   finalInvoiceIssueProblem,
+  invoicePaidByTransfer,
+  proformaPaidOf,
   vatRateText,
+  webshopOverbillingProblem,
+  type WebshopOrderInvoiceFact,
 } from "./billing-document-issue.js";
 import { toSzamlazzAgentInput } from "./billing-document-szamlazz.adapter.js";
 import { finalLineOfQuoteItem } from "./billing-final-lines.js";
@@ -582,5 +586,155 @@ describe("a forrás-sortól az XML tételig (L8)", () => {
         afakulcs: "5",
       },
     ]);
+  });
+});
+
+/*
+  A BEÉRKEZETT ELŐRE UTALÁS SZÁMLÁJA KIFIZETVE (kártya d31a66a3, S1). A „kifizetve” az OS-ben rögzített beérkezésből jön, nem a
+  Számlázz.hu feedjéből (az Autokassza ki van kapcsolva, a díjbekérő ott fizetetlen). MI PIROSÍT: egy előleg-beérkezés, egy kisebb
+  összeg, más deviza, egy nem webshop számla vagy egy díjbekérő nélküli számla is kifizetettként megy ki; vagy az előlegszámla
+  eddigi, feed szerinti olvasása elromlik.
+*/
+describe("an invoice paid by the recorded transfer", () => {
+  // the draft's gross: 2985.0017, sent as 2985.00
+  const webshop = row({
+    sourceType: "WEBSHOP_ORDER",
+    sourceId: "order_38",
+    proformaInvoice: { id: "p-1", invoiceNumber: "D-2026-7" },
+  });
+  const facts = (
+    over: Partial<{ amount: string; currency: string; advance: boolean }> = {},
+  ) => ({
+    amount: d(over.amount ?? "2985.0000"),
+    currency: over.currency ?? "HUF",
+    advance: over.advance ?? false,
+  });
+
+  it("is paid when the whole-order transfer covers its gross", () => {
+    assert.equal(invoicePaidByTransfer(webshop, facts()), true);
+  });
+
+  it("is not paid for an advance, a smaller amount, another currency, or no transfer", () => {
+    assert.equal(
+      invoicePaidByTransfer(webshop, facts({ advance: true })),
+      false,
+    );
+    assert.equal(
+      invoicePaidByTransfer(webshop, facts({ amount: "2984.0000" })),
+      false,
+    );
+    assert.equal(
+      invoicePaidByTransfer(webshop, facts({ currency: "EUR" })),
+      false,
+    );
+    assert.equal(invoicePaidByTransfer(webshop, null), false);
+    assert.equal(
+      invoicePaidByTransfer(
+        row({ ...webshop, documentType: "ADVANCE_INVOICE" }),
+        facts(),
+      ),
+      false,
+    );
+  });
+
+  it("asks the transfer only for a webshop invoice with a proforma, and the feed only for an advance", async () => {
+    const asked: string[] = [];
+    const documents = {
+      proformaPaymentFacts: async (number: string) => {
+        asked.push(`feed ${number}`);
+        return {
+          paidAmount: d("2985"),
+          grossAmount: d("2985"),
+          currency: "HUF",
+          cancelled: false,
+        };
+      },
+      webshopTransferFacts: async (orderId: string, proformaId: string) => {
+        asked.push(`transfer ${orderId} ${proformaId}`);
+        return facts();
+      },
+    };
+    assert.equal(await proformaPaidOf(webshop, documents), true);
+    assert.equal(
+      await proformaPaidOf(
+        row({ ...webshop, sourceType: "CONTRACT", sourceId: "c-1" }),
+        documents,
+      ),
+      false,
+    );
+    assert.equal(
+      await proformaPaidOf(
+        row({ ...webshop, proformaInvoice: null }),
+        documents,
+      ),
+      false,
+    );
+    assert.equal(
+      await proformaPaidOf(
+        row({ ...webshop, documentType: "ADVANCE_INVOICE" }),
+        documents,
+      ),
+      true,
+    );
+    assert.deepEqual(asked, ["transfer order_38 p-1", "feed D-2026-7"]);
+  });
+});
+
+/*
+  EGY WEBSHOP RENDELÉS EGYSZER (kártya d31a66a3, S1): vagy egy számla, vagy előleg- és végszámla. MI PIROSÍT: egy számla kiáll egy
+  másik számla, előleg vagy végszámla mellé; egy előleg vagy végszámla kiáll a rendelés számlája mellé; egy kiállítás alatti bizonylat
+  nem számít; egy sztornózott mégis megállít; az előleg és a végszámla egymást megállítja (az S2 és S4 dolga, nem ezé az őrzőé).
+*/
+describe("a webshop order invoiced once", () => {
+  const fact = (
+    over: Partial<WebshopOrderInvoiceFact>,
+  ): WebshopOrderInvoiceFact => ({
+    documentType: "INVOICE",
+    status: "ISSUED",
+    number: "E-ACR-1",
+    cancelled: false,
+    ...over,
+  });
+
+  it("an invoice stops on any other invoice, advance or final invoice, naming it", () => {
+    for (const other of [
+      fact({}),
+      fact({ documentType: "ADVANCE_INVOICE", number: "E-ACR-2" }),
+      fact({ documentType: "FINAL_INVOICE", number: "E-ACR-3" }),
+      fact({ status: "ISSUING", number: null }),
+    ]) {
+      const problem = webshopOverbillingProblem("INVOICE", [other]);
+      assert.ok(problem, JSON.stringify(other));
+      assert.match(
+        problem,
+        other.number ? new RegExp(other.number) : /kiállítás alatt/,
+      );
+    }
+  });
+
+  it("an advance or a final invoice stops on the order's invoice, not on each other", () => {
+    for (const type of ["ADVANCE_INVOICE", "FINAL_INVOICE"]) {
+      assert.match(
+        webshopOverbillingProblem(type, [fact({})]) ?? "",
+        /számla E-ACR-1/,
+      );
+      assert.equal(
+        webshopOverbillingProblem(type, [
+          fact({ documentType: "ADVANCE_INVOICE" }),
+          fact({ documentType: "FINAL_INVOICE" }),
+        ]),
+        null,
+      );
+    }
+  });
+
+  it("a cancelled one does not count, and other document types pass", () => {
+    assert.equal(
+      webshopOverbillingProblem("INVOICE", [fact({ cancelled: true })]),
+      null,
+    );
+    assert.equal(webshopOverbillingProblem("INVOICE", []), null);
+    assert.equal(webshopOverbillingProblem("DELIVERY_NOTE", [fact({})]), null);
+    assert.equal(webshopOverbillingProblem("PROFORMA", [fact({})]), null);
   });
 });

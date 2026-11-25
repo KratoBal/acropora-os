@@ -36,7 +36,7 @@ export function parcelRefusal(input: {
   storePickup: boolean;
   carrier: "FOXPOST" | "GLS" | null;
   invoiceIssued: boolean;
-  /** Előre utalás: a számla a Számlázz.hu-tól jön, az OS nem állít ki. */
+  /** Előre utalás: a számla az utalás beérkezése után jön (d31a66a3, S1). */
   bankTransfer: boolean;
 }): string | null {
   if (input.storePickup)
@@ -45,7 +45,7 @@ export function parcelRefusal(input: {
     return "Csomag a visszaigazolt, még le nem zárt rendeléshez adható fel.";
   if (!input.invoiceIssued)
     return input.bankTransfer
-      ? "Előre utalásnál a számlát a Számlázz.hu állítja ki a díjbekérő kifizetésekor; a csomag utána adható fel."
+      ? "Előre utalásnál a számla az utalás beérkezése után állítható ki; a csomag utána adható fel."
       : "Előbb állítsd ki a számlát.";
   if (!input.carrier)
     return "A rendelés szállítási módjából nem derül ki a szállító (Foxpost vagy GLS).";

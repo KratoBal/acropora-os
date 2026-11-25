@@ -218,10 +218,10 @@ export function paymentOf(
   };
 }
 
-/** Előre utalásnál a Számla lépés: a számla a Számlázz.hu-tól jön. */
-export const TRANSFER_INVOICE_STEP = "A Számlázz.hu állítja ki a kifizetéskor";
-/** Előre utalásnál a csomag oka: nem kiállítás kell, hanem a kifizetés. */
-export const TRANSFER_PARCEL_WAIT = "A számla a díjbekérő kifizetése után jön";
+/** Előre utalásnál a Számla lépés: az OS állítja ki, az utalás beérkezése után (d31a66a3, S1). */
+export const TRANSFER_INVOICE_STEP = "Kiállítható az utalás beérkezése után";
+/** Előre utalásnál a csomag oka: a számla, és előtte az utalás beérkezése. */
+export const TRANSFER_PARCEL_WAIT = "A számla az utalás beérkezése után jön";
 
 const AFTER = (
   code: WebshopOrderStatus | null,
@@ -240,6 +240,7 @@ export function stepsOf(
   storePickup: boolean,
   facts: WebshopOrderFacts,
   cardPayment: boolean,
+  /** A prepaid order whose whole transfer is not in yet (d31a66a3, S1): the invoice waits for it. */
   bankTransfer: boolean,
 ): WebshopOrderStep[] {
   const confirmed = AFTER(
@@ -263,11 +264,11 @@ export function stepsOf(
     key: "invoice",
     label: "Számla",
     /*
-      ELŐRE UTALÁSNÁL A SZÁMLA NEM AZ OS DOLGA (bb3a6bd5): a Számlázz.hu
-      Autokassza állítja ki a kifizetett díjbekérőből, és az OS 409-cel
-      elutasítja a kiállítást. A lépés tehát nem hívhat kiállításra; azt
-      mondja meg, mire vár. Stage-próba, 2026-10-07: a #56-on ez a lépés még
-      „Számla kiállítása” volt.
+      ELŐRE UTALÁSNÁL A SZÁMLA AZ UTALÁS BEÉRKEZÉSE UTÁN JÖN (d31a66a3, S1): a
+      Számlázz.hu Autokassza ki van kapcsolva, az OS állítja ki, de csak a
+      rögzített beérkezésre. A lépés ezért azt mondja meg, mire vár, nem hív
+      kiállításra (stage-próba, 2026-10-07: a #56-on „Számla kiállítása” állt,
+      és a gomb 409-et kapott).
     */
     detail:
       facts.invoiceNumber ??
@@ -682,7 +683,9 @@ export function toDetail(input: {
       shipping.storePickup,
       facts,
       payment?.method === "Stripe",
-      bankTransfer,
+      // a prepaid order waits for its transfer until the whole of it is in; then its invoice is issued as any other (S1)
+      bankTransfer &&
+        !(input.transferReceipt && !input.transferReceipt.advance),
     ),
     relatedOrder: related
       ? { ...related, displayId: input.relatedDisplayId }
