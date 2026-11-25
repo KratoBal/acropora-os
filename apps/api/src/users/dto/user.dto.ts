@@ -2,6 +2,7 @@ import { USER_LIST_SORT_FIELDS, type UserListSortField } from "@acropora/types";
 import { Type } from "class-transformer";
 import {
   IsArray,
+  IsBoolean,
   IsEmail,
   IsIn,
   IsInt,
@@ -70,6 +71,13 @@ export class UpdateUserDto {
   @IsIn(SERVICE_CAPABILITY_VALUES, { each: true })
   @IsOptional()
   serviceCapabilities?: ServiceCapabilityValue[];
+  /**
+   * GÉPI / FLOTTA FIÓK JELÖLŐ (card b2e74712). Hiányzó mező: nem nyúl hozzá. A jelölt fiók nem osztható felelősnek, és nem kap
+   * ticket@ levélfogadást; a módosítás a `changedFields` nevével az auditnaplóba kerül, mint a többi mező.
+   */
+  @IsBoolean()
+  @IsOptional()
+  isServiceAccount?: boolean;
 
   @IsString() expectedUpdatedAt!: string;
 }
