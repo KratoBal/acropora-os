@@ -30,3 +30,30 @@ describe("keskeny képernyő: a partner-listák sorai", () => {
     );
   });
 });
+
+/**
+ * TELEFONON MENÜ ÉS KÁRTYALISTA (picasso képernyő-leltára, 2026-11-25, f0b70dbd, 390 px): a portálon `lg` alatt nem volt menü,
+ * és a hibajegy-lista 720 px-es táblája jobbra kifutott. MI PIROSIT: a felső sáv menügombja nem az oldalsávot nyitja (más
+ * azonosító, vagy az oldalsáv `lg` alatt nem válik láthatóvá a nyitott állapotban); a hibajegy-tábla `md` alatt nem vált
+ * blokk-elrendezésre, vagy a fejléce látható marad.
+ */
+const HEJ = readFileSync("src/components/portal-shell.tsx", "utf8");
+const HIBAJEGYEK = readFileSync("src/components/ticket-list.tsx", "utf8");
+
+describe("keskeny képernyő: menü és hibajegy-kártyák", () => {
+  it("a felső sáv gombja az oldalsávot nyitja, és nyitva az lg alatt is látszik", () => {
+    assert.match(
+      HEJ,
+      /aria-expanded=\{menuOpen\}\s*aria-controls="partner-menu"/,
+    );
+    assert.match(HEJ, /<aside\s+id="partner-menu"/);
+    assert.match(HEJ, /menuOpen \? "z-50 flex shadow-2xl" : "z-30 hidden"/);
+  });
+
+  it("a hibajegy-tábla md alatt kártyalista, a fejléce csak a képernyőolvasóé", () => {
+    assert.match(
+      HIBAJEGYEK,
+      /<table className="[^"]*\bmax-md:block\b[^"]*\bmd:min-w-\[720px\][^"]*">\s*<thead className="max-md:sr-only">/,
+    );
+  });
+});

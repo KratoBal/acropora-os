@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import {
   Icon,
   type IconName,
@@ -130,6 +130,11 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { effectiveTheme } = useThemePreference();
+  // the phone's menu (picasso's screen inventory, f0b70dbd: below `lg` the portal had no menu at all); a new page closes it
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -282,9 +287,48 @@ export function PortalShell({ children }: { children: ReactNode }) {
         amit ez a javitas felszamol, csak MASIK ket lapon. A hatokor tehat
         szandekosan az oldalsavra szukul.
       */}
-      <aside
+      {/*
+        TELEFONON (az `lg` alatt) FELSŐ SÁV ÉS LENYÍLÓ MENÜ (picasso képernyő-leltára, 2026-11-25, f0b70dbd): az oldalsáv eddig
+        `hidden lg:flex` volt, tehát 390 px-en a portálon nem volt menü, egyik lapról sem lehetett a másikra jutni. Ugyanaz az
+        oldalsáv elem nyílik ki, nem egy második másolat: a menüpontok szűrése (szerver `navigation`) így egy helyen marad.
+      */}
+      <div
         data-theme={effectiveTheme}
-        className="fixed inset-y-0 left-0 z-30 hidden w-52 flex-col border-r border-pilot-grey-200 bg-white lg:flex"
+        className="sticky top-0 z-20 flex h-12 items-center justify-between border-b border-pilot-grey-200 bg-white px-4 lg:hidden"
+      >
+        <Link
+          href="/attekintes"
+          className="flex items-center gap-2 text-xs font-bold text-pilot-grey-900 no-underline"
+        >
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-pilot-aqua-600 text-white">
+            <Icon name="droplet" size={14} />
+          </span>
+          Acropora
+        </Link>
+        <button
+          type="button"
+          aria-expanded={menuOpen}
+          aria-controls="partner-menu"
+          onClick={() => setMenuOpen((open) => !open)}
+          className="flex h-9 items-center gap-1.5 rounded-lg border border-pilot-grey-200 bg-white px-3 text-sm font-medium text-pilot-grey-700"
+        >
+          <Icon name="menu" size={15} />
+          Menü
+        </button>
+      </div>
+      {menuOpen ? (
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 z-40 bg-black/30 lg:hidden"
+          onClick={() => setMenuOpen(false)}
+        />
+      ) : null}
+      <aside
+        id="partner-menu"
+        data-theme={effectiveTheme}
+        className={`fixed inset-y-0 left-0 w-52 flex-col border-r border-pilot-grey-200 bg-white lg:z-30 lg:flex lg:shadow-none ${
+          menuOpen ? "z-50 flex shadow-2xl" : "z-30 hidden"
+        }`}
       >
         <div className="border-b border-pilot-grey-100 px-5 py-4">
           <Link
