@@ -307,13 +307,13 @@ describe("a létrehozó űrlap: a szülőeszköz keresése", () => {
   /**
    * Balázs, 2026-10-01: a szülőeszköz-lista a partner első 100 eszközét hozta
    * betűrendben, a FANK 406 eszközéből így csak AKV kezdetűek jöttek fel. A
-   * kérés most az alegység részfájára és a keresőre szűkít.
+   * kérés most a helyszín részfájára és a keresőre szűkít.
    */
   const utolsoKeres = () =>
     (api.list.mock.calls.at(-1)?.[1] as URLSearchParams | undefined) ??
     new URLSearchParams();
 
-  it("a beírt keresést és a választott alegységet is elküldi", async () => {
+  it("a beírt keresést és a választott helyszínt is elküldi", async () => {
     api.owners.mockResolvedValue({
       items: [
         {
@@ -348,10 +348,10 @@ describe("a létrehozó űrlap: a szülőeszköz keresése", () => {
 
     await waitFor(() =>
       expect(
-        (screen.getByLabelText("Alegység") as HTMLSelectElement).options.length,
+        (screen.getByLabelText("Helyszín") as HTMLSelectElement).options.length,
       ).toBe(2),
     );
-    fireEvent.change(screen.getByLabelText("Alegység"), {
+    fireEvent.change(screen.getByLabelText("Helyszín"), {
       target: { value: "dep-biodom" },
     });
     await waitFor(() =>

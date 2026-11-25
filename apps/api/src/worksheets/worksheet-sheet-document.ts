@@ -170,7 +170,7 @@ export async function worksheetSheetDocument(
   és az első szakaszcímen is át). Ami most van:
 
     fejléc     a nagy betűs cím a munkalapSZÁM (rövid, nem törik), alatta a partner neve; a tárgy a törzsbe kerül
-    két oszlop balra: partner, alegység, tárgy, ki vette fel, ki dolgozott rajta; jobbra: kiállítás, teljesítés, határidő, lezárva
+    két oszlop balra: partner, helyszín, tárgy, ki vette fel, ki dolgozott rajta; jobbra: kiállítás, teljesítés, határidő, lezárva
     tételek    táblázat: sorszám, megnevezés (alatta halványan a részlet és az eszközkódok), jobbra a mennyiség
     munkaóra   az összesítés csak munkaóra-tétel mellett áll ki (worksheetSheetLayout)
 

@@ -143,6 +143,8 @@ export interface WorksheetLineEditorProps {
    * tétel önmagában nem tartozott ehhez a feladathoz.
    */
   pilot?: boolean;
+  /** ADDITÍV: kártya-keret nélkül rajzol (csak `pilot` mellett), mert egy másik kártya belsejében áll. Elhagyva a mai kártyás alak. */
+  bare?: boolean;
 }
 
 /**
@@ -212,6 +214,7 @@ export function WorksheetLineEditor({
   onChange,
   disabled,
   pilot,
+  bare,
 }: WorksheetLineEditorProps) {
   const update = (index: number, patch: Partial<WorksheetLineDraft>) => {
     onChange(
@@ -231,18 +234,18 @@ export function WorksheetLineEditor({
    * widgetnel.
    */
   if (pilot) {
+    // `bare`: a tételek egy másik kártya BELSEJÉBEN állnak (az űrlap-váz "Mi a munka?" csoportja): kártya-keret nélkül, al-címmel
+    const Shell = bare ? "div" : PilotCard;
+    const shellProps = bare
+      ? { className: "space-y-3" }
+      : { className: "space-y-3 p-4" };
+    const Heading = bare ? "h3" : "h2";
     return (
-      <PilotCard className="space-y-3 p-4">
+      <Shell {...shellProps}>
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-pilot-grey-900">Tételek</h2>
-          <PilotButton
-            type="button"
-            variant="secondary"
-            disabled={disabled}
-            onClick={() => onChange([...lines, emptyLine()])}
-          >
-            Új tétel
-          </PilotButton>
+          <Heading className="text-sm font-semibold text-pilot-grey-900">
+            Tételek
+          </Heading>
         </div>
         {lines.length === 0 ? (
           <p className="text-sm text-pilot-grey-400">
@@ -269,9 +272,10 @@ export function WorksheetLineEditor({
             return (
               <div
                 key={index}
-                className={`grid gap-2 border-b border-pilot-grey-100 pb-3 last:border-0 last:pb-0 ${COLUMNS}`}
+                // telefonon: a megnevezés teljes szélesség, alatta a mennyiség és az egység egy sorban, alatta a munkaóra és a hányan (picasso 3.7 terve)
+                className={`grid grid-cols-2 gap-2 border-b border-pilot-grey-100 pb-3 last:border-0 last:pb-0 ${COLUMNS}`}
               >
-                <div className="space-y-2">
+                <div className="col-span-2 space-y-2 md:col-span-1">
                   <PilotInput
                     aria-label={`${index + 1}. tétel megnevezése`}
                     value={line.description}
@@ -363,7 +367,16 @@ export function WorksheetLineEditor({
             );
           })}
         </div>
-      </PilotCard>
+        {/* az "Új tétel" a lista ALATT áll (telefonon is), nem a cím mellett */}
+        <PilotButton
+          type="button"
+          variant="secondary"
+          disabled={disabled}
+          onClick={() => onChange([...lines, emptyLine()])}
+        >
+          + Új tétel
+        </PilotButton>
+      </Shell>
     );
   }
 

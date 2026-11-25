@@ -252,7 +252,7 @@ export function worksheetSheetLayout(
         : input.customerName,
     },
     {
-      label: "Alegység",
+      label: "Helyszín",
       value: `${input.departmentName} (${input.departmentCode})`,
     },
     field("Tárgy", input.subject),
@@ -336,7 +336,7 @@ export function worksheetSheetLines(
 
   // SZÁM NÉLKÜL IS VAN FEJLÉC, ÉS KIMONDJA, HOGY NINCS SZÁMA: a `${null}` „MUNKALAP null"-t írna, az üres pedig elveszett számot sugallna.
   out.push(`MUNKALAP  ${layout.number}`, "");
-  out.push(field("Partner"), field("Alegység"), field("Tárgy"));
+  out.push(field("Partner"), field("Helyszín"), field("Tárgy"));
   out.push(layout.description ? `Leírás: ${layout.description}` : null);
   out.push(field("Kiállítás"), field("Teljesítés"), field("Határidő"));
   out.push(field("Felvette"), field("Dolgozott rajta"));

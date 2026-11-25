@@ -47,7 +47,7 @@ export const suppliersApi = {
     );
   },
   /**
-   * Egy meglévő alegység NEVE és ARCHIVÁLÁSA. A kód és a szülő nem megy át
+   * Egy meglévő helyszín NEVE és ARCHIVÁLÁSA. A kód és a szülő nem megy át
    * rajta: a szerver `forbidNonWhitelisted` beállítással fut, tehát egy ilyen
    * mező 400-zal esne el, nem csendben hullana le.
    */

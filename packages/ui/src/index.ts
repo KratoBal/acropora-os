@@ -104,6 +104,14 @@ export {
   PILOT_SHELL_BLEED,
 } from "./pilot-ui";
 export type { PilotBadgeVariant } from "./pilot-ui";
+export {
+  PilotFormCard,
+  PilotFieldPair,
+  PilotField,
+  PilotMissingSummary,
+  PilotFormActions,
+  PilotFormLayout,
+} from "./pilot-form";
 export { CalculatorCard } from "./calculator-card";
 export type {
   CalculatorAquariumOption,

@@ -17,7 +17,7 @@ export const PARENT_PICKER_LIMIT = 500;
  * (acrobot 26045: „ugyanazzal a választóval, mint létrehozáskor”).
  *
  * A lista szűkítve jön, nem az első száz (Balázs, 2026-10-01): a partner aktív
- * eszközei, a kiválasztott alegység részfájára szűkítve, és két betűtől a
+ * eszközei, a kiválasztott helyszín részfájára szűkítve, és két betűtől a
  * kereső szerint (név, kód, matrica). A szerkesztő ezen felül kizárja az
  * eszközt magát és a leszármazottait (`excludeSubtreeOf`): azok kört zárnának,
  * és a mentés úgyis elutasítaná őket.
@@ -85,7 +85,7 @@ export function parentAssetTruncation(
   total: number,
 ): string | null {
   return total > shown
-    ? `${total} találatból az első ${shown} látszik. Szűkíts alegységre vagy keresővel.`
+    ? `${total} találatból az első ${shown} látszik. Szűkíts helyszínre vagy keresővel.`
     : null;
 }
 

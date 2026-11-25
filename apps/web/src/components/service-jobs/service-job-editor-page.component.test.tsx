@@ -57,6 +57,10 @@ const sheets = vi.hoisted(() => ({
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
+// the form stands in the Pilot theme root now (the shared form scaffold), which loads a local font
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
@@ -150,17 +154,21 @@ describe("ServiceJobEditorPage", () => {
    * is, ha a másik eltűnik - és a hiányt épp az venné észre, akinek kellett
    * volna.
    */
-  it("a cím fölött és a láblécben is van kiút, és nem ugyanaz", async () => {
+  it("a cím fölött és a gombsorban is van kiút, és nem ugyanaz", async () => {
+    navigation.push.mockReset();
     render(<ServiceJobEditorPage />);
-    await screen.findByText("Partner és helyszín");
+    await screen.findByText("Kinek és hol?");
 
-    const fentre = screen.getByRole("link", { name: "Hibajegyek" });
-    const megsem = screen.getByRole("link", { name: "Mégsem" });
-
-    expect(fentre.getAttribute("href")).toBe("/szerviz/hibajegyek");
-    expect(megsem.getAttribute("href")).toBe("/szerviz/hibajegyek");
-    // KÉT KÜLÖN ELEM: ugyanoda visznek, de nem egy elem kétszer megtalálva.
-    expect(fentre).not.toBe(megsem);
+    // a morzsa (fent) és a Mégse (a gombsorban) két külön gomb, ugyanoda visznek
+    const fentre = screen.getByRole("button", { name: "Hibajegyek" });
+    const megse = screen.getByRole("button", { name: "Mégse" });
+    expect(fentre).not.toBe(megse);
+    fireEvent.click(fentre);
+    fireEvent.click(megse);
+    expect(navigation.push.mock.calls).toEqual([
+      ["/szerviz/hibajegyek"],
+      ["/szerviz/hibajegyek"],
+    ]);
   });
 
   /*
@@ -171,18 +179,16 @@ describe("ServiceJobEditorPage", () => {
   */
   it("a karbantartási űrlap a saját nevét és a saját listáját mutatja", async () => {
     render(<ServiceJobEditorPage kind="MAINTENANCE" />);
-    await screen.findByText("Partner és helyszín");
+    await screen.findByText("Kinek és hol?");
 
     expect(
       screen.getByRole("heading", { name: "Új karbantartási lap" }),
     ).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Új hibajegy" })).toBeNull();
-    expect(
-      screen.getByRole("link", { name: "Karbantartás" }).getAttribute("href"),
-    ).toBe("/szerviz/karbantartas");
-    expect(
-      screen.getByRole("link", { name: "Mégsem" }).getAttribute("href"),
-    ).toBe("/szerviz/karbantartas");
+    fireEvent.click(screen.getByRole("button", { name: "Karbantartás" }));
+    expect(navigation.push).toHaveBeenLastCalledWith("/szerviz/karbantartas");
+    fireEvent.click(screen.getByRole("button", { name: "Mégse" }));
+    expect(navigation.push).toHaveBeenLastCalledWith("/szerviz/karbantartas");
   });
 
   /*
@@ -193,7 +199,7 @@ describe("ServiceJobEditorPage", () => {
   */
   it("a karbantartási űrlap egyetlen szövegében sincs hibajegy-szó, a gomb és a címke a karbantartásé", async () => {
     render(<ServiceJobEditorPage kind="MAINTENANCE" />);
-    await screen.findByText("Partner és helyszín");
+    await screen.findByText("Kinek és hol?");
 
     const leftover = (document.body.textContent ?? "").match(
       /.{0,30}(hiba|(?<![a-zé])jegy).{0,30}/i,
@@ -202,9 +208,9 @@ describe("ServiceJobEditorPage", () => {
     expect(
       screen.getByRole("button", { name: "Karbantartási lap megnyitása" }),
     ).toBeTruthy();
-    expect(screen.getByLabelText("Mi a feladat?")).toBeTruthy();
-    expect(screen.queryByLabelText("Mi a baj?")).toBeNull();
-    expect(screen.getByText("A munka leírása")).toBeTruthy();
+    expect(screen.getByLabelText(/^Mi a feladat\?/)).toBeTruthy();
+    expect(screen.queryByLabelText(/^Mi a baj\?/)).toBeNull();
+    expect(screen.getByText("Mi a munka?")).toBeTruthy();
   });
 
   it("a karbantartási lap létrehozása után a karbantartási lap útvonalára visz", async () => {
@@ -220,13 +226,13 @@ describe("ServiceJobEditorPage", () => {
       ],
     });
     render(<ServiceJobEditorPage kind="MAINTENANCE" />);
-    fireEvent.change(await screen.findByLabelText("Mi a feladat?"), {
+    fireEvent.change(await screen.findByLabelText(/^Mi a feladat\?/), {
       target: { value: "Havi szűrőtisztítás" },
     });
-    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
+    fireEvent.change(await listedSelect(/^Partner/, "vevo-1"), {
       target: { value: "vevo-1" },
     });
-    fireEvent.change(await listedSelect("Helyszín", "unit-1"), {
+    fireEvent.change(await listedSelect(/^Helyszín/, "unit-1"), {
       target: { value: "unit-1" },
     });
     fireEvent.click(
@@ -241,12 +247,12 @@ describe("ServiceJobEditorPage", () => {
 
   it("a hibajegy-űrlap a hibajegy nevét és listáját mutatja", async () => {
     render(<ServiceJobEditorPage />);
-    await screen.findByText("Partner és helyszín");
+    await screen.findByText("Kinek és hol?");
 
     expect(screen.getByRole("heading", { name: "Új hibajegy" })).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: "Mégsem" }).getAttribute("href"),
-    ).toBe("/szerviz/hibajegyek");
+    navigation.push.mockReset();
+    fireEvent.click(screen.getByRole("button", { name: "Mégse" }));
+    expect(navigation.push).toHaveBeenLastCalledWith("/szerviz/hibajegyek");
   });
 
   /**
@@ -259,11 +265,12 @@ describe("ServiceJobEditorPage", () => {
   it("partner és helyszín nélkül a gomb tiltva marad, és nem hív felvitelt", async () => {
     render(<ServiceJobEditorPage />);
 
-    fireEvent.change(screen.getByLabelText("Mi a baj?"), {
+    fireEvent.change(screen.getByLabelText(/^Mi a baj\?/), {
       target: { value: "A hármas medence szivattyúja nem indul" },
     });
     const gomb = screen.getByRole("button", { name: "Hibajegy megnyitása" });
-    expect((gomb as HTMLButtonElement).disabled).toBe(true);
+    // halvány, de kattintható (aria-disabled): a kattintás a hibákat mutatja, hívás nincs
+    expect(gomb.getAttribute("aria-disabled")).toBe("true");
 
     fireEvent.click(gomb);
     expect(api.create).not.toHaveBeenCalled();
@@ -281,7 +288,7 @@ describe("ServiceJobEditorPage", () => {
     await waitFor(() =>
       expect(sheets.selectablePartners).toHaveBeenCalledTimes(1),
     );
-    const valaszto = await screen.findByLabelText("Partner");
+    const valaszto = await screen.findByLabelText(/^Partner/);
     // the options come with the partners' answer, after the field
     expect(
       await within(valaszto).findByRole("option", {
@@ -315,13 +322,13 @@ describe("ServiceJobEditorPage", () => {
       expect(sheets.selectablePartners).toHaveBeenCalledTimes(1),
     );
 
-    fireEvent.change(screen.getByLabelText("Mi a baj?"), {
+    fireEvent.change(screen.getByLabelText(/^Mi a baj\?/), {
       target: { value: "A hármas medence szivattyúja nem indul" },
     });
-    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
+    fireEvent.change(await listedSelect(/^Partner/, "vevo-1"), {
       target: { value: "vevo-1" },
     });
-    fireEvent.change(await listedSelect("Helyszín", "unit-1"), {
+    fireEvent.change(await listedSelect(/^Helyszín/, "unit-1"), {
       target: { value: "unit-1" },
     });
     fireEvent.click(
@@ -357,7 +364,7 @@ describe("ServiceJobEditorPage", () => {
     expect(
       await screen.findByText(/Nincs kiválasztható szervizpartner/),
     ).toBeTruthy();
-    expect(screen.queryByLabelText("Partner")).toBeNull();
+    expect(screen.queryByLabelText(/^Partner/)).toBeNull();
   });
 
   /**
@@ -370,7 +377,7 @@ describe("ServiceJobEditorPage", () => {
     expect(
       screen.getByText("Nincs jogosultságod hibajegyet nyitni"),
     ).toBeTruthy();
-    expect(screen.queryByLabelText("Mi a baj?")).toBeNull();
+    expect(screen.queryByLabelText(/^Mi a baj\?/)).toBeNull();
   });
   /**
    * A SORREND ALLITASSAL VAN ROGZITVE, mert Balazs KERT egy sorrendet
@@ -420,12 +427,18 @@ describe("ServiceJobEditorPage", () => {
       bizonyitja, hogy a delegalas tenyleg a sorrend vegen all -- Balazs
       2026-09-14-i listaja szerint.
     */
-    expect(feliratok).toEqual([
+    // a jelölés (csillag, "(kötelező)" a felolvasónak, "(nem kötelező)") a címke része: a sorrendhez a nevet vesszük
+    const nevek = feliratok.map((szoveg) =>
+      szoveg!.replace(/\*? ?\(kötelező\)|\(nem kötelező\)|\*/g, "").trim(),
+    );
+    expect(nevek).toEqual([
       "Partner",
       "Helyszín",
       "Mi a baj?",
       "Részletek",
+      "Érintett eszközök",
       "Fényképek és fájlok",
+      "Felelős",
       "Sanyi",
       "Éva",
     ]);
@@ -442,7 +455,7 @@ describe("ServiceJobEditorPage", () => {
     render(<ServiceJobEditorPage />);
 
     expect(await screen.findByText(/Előbb válassz partnert/)).toBeTruthy();
-    expect(screen.queryByLabelText("Helyszín")).toBeNull();
+    expect(screen.queryByLabelText(/^Helyszín/)).toBeNull();
   });
 
   /**
@@ -454,10 +467,10 @@ describe("ServiceJobEditorPage", () => {
     render(<ServiceJobEditorPage />);
     // A CIM MEG VAN ADVA, hogy a gomb tiltasat KIZAROLAG a hianyzo helyszin
     // okozza -- kulonben a tiltas a cim hianyat is bizonyithatna.
-    fireEvent.change(screen.getByLabelText("Mi a baj?"), {
+    fireEvent.change(screen.getByLabelText(/^Mi a baj\?/), {
       target: { value: "A hármas medence szivattyúja nem indul" },
     });
-    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
+    fireEvent.change(await listedSelect(/^Partner/, "vevo-1"), {
       target: { value: "vevo-1" },
     });
 
@@ -465,12 +478,10 @@ describe("ServiceJobEditorPage", () => {
       await screen.findByText(/Ehhez a partnerhez nincs felvéve helyszín/),
     ).toBeTruthy();
     expect(
-      (
-        screen.getByRole("button", {
-          name: "Hibajegy megnyitása",
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
+      screen
+        .getByRole("button", { name: "Hibajegy megnyitása" })
+        .getAttribute("aria-disabled"),
+    ).toBe("true");
   });
 
   /**
@@ -516,10 +527,10 @@ describe("ServiceJobEditorPage", () => {
     });
 
     render(<ServiceJobEditorPage />);
-    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
+    fireEvent.change(await listedSelect(/^Partner/, "vevo-1"), {
       target: { value: "vevo-1" },
     });
-    fireEvent.change(await listedSelect("Helyszín", "unit-1"), {
+    fireEvent.change(await listedSelect(/^Helyszín/, "unit-1"), {
       target: { value: "unit-1" },
     });
 
@@ -549,17 +560,17 @@ describe("ServiceJobEditorPage", () => {
       ],
     });
     render(<ServiceJobEditorPage />);
-    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
+    fireEvent.change(await listedSelect(/^Partner/, "vevo-1"), {
       target: { value: "vevo-1" },
     });
 
-    const helyszin = await screen.findByLabelText("Helyszín");
+    const helyszin = await screen.findByLabelText(/^Helyszín/);
     expect(
       within(helyszin).getByText("Nagy fókamedence / Biodóm (BIO)"),
     ).toBeTruthy();
 
     fireEvent.change(helyszin, { target: { value: "unit-2" } });
-    fireEvent.change(screen.getByLabelText("Mi a baj?"), {
+    fireEvent.change(screen.getByLabelText(/^Mi a baj\?/), {
       target: { value: "A hármas medence szivattyúja nem indul" },
     });
     fireEvent.click(
@@ -607,19 +618,19 @@ describe("ServiceJobEditorPage", () => {
       ],
     });
     render(<ServiceJobEditorPage />);
-    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
+    fireEvent.change(await listedSelect(/^Partner/, "vevo-1"), {
       target: { value: "vevo-1" },
     });
-    const helyszin = await screen.findByLabelText("Helyszín");
+    const helyszin = await screen.findByLabelText(/^Helyszín/);
     fireEvent.change(helyszin, { target: { value: "unit-1" } });
     expect((helyszin as HTMLSelectElement).value).toEqual("unit-1");
 
     fireEvent.click(screen.getByRole("button", { name: "Másik partner" }));
-    fireEvent.change(await listedSelect("Partner", "vevo-2"), {
+    fireEvent.change(await listedSelect(/^Partner/, "vevo-2"), {
       target: { value: "vevo-2" },
     });
 
-    const ujHelyszin = await screen.findByLabelText("Helyszín");
+    const ujHelyszin = await screen.findByLabelText(/^Helyszín/);
     expect((ujHelyszin as HTMLSelectElement).value).toEqual("");
   });
 
@@ -645,16 +656,16 @@ describe("ServiceJobEditorPage", () => {
       ],
     });
     render(<ServiceJobEditorPage />);
-    fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
+    fireEvent.change(await screen.findByLabelText(/^Mi a baj\?/), {
       target: { value: "Nem indul a szivattyú" },
     });
-    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
+    fireEvent.change(await listedSelect(/^Partner/, "vevo-1"), {
       target: { value: "vevo-1" },
     });
-    fireEvent.change(await listedSelect("Helyszín", "unit-1"), {
+    fireEvent.change(await listedSelect(/^Helyszín/, "unit-1"), {
       target: { value: "unit-1" },
     });
-    fireEvent.change(screen.getByLabelText("Fényképek és fájlok"), {
+    fireEvent.change(screen.getByLabelText(/^Fényképek és fájlok/), {
       target: { files: fajlok },
     });
   }
@@ -760,13 +771,13 @@ describe("ServiceJobEditorPage", () => {
       ],
     });
     render(<ServiceJobEditorPage />);
-    fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
+    fireEvent.change(await screen.findByLabelText(/^Mi a baj\?/), {
       target: { value: "Nem indul a szivattyú" },
     });
-    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
+    fireEvent.change(await listedSelect(/^Partner/, "vevo-1"), {
       target: { value: "vevo-1" },
     });
-    fireEvent.change(await listedSelect("Helyszín", "unit-1"), {
+    fireEvent.change(await listedSelect(/^Helyszín/, "unit-1"), {
       target: { value: "unit-1" },
     });
     fireEvent.click(await screen.findByLabelText("Éva"));
@@ -815,13 +826,13 @@ describe("ServiceJobEditorPage", () => {
       ],
     });
     render(<ServiceJobEditorPage />);
-    fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
+    fireEvent.change(await screen.findByLabelText(/^Mi a baj\?/), {
       target: { value: "Nem indul a szivattyú" },
     });
-    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
+    fireEvent.change(await listedSelect(/^Partner/, "vevo-1"), {
       target: { value: "vevo-1" },
     });
-    fireEvent.change(await listedSelect("Helyszín", "unit-1"), {
+    fireEvent.change(await listedSelect(/^Helyszín/, "unit-1"), {
       target: { value: "unit-1" },
     });
     fireEvent.click(
@@ -955,10 +966,10 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
 
   const pickContract = async () => {
     render(<ServiceJobEditorPage kind="MAINTENANCE" />);
-    fireEvent.change(await screen.findByLabelText("Mi a feladat?"), {
+    fireEvent.change(await screen.findByLabelText(/^Mi a feladat\?/), {
       target: { value: "Negyedéves karbantartás" },
     });
-    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
+    fireEvent.change(await listedSelect(/^Partner/, "vevo-1"), {
       target: { value: "vevo-1" },
     });
     fireEvent.change(await listedSelect("Szerződés", "contract-1"), {
@@ -968,7 +979,7 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
 
   it("WEB-JOB-CONTRACT-LIST: csak a partner aktív karbantartási szerződéseit kínálja", async () => {
     render(<ServiceJobEditorPage kind="MAINTENANCE" />);
-    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
+    fireEvent.change(await listedSelect(/^Partner/, "vevo-1"), {
       target: { value: "vevo-1" },
     });
     const select = (await screen.findByLabelText(
@@ -990,7 +1001,7 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
     expect(harmadik.hasAttribute("disabled")).toBe(true);
     expect(screen.getAllByText(/Helyszín: Nagy fókamedence/)).toHaveLength(2);
     expect(screen.getAllByText(/2 eszköz/)).toHaveLength(2);
-    expect(screen.queryByLabelText("Helyszín")).toBeNull();
+    expect(screen.queryByLabelText(/^Helyszín/)).toBeNull();
     expect(
       screen.getByText(/A kijelölt szerződéstételek eszközei kerülnek a lapra/),
     ).toBeTruthy();
@@ -999,7 +1010,7 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
   it("WEB-JOB-CONTRACT-SUBMIT: a szerződés végpontján nyit, a leírás és a delegálás a létrejött lapra megy", async () => {
     await pickContract();
     fireEvent.click(screen.getByRole("checkbox", { name: /2\. Vízcsere/ }));
-    fireEvent.change(screen.getByLabelText("Részletek"), {
+    fireEvent.change(screen.getByLabelText(/^Részletek/), {
       target: { value: "Mindkét medence." },
     });
     fireEvent.click(await screen.findByLabelText("Éva"));
@@ -1033,8 +1044,8 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
     expect(
       screen
         .getByRole("button", { name: "Karbantartási lap megnyitása" })
-        .hasAttribute("disabled"),
-    ).toBe(true);
+        .getAttribute("aria-disabled"),
+    ).toBe("true");
   });
 
   it("WEB-JOB-CONTRACT-RETRY: ha a leírás mentése bukik, kimondja, hogy a lap létrejött, és az újrapróbálás nem nyit másodikat", async () => {
@@ -1043,7 +1054,7 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
       .mockRejectedValueOnce(new Error("A szerver nem érhető el."))
       .mockResolvedValueOnce({});
     await pickContract();
-    fireEvent.change(screen.getByLabelText("Részletek"), {
+    fireEvent.change(screen.getByLabelText(/^Részletek/), {
       target: { value: "Mindkét medence." },
     });
     fireEvent.click(
@@ -1089,7 +1100,7 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
         .hasAttribute("disabled"),
     ).toBe(true);
     expect(
-      screen.getByLabelText("Mi a feladat?").hasAttribute("disabled"),
+      screen.getByLabelText(/^Mi a feladat\?/).hasAttribute("disabled"),
     ).toBe(true);
     expect(
       screen
@@ -1138,14 +1149,14 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
   it("WEB-JOB-CONTRACT-NONE: szerződés nélkül a régi út marad, a helyszín választható", async () => {
     api.create.mockResolvedValue({ id: "job-uj", jobNumber: "KB-2026-001" });
     render(<ServiceJobEditorPage kind="MAINTENANCE" />);
-    fireEvent.change(await screen.findByLabelText("Mi a feladat?"), {
+    fireEvent.change(await screen.findByLabelText(/^Mi a feladat\?/), {
       target: { value: "Negyedéves karbantartás" },
     });
-    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
+    fireEvent.change(await listedSelect(/^Partner/, "vevo-1"), {
       target: { value: "vevo-1" },
     });
     await screen.findByLabelText("Szerződés");
-    fireEvent.change(await listedSelect("Helyszín", "unit-1"), {
+    fireEvent.change(await listedSelect(/^Helyszín/, "unit-1"), {
       target: { value: "unit-1" },
     });
     fireEvent.click(
@@ -1158,20 +1169,76 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
   it("WEB-JOB-CONTRACT-PERMISSION: partners.manage nélkül, és hibajegynél nincs szerződésválasztó", async () => {
     auth.session = sessionAs("SERVICE");
     const { unmount } = render(<ServiceJobEditorPage kind="MAINTENANCE" />);
-    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
+    fireEvent.change(await listedSelect(/^Partner/, "vevo-1"), {
       target: { value: "vevo-1" },
     });
-    await screen.findByLabelText("Helyszín");
+    await screen.findByLabelText(/^Helyszín/);
     expect(screen.queryByLabelText("Szerződés")).toBeNull();
     unmount();
 
     auth.session = sessionAs("OWNER");
     render(<ServiceJobEditorPage />);
-    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
+    fireEvent.change(await listedSelect(/^Partner/, "vevo-1"), {
       target: { value: "vevo-1" },
     });
-    await screen.findByLabelText("Helyszín");
+    await screen.findByLabelText(/^Helyszín/);
     expect(screen.queryByLabelText("Szerződés")).toBeNull();
     expect(contracts.list).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * A KARBANTARTÁS (ÉS A RÉGI HIBAJEGY) ŰRLAP A KÖZÖS VÁZON (picasso leltár 3.7, acrobot 2026-11-25): ugyanazok a csoport-címek, ugyanaz a jelölés és összesítő,
+ * mint az új hibajegy és az új munkalap űrlapon (a "Mikor?" csoport itt nincs: nincs dátum-mező). MI PIROSÍT: ha a csoportok címe vagy sorrendje eltér; ha a
+ * kötelező mező csillag nélkül, a nem kötelező "(nem kötelező)" nélkül marad; ha az összesítő más alakú; ha a halvány mentésre kattintva nem a mező hibái
+ * jelennek meg (vagy mégis mentene); ha a szerződéses úton a helyszín kötelező marad. A kötelezőségi szabály és a hívások a fenti tesztek.
+ */
+describe("ServiceJobEditorPage: a közös űrlap-váz", () => {
+  it("a csoportok kérdés-című kártyák: Kinek és hol? / Mi a munka? / Ki felel érte?", async () => {
+    render(<ServiceJobEditorPage kind="MAINTENANCE" />);
+    await screen.findByText("Kinek és hol?");
+    const titles = screen
+      .getAllByRole("heading", { level: 2 })
+      .map((heading) => heading.textContent)
+      .filter((text) => text !== "Mi történik ezután");
+    expect(titles).toEqual(["Kinek és hol?", "Mi a munka?", "Ki felel érte?"]);
+  });
+
+  it("a kötelező mezők csillagosak, a többi '(nem kötelező)'", async () => {
+    render(<ServiceJobEditorPage kind="MAINTENANCE" />);
+    await screen.findByText("Kinek és hol?");
+    for (const name of ["Partner", "Mi a feladat?"]) {
+      const label = screen.getByText(name, { selector: "label" });
+      expect(label.textContent, name).toContain("*");
+    }
+    for (const name of [
+      "Részletek",
+      "Érintett eszközök",
+      "Fényképek és fájlok",
+      "Felelős",
+    ]) {
+      const label = screen.getByText(name, { selector: "label" });
+      expect(label.textContent, name).toContain("(nem kötelező)");
+    }
+  });
+
+  it("az összesítő egy alakban; a halvány mentésre a hibák a mezőknél jelennek meg, és nem ment", async () => {
+    render(<ServiceJobEditorPage kind="MAINTENANCE" />);
+    await screen.findByText("Kinek és hol?");
+    expect(screen.getByRole("status").textContent).toBe(
+      "Hiányzik: Partner, Helyszín, Mi a feladat?",
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Karbantartási lap megnyitása" }),
+    );
+    expect(
+      screen.getAllByRole("alert").map((alert) => alert.textContent),
+    ).toEqual([
+      "Válassz partnert.",
+      "Válassz helyszínt.",
+      "Írd le röviden, mi a feladat.",
+    ]);
+    expect(api.create).not.toHaveBeenCalled();
   });
 });
