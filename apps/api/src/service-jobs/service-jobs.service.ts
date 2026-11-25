@@ -31,6 +31,7 @@ import {
   serviceJobTimeline,
   type ServiceJobDetail,
   type ServiceJobListItem,
+  type ServiceJobListFacets,
   type ServiceJobListResponse,
   partnerServiceJobDetail,
   partnerServiceJobListItem,
@@ -72,7 +73,10 @@ import {
 } from "./maintenance-guard.js";
 import { serviceJobSource } from "./service-job-source.js";
 import { createdDayRange } from "../worksheets/worksheet-created-range.js";
-import { ServiceJobsRepository } from "./service-jobs.repository.js";
+import {
+  LIST_PAGE_SIZE,
+  ServiceJobsRepository,
+} from "./service-jobs.repository.js";
 
 @Injectable()
 export class ServiceJobsService {
@@ -1197,21 +1201,34 @@ export class ServiceJobsService {
       ],
     };
     const kind = query.kind ?? "REPAIR";
-    const [{ rows, truncated }, counts, maintenanceCounts] = await Promise.all([
-      this.repository.list(
-        query.scope ?? "open",
-        visibility,
-        query.search,
-        kind,
-        user.id,
-        query.maintenanceState,
-      ),
-      this.repository.countsByStatus(visibility, query.search, kind),
-      // the maintenance list's tabs count by the badge's rule, not by the ticket status (f4590db6)
-      kind === "MAINTENANCE"
-        ? this.repository.maintenanceStateCounts(visibility, query.search)
-        : Promise.resolve(undefined),
-    ]);
+    // a `page` megadása kapcsolja be a lapozást; nélküle a régi alak (a legújabb kétszáz sor és a `truncated`) marad
+    const paged = query.page !== undefined;
+    const pageSize = query.pageSize ?? LIST_PAGE_SIZE;
+    const [{ rows, truncated, totalItems }, counts, maintenanceCounts] =
+      await Promise.all([
+        this.repository.list(
+          query.scope ?? "open",
+          visibility,
+          query.search,
+          kind,
+          user.id,
+          query.maintenanceState,
+          {
+            statuses: query.statuses,
+            customerId: query.customerId,
+            departmentId: query.departmentId,
+            page: query.page,
+            pageSize: paged ? pageSize : undefined,
+            sort: query.sort,
+            direction: query.direction,
+          },
+        ),
+        this.repository.countsByStatus(visibility, query.search, kind),
+        // the maintenance list's tabs count by the badge's rule, not by the ticket status (f4590db6)
+        kind === "MAINTENANCE"
+          ? this.repository.maintenanceStateCounts(visibility, query.search)
+          : Promise.resolve(undefined),
+      ]);
     /*
       A PARTNER SAJAT ALAKOT KAP (kartya a0660885): ugyanaz a `!== "internal"`
       elagazas, mint a reszletlapon, tehat a szallito is a szukebb iranyba esik.
@@ -1248,8 +1265,49 @@ export class ServiceJobsService {
       counts,
       ...(maintenanceCounts ? { maintenanceCounts } : {}),
       truncated,
+      ...(paged && totalItems !== undefined
+        ? {
+            pagination: {
+              page: query.page ?? 1,
+              pageSize,
+              totalItems,
+              totalPages: Math.max(1, Math.ceil(totalItems / pageSize)),
+            },
+          }
+        : {}),
       items: partner ? items.map(partnerServiceJobListItem) : items,
     };
+  }
+
+  /**
+   * A SZŰRŐ-LEHETŐSÉGEK (`GET /service/jobs/facets`): ugyanaz a láthatósági szűrő és hatókör, mint a listán, a partner- és helyszín-szűrő
+   * nélkül. A partner portálján a lista saját szűkítése érvényes, tehát csak a saját helyszínei látszanak.
+   */
+  async listFacets(
+    query: ServiceJobListQueryDto,
+    user: AuthenticatedUser,
+  ): Promise<ServiceJobListFacets> {
+    const created = createdDayRange(query.createdFrom, query.createdTo);
+    const visibility: Prisma.ServiceJobWhereInput = {
+      AND: [
+        await this.visibilityFor(user),
+        hiddenRowsWhere(
+          partnerScopeOf(user),
+          query.includeHidden,
+          hasPermission(user, PERMISSIONS.SERVICE_HIDE),
+        ),
+        ...(created ? [{ createdAt: created }] : []),
+      ],
+    };
+    return this.repository.listFacets(
+      query.scope ?? "open",
+      visibility,
+      query.search,
+      query.kind ?? "REPAIR",
+      user.id,
+      query.maintenanceState,
+      query.statuses,
+    );
   }
 
   /**

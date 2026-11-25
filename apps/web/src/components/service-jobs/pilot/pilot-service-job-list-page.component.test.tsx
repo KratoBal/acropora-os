@@ -19,6 +19,7 @@ import {
   JOB_COLUMNS,
   JOB_TABLE_MIN_WIDTH,
   PilotServiceJobListPage,
+  serviceJobListPageFromUrl,
   serviceJobListQuery,
   serviceJobListStateFromUrl,
 } from "./pilot-service-job-list-page";
@@ -60,7 +61,7 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
-const api = vi.hoisted(() => ({ list: vi.fn() }));
+const api = vi.hoisted(() => ({ list: vi.fn(), facets: vi.fn() }));
 vi.mock("@/lib/api/service-jobs", () => ({ serviceJobsApi: api }));
 
 const session: Session = {
@@ -123,6 +124,32 @@ const response: ServiceJobListResponse = {
   truncated: false,
 };
 
+// the partner and location options come from the server's facets now, by id (not from the loaded rows)
+const facets = {
+  partners: [
+    { id: "cust-alfa", name: "Alfa Kft" },
+    { id: "cust-beta", name: "Beta Kft" },
+  ],
+  locations: [
+    { id: "dep-1", label: "AKV · Nagy medence" },
+    { id: "dep-2", label: "Medence kettő" },
+  ],
+};
+
+// the paging, sort and filter arguments of a list call; the open tab asks for the four really open statuses
+function extra(overrides: Record<string, unknown> = {}) {
+  return {
+    page: 1,
+    pageSize: 25,
+    sort: undefined,
+    direction: undefined,
+    statuses: ["NEW", "TRIAGED", "SCHEDULED", "IN_PROGRESS"],
+    customerId: undefined,
+    departmentId: undefined,
+    ...overrides,
+  };
+}
+
 /*
   STRICT MODE-BAN RENDERELÜNK, mert a fejlesztői szerver is abban fut, és ott
   minden effekt kétszer indul. Egy "az első futást kihagyom" jelzőre épített
@@ -149,16 +176,18 @@ beforeEach(() => {
   navigation.cache.clear();
   api.list.mockReset();
   api.list.mockResolvedValue(response);
+  api.facets.mockReset();
+  api.facets.mockResolvedValue(facets);
 });
 
 describe("service-job list state in the URL", () => {
   it("reads the tab, search and partner from the URL, and leaves the URL alone", async () => {
-    renderAt("tab=closed&q=szivatty&partner=Beta+Kft");
+    renderAt("tab=closed&q=szivatty&partner=cust-beta");
 
     await screen.findByText("Jegy 2");
     await settle();
 
-    // the closed tab asks for every job, with the URL's search
+    // the closed tab asks for the closed statuses (the server filters), with the URL's search and partner, page 1 of 25
     expect(api.list).toHaveBeenLastCalledWith(
       "token-1",
       "all",
@@ -168,11 +197,19 @@ describe("service-job list state in the URL", () => {
       "REPAIR",
       undefined,
       { from: "", to: "" },
+      {
+        page: 1,
+        pageSize: 25,
+        sort: undefined,
+        direction: undefined,
+        statuses: ["COMPLETED", "CANCELLED"],
+        customerId: "cust-beta",
+        departmentId: undefined,
+      },
     );
     expect(
       (screen.getByLabelText("Partner szűrő") as HTMLSelectElement).value,
-    ).toBe("Beta Kft");
-    expect(screen.queryByText("Jegy 1")).toBeNull();
+    ).toBe("cust-beta");
     // nothing was reset, so there is nothing to write back
     expect(navigation.replace).not.toHaveBeenCalled();
   });
@@ -227,18 +264,18 @@ describe("service-job list state in the URL", () => {
     await screen.findByText("Jegy 1");
 
     fireEvent.change(screen.getByLabelText("Partner szűrő"), {
-      target: { value: "Alfa Kft" },
+      target: { value: "cust-alfa" },
     });
     await settle();
 
     expect(navigation.replace).toHaveBeenLastCalledWith(
-      "/szerviz/hibajegyek?tab=closed&partner=Alfa+Kft",
+      "/szerviz/hibajegyek?tab=closed&partner=cust-alfa",
       { scroll: false },
     );
   });
 
   it("clears the partner when the tab changes, and the URL follows", async () => {
-    renderAt("tab=closed&partner=Beta+Kft");
+    renderAt("tab=closed&partner=cust-beta");
     await screen.findByText("Jegy 2");
 
     fireEvent.click(screen.getByRole("tab", { name: /^Összes/ }));
@@ -381,6 +418,7 @@ describe("service-job list, redesign columns", () => {
       "REPAIR",
       undefined,
       { from: "", to: "" },
+      extra(),
     );
   });
 
@@ -427,6 +465,7 @@ describe("service-job list, the created-day filter", () => {
       "REPAIR",
       undefined,
       { from: "2026-11-18", to: "2026-11-19" },
+      extra(),
     );
     expect(navigation.replace).toHaveBeenLastCalledWith(
       "/szerviz/hibajegyek?createdFrom=2026-11-18&createdTo=2026-11-19",
@@ -561,8 +600,17 @@ describe("service-job list (a): tabs with numbers, quiet rows, states", () => {
   });
 
   it("offers Szűrők törlése on a filtered-empty list, and it clears the search and the filters", async () => {
-    withRows([item("3", "NEW", "Alfa Kft")]);
-    renderAt("partner=Nincs+Ilyen+Kft");
+    // the server filters: a partner nobody has gives an empty list, and without the filter the row comes back
+    api.list.mockImplementation(
+      async (...args: unknown[]) =>
+        ({
+          ...response,
+          items: (args[8] as { customerId?: string }).customerId
+            ? []
+            : [item("3", "NEW", "Alfa Kft")],
+        }) satisfies ServiceJobListResponse,
+    );
+    renderAt("partner=nincs-ilyen");
     expect(await screen.findByText("Nincs találat")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Szűrők törlése" }));
     expect(await screen.findByText("Jegy 3")).toBeTruthy();
@@ -587,5 +635,174 @@ describe("service-job list (a): tabs with numbers, quiet rows, states", () => {
     expect(screen.getAllByRole("link", { name: /Új hibajegy/ })).toHaveLength(
       2,
     );
+  });
+});
+
+/**
+ * (b) KÖR (f0b70dbd): a lista szerveroldali lapozású és rendezett, a fül az állapot-szűrő, a partner és a helyszín azonosítóval szűr, és a
+ * legördülők a szerver szűrő-lehetőségeiből épülnek. MI PIROSÍT: ha az oldalszám nem az URL-ből jön, vagy nem kerül vissza oda; ha egy
+ * szűrőváltás nem az első oldalra visz (és egy kérés megy el, nem kettő); ha a rendezés elvész egy szűrő-váltásnál; ha a fül nem az
+ * állapotokat kéri; ha a legördülők a betöltött sorokból épülnek.
+ */
+describe("service-job list (b): server paging, sort, status tabs, facets", () => {
+  const paged = (page: number, totalItems: number, rows = response.items) => ({
+    ...response,
+    items: rows,
+    pagination: {
+      page,
+      pageSize: 25,
+      totalItems,
+      totalPages: Math.max(1, Math.ceil(totalItems / 25)),
+    },
+  });
+
+  it("asks for the page in the URL, says the row range of the filtered set, and pages with the page key only", async () => {
+    api.list.mockResolvedValue(paged(2, 61));
+    renderAt("tab=closed&sort=createdAt&direction=desc&page=2");
+    await screen.findByText("Jegy 3");
+    await settle();
+    expect(api.list).toHaveBeenLastCalledWith(
+      "token-1",
+      "all",
+      expect.anything(),
+      "",
+      false,
+      "REPAIR",
+      undefined,
+      { from: "", to: "" },
+      extra({
+        page: 2,
+        sort: "createdAt",
+        direction: "desc",
+        statuses: ["COMPLETED", "CANCELLED"],
+      }),
+    );
+    // 3 rows on page 2 of 25: "26–28 / 61"
+    expect(screen.getByText(/26–28 \/ 61 lezárt hibajegy/)).toBeTruthy();
+    // the URL already says everything: nothing is written back
+    expect(navigation.replace).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Következő" }));
+    expect(navigation.replace).toHaveBeenLastCalledWith(
+      "/szerviz/hibajegyek?tab=closed&sort=createdAt&direction=desc&page=3",
+      { scroll: false },
+    );
+  });
+
+  it("shows no pager when everything fits one page", async () => {
+    api.list.mockResolvedValue(paged(1, 3));
+    renderAt("");
+    await screen.findByText("Jegy 3");
+    expect(screen.queryByRole("button", { name: "Következő" })).toBeNull();
+    expect(screen.getByText(/1–3 \/ 3 nyitott hibajegy/)).toBeTruthy();
+  });
+
+  it("a filter change goes to the first page in ONE request, and keeps the sort", async () => {
+    api.list.mockResolvedValue(paged(3, 61));
+    renderAt("tab=closed&sort=jobNumber&direction=asc&page=3");
+    await screen.findByText("Jegy 3");
+    await settle();
+    api.list.mockClear();
+
+    fireEvent.click(screen.getByRole("tab", { name: /^Összes/ }));
+    await settle();
+
+    // no request with the old page and the new tab
+    expect(api.list).toHaveBeenCalledTimes(1);
+    expect(api.list).toHaveBeenLastCalledWith(
+      "token-1",
+      "all",
+      expect.anything(),
+      "",
+      false,
+      "REPAIR",
+      undefined,
+      { from: "", to: "" },
+      extra({
+        page: 1,
+        sort: "jobNumber",
+        direction: "asc",
+        statuses: null,
+      }),
+    );
+    expect(navigation.replace).toHaveBeenLastCalledWith(
+      "/szerviz/hibajegyek?tab=all&sort=jobNumber&direction=asc",
+      { scroll: false },
+    );
+  });
+
+  it("clicking a sortable header writes the sort key and drops the page; the state column is not sortable", async () => {
+    api.list.mockResolvedValue(paged(2, 61));
+    renderAt("page=2");
+    await screen.findByText("Jegy 3");
+    fireEvent.click(screen.getByRole("button", { name: /Hibajegy/ }));
+    expect(navigation.replace).toHaveBeenLastCalledWith(
+      "/szerviz/hibajegyek?sort=jobNumber&direction=asc",
+      { scroll: false },
+    );
+    expect(screen.queryByRole("button", { name: /^Állapot/ })).toBeNull();
+    expect(
+      JOB_COLUMNS.filter((column) => column.sortable).map(
+        (column) => column.id,
+      ),
+    ).toEqual(["job", "createdAt"]);
+  });
+
+  it("builds the partner and location options from the server's facets, and asks for them with the tab's statuses", async () => {
+    renderAt("tab=waiting");
+    await screen.findByText("Jegy 3");
+    await settle();
+    expect(api.facets).toHaveBeenLastCalledWith(
+      "token-1",
+      "open",
+      expect.anything(),
+      "",
+      false,
+      { from: "", to: "" },
+      ["WAITING_FOR_PARTS", "WAITING_FOR_CUSTOMER"],
+    );
+    const partners = within(screen.getByLabelText("Partner szűrő"));
+    expect(
+      partners.getAllByRole("option").map((option) => option.textContent),
+    ).toEqual(["Minden partner", "Alfa Kft", "Beta Kft"]);
+    const locations = within(screen.getByLabelText("Helyszín szűrő"));
+    expect(
+      locations.getAllByRole("option").map((option) => option.textContent),
+    ).toEqual(["Minden helyszín", "AKV · Nagy medence", "Medence kettő"]);
+  });
+
+  it("sends the chosen location by its id, and goes back to the last page when the URL's page is gone", async () => {
+    api.list.mockResolvedValue({ ...paged(9, 30), items: [] });
+    renderAt("location=dep-2&page=9");
+    await settle();
+    expect(api.list).toHaveBeenCalledWith(
+      "token-1",
+      "open",
+      expect.anything(),
+      "",
+      false,
+      "REPAIR",
+      undefined,
+      { from: "", to: "" },
+      extra({ page: 9, departmentId: "dep-2" }),
+    );
+    expect(navigation.replace).toHaveBeenLastCalledWith(
+      "/szerviz/hibajegyek?location=dep-2&page=2",
+      { scroll: false },
+    );
+    expect(screen.queryByText("Nincs találat")).toBeNull();
+  });
+
+  it("reads the page from the URL only when it is a positive whole number", () => {
+    for (const [query, page] of [
+      ["", 1],
+      ["page=4", 4],
+      ["page=0", 1],
+      ["page=-2", 1],
+      ["page=2.5", 1],
+      ["page=x", 1],
+    ] as const)
+      expect(serviceJobListPageFromUrl(new URLSearchParams(query)), query).toBe(
+        page,
+      );
   });
 });
