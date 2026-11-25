@@ -867,6 +867,20 @@ describe("service-job list (b): old URLs that carry a name", () => {
     });
   });
 
+  it("says so when only the partner is unknown, and only then", async () => {
+    renderAt("partner=Nincs+Ilyen+Kft&location=dep-1");
+    expect(
+      await screen.findByText(
+        "A régi szűrő nem érvényes, a teljes lista látszik",
+      ),
+    ).toBeTruthy();
+    await settle();
+    const call = api.list.mock.calls.at(-1)![8] as Record<string, unknown>;
+    expect(call.customerId).toBeUndefined();
+    // the location was known and stays
+    expect(call.departmentId).toBe("dep-1");
+  });
+
   it("keeps the URL's filter when the options cannot be loaded, and still loads the list", async () => {
     api.facets.mockRejectedValue(new Error("nem elérhető"));
     renderAt("partner=cust-beta");
@@ -883,9 +897,15 @@ describe("service-job list (b): old URLs that carry a name", () => {
       target: { value: "szivattyu" },
     });
     await settle();
-    expect(api.facets).toHaveBeenCalledTimes(3);
+    // the narrowed options have arrived (a third request, answered) and the partner is still the user's
+    await waitFor(() => expect(api.facets).toHaveBeenCalledTimes(3));
+    await settle();
     expect(screen.queryByText(/A régi szűrő nem érvényes/)).toBeNull();
     expect(lastExtra().customerId).toBe("cust-alfa");
+    expect(navigation.replace).not.toHaveBeenCalledWith(
+      expect.not.stringContaining("partner="),
+      expect.anything(),
+    );
   });
 
   it("resolveUrlFilters: an ambiguous name or leaf is dropped, an id stays", () => {
