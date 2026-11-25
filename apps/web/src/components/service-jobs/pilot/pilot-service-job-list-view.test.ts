@@ -1,13 +1,9 @@
-import type {
-  ServiceJobListItem,
-  ServiceJobStatusCounts,
-} from "@acropora/types";
+import type { ServiceJobStatusCounts } from "@acropora/types";
 import { describe, expect, it } from "vitest";
 
 import {
   assigneeNames,
   pilotStatTiles,
-  pilotItemsForTab,
   pilotTabCounts,
   pilotTabDef,
   PILOT_TABS,
@@ -29,75 +25,35 @@ function counts(
   };
 }
 
-function item(
-  id: string,
-  status: ServiceJobListItem["status"],
-): ServiceJobListItem {
-  return {
-    id,
-    jobNumber: `HJ-2026-${id}`,
-    title: `Jegy ${id}`,
-    kind: "REPAIR",
-    status,
-    partnerStatus: "IN_PROGRESS",
-    partnerStatusLabel: "Feldolgozás alatt",
-    customerName: null,
-    departmentPath: null,
-    departmentCode: null,
-    assignees: [],
-    worksheetCount: 0,
-    createdAt: "2026-09-01T08:00:00.000Z",
-    hidden: false,
-  };
-}
+const common = (
+  overrides: Partial<Parameters<typeof pilotTabCounts>[0]> = {},
+) => ({ NEW: 0, IN_PROGRESS: 0, WAITING: 0, DONE: 0, CLOSED: 0, ...overrides });
 
-describe("pilotItemsForTab", () => {
-  /**
-   * A "Nyitott hibajegy" fül KIZÁRJA a várakozó jegyeket -- ez a különbség
-   * a mai (`service-job-list-view.ts`) "open" füléhez képest, ahol BENNE
-   * vannak. A Figma-terv külön fület ad a várakozásnak, tehát a "nyitott"
-   * itt szűkebb halmazt jelent.
-   */
-  it("a nyitott fül nem tartalmazza a várakozó állapotokat", () => {
-    const items = [
-      item("1", "NEW"),
-      item("2", "WAITING_FOR_PARTS"),
-      item("3", "IN_PROGRESS"),
-    ];
-    expect(pilotItemsForTab(items, "open").map((i) => i.id)).toEqual([
-      "1",
-      "3",
+describe("a fülek a közös öt állapoton (kártya 7f23785c)", () => {
+  it("a sorrend és a felirat picasso 4. pontja szerint", () => {
+    expect(PILOT_TABS.map((tab) => tab.label)).toEqual([
+      "Nyitott",
+      "Vár valamire",
+      "Lezárt",
+      "Összes",
     ]);
   });
 
-  it("a várakozó fül a két várakozó állapotot adja, mást nem", () => {
-    const items = [
-      item("1", "NEW"),
-      item("2", "WAITING_FOR_PARTS"),
-      item("3", "WAITING_FOR_CUSTOMER"),
-      item("4", "COMPLETED"),
-    ];
-    expect(pilotItemsForTab(items, "waiting").map((i) => i.id)).toEqual([
-      "2",
-      "3",
+  /*
+    AZ ELKÉSZÜLT A NYITOTTBA ESIK (picasso 4. pont: még teendő van vele), és a
+    szerver a KÖZÖS állapotot kapja szűrőnek, nem a tárolt nyolcat: a
+    levezetett Elkészült a tárolt IN_PROGRESS egy része, és csak a szerver
+    tudja kettéválasztani.
+  */
+  it("minden fül a közös állapotokat kéri a szervertől", () => {
+    expect(
+      PILOT_TABS.map((tab) => [tab.id, tab.scope, tab.commonStatuses]),
+    ).toEqual([
+      ["open", "open", ["NEW", "IN_PROGRESS", "DONE"]],
+      ["waiting", "open", ["WAITING"]],
+      ["closed", "all", ["CLOSED"]],
+      ["all", "all", null],
     ]);
-  });
-
-  it("a lezárt fül a két végállapotot adja", () => {
-    const items = [
-      item("1", "COMPLETED"),
-      item("2", "CANCELLED"),
-      item("3", "NEW"),
-    ];
-    expect(pilotItemsForTab(items, "closed").map((i) => i.id)).toEqual([
-      "1",
-      "2",
-    ]);
-  });
-
-  it("az összes fül szűrés nélkül adja vissza a teljes listát", () => {
-    const items = [item("1", "NEW"), item("2", "COMPLETED")];
-    expect(pilotItemsForTab(items, "all")).toHaveLength(2);
   });
 
   it("ismeretlen fülre dob, nem csendben üreset ad", () => {
@@ -110,50 +66,27 @@ describe("pilotItemsForTab", () => {
 });
 
 describe("pilotTabCounts", () => {
-  it("a négy csempe a teljes halmazból számol, a nyitott a várakozókat nem tartalmazza", () => {
-    const summary = pilotTabCounts(
-      counts({
-        NEW: 2,
-        TRIAGED: 1,
-        WAITING_FOR_PARTS: 3,
-        WAITING_FOR_CUSTOMER: 1,
-        COMPLETED: 4,
-        CANCELLED: 1,
-      }),
-    );
-    expect(summary).toEqual({
-      all: 12,
-      open: 3,
-      waiting: 4,
-      closed: 5,
-    });
+  it("a négy szám a közös számlálóból, az Elkészült a nyitottban", () => {
+    expect(
+      pilotTabCounts(
+        common({ NEW: 2, IN_PROGRESS: 3, WAITING: 4, DONE: 5, CLOSED: 6 }),
+      ),
+    ).toEqual({ open: 10, waiting: 4, closed: 6, all: 20 });
   });
 
   /*
-    NEGATÍV KONTROLL: ha a "nyitott" számláló véletlenül a mai
-    (szélesebb, várakozókat is tartalmazó) definíciót használná, ez az
-    állítás elbukna -- a várakozó tételek itt SZÁNDÉKOSAN nagyok, hogy a
-    hiba ne tudjon véletlenül nullával egybeesni.
+    NEGATÍV KONTROLL: ha a "nyitott" a várakozókat is számolná, vagy az
+    Elkészültet kihagyná, ez elbukna; a két tétel szándékosan nagy, hogy a
+    hiba ne essen egybe a helyes számmal.
   */
-  it("a várakozó jegyek NEM kerülnek a nyitott csempébe", () => {
-    const summary = pilotTabCounts(
-      counts({ NEW: 1, WAITING_FOR_PARTS: 9, WAITING_FOR_CUSTOMER: 9 }),
-    );
-    expect(summary.open).toBe(1);
-    expect(summary.waiting).toBe(18);
+  it("a várakozó nem nyitott, az elkészült igen", () => {
+    const summary = pilotTabCounts(common({ NEW: 1, WAITING: 9, DONE: 7 }));
+    expect(summary.open).toBe(8);
+    expect(summary.waiting).toBe(9);
   });
 });
 
 describe("a redesign listájának segédjei", () => {
-  it("a fülek sorrendje és felirata a terv szerint", () => {
-    expect(PILOT_TABS.map((tab) => tab.label)).toEqual([
-      "Nyitott",
-      "Összes",
-      "Várakozik",
-      "Lezárt",
-    ]);
-  });
-
   it("a felelősök nevei vesszővel, üres listán null", () => {
     expect(assigneeNames([{ name: "Ádám" }, { name: "Péter" }])).toBe(
       "Ádám, Péter",
@@ -161,14 +94,27 @@ describe("a redesign listájának segédjei", () => {
     expect(assigneeNames([])).toBeNull();
   });
 
-  it("a csempék a számlálóból jönnek, kitalált szám nélkül", () => {
+  it("a csempék a számlálókból jönnek, kitalált szám nélkül", () => {
     const tiles = pilotStatTiles(
-      counts({ NEW: 0, SCHEDULED: 3, WAITING_FOR_PARTS: 2, COMPLETED: 4 }),
+      counts({ SCHEDULED: 3, WAITING_FOR_PARTS: 2, COMPLETED: 4 }),
+      common({ IN_PROGRESS: 3, WAITING: 2, CLOSED: 4 }),
     );
     expect(tiles.map((tile) => [tile.label, tile.value, tile.detail])).toEqual([
       ["Nyitott hibajegy", 3, null],
-      ["Várakozik", 2, "2 alkatrészre"],
+      ["Vár valamire", 2, "2 alkatrészre"],
       ["Lezárt ügy", 4, null],
+    ]);
+  });
+
+  it("a csempe alcíme kimondja az újat, az elkészültet és a meghiúsultat", () => {
+    const tiles = pilotStatTiles(
+      counts({ NEW: 1, IN_PROGRESS: 2, COMPLETED: 3, CANCELLED: 2 }),
+      common({ NEW: 1, IN_PROGRESS: 1, DONE: 1, CLOSED: 5 }),
+    );
+    expect(tiles.map((tile) => tile.detail)).toEqual([
+      "1 új · 1 elkészült",
+      null,
+      "2 meghiúsult",
     ]);
   });
 });

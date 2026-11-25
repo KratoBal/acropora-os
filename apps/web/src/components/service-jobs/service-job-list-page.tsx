@@ -7,6 +7,7 @@ import {
   PilotButton,
 } from "@acropora/ui";
 import {
+  commonServiceStateTone,
   hasPermission,
   PERMISSIONS,
   type ServiceJobListResponse,
@@ -39,6 +40,11 @@ import {
   serviceJobStatusLabel,
   serviceJobStatusTone,
 } from "./service-job-labels";
+import {
+  commonLabel,
+  commonReasonText,
+  commonStateOf,
+} from "./common-status-view";
 import {
   itemsForTab,
   listSummary,
@@ -114,23 +120,38 @@ export const MAINTENANCE_JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
     id: "status",
     header: "Állapot",
     width: "220px",
-    // A KARBANTARTÁS ÁLLAPOTA A MUNKALAPOK ALÁÍRÁSÁBÓL JÖN (Balázs, 2026-11-18): minden aláírva = Kész, különben Folyamatban; nincs
-    // hibajegy-állapot és partner-állapot sor (a karbantartási lap nem hibajegy). A fajta nélküli/hibajegy sor a régi módon.
-    cell: (job) =>
-      job.kind === "MAINTENANCE" ? (
-        <ServiceStatusBadge tone={job.maintenanceDone ? "green" : "blue"}>
-          {job.maintenanceDone ? "Kész" : "Folyamatban"}
-        </ServiceStatusBadge>
-      ) : (
+    // A KARBANTARTÁS ÁLLAPOTA A MUNKALAPOK ALÁÍRÁSÁBÓL JÖN (Balázs, 2026-11-18), a közös szavakkal (kártya 7f23785c): minden aláírva =
+    // Lezárt, és ezt az ok ki is mondja (picasso 9. pont), különben Folyamatban. A szerver `commonStatus`-a; ha a válasz nem hozza (régi
+    // szerver), a szerver `maintenanceDone`-ja ugyanezt mondja. Nincs hibajegy-állapot és partner-állapot sor (a karbantartási lap nem
+    // hibajegy). A fajta nélküli/hibajegy sor a régi módon.
+    cell: (job) => {
+      if (job.kind !== "MAINTENANCE")
+        return (
+          <>
+            <ServiceStatusBadge tone={serviceJobStatusTone(job.status)}>
+              {serviceJobStatusLabel[job.status]}
+            </ServiceStatusBadge>
+            <div className={`mt-1 ${sv.rowMeta}`}>
+              A partner ezt látja: {job.partnerStatusLabel}
+            </div>
+          </>
+        );
+      const state = commonStateOf(job) ?? {
+        status: job.maintenanceDone
+          ? ("CLOSED" as const)
+          : ("IN_PROGRESS" as const),
+        reason: null,
+      };
+      const reason = commonReasonText(state, "MAINTENANCE");
+      return (
         <>
-          <ServiceStatusBadge tone={serviceJobStatusTone(job.status)}>
-            {serviceJobStatusLabel[job.status]}
+          <ServiceStatusBadge tone={commonServiceStateTone(state)}>
+            {commonLabel(state)}
           </ServiceStatusBadge>
-          <div className={`mt-1 ${sv.rowMeta}`}>
-            A partner ezt látja: {job.partnerStatusLabel}
-          </div>
+          {reason ? <div className={`mt-1 ${sv.rowMeta}`}>{reason}</div> : null}
         </>
-      ),
+      );
+    },
   },
   {
     id: "worksheets",

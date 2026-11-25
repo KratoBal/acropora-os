@@ -112,7 +112,8 @@ export type MaintenanceTab = "progress" | "done" | "all";
 
 export const MAINTENANCE_TABS: { id: MaintenanceTab; label: string }[] = [
   { id: "progress", label: "Folyamatban" },
-  { id: "done", label: "Kész" },
+  // a közös szó (kártya 7f23785c, picasso 9. pont): a "Kész" helyett Lezárt; az azonosító marad, a mentett hivatkozások ugyanide visznek
+  { id: "done", label: "Lezárt" },
   { id: "all", label: "Összes" },
 ];
 

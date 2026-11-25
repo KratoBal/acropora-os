@@ -11,6 +11,7 @@ import {
   PAGE_GUTTER_X,
 } from "@acropora/ui";
 import {
+  commonServiceStateText,
   hasPermission,
   isFinishedServiceJob,
   PERMISSIONS,
@@ -59,11 +60,15 @@ import {
   serviceJobStatusLabel,
   serviceJobWorksheetLabel,
 } from "../service-job-labels";
+import { assigneeNames, NO_ASSIGNEE } from "./pilot-service-job-list-view";
 import {
-  assigneeNames,
-  NO_ASSIGNEE,
-  STATUS_BADGE_VARIANT,
-} from "./pilot-service-job-list-view";
+  closeBlockedSentence,
+  commonLabel,
+  commonPilotVariant,
+  commonReasonText,
+  commonStateOf,
+  serviceJobStepLabel,
+} from "../common-status-view";
 import {
   PilotBadge,
   PilotButton,
@@ -305,6 +310,10 @@ export function PilotServiceJobDetailPage({
   const [editingPlacement, setEditingPlacement] = useState(false);
   const [stepError, setStepError] = useState<string | null>(null);
   const [stepping, setStepping] = useState(false);
+  // a két végállapot-lépés (Lezárás, Meghiúsultnak jelölés) megerősítő ablaka: a lépés célja, amíg nyitva van
+  const [confirmStep, setConfirmStep] = useState<
+    "COMPLETED" | "CANCELLED" | null
+  >(null);
   const [note, setNote] = useState("");
   const [noteCelja, setNoteCelja] = useState<ServiceJobStatusValue | null>(
     null,
@@ -393,10 +402,15 @@ export function PilotServiceJobDetailPage({
       szoveg: note,
       celzott: noteCelja,
       most: to,
-      cimke: (lepes) => serviceJobStatusLabel[lepes],
+      cimke: (lepes) =>
+        job
+          ? serviceJobStepLabel(job.status, lepes)
+          : serviceJobStatusLabel[lepes],
     });
     if (!ellenorzes.rendben) {
       setStepError(ellenorzes.uzenet);
+      // the confirm dialog closes too: the reason is in the panel, under the buttons
+      setConfirmStep(null);
       return;
     }
 
@@ -417,6 +431,7 @@ export function PilotServiceJobDetailPage({
       setNoteCelja(note.trim() === "" ? null : to);
     } finally {
       setStepping(false);
+      setConfirmStep(null);
     }
   };
 
@@ -684,10 +699,10 @@ export function PilotServiceJobDetailPage({
     entry.kind === "worksheet" ? [entry.worksheet] : [],
   );
   const maintenance = job.kind === "MAINTENANCE";
-  // a karbantartás állapota a munkalapok aláírásából jön: minden aláírva = kész (nincs munkalap: még folyamatban)
-  const maintenanceDone =
-    worksheets.length > 0 &&
-    worksheets.every((worksheet) => worksheet.status === "SIGNED");
+  // a közös állapot a szerveré (kártya 7f23785c): a karbantartásé is, a jelvény szabályával (Lezárt = minden munkalap aláírva)
+  const common = commonStateOf(job);
+  const commonReason = common ? commonReasonText(common, job.kind) : null;
+  const closeBlocked = common ? closeBlockedSentence(common, worksheets) : null;
   const finished = !maintenance && isFinishedServiceJob(job.status);
 
   const creation = job.timeline.find(
@@ -731,21 +746,35 @@ export function PilotServiceJobDetailPage({
           title={job.title}
           meta={
             <>
-              {maintenance ? (
-                <span data-testid="maintenance-status">
-                  <PilotBadge variant={maintenanceDone ? "success" : "blue"}>
-                    {maintenanceDone ? "Kész" : "Folyamatban"}
-                  </PilotBadge>
-                </span>
-              ) : (
-                <>
-                  <PilotBadge variant={STATUS_BADGE_VARIANT[job.status]}>
+              {/*
+                A KÖZÖS ÁLLAPOT ÉS MELLETTE AZ OKA (picasso 1. pont): „Elkészült · aláírásra vár", „Lezárt · meghiúsult". A
+                szerver hiányzó mezőjénél (régi válasz) a tárolt állapot neve áll, szín nélkül.
+              */}
+              <span
+                data-testid={maintenance ? "maintenance-status" : "job-status"}
+                className="inline-flex flex-wrap items-center gap-1.5"
+              >
+                {common ? (
+                  <>
+                    <PilotBadge variant={commonPilotVariant(common)}>
+                      {commonLabel(common)}
+                    </PilotBadge>
+                    {commonReason ? (
+                      <span className="text-xs text-pilot-grey-600">
+                        {commonReason}
+                      </span>
+                    ) : null}
+                  </>
+                ) : (
+                  <PilotBadge variant="grey">
                     {serviceJobStatusLabel[job.status]}
                   </PilotBadge>
-                  <PilotBadge variant="blue">
-                    Partner: {job.partnerStatusLabel}
-                  </PilotBadge>
-                </>
+                )}
+              </span>
+              {maintenance ? null : (
+                <PilotBadge variant="blue">
+                  Partner: {job.partnerStatusLabel}
+                </PilotBadge>
               )}
               {job.hidden ? (
                 <PilotBadge variant="amber">Rejtett</PilotBadge>
@@ -1261,9 +1290,21 @@ export function PilotServiceJobDetailPage({
               <p className="mt-3 text-sm text-pilot-grey-900">
                 Jelenleg:{" "}
                 <span className="font-semibold">
-                  {serviceJobStatusLabel[job.status]}
+                  {common
+                    ? commonServiceStateText(common)
+                    : serviceJobStatusLabel[job.status]}
                 </span>
               </p>
+              {/*
+                AZ ELKÉSZÜLT MAGÁTÓL ÁLL BE, NINCS RÁ GOMB (picasso 2. pont): a lap kimondja, hogy a munka kész, és mi
+                a hátralévő lépés.
+              */}
+              {common?.status === "DONE" ? (
+                <p className="mt-1 text-xs text-pilot-grey-600">
+                  A munkalapok elkészültek. A hibajegy az aláírás és az átadás
+                  után zárható le.
+                </p>
+              ) : null}
               <div className="mt-4 space-y-3">
                 {stepError ? (
                   <Alert
@@ -1300,19 +1341,50 @@ export function PilotServiceJobDetailPage({
                         EGY ELSŐDLEGES GOMB (picasso képernyő-leltára, 2026-11-25, f0b70dbd): az első megengedett lépés a
                         menet fő iránya (`service-job-transitions.ts`: előre áll elöl, a várakozás és a meghiúsulás utána),
                         a többi lépés ugyanúgy megmarad, másodlagos gombként.
+
+                        A FELIRAT IGE (kártya 7f23785c, picasso 3. pont), és a két végállapot (Lezárás, Meghiúsultnak
+                        jelölés) megerősítő ablakon át megy, mert belőlük nincs visszaút (`service-job-transitions.ts`). A
+                        Lezárás halvány, ahol a közös állapotból biztos, hogy a kapu nem engedi, és alatta a mondat
+                        mondja meg, mi hiányzik (`closeBlockedSentence`).
                       */}
-                      {job.allowedSteps.map((to, index) => (
-                        <PilotButton
-                          key={to}
-                          variant={index === 0 ? "primary" : "secondary"}
-                          size="regular"
-                          fullWidth
-                          disabled={stepping}
-                          onClick={() => void step(to)}
-                        >
-                          Tovább → {serviceJobStatusLabel[to]}
-                        </PilotButton>
-                      ))}
+                      {job.allowedSteps.map((to, index) => {
+                        const blocked =
+                          to === "COMPLETED" ? closeBlocked : null;
+                        return (
+                          <div key={to} className="flex flex-col gap-1">
+                            <PilotButton
+                              variant={
+                                to === "CANCELLED"
+                                  ? "danger"
+                                  : index === 0
+                                    ? "primary"
+                                    : "secondary"
+                              }
+                              size="regular"
+                              fullWidth
+                              disabled={stepping || blocked !== null}
+                              aria-describedby={
+                                blocked ? "pilot-lezaras-akadaly" : undefined
+                              }
+                              onClick={() =>
+                                to === "COMPLETED" || to === "CANCELLED"
+                                  ? setConfirmStep(to)
+                                  : void step(to)
+                              }
+                            >
+                              {serviceJobStepLabel(job.status, to)}
+                            </PilotButton>
+                            {blocked ? (
+                              <p
+                                id="pilot-lezaras-akadaly"
+                                className="text-xs text-pilot-grey-600"
+                              >
+                                {blocked}
+                              </p>
+                            ) : null}
+                          </div>
+                        );
+                      })}
                     </div>
                   </>
                 ) : (
@@ -1358,6 +1430,14 @@ export function PilotServiceJobDetailPage({
                 labelWidth="110px"
                 value={formatDateTime(job.createdAt)}
               />
+              {/* AZ IDŐPONT SOR, NEM ÁLLAPOT (terv 3. pont): az Ütemezve állapot kivezetve, a dátum megmarad */}
+              {job.scheduledAt ? (
+                <PilotDataRow
+                  label="Ütemezve"
+                  labelWidth="110px"
+                  value={formatDateTime(job.scheduledAt)}
+                />
+              ) : null}
               {maintenance ? null : (
                 <PilotDataRow
                   label="A partner ezt látja"
@@ -1511,6 +1591,30 @@ export function PilotServiceJobDetailPage({
         </div>
       </div>
 
+      {/*
+        A KÉT VÉGÁLLAPOT ELÉ MEGERŐSÍTŐ ABLAK (terv 9. pont, picasso D minta): a cím a műveletet nevezi, a szöveg a
+        következményt, a visszaút helyén kimondva, hogy nincs. A lépés megjegyzése (a mező a panelen) ugyanúgy megy vele.
+      */}
+      <ConfirmDialog
+        open={confirmStep === "COMPLETED"}
+        title="Lezárod a hibajegyet?"
+        consequence={`A ${job.jobNumber} hibajegy lezárul, és nem nyitható újra. A partner is lezártként látja.`}
+        recovery="Ez nem vonható vissza."
+        confirmLabel="Lezárás"
+        busy={stepping}
+        onConfirm={() => void step("COMPLETED")}
+        onCancel={() => setConfirmStep(null)}
+      />
+      <ConfirmDialog
+        open={confirmStep === "CANCELLED"}
+        title="Meghiúsultnak jelölöd a hibajegyet?"
+        consequence={`A ${job.jobNumber} hibajegy meghiúsultként lezárul, és nem nyitható újra. A partner lezártként látja. Ha az okot a megjegyzésbe írtad, a naplóban ott marad.`}
+        recovery="Ez nem vonható vissza."
+        confirmLabel="Meghiúsultnak jelölés"
+        busy={stepping}
+        onConfirm={() => void step("CANCELLED")}
+        onCancel={() => setConfirmStep(null)}
+      />
       <ConfirmDialog
         open={sheetToDetach !== null}
         title="Leválasztod ezt a munkalapot a hibajegyről?"
