@@ -201,6 +201,32 @@ describe("ProductListPage", () => {
     );
   });
 
+  it("a negatív készlet piros és megjegyzéses (Picasso 3.10), a nulla és a hiányzó nem", async () => {
+    const base = populatedResponse.items[0]!;
+    api.list.mockResolvedValue({
+      ...populatedResponse,
+      items: [
+        { ...base, id: "p-neg", name: "Negatív termék", stockOnHand: "-4" },
+        { ...base, id: "p-zero", name: "Nulla termék", stockOnHand: "0" },
+        { ...base, id: "p-none", name: "Ismeretlen termék", stockOnHand: null },
+        { ...base, id: "p-ok", name: "Rendes termék", stockOnHand: "12" },
+      ],
+    });
+    render(createElement(ProductListPage));
+    await screen.findByRole("table");
+    const stockOf = (name: string) =>
+      screen.getByText(name).closest("tr")!.querySelectorAll("td")[4]!;
+    const negative = stockOf("Negatív termék");
+    const flag = negative.querySelector("[title='Negatív készlet']")!;
+    expect(flag.className).toContain("text-pilot-red-700");
+    expect(negative.textContent).toContain("(negatív készlet)");
+    for (const name of ["Nulla termék", "Ismeretlen termék", "Rendes termék"])
+      expect(
+        stockOf(name).querySelector("[title='Negatív készlet']"),
+        name,
+      ).toBeNull();
+  });
+
   /*
     A TARTÁSI ADAT OSZLOP CSAK AKKOR ÁLL, HA VAN ILYEN SOR (Picasso 3.10, acrobot 62085). MI PIROSÍT: ha az oszlop akkor is áll, amikor az oldal minden sora "—"; ha
     eltűnik, amikor egy sornak van tartási adata; ha üres oldalon is eltűnik (nincs sor, amiből dönteni lehetne).
@@ -433,7 +459,6 @@ describe("ProductListPage", () => {
     ).toBeInTheDocument();
   });
 
-  // the husbandry column stands only where the page has a row with husbandry data (Picasso 3.10): this alignment test needs all the columns
   // the shared table carries its minimum as the CSS variable --pilot-table-min on the wrapper around the table
   const tableMin = (table: HTMLElement) =>
     (

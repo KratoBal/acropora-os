@@ -68,6 +68,11 @@ function pageRange(pagination: ProductListResponse["pagination"]): string {
   return `${from.toLocaleString("hu-HU")}–${to.toLocaleString("hu-HU")} / ${total.toLocaleString("hu-HU")}`;
 }
 
+/** A negatív készlet (a tárolt szám 0 alatt van); a hiányzó ("—") és a nulla nem az. */
+export function isNegativeStock(value: string | null): boolean {
+  return value !== null && Number(value) < 0;
+}
+
 /**
  * A TARTÁSI ADAT OSZLOP CSAK AKKOR ÁLL, HA AZ OLDALON VAN ILYEN SOR (Picasso 3.10, acrobot 62085): az oszlop csak az élő állatnak mond valamit, egy 1932 termékes
  * listán a legtöbb oldalon minden sor "—", és 190 px-et visz a név oszlopától. Ahogy a Hierarchia az eszközlistán: ha az oldal egyetlen sorának sincs tartási
@@ -486,11 +491,21 @@ export function ProductListPage() {
       header: "Készlet",
       width: "84px",
       align: "right",
-      cell: (product) => (
-        <span className="text-pilot-grey-900">
-          {formatStock(product.stockOnHand)}
-        </span>
-      ),
+      cell: (product) =>
+        isNegativeStock(product.stockOnHand) ? (
+          // NEGATÍV KÉSZLET JELZÉS NÉLKÜL ÁLLT (Picasso 3.10: -4, -1 egyforma szám a többi között): piros, félkövér, megjegyzéssel és a felolvasónak is
+          <span
+            title="Negatív készlet"
+            className="font-semibold text-pilot-red-700"
+          >
+            {formatStock(product.stockOnHand)}
+            <span className="sr-only"> (negatív készlet)</span>
+          </span>
+        ) : (
+          <span className="text-pilot-grey-900">
+            {formatStock(product.stockOnHand)}
+          </span>
+        ),
     },
     {
       // a82ed229: the shipping flags; "nincs vizsgálva" is not "nincs korlát"

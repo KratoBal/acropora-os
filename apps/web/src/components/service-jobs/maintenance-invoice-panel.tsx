@@ -48,8 +48,11 @@ import {
 export function MaintenanceInvoicePanel({
   serviceJobId,
   refreshKey = 0,
+  onChanged,
 }: {
   serviceJobId: string;
+  /** A számla változott (piszkozat készült, kiállítás, törlés): a lap lépéssora újraolvas. Elhagyva nem történik semmi. */
+  onChanged?: () => void;
   /** Egy másik panel (a teljesítési igazolásé) változtatott: a kulcs változására az igazolás és a számla újratöltődik. */
   refreshKey?: number;
 }) {
@@ -113,6 +116,7 @@ export function MaintenanceInvoicePanel({
     setError(null);
     try {
       setInvoice(await maintenanceInvoiceApi.draft(token, certificateId));
+      onChanged?.();
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -131,6 +135,7 @@ export function MaintenanceInvoicePanel({
     onIssued: (result) => {
       setInvoice(result.invoice);
       setMail(result.mail);
+      onChanged?.();
     },
     onFailed: (message) => {
       setError(message);
@@ -245,6 +250,7 @@ export function MaintenanceInvoicePanel({
                     setError(null);
                     setInvoice(null);
                     void load();
+                    onChanged?.();
                   }}
                   onError={(message) => {
                     setError(message);
