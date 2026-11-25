@@ -1,6 +1,11 @@
 "use client";
 
-import { Icon, PilotDataTable, type PilotTableColumn } from "@acropora/ui";
+import {
+  Icon,
+  PilotDataTable,
+  type PilotTableColumn,
+  type PilotTableSort,
+} from "@acropora/ui";
 import {
   BILLING_LIST_PATH as SHARED_BILLING_LIST_PATH,
   billingDocumentPath,
@@ -112,6 +117,7 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
     {
       id: "issueDate",
       header: "Kiállítás",
+      sortable: true,
       nowrap: true,
       width: "120px",
       cell: (item) => formatDay(item.issueDate),
@@ -119,6 +125,7 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
     {
       id: "dueDate",
       header: "Határidő",
+      sortable: true,
       nowrap: true,
       width: "120px",
       cell: (item) => formatDay(item.dueDate),
@@ -138,6 +145,7 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
       // együtt látszik a nettó, az ÁFA és a bruttó, ugyanabban a sorrendben és formában, mint a bejövőn
       id: "totals",
       header: "Összegek",
+      sortable: true,
       width: "170px",
       align: "right",
       cell: (item) => (
@@ -206,12 +214,27 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
     },
   ];
 
+/**
+ * A RENDEZHETŐ OSZLOPOK (Balázs kérése, kártya 2f6369a4): a tábla oszlop-azonosítója -> a szerver mezője. A lista két forrásból áll
+ * össze, ezért csak a mindkettőben közös számszerű/nap-értékű oszlopok rendezhetők: a kiállítás napja, a határidő és az összeg (bruttó).
+ * A szöveges oszlopok (vevő, bizonylatszám, fizetési mód) egy egységes lekérdezést kérnek, külön munka.
+ */
+export const BILLING_SORT_COLUMNS = {
+  issueDate: "issueDate",
+  dueDate: "dueDate",
+  totals: "grossAmount",
+} as const;
+
 export function BillingDocumentTable({
   items,
   onOpen,
+  sort,
+  onSort,
 }: {
   items: readonly BillingDocumentListItem[];
   onOpen: (item: BillingDocumentListItem) => void;
+  sort?: PilotTableSort | null;
+  onSort?: (columnId: string) => void;
 }) {
   return (
     <PilotDataTable
@@ -219,6 +242,8 @@ export function BillingDocumentTable({
       rows={items}
       rowKey={(item) => item.id}
       onRowActivate={onOpen}
+      sort={sort}
+      onSort={onSort}
       rowLabel={(item) =>
         `${item.origin === "EXTERNAL" ? "Külső " : ""}${
           item.externalKindLabel ??

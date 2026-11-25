@@ -16,8 +16,8 @@ export interface ListSortSpec<Field extends string, OrderBy> {
   fields: Readonly<Record<Field, (direction: SortDirection) => OrderBy>>;
   /** A rendezetlen (alap) sorrend: a lista mostani sorrendje, az `id`-vel a végén. */
   fallback: readonly OrderBy[];
-  /** A döntetlen-feloldó az adott irányra (általában `{ id: direction }`). */
-  tieBreaker: (direction: SortDirection) => OrderBy;
+  /** A döntetlen-feloldó(k) az adott irányra (általában `{ id: direction }`; több is lehet: `createdAt`, majd `id`). */
+  tieBreaker: (direction: SortDirection) => OrderBy | readonly OrderBy[];
 }
 
 export function listOrderBy<Field extends string, OrderBy>(
@@ -27,5 +27,9 @@ export function listOrderBy<Field extends string, OrderBy>(
 ): OrderBy[] {
   if (!sort || !Object.hasOwn(spec.fields, sort)) return [...spec.fallback];
   const dir = direction ?? "asc";
-  return [spec.fields[sort](dir), spec.tieBreaker(dir)];
+  const tie = spec.tieBreaker(dir);
+  return [
+    spec.fields[sort](dir),
+    ...(Array.isArray(tie) ? tie : [tie as OrderBy]),
+  ];
 }

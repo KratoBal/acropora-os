@@ -37,8 +37,10 @@ import {
   urlPage,
   useUrlQuery,
 } from "@/lib/navigation/use-url-query";
+import { useUrlSort } from "@/lib/navigation/use-url-sort";
 import {
   BILLING_LIST_PATH,
+  BILLING_SORT_COLUMNS,
   BillingDocumentTable,
   billingDocumentHref,
 } from "./billing-document-table";
@@ -174,6 +176,7 @@ function OutgoingList({
   const router = useRouter();
 
   const { params, update } = useUrlQuery();
+  const { sort, onSort, apiSort } = useUrlSort(BILLING_SORT_COLUMNS);
   const documentType = urlChoice(
     params,
     "documentType",
@@ -261,6 +264,10 @@ function OutgoingList({
     }
     if (paymentMethod) value.set("paymentMethod", paymentMethod);
     if (paymentState) value.set("paymentState", paymentState);
+    if (apiSort) {
+      value.set("sort", apiSort.sort);
+      value.set("direction", apiSort.direction);
+    }
     return value;
   }, [
     appliedSearch,
@@ -272,6 +279,7 @@ function OutgoingList({
     paymentState,
     period,
     status,
+    apiSort,
   ]);
 
   const load = useCallback(
@@ -481,7 +489,12 @@ function OutgoingList({
                 onPageChange={goToPage}
               />
             </div>
-            <BillingDocumentTable items={data.items} onOpen={open} />
+            <BillingDocumentTable
+              items={data.items}
+              onOpen={open}
+              sort={sort}
+              onSort={onSort}
+            />
             <div className="flex flex-col gap-3 border-t border-pilot-grey-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-pilot-grey-500">
                 {pageRange(data.pagination)}

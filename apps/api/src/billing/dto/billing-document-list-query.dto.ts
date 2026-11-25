@@ -1,6 +1,7 @@
 import {
   BILLING_DOCUMENT_LIST_PAGE_SIZE,
   BILLING_LIST_PAYMENT_FILTERS,
+  BILLING_LIST_SORT_FIELDS,
   BILLING_DOCUMENT_ORIGINS,
   BILLING_DOCUMENT_STATUSES,
   BILLING_DOCUMENT_TYPES,
@@ -8,6 +9,7 @@ import {
   INVOICE_FORMATS,
   type BillingDocumentListQuery,
   type BillingListPaymentFilter,
+  type BillingListSortField,
   type BillingDocumentOrigin,
   type BillingDocumentStatus,
   type BillingDocumentType,
@@ -56,4 +58,7 @@ export class BillingDocumentListQueryDto implements BillingDocumentListQuery {
   @IsIn(BILLING_LIST_PAYMENT_FILTERS)
   @IsOptional()
   paymentState?: BillingListPaymentFilter;
+  /** The sort column and direction (whitelist: the fields both sources share; `ownListOrderBy`) */
+  @IsIn(BILLING_LIST_SORT_FIELDS) @IsOptional() sort?: BillingListSortField;
+  @IsIn(["asc", "desc"]) @IsOptional() direction?: "asc" | "desc";
 }

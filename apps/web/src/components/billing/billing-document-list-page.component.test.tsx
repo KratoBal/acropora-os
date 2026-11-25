@@ -154,6 +154,69 @@ describe("BillingDocumentListPage", () => {
     A SOR CÉLJA (brief 7. és 24. pont). MI PIROSÍT: ha a vázlat a részletekre
     nyílna, vagy ha csak a nyíl lenne kattintható, a sor nem.
   */
+  /* A kimenő lista rendezése (Balázs kérése, kártya 2f6369a4): a két forrás közös, számszerű oszlopai, az URL-ben, szerveroldalon. */
+  it("a rendezés az URL-ből a kérésbe megy, és a Kiállítás fejlécre kattintva asc, desc, alap körbe jár, oldalnullázással", async () => {
+    urlNavigation.reset(
+      "/penzugy/szamlazas",
+      "oldal=3&sort=grossAmount&direction=desc",
+    );
+    render(<BillingDocumentListPage />);
+    await waitFor(() => expect(api.list).toHaveBeenCalled());
+    expect(lastQuery()).toMatchObject({
+      sort: "grossAmount",
+      direction: "desc",
+    });
+    expect(
+      await screen.findByRole("columnheader", { name: /Összegek/ }),
+    ).toHaveAttribute("aria-sort", "descending");
+
+    // egy másik oszlop (Kiállítás) növekvőben indul, és az oldal az elsőre áll
+    fireEvent.click(
+      within(
+        await screen.findByRole("columnheader", { name: /Kiállítás/ }),
+      ).getByRole("button"),
+    );
+    await waitFor(() =>
+      expect(lastQuery()).toMatchObject({
+        sort: "issueDate",
+        direction: "asc",
+      }),
+    );
+    expect(lastQuery().page).toBe("1");
+
+    // a Kiállítás második kattintása csökkenő, a harmadik az alap (a kulcsok törlődnek)
+    fireEvent.click(
+      within(
+        await screen.findByRole("columnheader", { name: /Kiállítás/ }),
+      ).getByRole("button"),
+    );
+    await waitFor(() => expect(lastQuery().direction).toBe("desc"));
+    fireEvent.click(
+      within(
+        await screen.findByRole("columnheader", { name: /Kiállítás/ }),
+      ).getByRole("button"),
+    );
+    await waitFor(() => expect(lastQuery()).not.toHaveProperty("sort"));
+    expect(lastQuery()).not.toHaveProperty("direction");
+  });
+
+  it("csak a három közös, szám- vagy nap-értékű oszlop rendezhető: a vevő, a bizonylatszám és a fizetés nem", async () => {
+    render(<BillingDocumentListPage />);
+    await waitFor(() => expect(api.list).toHaveBeenCalled());
+    for (const name of [/Kiállítás/, /Határidő/, /Összegek/])
+      expect(
+        within(await screen.findByRole("columnheader", { name })).getAllByRole(
+          "button",
+        ),
+      ).toHaveLength(1);
+    for (const name of [/Bizonylatszám/, /Vevő/, /Fizetés/, /Dokumentum/])
+      expect(
+        within(await screen.findByRole("columnheader", { name })).queryByRole(
+          "button",
+        ),
+      ).toBeNull();
+  });
+
   it("a whole row opens: a draft into the editor, everything else into the details, by keyboard too", async () => {
     render(<BillingDocumentListPage />);
     const rows = await screen.findAllByRole("row", { name: /megnyitása$/ });
