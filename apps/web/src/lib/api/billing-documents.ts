@@ -129,12 +129,14 @@ export const billingDocumentsApi = {
     /** A rendezett oszlop és az irány (`CASH_REGISTER_RECEIPT_SORT_FIELDS`); nélküle az alap sorrend. */
     sort?: { sort: string; direction: "asc" | "desc" } | null,
   ) {
+    // a lekérdezés a sablonon KÍVÜL áll: a telefon-végpont őr (`mobile-api-routes.spec`) a sablon-szövegből olvassa az útvonalat
+    const query = new URLSearchParams({ day, page: String(page) });
+    if (sort) {
+      query.set("sort", sort.sort);
+      query.set("direction", sort.direction);
+    }
     return apiRequest<CashRegisterReceiptListResponse>(
-      `/billing/cash-register-receipts?${new URLSearchParams({
-        day,
-        page: String(page),
-        ...(sort ? { sort: sort.sort, direction: sort.direction } : {}),
-      })}`,
+      `/billing/cash-register-receipts?${query}`,
       token,
       { signal },
     );
