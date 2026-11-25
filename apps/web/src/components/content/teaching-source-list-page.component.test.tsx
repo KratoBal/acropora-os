@@ -18,11 +18,17 @@ vi.mock("@/components/auth/auth-provider", () => ({
 vi.mock("next/link", () => ({
   default: ({
     href,
+    className,
     children,
   }: {
     href: string;
+    className?: string;
     children: React.ReactNode;
-  }) => <a href={href}>{children}</a>,
+  }) => (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  ),
 }));
 
 const item = (
@@ -91,6 +97,14 @@ describe("TeachingSourceListPage", () => {
     expect(screen.getByText(/3\. verzió · belső/)).toBeTruthy();
     expect(screen.getByText(/még nincs forrása/)).toBeTruthy();
     expect(screen.getByText("nincs kimenet")).toBeTruthy();
+  });
+
+  it("the source link is the system's link green, not the purple brand colour (Picasso 3.17)", async () => {
+    api.teachingSources.mockResolvedValue([item({})]);
+    render(<TeachingSourceListPage />);
+    const link = await screen.findByRole("link", { name: "Az első hat hét" });
+    expect(link.className).toContain("text-pilot-aqua-700");
+    expect(link.className).not.toContain("brand");
   });
 
   it("says when there is none", async () => {

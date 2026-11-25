@@ -2,7 +2,13 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Alert, PageHeader, Skeleton, PAGE_GUTTER_X } from "@acropora/ui";
+import {
+  Alert,
+  PageHeader,
+  Skeleton,
+  PAGE_GUTTER_X,
+  PILOT_FIELD_HINT_CLASS,
+} from "@acropora/ui";
 import type {
   ServiceDraftItem,
   ServiceDraftListResponse,
@@ -129,6 +135,49 @@ export function jevClassLabel(jevClass: string | null): string {
   return "Kiszűrve";
 }
 
+/**
+ * AZ IDÉZETT VÁLASZ-LEVÉL ÖSSZECSUKVA (Picasso 3.17, acrobot 61999): a levél szövege az ÚJ rész és a "... ezt írta:" fejlécű idézett lánc együtt jött, és
+ * a kártyán az egész látszott. A fejléc az első sor, ami "ezt írta" (vagy "wrote") szóval ér véget, vagy egy "Eredeti üzenet" elválasztó; előtte az új
+ * szöveg áll, utána az idézett rész. Ha a fejléc előtt nincs szöveg, nem bontunk (az egész levél idézet, és egy üres kártya rosszabb, mint egy hosszú).
+ * Csak a megjelenítés változik: az elfogadás, az AI-vázlat és a helyszín-javaslat ugyanazt a teljes szöveget kapja.
+ */
+export function splitQuotedReply(text: string): {
+  own: string;
+  quoted: string | null;
+} {
+  const lines = text.split("\n");
+  const header = lines.findIndex(
+    (line) =>
+      /(?:\bezt írta|\bwrote)\s*:?\s*$/i.test(line) ||
+      /^-{2,}\s*(?:Eredeti üzenet|Original Message)\s*-{2,}\s*$/i.test(line),
+  );
+  if (header <= 0) return { own: text, quoted: null };
+  const own = lines.slice(0, header).join("\n").trimEnd();
+  if (own.trim() === "") return { own: text, quoted: null };
+  return { own, quoted: lines.slice(header).join("\n") };
+}
+
+function DraftOriginalText({ text }: { text: string }) {
+  const { own, quoted } = splitQuotedReply(text);
+  return (
+    <>
+      <p className="whitespace-pre-wrap break-words text-sm text-pilot-grey-900">
+        {own}
+      </p>
+      {quoted ? (
+        <details className="text-xs">
+          <summary className="cursor-pointer font-medium text-pilot-aqua-700">
+            Idézett levél megnyitása
+          </summary>
+          <p className="mt-3 whitespace-pre-wrap break-words text-pilot-grey-600">
+            {quoted}
+          </p>
+        </details>
+      ) : null}
+    </>
+  );
+}
+
 function DraftCard({
   item,
   data,
@@ -225,9 +274,7 @@ function DraftCard({
         <p className="text-xs font-semibold text-pilot-grey-600">
           {isTicket ? "A levél szövege" : "A kért javítás szövege"}
         </p>
-        <p className="whitespace-pre-wrap break-words text-sm text-pilot-grey-900">
-          {item.originalProblem}
-        </p>
+        <DraftOriginalText text={item.originalProblem} />
         {item.attachments.length > 0 ? (
           <div className="flex flex-wrap gap-4">
             {item.attachments.map((f) => (
@@ -307,11 +354,14 @@ function DraftCard({
           </p>
         </details>
         {item.status === "PENDING" ? (
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <PilotButton
               disabled={busy || !department || (!isTicket && !data.openedBy)}
               onClick={() => onDecide(item, "accept", department, author)}
               aria-label={`Elfogadom: ${item.title}`}
+              aria-describedby={
+                department ? undefined : `accept-hint-${item.id}`
+              }
             >
               {busy ? "Mentés…" : "Elfogadom"}
             </PilotButton>
@@ -323,6 +373,15 @@ function DraftCard({
             >
               Elvetem
             </PilotButton>
+            {/* MIÉRT HALVÁNY AZ ELFOGADOM (Picasso 3.17): amíg nincs helyszín, egy mondat megmondja; ugyanaz a súgó-stílus, mint az űrlapokon */}
+            {department ? null : (
+              <p
+                id={`accept-hint-${item.id}`}
+                className={PILOT_FIELD_HINT_CLASS}
+              >
+                Előbb válassz helyszínt.
+              </p>
+            )}
           </div>
         ) : (
           <p className="text-xs text-pilot-grey-600">
@@ -551,7 +610,7 @@ export function ServiceDraftsPage() {
               setSource(value);
               setNotice(undefined);
             }}
-            className={`rounded-md px-3 py-2 text-xs ${source === value ? "bg-pilot-amber-50 text-pilot-amber-700" : "bg-pilot-grey-100 text-pilot-grey-600"}`}
+            className={`rounded-md px-3 py-2 text-xs ${source === value ? "bg-pilot-aqua-50 text-pilot-aqua-700" : "bg-pilot-grey-100 text-pilot-grey-600"}`}
           >
             {label}
           </button>
@@ -577,7 +636,7 @@ export function ServiceDraftsPage() {
               setStatus(value);
               setNotice(undefined);
             }}
-            className={`rounded-md px-3 py-2 text-xs ${status === value ? "bg-pilot-amber-50 text-pilot-amber-700" : "bg-pilot-grey-100 text-pilot-grey-600"}`}
+            className={`rounded-md px-3 py-2 text-xs ${status === value ? "bg-pilot-aqua-50 text-pilot-aqua-700" : "bg-pilot-grey-100 text-pilot-grey-600"}`}
           >
             {label}
           </button>

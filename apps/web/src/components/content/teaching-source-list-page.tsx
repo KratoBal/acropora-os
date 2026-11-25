@@ -68,7 +68,7 @@ export function TeachingSourceListPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <Link
                   href={`/tartalom/${encodeURIComponent(item.contentId)}/forras`}
-                  className="font-medium text-brand-700 underline-offset-4 hover:underline"
+                  className="font-medium text-pilot-aqua-700 underline-offset-4 hover:underline"
                 >
                   {item.title}
                 </Link>

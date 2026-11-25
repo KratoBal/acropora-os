@@ -381,6 +381,76 @@ describe("anyagigények áttekintője", () => {
     });
   });
 
+  it("ha minden számláló nulla és a lista üres, egy üres állapot áll egy mondattal, nem öt nulla és két üres doboz (Picasso 3.17)", async () => {
+    api.overview.mockResolvedValue({ items: [], nextCursor: null });
+    api.summary.mockResolvedValue({
+      open: 0,
+      inProgress: 0,
+      ordered: 0,
+      partiallyReceived: 0,
+      receivedLast7Days: 0,
+    });
+    render(<MaterialRequestOverviewPage />);
+    expect(await screen.findByText("Nincs anyagigény")).toBeTruthy();
+    expect(
+      screen.getByText(/anyagot kell beszerezni, az igény itt jelenik meg/),
+    ).toBeTruthy();
+    // sem a nulla számlálók, sem a "Válassz egy anyagigényt" doboz, sem a szűrősor nem látszik
+    expect(
+      screen.queryByText("Válassz egy anyagigényt a listából."),
+    ).toBeNull();
+    expect(screen.queryByRole("group", { name: "Szűrés" })).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("a nulla számlálóval sem lesz üres állapot, ha a lista nem üres vagy keresés fut, és a betöltés alatt álló szám nem nulla", async () => {
+    const zero = {
+      open: 0,
+      inProgress: 0,
+      ordered: 0,
+      partiallyReceived: 0,
+      receivedLast7Days: 0,
+    };
+    // a számláló hibás ("—"): nem tudjuk, hogy nulla, ezért nincs üres állapot
+    api.overview.mockResolvedValue({ items: [], nextCursor: null });
+    api.summary.mockRejectedValue(new ApiError("boom", 500));
+    const { unmount } = render(<MaterialRequestOverviewPage />);
+    expect((await screen.findByRole("status")).textContent).toBe(
+      "Nincs aktív anyagigény.",
+    );
+    expect(screen.queryByText("Nincs anyagigény")).toBeNull();
+    unmount();
+    // a lista nem üres, a számlálók nullák: a lista áll
+    api.overview.mockResolvedValue({ items: [summary()], nextCursor: null });
+    api.summary.mockResolvedValue(zero);
+    render(<MaterialRequestOverviewPage />);
+    expect(
+      await screen.findByText("Teszt Ügyfél Kft. · Teszt részleg"),
+    ).toBeTruthy();
+    expect(screen.queryByText("Nincs anyagigény")).toBeNull();
+  });
+
+  it("a másik szűrőn a nulla és az üres lista nem viszi el a szűrősort: onnan vissza kell tudni lépni", async () => {
+    const zero = {
+      open: 0,
+      inProgress: 0,
+      ordered: 0,
+      partiallyReceived: 0,
+      receivedLast7Days: 0,
+    };
+    api.overview.mockResolvedValue({ items: [summary()], nextCursor: null });
+    api.summary.mockResolvedValue(counts);
+    render(<MaterialRequestOverviewPage />);
+    await screen.findByText("Teszt Ügyfél Kft. · Teszt részleg");
+    // a lista közben kiürül (egy élő frissítés után), miközben a "Visszavont" szűrő áll
+    api.overview.mockResolvedValue({ items: [], nextCursor: null });
+    api.summary.mockResolvedValue(zero);
+    fireEvent.click(screen.getByRole("button", { name: "Visszavont" }));
+    expect((await screen.findByRole("status")).textContent).toMatch(/Nincs/);
+    expect(screen.queryByText("Nincs anyagigény")).toBeNull();
+    expect(screen.getByRole("group", { name: "Szűrés" })).toBeTruthy();
+  });
+
   it("hibás számláló '—', nem nulla; hibás lista hiba, nem üres", async () => {
     api.overview.mockRejectedValue(new ApiError("boom", 500));
     api.summary.mockRejectedValue(new ApiError("boom", 500));
