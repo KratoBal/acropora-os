@@ -9,7 +9,7 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { Prisma } from "@acropora/database";
+import { Prisma } from "@acropora/database";
 import {
   checkBillingIssueDates,
   type BillingIssueConfirmation,
@@ -43,6 +43,10 @@ import {
 } from "../billing/billing-document-issue.js";
 import { budapestDayKey } from "../dashboard/budapest-day.js";
 import { maintenanceIssueSummary } from "./maintenance-invoice-confirmation.js";
+import {
+  LINE_SHAPE_CHANGED_MESSAGE,
+  sameLineShape,
+} from "./maintenance-invoice-line-shape.js";
 import { maintenanceInvoiceIssueEnabled } from "./maintenance-invoice-issue.config.js";
 import { effectivePaymentDueDays } from "../customers/partner-payment-terms.js";
 import { MaintenanceInvoiceRepository } from "./maintenance-invoice.repository.js";
@@ -447,12 +451,16 @@ export class MaintenanceInvoiceDraftService {
       currency: mapped.xmlInput.currency,
       totals: mapped.totals,
       pdfStorageKey: storageKeyFor(documentKey),
+      // A TÁROLT SOR A KIMENT TÉTEL (barracuda L6): a mennyiség, az egység és az egységár a Számlázz.hu-nak küldött tételé,
+      // nem az igazolásé újraolvasva; a kiállítás ebből veti össze, mit mutatott az előnézet (L7)
       lines: certificate.items.map((item, index) => {
         const amounts = mapped.lineAmounts[index]!;
+        const sent = mapped.xmlInput.items[index]!;
         return {
           description: item.description,
-          quantity: item.quantity,
-          unitNet: item.unitNet,
+          quantity: new Prisma.Decimal(sent.quantity),
+          unit: sent.unit,
+          unitNet: new Prisma.Decimal(sent.netUnitPrice),
           vatRatePercent: item.vatRatePercent,
           netAmount: amounts.netAmount,
           vatAmount: amounts.vatAmount,
@@ -548,6 +556,9 @@ export class MaintenanceInvoiceDraftService {
       throw new ConflictException(
         "A teljesítési igazolás a piszkozat óta megváltozott: az összeg már nem egyezik. Készíts új piszkozatot.",
       );
+    // az ÖSSZEG mellett a sorok alakja is (barracuda L7): az előnézet alakját tárolt sorok vs a mostani tételek
+    if (!sameLineShape(invoice.lines, mapped.xmlInput.items))
+      throw new ConflictException(LINE_SHAPE_CHANGED_MESSAGE);
 
     // WHAT THE WINDOW SHOWED IS WHAT THE INVOICE CARRIES (card 7ba97e0d, S3), as on the billing editor
     const today = budapestDayKey(now);

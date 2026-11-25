@@ -221,6 +221,8 @@ export class CompletionCertificatesService {
           // A KÉRT ALKALOMSZÁM, az egységár az egy alkalomra eső díj (egységár x darab) -- lásd a
           // `CompletionCertificateInput` építésénél a magyarázatot ugyanerre a döntésre.
           quantity: new Prisma.Decimal(item.occasions),
+          // az igazolás PDF-je "alkalom"-ot ír, a tárolt sor is ezt tárolja (a számla ebből veszi az egységet; régi sorokon null)
+          quantityUnit: "alkalom",
           unitNet: item.unitNet.times(item.quantity),
           vatRatePercent: item.vatRatePercent,
         })),

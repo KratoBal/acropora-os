@@ -6,7 +6,6 @@ import {
   wholeForintCertificateAmounts,
   type CertificateAmounts,
 } from "../completion-certificates/completion-certificate-amounts.js";
-import { formatQuantity } from "../completion-certificates/completion-certificate-content.js";
 import { missingAddressParts } from "../customers/address-parts.js";
 import { budapestDayKey } from "../dashboard/budapest-day.js";
 import type { SzamlazzAgentInvoiceInput } from "../integrations/szamlazz/szamlazz-agent-xml.js";
@@ -82,21 +81,18 @@ export class MaintenanceInvoiceInputError extends Error {
 }
 
 /**
- * EGY BIZONYLAT-SOR EGYENLŐ EGY XML-TÉTEL.
+ * EGY BIZONYLAT-SOR EGYENLŐ EGY XML-TÉTEL, ÉS A TÉTEL MINDIG A TIG SORÁNAK MÁSA: a valódi mennyiség, a TIG-en álló egység és a
+ * TIG-en álló egységár (tizedes is). SOHA nem "1 db a sorösszeggel".
  *
- * A Számlázz.hu Agent API tételenként ellenőriz: `nettoEgysegar × mennyiseg
- * = nettoErtek` (lásd generating_invoice_xml.txt). A teljesítési igazolás
- * viszont a SAJÁT mennyiségét (pl. "3 alkalom") és EGYSÉGÁRÁT tartja --
- * `wholeForintCertificateAmounts` a SOR (mennyiség × egységár) végösszegét
- * kerekíti egész forintra, nem az egységárat. Ha a mennyiség nem 1, az
- * egységár × mennyiség szorzat a kerekítés UTÁN már nem feltétlenül adja ki
- * pontosan a kerekített sorösszeget.
+ * ACROBOT DÖNTÉSE (61289, Balázs szabálya, emlék 2957: a számla mindig a TIG-gel egyezik): a mennyiség és az egységár az
+ * igazolás sora szerint megy, akkor is, ha a mennyiség x egységár szorzata a kerekített sorösszegtől egy kerekítésnyit eltér.
+ * Ez a kerekítési különbség a TIG-en is ugyanúgy látszik (az igazolás a sor végösszegét kerekíti egész forintra, nem az
+ * egységárat), tehát a számla és a TIG egyformán mutatja, és a sor összege (`nettoErtek`) a TIG sorösszege. Eddig a nem pontos
+ * szorzatú sor "1 db, sorösszeg" lett, a nevében a mennyiséggel (barracuda L1): ez megszűnt. Hogy a Számlázz.hu a kerekítésnyi
+ * eltérést a tételen elfogadja-e, a teszt OS elő-nézetén mérendő (a kiállítás előtt), nem ebből a kódból tudható.
  *
- * Ezért: ahol a szorzat PONTOSAN a kerekített sorösszeg, a sor a valódi
- * mennyiséggel, egységgel és egységárral megy (a számlán az áll, ami az
- * igazoláson); ahol nem, "1 db" a kerekített sorösszeggel, és a mennyiség a
- * tétel nevében. Mindkét út kielégíti a Számlázz.hu azonosságát, és pontosan
- * azt az összeget viszi, ami az igazoláson áll (ADR-014 "a számla a mérvadó").
+ * AZ EGYSÉG: az igazoláson álló; az egység nélküli sor (régi, szervizes) "alkalom", ahogy a PDF is írja (barracuda L2), 1-es
+ * mennyiségnél is. Eddig az egység nélküli 1-es sor "1 db" volt az igazolás "1 alkalom"-ja helyett.
  */
 function mapItem(item: {
   description: string;
@@ -116,56 +112,13 @@ function mapItem(item: {
     }),
     item.vatRatePercent,
   );
-  const totals = {
-    vatRatePercent: item.vatRatePercent.toString(),
-    netAmount: amounts.netAmount.toNumber(),
-    vatAmount: amounts.vatAmount.toNumber(),
-    grossAmount: amounts.grossAmount.toNumber(),
-  };
-  /*
-    A SOR VALÓDI MENNYISÉGGEL ÉS EGYSÉGÁRRAL MEGY, ahol az egységár × mennyiség
-    PONTOSAN a kerekített sorösszeg (akkor a Számlázz.hu azonossága is áll); ahol
-    nem, "1 db" a sorösszeggel, és a mennyiség a tétel nevében.
-
-    A megrendeléses sor (acrobot 42206, B) egységét az ajánlat adja. A szervizes
-    (egység nélküli) sor egysége az igazoláson "alkalom" (lásd a séma
-    `quantityUnit` megjegyzését), és eddig MINDIG "1 db" ment a sorösszeggel: egy
-    "2 alkalom × 450 000" sor a számla-előnézeten "1 db, 900 000" lett (Luca
-    kérése, TIG TI-2026-003). Most a szervizes sor is a valódi mennyiséggel megy,
-    ha az nem 1; az 1 mennyiségű, egység nélküli sor alakja változatlan.
-  */
-  const unit =
-    item.quantityUnit ?? (item.quantity.equals(1) ? null : "alkalom");
-  if (unit) {
-    if (item.quantity.times(item.unitNet).equals(amounts.netAmount))
-      return {
-        amounts,
-        line: {
-          name: item.description,
-          quantity: item.quantity.toNumber(),
-          unit,
-          netUnitPrice: item.unitNet.toNumber(),
-          ...totals,
-        },
-      };
-    return {
-      amounts,
-      line: {
-        name: `${item.description}, ${formatQuantity(item.quantity)} ${unit}`,
-        quantity: 1,
-        unit: "db",
-        netUnitPrice: amounts.netAmount.toNumber(),
-        ...totals,
-      },
-    };
-  }
   return {
     amounts,
     line: {
       name: item.description,
-      quantity: 1,
-      unit: "db",
-      netUnitPrice: amounts.netAmount.toNumber(),
+      quantity: item.quantity.toNumber(),
+      unit: item.quantityUnit || "alkalom",
+      netUnitPrice: item.unitNet.toNumber(),
       vatRatePercent: item.vatRatePercent.toString(),
       netAmount: amounts.netAmount.toNumber(),
       vatAmount: amounts.vatAmount.toNumber(),
