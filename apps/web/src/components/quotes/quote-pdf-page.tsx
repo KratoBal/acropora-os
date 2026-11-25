@@ -128,7 +128,7 @@ export function QuotePdfPage({ quoteId }: { quoteId: string }) {
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
       <PilotPageHeader
-        eyebrow="Pénzügy / Árajánlatok"
+        eyebrow="Értékesítés / Árajánlatok"
         title={`PDF előnézet · ${quote.quoteNumber} v${version.versionNumber}`}
         description="Pontosan azt mutatja, amit az ügyfél kap. A publikált PDF a verzióhoz rögzül."
         meta={

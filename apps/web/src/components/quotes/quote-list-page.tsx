@@ -234,7 +234,7 @@ export function QuoteListPage() {
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
       <PilotPageHeader
-        eyebrow="Pénzügy / Árajánlatok"
+        eyebrow="Értékesítés / Árajánlatok"
         title="Árajánlatok"
         description="Projekt- és értékesítési ajánlatok, verziókkal és ügyfélstátusszal."
         actions={
