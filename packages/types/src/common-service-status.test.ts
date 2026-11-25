@@ -7,6 +7,7 @@ import {
   commonServiceStateText,
   commonServiceStateTone,
   commonWorksheetStatus,
+  partnerClosedReasonLabel,
   partnerStatusFromCommon,
   type CommonJobWorksheetFacts,
   type CommonServiceState,
@@ -223,7 +224,7 @@ describe("partner-rövidítés a közösből", () => {
     const elteres: Record<string, [string, string]> = {};
     for (const status of ALL_SERVICE_JOB_STATUS_VALUES) {
       const ma = partnerVisibleStatus(status);
-      const uj = partnerStatusFromCommon(commonJobStatus(status, []).status);
+      const uj = partnerStatusFromCommon(commonJobStatus(status, [])).status;
       if (ma !== uj) elteres[status] = [ma, uj];
     }
     assert.deepEqual(elteres, SZANDEKOS);
@@ -233,13 +234,30 @@ describe("partner-rövidítés a közösből", () => {
     assert.equal(partnerVisibleStatus("IN_PROGRESS"), "IN_PROGRESS");
     assert.equal(
       partnerStatusFromCommon(
-        commonJobStatus("IN_PROGRESS", [lap("AWAITING_SIGNATURE")]).status,
-      ),
+        commonJobStatus("IN_PROGRESS", [lap("AWAITING_SIGNATURE")]),
+      ).status,
       "COMPLETED",
     );
   });
 
   it("a Vár valamire a partnernek Feldolgozás alatt", () => {
-    assert.equal(partnerStatusFromCommon("WAITING"), "IN_PROGRESS");
+    assert.equal(
+      partnerStatusFromCommon(ALLAPOT("WAITING", "PARTS")).status,
+      "IN_PROGRESS",
+    );
+  });
+
+  // acrobot 61894: a felirat Lezárva marad, a meghiúsulás második sorként él tovább
+  it("a meghiúsult ok a partnernél is megmarad, csak a lezárt jegyen", () => {
+    const vart: Record<string, string | null> = {};
+    const kapott: Record<string, string | null> = {};
+    for (const status of ALL_SERVICE_JOB_STATUS_VALUES) {
+      vart[status] = status === "CANCELLED" ? "CANCELLED" : null;
+      kapott[status] = partnerStatusFromCommon(
+        commonJobStatus(status, []),
+      ).closedReason;
+    }
+    assert.deepEqual(kapott, vart);
+    assert.equal(partnerClosedReasonLabel.CANCELLED, "Nem teljesült");
   });
 });

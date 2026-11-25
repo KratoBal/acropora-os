@@ -346,6 +346,7 @@ export {
   commonServiceStateTone,
   commonServiceStatusLabel,
   commonWorksheetStatus,
+  partnerClosedReasonLabel,
   partnerStatusFromCommon,
 } from "./common-service-status.js";
 export type {
@@ -354,6 +355,8 @@ export type {
   CommonServiceStatus,
   CommonServiceStatusReason,
   CommonServiceTone,
+  PartnerClosedReason,
+  PartnerCommonState,
 } from "./common-service-status.js";
 export {
   worksheetStatusLabel,
