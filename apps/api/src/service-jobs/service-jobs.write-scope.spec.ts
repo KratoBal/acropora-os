@@ -104,6 +104,7 @@ function serviceWith(overrides: Partial<ServiceJobsRepository> = {}) {
     }),
     customerExists: async () => true,
     assignableUserIds: async (ids: readonly string[]) => new Set(ids),
+    currentAssigneeIds: async () => new Set<string>(),
     move: async () => {
       irasok.push("move");
       return { ok: true };

@@ -86,3 +86,33 @@ describe("UpdateUserDto serviceCapabilities", () => {
     );
   });
 });
+
+/**
+ * A GÉPI / FLOTTA FIÓK JELÖLŐ A MÓDOSÍTÁSBAN (card b2e74712). MI PIROSÍT: ha egy nem logikai érték (a "false" szöveg, egy szám) átmegy
+ * (a jelölő hamis szöveggel is "igaz" lenne); ha a hiányzó mező hibát ad (a nem érintő mentések, pl. egy névjavítás nem küldik).
+ */
+describe("UpdateUserDto isServiceAccount", () => {
+  const messages = (isServiceAccount: unknown) =>
+    validateSync(
+      plainToInstance(UpdateUserDto, { ...ALAP, isServiceAccount }),
+    ).flatMap((error) => Object.values(error.constraints ?? {}));
+
+  it("elfogadja az igaz és a hamis értéket", () => {
+    assert.deepEqual(messages(true), []);
+    assert.deepEqual(messages(false), []);
+  });
+
+  it("a hiányzó mező nem hiba", () => {
+    assert.deepEqual(
+      validateSync(plainToInstance(UpdateUserDto, { ...ALAP })).flatMap(
+        (error) => Object.values(error.constraints ?? {}),
+      ),
+      [],
+    );
+  });
+
+  it("nem logikai értéket visszautasít", () => {
+    assert.notDeepEqual(messages("false"), []);
+    assert.notDeepEqual(messages(1), []);
+  });
+});

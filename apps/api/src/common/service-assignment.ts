@@ -80,6 +80,9 @@ export const SERVICE_ASSIGNABLE_ROLES: readonly UserRole[] =
 export function assignableUserWhere(): Prisma.UserWhereInput {
   return {
     isActive: true,
+    // a gépi / flotta fiók nem kapható munkára (Balázs D4, acrobot 2026-11-25, card b2e74712; a jelölő a f6694b49 óta él, `User.isServiceAccount`):
+    // KIFEJEZETT JELÖLŐ, nem szerep és nem név. A már rá kiosztott sor megmarad (lásd a hívók `keep` halmazát), újat nem lehet.
+    isServiceAccount: false,
     ...usersWithPermissionWhere(PERMISSIONS.SERVICE_MANAGE, INTERNAL_ROLES),
     customerId: null,
     supplierId: null,

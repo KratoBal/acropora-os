@@ -8,6 +8,7 @@ import {
 import type { Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { usersApi } from "@/lib/api/users";
 import { UserEditorPage } from "./user-editor-page";
 
 const router = vi.hoisted(() => ({ push: vi.fn() }));
@@ -27,6 +28,8 @@ vi.mock("@acropora/types", () => ({
   PERMISSIONS: { USERS_MANAGE: "users.manage" },
   hasPermission: () => true,
   isNavigationEntryVisible: () => false,
+  // a meglévő fiók betöltése (a jelenléti beosztás szakasz) hívja; az új fióknál ez az ág nem fut
+  isAttendanceEmployeeRole: () => false,
   /*
     KEZZEL IRT TUKOR, NEM A VALODI LISTA -- ES EZ SZANDEKOS.
 
@@ -345,5 +348,108 @@ describe("UserEditorPage partner szerepköre", () => {
     // ES A VALASZTO UJRA A TELJES LISTAT KINALJA: a szerep tudatos dontes marad,
     // nem egy ottfelejtett ertek.
     expect(within(role).getAllByRole("option")).toHaveLength(2);
+  });
+});
+
+/**
+ * A GÉPI / FLOTTA FIÓK JELÖLŐ A SZERKESZTŐBEN (card b2e74712, acrobot 2026-11-25): eddig csak adatbázis-úton volt állítható. MI PIROSÍT: ha a
+ * kapcsoló új fióknál vagy partner-fióknál is megjelenik (egy partner nem lehet gép, egy új fiók embernek indul); ha a bejelölés nem megy át a
+ * mentésbe; ha egy bejelölt partner-fióknál a mentés mégis igazat küld; ha a betöltött érték nem a jelölőt mutatja.
+ */
+describe("UserEditorPage gépi fiók jelölő", () => {
+  const detail = (over: Record<string, unknown> = {}) => ({
+    id: "u1",
+    firstName: "Acro",
+    lastName: "Bot",
+    displayName: "Acro Bot",
+    nickname: null,
+    email: "bot@acropora.local",
+    role: "VIEWER",
+    isActive: true,
+    hasPassword: true,
+    createdAt: "2026-11-01T10:00:00.000Z",
+    updatedAt: "2026-11-25T10:00:00.000Z",
+    notificationRoles: [],
+    serviceCapabilities: [],
+    isServiceAccount: false,
+    customerId: null,
+    supplierId: null,
+    ...over,
+  });
+  const toggle = () =>
+    screen.getByRole("checkbox", {
+      name: /Gépi \/ flotta fiók/,
+    }) as HTMLInputElement;
+
+  beforeEach(() => {
+    auth.session = session;
+    router.push.mockReset();
+    vi.mocked(usersApi.detail).mockReset();
+    vi.mocked(usersApi.update).mockReset();
+  });
+
+  it("egy új fióknál nincs kapcsoló", () => {
+    render(<UserEditorPage />);
+    expect(
+      screen.queryByRole("checkbox", { name: /Gépi \/ flotta fiók/ }),
+    ).toBeNull();
+  });
+
+  it("a betöltött jelölőt mutatja, és a bejelölés a mentésben elmegy", async () => {
+    vi.mocked(usersApi.detail).mockResolvedValue(
+      detail({ isServiceAccount: true }) as never,
+    );
+    vi.mocked(usersApi.update).mockResolvedValue(detail() as never);
+    render(<UserEditorPage userId="u1" />);
+    await waitFor(() => expect(toggle().checked).toBe(true));
+    fireEvent.click(toggle());
+    expect(toggle().checked).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: /Változások mentése/ }));
+    await waitFor(() => expect(usersApi.update).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(usersApi.update).mock.calls[0]![2]).toMatchObject({
+      isServiceAccount: false,
+      expectedUpdatedAt: "2026-11-25T10:00:00.000Z",
+    });
+  });
+
+  it("a bejelölés igazként megy, és egy partner-fióknál nincs kapcsoló, és a mentés hamisat küld", async () => {
+    vi.mocked(usersApi.detail).mockResolvedValue(detail() as never);
+    vi.mocked(usersApi.update).mockResolvedValue(detail() as never);
+    const first = render(<UserEditorPage userId="u1" />);
+    await waitFor(() => expect(toggle().checked).toBe(false));
+    fireEvent.click(toggle());
+    fireEvent.click(screen.getByRole("button", { name: /Változások mentése/ }));
+    await waitFor(() => expect(usersApi.update).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(usersApi.update).mock.calls[0]![2]).toMatchObject({
+      isServiceAccount: true,
+    });
+    first.unmount();
+
+    vi.mocked(usersApi.update).mockClear();
+    vi.mocked(usersApi.detail).mockResolvedValue(
+      detail({
+        customerId: "c1",
+        role: "PARTNER_SERVICE",
+        isServiceAccount: true,
+      }) as never,
+    );
+    render(<UserEditorPage userId="u1" />);
+    // wait until the partner account is really loaded (the save button exists then), THEN look for the switch
+    const save = await screen.findByRole("button", {
+      name: /Változások mentése/,
+    });
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("Szerepkör") as HTMLSelectElement).value,
+      ).toBe("PARTNER_SERVICE"),
+    );
+    expect(
+      screen.queryByRole("checkbox", { name: /Gépi \/ flotta fiók/ }),
+    ).toBeNull();
+    fireEvent.click(save);
+    await waitFor(() => expect(usersApi.update).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(usersApi.update).mock.calls[0]![2]).toMatchObject({
+      isServiceAccount: false,
+    });
   });
 });
