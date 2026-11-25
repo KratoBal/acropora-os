@@ -81,6 +81,18 @@ export interface IncomingBankMatch {
 export type IncomingDateBasis = "ISSUE" | "FULFILLMENT";
 
 /** `GET /billing/incoming-documents` lekérdezése. */
+/**
+ * A BEJÖVŐ LISTA RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4): a szerver mezői. A lista a memóriában áll össze (a szűrés és a
+ * lapozás is ott fut), ezért a rendezés a szűrés UTÁN, a lapozás ELŐTT megy, a megjelenített értékkel.
+ */
+export const INCOMING_SORT_FIELDS = [
+  "documentNumber",
+  "supplierName",
+  "issueDate",
+  "grossAmount",
+] as const;
+export type IncomingSortField = (typeof INCOMING_SORT_FIELDS)[number];
+
 export interface IncomingDocumentListQuery {
   page?: number;
   pageSize?: number;
@@ -97,6 +109,9 @@ export interface IncomingDocumentListQuery {
   bankMatch?: IncomingBankMatchState;
   /** csak az ellenőrizendő (vagy csak az ellenőrzött) postafiókos sorok */
   review?: IncomingReviewState;
+  /** A rendezett oszlop és az irány; nélkülük az eddigi sorrend. */
+  sort?: IncomingSortField;
+  direction?: "asc" | "desc";
 }
 
 /**

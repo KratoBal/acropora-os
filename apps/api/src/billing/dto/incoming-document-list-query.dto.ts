@@ -3,11 +3,13 @@ import {
   INCOMING_BANK_MATCH_STATES,
   INCOMING_PAYMENT_STATES,
   INCOMING_REVIEW_STATES,
+  INCOMING_SORT_FIELDS,
   type IncomingBankMatchState,
   type IncomingDateBasis,
   type IncomingDocumentListQuery,
   type IncomingPaymentState,
   type IncomingReviewState,
+  type IncomingSortField,
 } from "@acropora/types";
 import { Type } from "class-transformer";
 import {
@@ -46,4 +48,7 @@ export class IncomingDocumentListQueryDto implements IncomingDocumentListQuery {
   @IsIn(INCOMING_REVIEW_STATES)
   @IsOptional()
   review?: IncomingReviewState;
+  /** The sort column and direction (whitelist; the list is built in memory, `sortIncoming`) */
+  @IsIn(INCOMING_SORT_FIELDS) @IsOptional() sort?: IncomingSortField;
+  @IsIn(["asc", "desc"]) @IsOptional() direction?: "asc" | "desc";
 }

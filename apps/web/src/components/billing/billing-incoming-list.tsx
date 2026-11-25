@@ -35,6 +35,7 @@ import {
   urlPage,
   useUrlQuery,
 } from "@/lib/navigation/use-url-query";
+import { useUrlSort } from "@/lib/navigation/use-url-sort";
 import { listAmount } from "./billing-amount-format";
 import {
   BillingFilterGrid,
@@ -81,6 +82,17 @@ const bankTone = (state: IncomingDocumentListItem["bankMatch"]["state"]) =>
       ? "text-pilot-grey-500"
       : "text-pilot-accent-warm-text";
 
+/**
+ * A RENDEZHETŐ OSZLOPOK (Balázs kérése, kártya 2f6369a4): a tábla oszlop-azonosítója -> a szerver mezője. A "Dátumok" a kelt szerint
+ * rendez (a teljesítés és a határidő a cellában csak mellette áll), az "Összegek" a bruttó szerint (a devizák nyers összege, nincs átváltás).
+ */
+export const INCOMING_SORT_COLUMNS = {
+  invoice: "documentNumber",
+  supplier: "supplierName",
+  dates: "issueDate",
+  totals: "grossAmount",
+} as const;
+
 /** Az oszlopok a Figma 374:651 kerete szerint. */
 export const INCOMING_COLUMNS: readonly PilotTableColumn<IncomingDocumentListItem>[] =
   [
@@ -88,6 +100,7 @@ export const INCOMING_COLUMNS: readonly PilotTableColumn<IncomingDocumentListIte
       id: "invoice",
       header: "Számla",
       width: "140px",
+      sortable: true,
       cell: (item) => (
         <span className="flex flex-col gap-0.5">
           <span className="truncate font-semibold text-pilot-grey-900">
@@ -112,6 +125,7 @@ export const INCOMING_COLUMNS: readonly PilotTableColumn<IncomingDocumentListIte
     {
       id: "supplier",
       header: "Szállító",
+      sortable: true,
       cell: (item) => (
         <span className="flex min-w-0 flex-col gap-0.5">
           <span
@@ -130,6 +144,7 @@ export const INCOMING_COLUMNS: readonly PilotTableColumn<IncomingDocumentListIte
       id: "dates",
       header: "Dátumok",
       width: "150px",
+      sortable: true,
       cell: (item) => (
         <span className="flex flex-col gap-0.5 text-xs text-pilot-grey-600">
           <span>Kelt: {formatDay(item.issueDate)}</span>
@@ -200,6 +215,7 @@ export const INCOMING_COLUMNS: readonly PilotTableColumn<IncomingDocumentListIte
       header: "Összegek",
       width: "170px",
       align: "right",
+      sortable: true,
       cell: (item) => (
         <span className="flex flex-col items-end gap-0.5 whitespace-nowrap tabular-nums">
           <span className="text-xs text-pilot-grey-600">
@@ -285,6 +301,7 @@ const FILTER_KEYS = [
 export function BillingIncomingList({ token }: { token: string }) {
   const router = useRouter();
   const { params, update } = useUrlQuery();
+  const { sort, onSort, apiSort } = useUrlSort(INCOMING_SORT_COLUMNS);
   const months = useMemo(() => monthOptions(), []);
   const period = urlChoice(
     params,
@@ -359,6 +376,10 @@ export function BillingIncomingList({ token }: { token: string }) {
     if (currency) value.set("currency", currency);
     if (bankMatch) value.set("bankMatch", bankMatch);
     if (review) value.set("review", review);
+    if (apiSort) {
+      value.set("sort", apiSort.sort);
+      value.set("direction", apiSort.direction);
+    }
     return value;
   }, [
     appliedSearch,
@@ -370,6 +391,7 @@ export function BillingIncomingList({ token }: { token: string }) {
     page,
     paymentState,
     period,
+    apiSort,
   ]);
 
   const load = useCallback(
@@ -568,6 +590,8 @@ export function BillingIncomingList({ token }: { token: string }) {
             </div>
             <PilotDataTable
               columns={INCOMING_COLUMNS}
+              sort={sort}
+              onSort={onSort}
               rows={data.items}
               rowKey={(item) => item.id}
               onRowActivate={(item) =>
