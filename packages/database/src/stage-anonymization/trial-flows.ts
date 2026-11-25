@@ -236,6 +236,8 @@ export async function runTrialFlows(
             {
               description: "Teszt szolgáltatás",
               quantity: "1",
+              // the issue refuses an item line without a unit (card c37ea343, L5)
+              unit: "db",
               unitNet: "10000",
               vatRatePercent: "27",
               discountPercent: null,

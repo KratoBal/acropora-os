@@ -70,6 +70,7 @@ export type IssueInputError =
   | "BILLING_ISSUE_ADDRESS_INCOMPLETE"
   | "BILLING_ISSUE_NO_LINES"
   | "BILLING_ISSUE_LINE_INVALID"
+  | "BILLING_ISSUE_LINE_NO_UNIT"
   | "BILLING_ISSUE_NO_FULFILLMENT_DATE";
 
 /** "27.00" -> "27", "5.50" -> "5.5": a Számlázz.hu `afakulcs` alakja. */
@@ -197,6 +198,17 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
   const forIssue: BillingDocumentForIssue["lines"][number][] = [];
   for (const line of row.lines) {
     const discount = line.kind === "DISCOUNT";
+    /*
+      A TÉTEL-SOR EGYSÉGE KÖTELEZŐ (barracuda számla-sor söprése, L5; kártya c37ea343): eddig az üres egység csendben "db"-ként ment
+      a Számlázz.hu-ra, így egy órában, kg-ban vagy alkalomban mért tétel "db"-ként állt a számlán. A kedvezmény-sor nem tétel: az
+      egysége a Számlázz.hu-n nem jelenik meg, ott marad a "db".
+    */
+    if (!discount && !line.unit?.trim())
+      return {
+        ok: false,
+        code: "BILLING_ISSUE_LINE_NO_UNIT",
+        message: `A(z) „${line.description}” tételnek nincs mennyiségi egysége (például db, óra, kg, alkalom). Add meg a tételnél, és utána állítsd ki.`,
+      };
     const amounts = szamlazzAmountsOfLine(line, row.currency);
     if (!amounts.ok)
       return {

@@ -118,6 +118,8 @@ export function finalLineOfQuoteItem(item: QuoteBasisItem): FinalDraftLine {
  * HONNAN JÖNNEK A VÉGSZÁMLA TÉTELEI (kártya 2650d371; barracuda #2639: fail-closed). Tiszta döntés, a szolgáltatás csak végrehajtja:
  *
  * - `PROFORMA`: nincs kötés, vagy a mérföldkő 100%-os (teljes ellenérték): a díjbekérő tételei, a mai viselkedés;
+ *   a 100%-os mérföldkőnél SZÁNDÉKOSAN: a díjbekérő kulcsonként egyszer kerekít, az ajánlat tételei tételenként, és a levonás után
+ *   a különbözet fillérre nem nulla (2 × 1001 Ft, 27%: előleg 2543, tételek 2542; barracuda #2847, acrobot 61431, kártya c37ea343);
  * - `QUOTE`: egy 100% alatti mérföldkő, és az ajánlatnak NINCS másik díjbekérős mérföldköve: az ajánlat teljes elfogadott tételei;
  * - `EMPTY`: több előleg-mérföldkő is van díjbekérővel: SEM a százalékos sor (az a nulla végszámla), SEM az ajánlat teljes tételei (a
  *   másik előleget kétszer számlázná): üres vázlat, a kezelő írja be a tételeket (mint előleg nélküli díjbekérőnél);
