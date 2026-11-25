@@ -1,3 +1,7 @@
+import {
+  AQUARIUM_LIST_SORT_FIELDS,
+  type AquariumListSortField,
+} from "@acropora/types";
 import { Type } from "class-transformer";
 import {
   IsArray,
@@ -177,6 +181,9 @@ export class AquariumListQueryDto {
   @IsString()
   @IsOptional()
   customerId?: string;
+  /** The sort column and direction (whitelist: `AQUARIUM_LIST_SORT_FIELDS`); without them the creation time, newest first. */
+  @IsIn(AQUARIUM_LIST_SORT_FIELDS) @IsOptional() sort?: AquariumListSortField;
+  @IsIn(["asc", "desc"]) @IsOptional() direction?: "asc" | "desc";
 }
 
 /**

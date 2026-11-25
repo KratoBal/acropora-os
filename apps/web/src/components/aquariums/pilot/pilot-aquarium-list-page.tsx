@@ -19,6 +19,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { aquariumsApi } from "@/lib/api/aquariums";
+import { sortFromParams, useUrlSort } from "@/lib/navigation/use-url-sort";
 import {
   ownershipLabel,
   WATER_BODY_LABEL,
@@ -51,6 +52,34 @@ type AquariumRow = AquariumListResponse["items"][number];
 
 export const AQUARIUM_TABLE_MIN_WIDTH = 1240;
 
+/** A lista rendezhető oszlopai: a táblázat oszlop-azonosítója -> a szerver rendezési mezeje (`AQUARIUM_LIST_SORT_FIELDS`). */
+export const AQUARIUM_SORT_COLUMNS = {
+  name: "name",
+  customer: "customerName",
+  liters: "systemVolumeLiters",
+} as const;
+
+/**
+ * A kérés az oldal URL-jéből. Az oldal az URL paramétereit továbbadja az API-nak, ezért a rendezés CSAK akkor marad benne, ha ismert
+ * mezőre és érvényes irányra szól: egy régi vagy kézzel írt link ne törje el a listát 400-zal.
+ */
+export function aquariumListQuery(params: URLSearchParams): URLSearchParams {
+  const q = new URLSearchParams(params.toString());
+  q.delete("sort");
+  q.delete("direction");
+  const sort = sortFromParams(params, AQUARIUM_SORT_COLUMNS);
+  if (sort) {
+    q.set(
+      "sort",
+      AQUARIUM_SORT_COLUMNS[sort.id as keyof typeof AQUARIUM_SORT_COLUMNS],
+    );
+    q.set("direction", sort.direction);
+  }
+  if (!q.has("page")) q.set("page", "1");
+  if (!q.has("pageSize")) q.set("pageSize", "25");
+  return q;
+}
+
 /*
   AZ AKVÁRIUMLISTA OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a tábla
   kártyalistává alakul: az akvárium neve a kártya címe (alatta a száma), a többi oszlop a felirata
@@ -60,6 +89,7 @@ export const AQUARIUM_TABLE_MIN_WIDTH = 1240;
 export const AQUARIUM_COLUMNS: PilotTableColumn<AquariumRow>[] = [
   {
     id: "name",
+    sortable: true,
     header: "Név",
     width: "200px",
     cell: (item) => (
@@ -83,6 +113,7 @@ export const AQUARIUM_COLUMNS: PilotTableColumn<AquariumRow>[] = [
   },
   {
     id: "customer",
+    sortable: true,
     header: "Ügyfél",
     width: "170px",
     cell: (item) => (
@@ -114,6 +145,7 @@ export const AQUARIUM_COLUMNS: PilotTableColumn<AquariumRow>[] = [
   },
   {
     id: "liters",
+    sortable: true,
     header: "Liter",
     width: "110px",
     align: "right",
@@ -204,12 +236,8 @@ export function PilotAquariumListPage() {
     session && hasPermission(session.user, PERMISSIONS.AQUARIUMS_MANAGE),
   );
   const token = session?.token ?? "";
-  const query = useMemo(() => {
-    const q = new URLSearchParams(params.toString());
-    if (!q.has("page")) q.set("page", "1");
-    if (!q.has("pageSize")) q.set("pageSize", "25");
-    return q;
-  }, [params]);
+  const { sort, onSort } = useUrlSort(AQUARIUM_SORT_COLUMNS);
+  const query = useMemo(() => aquariumListQuery(params), [params]);
   const load = useCallback(
     async (signal?: AbortSignal) => {
       if (!canView) return;
@@ -425,6 +453,8 @@ export function PilotAquariumListPage() {
           */}
           <div className="flex-1">
             <PilotDataTable
+              sort={sort}
+              onSort={onSort}
               columns={AQUARIUM_COLUMNS}
               rows={data.items}
               rowKey={(item) => item.id}
