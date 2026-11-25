@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -13,6 +14,7 @@ import {
   PilotSupplierListPage,
   SUPPLIER_COLUMNS,
   SUPPLIER_TABLE_MIN_WIDTH,
+  supplierListQuery,
 } from "./pilot-supplier-list-page";
 
 /**
@@ -244,5 +246,103 @@ describe("PilotSupplierListPage paging", () => {
     await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
     const target = String(navigation.replace.mock.calls.at(-1)?.[0]);
     expect(new URLSearchParams(target.split("?")[1]).get("page")).toBe("3");
+  });
+});
+
+/*
+  A LISTA RENDEZÉSE AZ OSZLOPFEJEN (Balázs kérése, kártya 2f6369a4). MI PIROSÍT: ha egy fejléc nem a saját szerver-mezőjét írja az URL-be
+  (a kód, a név, az ország, az ügyintéző); ha a ciklus (növekvő, csökkenő, alap) elakad; ha a rendezés nem nullázza a lapot, vagy
+  elveszíti a szűrőt; ha az URL rendezése nem jut a kérésbe, vagy egy ismeretlen mező (régi vagy kézzel írt link) igen (az API 400-at
+  adna, és az egész lista eltörne); ha az elérhetőség vagy a státusz oszlop rendezhetőnek látszik.
+*/
+describe("PilotSupplierListPage sorting", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.params = new URLSearchParams("page=3&kind=SERVICE");
+    navigation.replace.mockReset();
+    api.list.mockReset().mockResolvedValue(response(3));
+  });
+
+  const lastReplace = () =>
+    new URLSearchParams(
+      String(navigation.replace.mock.calls.at(-1)?.[0]).split("?")[1],
+    );
+
+  it("a header writes its own server field, ascending first, drops the page and keeps the filter", async () => {
+    render(<PilotSupplierListPage />);
+    await screen.findAllByTestId("supplier-row");
+    fireEvent.click(screen.getByRole("button", { name: /Ügyintéző/ }));
+    const url = lastReplace();
+    expect(url.get("sort")).toBe("contactPersonName");
+    expect(url.get("direction")).toBe("asc");
+    expect(url.has("page")).toBe(false);
+    expect(url.get("kind")).toBe("SERVICE");
+  });
+
+  it("each sortable header sends its own field", async () => {
+    render(<PilotSupplierListPage />);
+    await screen.findAllByTestId("supplier-row");
+    for (const [name, field] of [
+      ["Kód", "code"],
+      ["Név", "name"],
+      ["Ország", "country"],
+    ] as const) {
+      navigation.replace.mockReset();
+      fireEvent.click(screen.getByRole("button", { name }));
+      expect(lastReplace().get("sort"), name).toBe(field);
+    }
+  });
+
+  it("the second click is descending, the third clears the sort", async () => {
+    navigation.params = new URLSearchParams("sort=name&direction=asc");
+    render(<PilotSupplierListPage />);
+    await screen.findAllByTestId("supplier-row");
+    fireEvent.click(screen.getByRole("button", { name: /Név/ }));
+    expect(lastReplace().get("direction")).toBe("desc");
+
+    // a mock a címet csak értesítésre olvassa újra: az URL "megváltozott"
+    navigation.params = new URLSearchParams("sort=name&direction=desc");
+    act(() => {
+      for (const listener of navigation.listeners) listener();
+    });
+    navigation.replace.mockReset();
+    fireEvent.click(screen.getByRole("button", { name: /Név/ }));
+    expect(lastReplace().has("sort")).toBe(false);
+    expect(lastReplace().has("direction")).toBe(false);
+  });
+
+  it("the URL's sort reaches the request, and an unknown or incomplete one does not", async () => {
+    navigation.params = new URLSearchParams("sort=country&direction=desc");
+    render(<PilotSupplierListPage />);
+    await screen.findAllByTestId("supplier-row");
+    const sent = api.list.mock.calls.at(-1)?.[1] as URLSearchParams;
+    expect(sent.get("sort")).toBe("country");
+    expect(sent.get("direction")).toBe("desc");
+
+    for (const bad of [
+      "sort=email&direction=asc",
+      "sort=country",
+      "sort=country&direction=up",
+      "direction=asc",
+    ]) {
+      const query = supplierListQuery(new URLSearchParams(bad));
+      expect(query.has("sort"), bad).toBe(false);
+      expect(query.has("direction"), bad).toBe(false);
+    }
+    expect(
+      Object.fromEntries(
+        supplierListQuery(new URLSearchParams("kind=SERVICE")),
+      ),
+    ).toEqual({ kind: "SERVICE", page: "1", pageSize: "25" });
+  });
+
+  it("the contact reach and the state have no sort button", async () => {
+    render(<PilotSupplierListPage />);
+    const table = await screen.findByRole("table");
+    const sortable = within(table)
+      .getAllByRole("columnheader")
+      .filter((header) => within(header).queryByRole("button"))
+      .map((header) => header.textContent?.replace(/[⇅↑↓]/g, ""));
+    expect(sortable).toEqual(["Kód", "Név", "Ország", "Ügyintéző"]);
   });
 });

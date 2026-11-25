@@ -20,6 +20,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { suppliersApi } from "@/lib/api/suppliers";
+import { sortFromParams, useUrlSort } from "@/lib/navigation/use-url-sort";
 import {
   PilotBadge,
   PilotButton,
@@ -48,6 +49,7 @@ export const SUPPLIER_TABLE_MIN_WIDTH = 950;
 export const SUPPLIER_COLUMNS: PilotTableColumn<SupplierRow>[] = [
   {
     id: "code",
+    sortable: true,
     header: "Kód",
     width: "110px",
     cell: (item) => (
@@ -63,6 +65,7 @@ export const SUPPLIER_COLUMNS: PilotTableColumn<SupplierRow>[] = [
   },
   {
     id: "name",
+    sortable: true,
     header: "Név",
     width: "280px",
     phone: "title",
@@ -85,6 +88,7 @@ export const SUPPLIER_COLUMNS: PilotTableColumn<SupplierRow>[] = [
   },
   {
     id: "country",
+    sortable: true,
     header: "Ország",
     width: "130px",
     cell: (item) => (
@@ -98,6 +102,7 @@ export const SUPPLIER_COLUMNS: PilotTableColumn<SupplierRow>[] = [
   },
   {
     id: "contact",
+    sortable: true,
     header: "Ügyintéző",
     width: "150px",
     cell: (item) => (
@@ -157,6 +162,35 @@ export const SUPPLIER_COLUMNS: PilotTableColumn<SupplierRow>[] = [
  * a korábbi (nem pilot) `SupplierListPage` viszont a kártya tetején ÉS
  * alján is mutatta -- ez utóbbi itt megszűnt, a terv szerint.
  */
+/** A lista rendezhető oszlopai: a táblázat oszlop-azonosítója -> a szerver rendezési mezeje (`SUPPLIER_LIST_SORT_FIELDS`). */
+export const SUPPLIER_SORT_COLUMNS = {
+  code: "code",
+  name: "name",
+  country: "country",
+  contact: "contactPersonName",
+} as const;
+
+/**
+ * A kérés az oldal URL-jéből. Az oldal az URL paramétereit továbbadja az API-nak, ezért a rendezés CSAK akkor marad benne, ha ismert
+ * mezőre és érvényes irányra szól: egy régi vagy kézzel írt link ne törje el a listát 400-zal.
+ */
+export function supplierListQuery(params: URLSearchParams): URLSearchParams {
+  const q = new URLSearchParams(params.toString());
+  q.delete("sort");
+  q.delete("direction");
+  const sort = sortFromParams(params, SUPPLIER_SORT_COLUMNS);
+  if (sort) {
+    q.set(
+      "sort",
+      SUPPLIER_SORT_COLUMNS[sort.id as keyof typeof SUPPLIER_SORT_COLUMNS],
+    );
+    q.set("direction", sort.direction);
+  }
+  if (!q.has("page")) q.set("page", "1");
+  if (!q.has("pageSize")) q.set("pageSize", "25");
+  return q;
+}
+
 export function PilotSupplierListPage() {
   const { session } = useAuth();
   const router = useRouter();
@@ -173,12 +207,8 @@ export function PilotSupplierListPage() {
     session && hasPermission(session.user, PERMISSIONS.PARTNERS_MANAGE),
   );
   const token = session?.token ?? "";
-  const query = useMemo(() => {
-    const q = new URLSearchParams(params.toString());
-    if (!q.has("page")) q.set("page", "1");
-    if (!q.has("pageSize")) q.set("pageSize", "25");
-    return q;
-  }, [params]);
+  const { sort, onSort } = useUrlSort(SUPPLIER_SORT_COLUMNS);
+  const query = useMemo(() => supplierListQuery(params), [params]);
   const load = useCallback(
     async (signal?: AbortSignal) => {
       if (!canView) return;
@@ -326,6 +356,8 @@ export function PilotSupplierListPage() {
               <PilotCard className="overflow-x-auto">
                 <PilotDataTable
                   columns={SUPPLIER_COLUMNS}
+                  sort={sort}
+                  onSort={onSort}
                   rows={data.items}
                   rowKey={(item) => item.id}
                   rowTestId="supplier-row"
