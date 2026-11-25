@@ -8,9 +8,15 @@ import {
   Min,
   Max,
   Matches,
+  IsISO8601,
   IsIn,
   ValidateIf,
 } from "class-validator";
+import {
+  QUOTE_SORT_FIELDS,
+  type QuoteSortDirection,
+  type QuoteSortField,
+} from "../quote-list-order.js";
 import type {
   CreateQuoteFromTemplateInput,
   UpdateQuoteInput,
@@ -46,6 +52,18 @@ export class QuoteListQueryDto {
   @IsOptional() @IsIn(["1", "true", "0", "false"]) expired?: string;
   /** P8: the rejection or cancellation reason */
   @IsOptional() @IsIn(QUOTE_CLOSE_REASONS) closeReason?: QuoteCloseReasonValue;
+  /** The creation day, from and to (Budapest calendar days, both ends included); Luca, card 7e5d3658 */
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsISO8601({ strict: true })
+  createdFrom?: string;
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsISO8601({ strict: true })
+  createdTo?: string;
+  /** The sort column and direction (whitelist, `quoteListOrderBy`); server-side, because the list is paged */
+  @IsOptional() @IsIn(QUOTE_SORT_FIELDS) sort?: QuoteSortField;
+  @IsOptional() @IsIn(["asc", "desc"]) direction?: QuoteSortDirection;
 }
 export class QuoteHeaderDto implements UpdateQuoteInput {
   @ValidateIf((_o, v) => v !== undefined)

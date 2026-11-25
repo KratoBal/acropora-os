@@ -9,6 +9,12 @@ import type {
   UpdateQuoteInput,
 } from "@acropora/types";
 
+import { createdAtRange } from "./quote-created-range.js";
+import {
+  quoteListOrderBy,
+  type QuoteSortDirection,
+  type QuoteSortField,
+} from "./quote-list-order.js";
 import { expiredWhere } from "./quote-expiry.js";
 import { nextQuoteNumber } from "./quote-number.js";
 import type { TemplateBlock } from "./quote-editor-input.js";
@@ -44,6 +50,12 @@ export interface QuoteListFilter {
   status?: QuoteStatusValue;
   closeReason?: QuoteCloseReasonValue;
   expired?: boolean;
+  /** The creation day (Budapest, `YYYY-MM-DD`), both ends included (`createdAtRange`). */
+  createdFrom?: string;
+  createdTo?: string;
+  /** The column the list is sorted by and the direction (`quoteListOrderBy`); default: modified last first. */
+  sort?: QuoteSortField;
+  direction?: QuoteSortDirection;
 }
 export type QuoteListRow = Prisma.QuoteGetPayload<{
   select: typeof QUOTE_LIST_SELECT;
@@ -174,13 +186,14 @@ export class QuotesRepository {
       ...(filter.status ? { status: filter.status } : {}),
       ...(filter.closeReason ? { closeReason: filter.closeReason } : {}),
       ...(filter.expired ? { AND: [expiredWhere()] } : {}),
+      ...(createdAtRange(filter) ? { createdAt: createdAtRange(filter)! } : {}),
     };
     const [items, total] = await prisma.$transaction(
       [
         prisma.quote.findMany({
           where,
           select: QUOTE_LIST_SELECT,
-          orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+          orderBy: quoteListOrderBy(filter),
           skip: (page - 1) * pageSize,
           take: pageSize,
         }),
