@@ -1,4 +1,7 @@
 import {
+  commonServiceStateText,
+  commonServiceStateTone,
+  type CommonServiceState,
   type MyServiceWorkItem,
   type ServiceJobStatusValue,
   type WorksheetDisplayStatus,
@@ -31,13 +34,27 @@ export function serviceWorkKindLabel(item: MyServiceWorkItem): string {
     : "Munkalap";
 }
 
+/**
+ * A JEGY KÖZÖS ÁLLAPOTA (kártya 7f23785c), ha a szerver küldi: ugyanaz a szó és szín, mint a hibajegy-listán („Elkészült · aláírásra
+ * vár"). A tárolt állapotból itt nem vezetünk le semmit; régi válasznál a tárolt állapot neve áll.
+ */
+function jobCommonState(item: MyServiceWorkItem): CommonServiceState | null {
+  return item.kind === "SERVICE_JOB" && item.commonStatus
+    ? { status: item.commonStatus, reason: item.commonReason ?? null }
+    : null;
+}
+
 export function serviceWorkStatusLabel(item: MyServiceWorkItem): string {
+  const common = jobCommonState(item);
+  if (common) return commonServiceStateText(common);
   return item.kind === "SERVICE_JOB"
     ? serviceJobStatusLabel[item.status as ServiceJobStatusValue]
     : worksheetDisplayStatusLabel[item.status as WorksheetDisplayStatus];
 }
 
 export function serviceWorkStatusTone(item: MyServiceWorkItem): ServiceTone {
+  const common = jobCommonState(item);
+  if (common) return commonServiceStateTone(common);
   return item.kind === "SERVICE_JOB"
     ? serviceJobStatusTone(item.status as ServiceJobStatusValue)
     : worksheetDisplayStatusTone(item.status as WorksheetDisplayStatus);

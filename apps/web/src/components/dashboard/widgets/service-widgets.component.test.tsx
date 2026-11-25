@@ -30,6 +30,38 @@ describe("a szerviz-widgetek", () => {
     ).toBe("Nincs nyitott hibajegy.");
   });
 
+  /*
+    A KÖZÖS ÁLLAPOTOK (kártya 7f23785c): a sorok a szerver `commonCounts`-ából jönnek, a két várakozás a tárolt bontásból. A tárolt
+    IN_PROGRESS itt 5, a szerver ebből 2-t Elkészültnek mond: ha a csempe a tárolt bontást olvasná, „Folyamatban 5” állna, és
+    Elkészült nem.
+  */
+  it("a hibajegyek a közös állapotokban, az Elkészült külön sorban", () => {
+    const { Body } = serviceTicketsWidget;
+    render(
+      <Body
+        data={{
+          openCount: 9,
+          byStatus: {
+            NEW: 1,
+            IN_PROGRESS: 5,
+            WAITING_FOR_PARTS: 2,
+            WAITING_FOR_CUSTOMER: 1,
+          },
+          commonCounts: { NEW: 1, IN_PROGRESS: 3, WAITING: 3, DONE: 2 },
+          oldestOpenAt: null,
+        }}
+      />,
+    );
+    const sorok = screen.getAllByRole("listitem").map((sor) => sor.textContent);
+    expect(sorok).toEqual([
+      "Új1",
+      "Elkészült2",
+      "Vár valamire · alkatrészre2",
+      "Vár valamire · ügyfélre1",
+      "Folyamatban3",
+    ]);
+  });
+
   it("a munkalapok csak akkor üresek, ha egyik teendő sincs", () => {
     const none = {
       draft: 0,

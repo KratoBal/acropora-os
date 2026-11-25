@@ -67,6 +67,28 @@ describe("phase 4 helpers", () => {
     expect(contextSubtitle("SERVICE_JOB", null)).toBe("Hibajegyhez kapcsolva");
   });
 
+  /*
+    THE SHARED STATE (card 7f23785c): when the server sends it, the card says what the ticket list says; the stored IN_PROGRESS alone
+    would read Folyamatban. A maintenance sheet gets its own shared word too.
+  */
+  it("the server's shared state wins over the stored status, also on a maintenance sheet", () => {
+    expect(
+      contextStatusLabel({
+        ...card,
+        commonStatus: "DONE",
+        commonReason: "AWAITING_SIGNATURE",
+      }),
+    ).toBe("Elkészült · aláírásra vár");
+    expect(
+      contextStatusLabel({
+        ...card,
+        jobKind: "MAINTENANCE",
+        commonStatus: "CLOSED",
+        commonReason: null,
+      }),
+    ).toBe("Lezárt");
+  });
+
   it("status labels by kind; an unknown status is not shown raw", () => {
     expect(
       contextStatusLabel({ ...card, type: "WORKSHEET", status: "COMPLETED" }),

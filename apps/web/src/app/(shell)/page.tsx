@@ -2,7 +2,10 @@
 
 import { Alert, Icon, Skeleton, type IconName } from "@acropora/ui";
 import {
+  commonServiceStateText,
   worksheetStatusLabel,
+  type CommonServiceStatus,
+  type CommonServiceStatusReason,
   type DashboardActivity,
   type DashboardSummary,
 } from "@acropora/types";
@@ -101,10 +104,20 @@ function worksheetStatusText(status: string) {
     : status;
 }
 
-function ticketStatusText(status: string) {
-  return Object.hasOwn(serviceJobStatusLabel, status)
-    ? serviceJobStatusLabel[status as keyof typeof serviceJobStatusLabel]
-    : status;
+/** A jegy közös állapota (kártya 7f23785c), ha a szerver küldi; régi válasznál a tárolt állapot neve. */
+function ticketStatusText(item: {
+  status: string;
+  commonStatus?: CommonServiceStatus;
+  commonReason?: CommonServiceStatusReason | null;
+}) {
+  if (item.commonStatus)
+    return commonServiceStateText({
+      status: item.commonStatus,
+      reason: item.commonReason ?? null,
+    });
+  return Object.hasOwn(serviceJobStatusLabel, item.status)
+    ? serviceJobStatusLabel[item.status as keyof typeof serviceJobStatusLabel]
+    : item.status;
 }
 
 /**
@@ -351,7 +364,7 @@ export function DashboardCards({ summary }: { summary: DashboardSummary }) {
                           </span>
                         </Link>
                         <PilotBadge variant="grey">
-                          {ticketStatusText(item.status)}
+                          {ticketStatusText(item)}
                         </PilotBadge>
                       </li>
                     ))}
