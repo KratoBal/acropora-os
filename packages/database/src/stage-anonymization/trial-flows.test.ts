@@ -15,7 +15,7 @@ import { runTrialFlows } from "./trial-flows.js";
   `discountPercent`, a POS line with a `variantId` key, an issue without the draft's own `updatedAt`, a ticket without its
   department); a step that fails but is not named, or whose dependents vanish instead of being reported; a token, the password or the
   body of a server error in a check name; a trial that passes when an answer is not the one it expects (not ISSUED, no TESZT number,
-  not TRIAGED).
+  not IN_PROGRESS).
 */
 const PASSWORD = "stage-jelszo-nem-igazi-1"; // scan-secrets: allow (an invented test string, not a credential)
 let api: FakeApi;
@@ -120,7 +120,7 @@ describe("a trial against an API that answers as the code was read to", () => {
     assert.equal(job.customerId, "cust-1");
     assert.equal(job.departmentId, "dep-1");
     assert.deepEqual(sent("POST", "/service/jobs/job-1/move")!.body, {
-      to: "TRIAGED",
+      to: "IN_PROGRESS",
     });
   });
 
@@ -187,7 +187,7 @@ describe("a trial against an API that does not answer as expected", () => {
     assert.equal(api.requests.length, 1, "nothing else was called");
   });
 
-  it("does not take an answer that is not the expected one for a pass (not ISSUED, a real invoice number, not TRIAGED, a draft that is not a draft)", async () => {
+  it("does not take an answer that is not the expected one for a pass (not ISSUED, a real invoice number, not IN_PROGRESS, a draft that is not a draft)", async () => {
     const cases: [string, number, unknown, string][] = [
       [
         "POST /billing/documents/inv-1/issue",
@@ -207,7 +207,12 @@ describe("a trial against an API that does not answer as expected", () => {
         { status: "ISSUED", documentNumber: "TESZT-2026-0a1b2c3d" },
         "not a stub",
       ],
-      ["POST /service/jobs/job-1/move", 201, { status: "NEW" }, "not TRIAGED"],
+      [
+        "POST /service/jobs/job-1/move",
+        201,
+        { status: "NEW" },
+        "not IN_PROGRESS",
+      ],
       [
         "GET /service/worksheets/ws-1",
         200,
