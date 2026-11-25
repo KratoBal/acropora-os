@@ -77,6 +77,16 @@ export interface UserDetail extends UserSummary {
 
 export type UserStatusFilter = "ACTIVE" | "INACTIVE" | "ALL";
 
+/**
+ * A FELHASZNÁLÓK LISTÁJÁNAK RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4). A lista lapozott, ezért a rendezés a szerveren
+ * történik. KÉT OSZLOP rendezhető: a név és az e-mail. A "Név" oszlop a becenevet írja ki, ha van, különben a megjelenítendő nevet;
+ * a rendezés a MEGJELENÍTENDŐ NÉV szerint áll, tehát a beceneves felhasználó a megjelenítendő neve helyén áll, nem a kiírt becenév
+ * helyén (a becenév nem külön tárolt, rendezhető mező). Nem rendezhető: a "Szerepkör" (a kijelzett felirat nem az enum sorrendje), a
+ * "Státusz" (kétállapotú jelző, szűrője van) és a "Jelszó". Az alap sorrend a vezetéknév, a keresztnév, az azonosító.
+ */
+export const USER_LIST_SORT_FIELDS = ["displayName", "email"] as const;
+export type UserListSortField = (typeof USER_LIST_SORT_FIELDS)[number];
+
 export interface UserListResponse {
   items: UserSummary[];
   pagination: {
