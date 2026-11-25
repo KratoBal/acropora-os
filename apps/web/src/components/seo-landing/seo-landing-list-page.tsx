@@ -16,9 +16,11 @@ import {
   type SeoLandingPage,
 } from "@acropora/types";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { seoLandingPagesApi } from "@/lib/api/seo-landing-pages";
+import { sortRows, type RowGetters } from "@/lib/navigation/sort-rows";
+import { useUrlSort } from "@/lib/navigation/use-url-sort";
 
 export const SEO_LANDING_LIST_PATH = "/admin/valogatasok";
 
@@ -32,6 +34,7 @@ export const SEO_LANDING_TABLE_MIN_WIDTH = 640;
 export const SEO_LANDING_COLUMNS: PilotTableColumn<SeoLandingPage>[] = [
   {
     id: "title",
+    sortable: true,
     header: "Válogatás",
     cell: (page) => (
       <Link
@@ -44,6 +47,7 @@ export const SEO_LANDING_COLUMNS: PilotTableColumn<SeoLandingPage>[] = [
   },
   {
     id: "slug",
+    sortable: true,
     header: "Cím a webshopban",
     width: "240px",
     cell: (page) => (
@@ -52,6 +56,7 @@ export const SEO_LANDING_COLUMNS: PilotTableColumn<SeoLandingPage>[] = [
   },
   {
     id: "status",
+    sortable: true,
     header: "Állapot",
     width: "130px",
     cell: (page) => (
@@ -62,12 +67,31 @@ export const SEO_LANDING_COLUMNS: PilotTableColumn<SeoLandingPage>[] = [
   },
   {
     id: "updated",
+    sortable: true,
     header: "Frissítve",
     width: "130px",
     nowrap: true,
     cell: (page) => new Date(page.updatedAt).toLocaleDateString("hu-HU"),
   },
 ];
+
+/**
+ * A LISTA RENDEZÉSE (Balázs kérése, kártya 2f6369a4): a lista minden válogatást betölt, ezért a böngészőben rendezünk. A táblázat
+ * oszlop-azonosítója -> az URL rendezési kulcsa; az "Állapot" a közzétett jelző szerint rendez (a vázlat előbb), a "Frissítve" időként.
+ */
+export const SEO_LANDING_SORT_COLUMNS = {
+  title: "title",
+  slug: "slug",
+  status: "status",
+  updated: "updated",
+} as const;
+
+export const SEO_LANDING_SORT_GETTERS: RowGetters<SeoLandingPage> = {
+  title: (page) => page.title,
+  slug: (page) => page.slug,
+  status: (page) => (page.isPublished ? 1 : 0),
+  updated: (page) => new Date(page.updatedAt),
+};
 
 /**
  * THE SEO LANDING PAGES (SEO P1-14): each one a curated product list at
@@ -85,6 +109,11 @@ export function SeoLandingListPage() {
   );
   const [pages, setPages] = useState<SeoLandingPage[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { sort, onSort } = useUrlSort(SEO_LANDING_SORT_COLUMNS);
+  const sortedPages = useMemo(
+    () => (pages ? sortRows(pages, sort, SEO_LANDING_SORT_GETTERS) : pages),
+    [pages, sort],
+  );
 
   useEffect(() => {
     if (!canView) return;
@@ -143,7 +172,9 @@ export function SeoLandingListPage() {
         <PilotCard>
           <PilotDataTable
             columns={SEO_LANDING_COLUMNS}
-            rows={pages}
+            sort={sort}
+            onSort={onSort}
+            rows={sortedPages ?? []}
             rowKey={(page) => page.id}
             rowTestId="seo-landing-row"
             minWidth={SEO_LANDING_TABLE_MIN_WIDTH}

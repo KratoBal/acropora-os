@@ -9,6 +9,10 @@ import type { PilotTableSort } from "@acropora/ui";
  * (`null`, `undefined`) MINDKÉT irányban a végén áll; a számok számként, a napok időként, a szövegek a magyar ábécé szerint
  * (a számjegyek számként: "N-2" a "N-10" előtt, az ékezetes betű a sima mellett); az egyenlő sorok az eddigi sorrendjüket tartják (stabil), így a lista
  * "alap" (nincs rendezés) sorrendje is az, ahogy a lap kapta.
+ *
+ * PÉNZÖSSZEG CSAK `Number()`-REL MEHET BE getterként (barracuda, #2862 review). Ami SZÖVEGKÉNT érkezik, az a numerikus kollátorhoz kerül, az pedig
+ * a tizedesrészt egész számként, a mínuszjelet írásjelként kezeli: a "10.5" és a "10.25", vagy egy negatív jóváírás rossz sorrendet kapna. A
+ * decimális szöveg-összegnél a getter `Number(row.osszeg)`, nem `row.osszeg`.
  */
 export type SortValue = string | number | Date | null | undefined;
 export type RowGetters<Row> = Readonly<Record<string, (row: Row) => SortValue>>;
