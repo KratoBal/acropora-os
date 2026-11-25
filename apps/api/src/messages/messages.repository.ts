@@ -6,6 +6,7 @@ import type { PartnerScope } from "../auth/partner-scope.util.js";
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
 import { serviceJobVisibilityWhere } from "../service-jobs/service-job-visibility.js";
+import { commonJobStates } from "../service-jobs/common-job-states.js";
 
 /**
  * AZ ÜZENETEK ADATELÉRÉSE (kártya 51d7aba0). A jogosultságot nem ez dönti el:
@@ -425,6 +426,15 @@ export class MessagesRepository extends Repository {
       where: { id: { in: [...ids] } },
       select: { id: true, kind: true },
     });
+  }
+
+  /** A kártya jegyének közös állapota (kártya 7f23785c), ugyanúgy, mint a hibajegy-listán. */
+  async commonStateOfJob(job: {
+    id: string;
+    status: Parameters<typeof commonJobStates>[1][number]["status"];
+    kind: "REPAIR" | "MAINTENANCE";
+  }) {
+    return (await commonJobStates(this.database, [job])).get(job.id) ?? null;
   }
 
   serviceJobForContext(id: string) {

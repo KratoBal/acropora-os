@@ -13,6 +13,7 @@ import {
   assetVisibilityForAndBranch,
   type PartnerScope,
 } from "../auth/partner-scope.util.js";
+import { commonStatusWhere } from "../service-jobs/common-status-where.js";
 import { serviceJobVisibilityWhere } from "../service-jobs/service-job-visibility.js";
 import { worksheetListWheres } from "../worksheets/worksheets.repository.js";
 import { budapestDayKey, startOfBudapestDay } from "./budapest-day.js";
@@ -74,7 +75,10 @@ export class DashboardServiceWidgetsRepository extends Repository {
         OPEN_TICKET,
       ],
     };
-    const [groups, oldest] = await Promise.all([
+    // the open tickets in the shared states (card 7f23785c): the same condition as the ticket list's counts, so the derived Elkészült
+    // (a part of the stored IN_PROGRESS) is counted the way the list counts it
+    const shared = ["NEW", "IN_PROGRESS", "WAITING", "DONE"] as const;
+    const [groups, oldest, ...sharedCounts] = await Promise.all([
       this.database.serviceJob.groupBy({
         by: ["status"],
         where,
@@ -85,6 +89,11 @@ export class DashboardServiceWidgetsRepository extends Repository {
         orderBy: { createdAt: "asc" },
         select: { createdAt: true },
       }),
+      ...shared.map((status) =>
+        this.database.serviceJob.count({
+          where: { AND: [where, commonStatusWhere(status)] },
+        }),
+      ),
     ]);
     const byStatus: DashboardServiceTicketsWidgetData["byStatus"] = {};
     let openCount = 0;
@@ -99,6 +108,12 @@ export class DashboardServiceWidgetsRepository extends Repository {
     return {
       openCount,
       byStatus,
+      commonCounts: {
+        NEW: sharedCounts[0] ?? 0,
+        IN_PROGRESS: sharedCounts[1] ?? 0,
+        WAITING: sharedCounts[2] ?? 0,
+        DONE: sharedCounts[3] ?? 0,
+      },
       oldestOpenAt: oldest ? oldest.createdAt.toISOString() : null,
     };
   }

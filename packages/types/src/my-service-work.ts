@@ -1,3 +1,7 @@
+import type {
+  CommonServiceStatus,
+  CommonServiceStatusReason,
+} from "./common-service-status.js";
 import type { ServiceJobStatusValue } from "./service-job-management.js";
 import type { WorksheetVersionStatus } from "./worksheet-management.js";
 
@@ -40,6 +44,12 @@ export interface MyServiceWorkItem {
   number: string | null;
   /** Hibajegynél a `ServiceJobStatusValue`, munkalapnál a `WorksheetDisplayStatus`. */
   status: string;
+  /**
+   * A KÖZÖS ÁLLAPOT ÉS AZ OKA (kártya 7f23785c, a közös szótár a lista és az adatlap után): a szerver vezeti le a tárolt állapotból és a
+   * munkalapok tényeiből, ugyanúgy, mint a hibajegy-listán. Csak `SERVICE_JOB` tételen; opcionális: a régi válasz és a fixtúrák nélküle épülnek.
+   */
+  commonStatus?: CommonServiceStatus;
+  commonReason?: CommonServiceStatusReason | null;
   /** Hibajegynél a cím; munkalapnál `null`. */
   title: string | null;
   /** A partner és a helyszín, ahogy a listák mutatják. */

@@ -80,12 +80,18 @@ describe("Nyitott hibajegyek", () => {
         { status: "IN_PROGRESS", _count: { _all: 0 } },
       ],
       "serviceJob.findFirst": { createdAt: new Date("2026-09-20T08:00:00Z") },
+      // the shared states are counted in the order NEW, IN_PROGRESS, WAITING, DONE
+      "serviceJob.count": (() => {
+        const answers = [2, 0, 1, 0];
+        return () => answers.shift();
+      })(),
     });
     const data = await repository.serviceTickets(customer);
 
     assert.deepEqual(data, {
       openCount: 3,
       byStatus: { NEW: 2, WAITING_FOR_PARTS: 1 },
+      commonCounts: { NEW: 2, IN_PROGRESS: 0, WAITING: 1, DONE: 0 },
       oldestOpenAt: "2026-09-20T08:00:00.000Z",
     });
     const where = json(
@@ -108,6 +114,19 @@ describe("Nyitott hibajegyek", () => {
       /"kind":"REPAIR"/,
       "a maintenance sheet is no ticket and must not be counted (acrobot 56109)",
     );
+    /*
+      THE SHARED COUNTS ARE NARROWED BY THE SAME OPEN, VISIBLE, REPAIR FILTER (card 7f23785c): each count is that filter AND the list's
+      shared-state condition. Without the filter a hidden or another partner's ticket would be counted as Elkészült.
+    */
+    const counts = calls.filter((c) => c.method === "count");
+    assert.equal(counts.length, 4);
+    for (const call of counts) {
+      const countWhere = json((call.args as { where: unknown }).where);
+      assert.ok(
+        countWhere.includes(where),
+        "the open filter must narrow the shared count",
+      );
+    }
     // the oldest one is read with the same filter
     assert.equal(
       json(
@@ -129,6 +148,8 @@ describe("Nyitott hibajegyek", () => {
     assert.deepEqual(await repository.serviceTickets(internal), {
       openCount: 0,
       byStatus: {},
+      // the proxy answers nothing to the counts: a missing number is zero, not undefined
+      commonCounts: { NEW: 0, IN_PROGRESS: 0, WAITING: 0, DONE: 0 },
       oldestOpenAt: null,
     });
   });

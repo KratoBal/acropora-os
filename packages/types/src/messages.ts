@@ -4,6 +4,10 @@
  */
 
 import type { UserRole } from "./auth.js";
+import type {
+  CommonServiceStatus,
+  CommonServiceStatusReason,
+} from "./common-service-status.js";
 
 export type ConversationTypeValue = "DIRECT" | "GROUP";
 export type ConversationAudienceValue = "INTERNAL" | "PARTNER";
@@ -131,6 +135,12 @@ export interface ConversationContextCard {
    * `ServiceJobStatusValue`; a feliratot a kliens adja.
    */
   status: string | null;
+  /**
+   * A KÖZÖS ÁLLAPOT ÉS AZ OKA (kártya 7f23785c, a közös szótár a lista és az adatlap után): a szerver vezeti le a tárolt állapotból és a
+   * munkalapok tényeiből, ugyanúgy, mint a hibajegy-listán. Csak `SERVICE_JOB` kártyán, és csak annak, aki a szervizt látja; opcionális: a régi válasz és a fixtúrák nélküle épülnek.
+   */
+  commonStatus?: CommonServiceStatus | null;
+  commonReason?: CommonServiceStatusReason | null;
   createdAt: string | null;
   restricted: boolean;
   /**

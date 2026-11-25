@@ -199,6 +199,8 @@ function fake() {
         ? { id, jobNumber: "HJ-2026-007", customer: { displayName: "FANK" } }
         : null;
     },
+    // the shared state of the card's job (card 7f23785c): this suite does not look at it
+    commonStateOfJob: async () => null,
     serviceJobForContext: async (id: string) =>
       id === "job1" || id === "job-karb"
         ? {

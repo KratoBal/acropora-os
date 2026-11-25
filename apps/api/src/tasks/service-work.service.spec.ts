@@ -76,6 +76,8 @@ const service = (rows: {
   open?: unknown[];
   closed?: unknown[];
   sheets?: unknown[];
+  /** the shared state per job id (card 7f23785c); missing: none, as an older server */
+  common?: Record<string, { status: string; reason: string | null }>;
 }) => {
   const asked: { closed: boolean }[] = [];
   const repository = {
@@ -84,6 +86,7 @@ const service = (rows: {
       return (closed ? rows.closed : rows.open) ?? [];
     },
     worksheets: async () => rows.sheets ?? [],
+    commonStates: async () => new Map(Object.entries(rows.common ?? {})),
   };
   return {
     asked,
@@ -92,6 +95,31 @@ const service = (rows: {
 };
 
 describe("the service view of Feladataim", () => {
+  /*
+    THE SHARED STATE GOES OUT ON THE JOB, NOT ON THE SHEET (card 7f23785c): the server reads it in one batch with the list's rule
+    (`commonJobStates`), and the item carries it next to the stored status. The first job is stored IN_PROGRESS and its common state is
+    Elkészült: a client that read the stored status would say Folyamatban. A sheet has its own display status and gets no common field.
+  */
+  it("a job carries its shared state from the server, a sheet none", async () => {
+    const { service: s } = service({
+      open: [jobRow("HJ-kesz", "IN_PROGRESS"), jobRow("HJ-uj", "NEW")],
+      sheets: [sheetRow("M-piszkozat", "DRAFT")],
+      common: {
+        "HJ-kesz": { status: "DONE", reason: "AWAITING_SIGNATURE" },
+        "HJ-uj": { status: "NEW", reason: null },
+      },
+    });
+    const result = await s.list(tech, "OPEN", now);
+    const items = [...result.mine, ...result.others];
+    const byId = new Map(items.map((item) => [item.id, item]));
+    assert.deepEqual(
+      [byId.get("HJ-kesz")?.commonStatus, byId.get("HJ-kesz")?.commonReason],
+      ["DONE", "AWAITING_SIGNATURE"],
+    );
+    assert.equal(byId.get("HJ-uj")?.commonStatus, "NEW");
+    assert.equal("commonStatus" in byId.get("M-piszkozat")!, false);
+  });
+
   it("sorts the open jobs and sheets into yours and someone else's, as the blueprint does", async () => {
     const { service: s } = service({
       open: [

@@ -5,7 +5,10 @@ import type {
   ServiceJobStatusValue,
   WorksheetDisplayStatus,
 } from "@acropora/types";
-import { worksheetDisplayStatusLabel } from "@acropora/types";
+import {
+  commonServiceStateText,
+  worksheetDisplayStatusLabel,
+} from "@acropora/types";
 
 import { serviceJobStatusLabel } from "@/components/service-jobs/service-job-labels";
 
@@ -58,6 +61,12 @@ export function contextStatusLabel(
   card: ConversationContextCard,
 ): string | null {
   if (!card.status) return null;
+  // a jegy közös állapota (kártya 7f23785c), ha a szerver küldi: a karbantartási lapé is (Lezárt / Folyamatban, a saját szabályával)
+  if (card.type === "SERVICE_JOB" && card.commonStatus)
+    return commonServiceStateText({
+      status: card.commonStatus,
+      reason: card.commonReason ?? null,
+    });
   // a karbantartási lapnak nincs hibajegy-állapota (Balázs, 2026-11-18 11:31 UTC): a kártya nem mond "Új"-at róla
   if (card.type === "SERVICE_JOB" && card.jobKind === "MAINTENANCE")
     return null;

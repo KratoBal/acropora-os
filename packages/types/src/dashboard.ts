@@ -1,3 +1,8 @@
+import type {
+  CommonServiceStatus,
+  CommonServiceStatusReason,
+} from "./common-service-status.js";
+
 /**
  * The home page is assembled from independently authorised blocks. Optional
  * keys are intentional: an omitted key means the caller may not see that
@@ -41,6 +46,12 @@ export interface DashboardTicket {
   number: string;
   title: string;
   status: string;
+  /**
+   * A KÖZÖS ÁLLAPOT ÉS AZ OKA (kártya 7f23785c, a közös szótár a lista és az adatlap után): a szerver vezeti le a tárolt állapotból és a
+   * munkalapok tényeiből, ugyanúgy, mint a hibajegy-listán. Opcionális: a régi válasz és a fixtúrák nélküle épülnek.
+   */
+  commonStatus?: CommonServiceStatus;
+  commonReason?: CommonServiceStatusReason | null;
   createdAt: string;
 }
 
