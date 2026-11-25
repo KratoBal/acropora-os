@@ -241,7 +241,7 @@ export function PilotWorksheetEditorPage({
               <PilotCardHeader title="Hozzárendelés" />
               <div className="px-5 py-2">
                 <PilotDataRow label="Partner" value={customerName} />
-                <PilotDataRow label="Alegység" value={departmentLabel} />
+                <PilotDataRow label="Helyszín" value={departmentLabel} />
               </div>
             </PilotCard>
 

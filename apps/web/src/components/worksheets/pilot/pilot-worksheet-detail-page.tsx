@@ -647,7 +647,7 @@ export function PilotWorksheetDetailPage({
             <div className="px-5 py-2">
               {fieldRow("Partner", worksheet.customer.displayName)}
               {fieldRow(
-                "Alegység",
+                "Helyszín",
                 worksheet.department.path?.length
                   ? worksheet.department.path.join(" / ")
                   : `${worksheet.department.code}: ${current.unitName ?? "—"}`,
