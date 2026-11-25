@@ -143,8 +143,11 @@ export const SUPPLIER_COLUMNS: PilotTableColumn<SupplierRow>[] = [
  */
 export function supplierColumnsFor(
   items: readonly SupplierRow[],
+  /** A rendezett oszlop azonosítója: ha éppen a kapcsolattartóra rendez a lista, az oszlop marad (a rendezés-jelzővel), különben a felhasználó nem látná, mi szerint áll a lista (barracuda, #2913). */
+  sortedBy?: string | null,
 ): PilotTableColumn<SupplierRow>[] {
   const noneHasContact =
+    sortedBy !== "contact" &&
     items.length > 0 &&
     items.every(
       (item) => !item.contactPersonName && !item.email && !item.phone,
@@ -285,7 +288,7 @@ export function PilotSupplierListPage() {
       </PilotThemeRoot>
     );
 
-  const tableColumns = supplierColumnsFor(data?.items ?? []);
+  const tableColumns = supplierColumnsFor(data?.items ?? [], sort?.id);
 
   return (
     <PilotThemeRoot bleed>
