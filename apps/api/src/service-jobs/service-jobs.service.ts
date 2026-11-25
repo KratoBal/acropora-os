@@ -23,7 +23,7 @@ import {
 } from "./description-edit-boundary.js";
 import { mayAssignUnit } from "./visibility-assignment.js";
 import { serviceJobNoun } from "./service-job-noun.js";
-import { commonFields, needsWorksheetFacts } from "./common-status-where.js";
+import { needsWorksheetFacts, statusFields } from "./common-status-where.js";
 
 import {
   commonJobStatus,
@@ -55,10 +55,6 @@ import {
   nextServiceJobNumber,
   serviceJobNumberPrefix,
 } from "./service-job-number.js";
-import {
-  partnerStatusLabel,
-  partnerVisibleStatus,
-} from "./service-job-status.js";
 import { mayWorksheetJoinTicket } from "../common/worksheet-under-ticket.js";
 import { sumWorksheetLaborHours } from "../worksheets/worksheet-labor.js";
 import {
@@ -1272,11 +1268,10 @@ export class ServiceJobsService {
       title: row.title,
       kind: row.kind,
       status: row.status,
-      ...commonFields(
+      // the partner's four words come from the same derived state (card 7f23785c, slice 4)
+      ...statusFields(
         commonJobStatus(row.status, facts.get(row.id) ?? [], row.kind),
       ),
-      partnerStatus: partnerVisibleStatus(row.status),
-      partnerStatusLabel: partnerStatusLabel(row.status),
       customerName: row.customerName,
       reporterPersonName: row.reporterPersonName ?? null,
       reporterName: row.reporterName ?? null,
@@ -1412,7 +1407,7 @@ export class ServiceJobsService {
        */
       hidden: row.hiddenAt !== null,
       status: row.status,
-      ...commonFields(
+      ...statusFields(
         commonJobStatus(
           row.status,
           needsWorksheetFacts(row)
@@ -1423,8 +1418,6 @@ export class ServiceJobsService {
           row.kind,
         ),
       ),
-      partnerStatus: partnerVisibleStatus(row.status),
-      partnerStatusLabel: partnerStatusLabel(row.status),
       customerName: row.customer?.displayName ?? null,
       customerId: row.customerId,
       departmentId: row.departmentId,

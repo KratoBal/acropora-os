@@ -105,7 +105,10 @@ describe("a karbantartás menüpont bekötése a partner portálon", () => {
     const lap = kod(ADATLAP);
     assert.match(lap, /maintenance \? null : <TicketConversation/);
     assert.match(lap, /worksheets\.length === 0 && !maintenance/);
-    assert.match(lap, /!maintenance && ticket\.partnerStatus === "COMPLETED"/);
+    assert.match(
+      lap,
+      /!maintenance &&\s*ticket\.partnerStatus === "CLOSED" &&\s*!ticket\.partnerClosedReason/,
+    );
     assert.match(
       lap,
       /router\.replace\(ticketHref\(ticket\.kind, ticket\.id\)\)/,
