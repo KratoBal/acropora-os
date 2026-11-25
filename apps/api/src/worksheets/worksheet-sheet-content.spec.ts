@@ -218,6 +218,17 @@ describe("a nyomtatott munkalap tartalma", () => {
     assert.match(szoveg(sheet()), /Partner: Fánk Kft\. \(VEVO-A\)/);
   });
 
+  it("a helyszín sora Helyszín címkét visel, nem Alegységet, és a kód a név mellett áll", () => {
+    // one concept, one word (acrobot, 2026-11-25): the partner reads this paper too
+    const sorok = worksheetSheetLines(sheet());
+    assert.ok(
+      sorok.some(
+        (sor) => sor.includes("Helyszín") && sor.includes("Biodóm (BIO)"),
+      ),
+    );
+    assert.doesNotMatch(szoveg(sheet()), /Alegység/);
+  });
+
   it("vevőkód nélkül a partner sora NEM visel üres zárójelet", () => {
     /*
       MI PIROSÍT: egy feltétel nélküli behelyettesítés. Akkor a lapon
