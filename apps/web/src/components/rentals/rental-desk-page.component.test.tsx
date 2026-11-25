@@ -307,6 +307,74 @@ describe("RentalDeskPage", () => {
     expect(api.contractPdf).toHaveBeenCalledWith("token-1", "r-1");
   });
 
+  // the dusk `Input` wraps its input in a label of its own: the field's label is the OUTERMOST label above the control
+  const outerLabel = (control: HTMLElement): HTMLElement => {
+    let found: HTMLElement | null = null;
+    for (let node = control.parentElement; node; node = node.parentElement)
+      if (node.tagName === "LABEL") found = node;
+    return found!;
+  };
+
+  /*
+    A KÖTELEZŐ ÉS A NEM KÖTELEZŐ MEZŐ JELÖLÉSE (Picasso 3.14): MI PIROSÍT: ha egy kötelező mező csillag és "kötelező" nélkül marad, vagy egy nem kötelező a
+    "(nem kötelező)" nélkül; ha a jelölés nem azt mondja, amit a `rentalRequest` megkövetel (a két lista egy helyen, a próbában kapcsolva).
+  */
+  it("marks every required field with the star and every optional one with '(nem kötelező)', as the request requires", async () => {
+    render(<RentalDeskPage now={() => NOW} />);
+    await screen.findByRole("option", { name: /Ozmózis víztisztító/ });
+    const REQUIRED: [string, keyof RentalForm | null][] = [
+      ["Eszköz", "equipmentId"],
+      ["Név", "name"],
+      ["Telefon", "phone"],
+      ["E-mail", "email"],
+      ["Irányítószám", "postalCode"],
+      ["Város", "city"],
+      ["Utca, házszám", "line1"],
+      ["Kezdés", "startsAt"],
+      ["Tervezett visszahozás", "plannedReturnAt"],
+    ];
+    for (const [label, key] of REQUIRED) {
+      const control = screen.getByLabelText(label);
+      expect(control.getAttribute("aria-required"), label).toBe("true");
+      const text = outerLabel(control).textContent ?? "";
+      expect(text, label).toContain("*");
+      expect(text, label).toContain("(kötelező)");
+      expect(text, label).not.toContain("(nem kötelező)");
+      // ... and the request really refuses the form without it (the typed form is otherwise complete)
+      expect(rentalRequest({ ...typed, [key!]: "" }, null).ok, label).toBe(
+        false,
+      );
+    }
+    for (const [label, key] of [
+      ["Kaució (Ft)", "depositHuf"],
+      ["Megjegyzés", "note"],
+    ] as const) {
+      const control = screen.getByLabelText(label);
+      expect(control.getAttribute("aria-required"), label).not.toBe("true");
+      const text = outerLabel(control).textContent ?? "";
+      expect(text, label).toContain("(nem kötelező)");
+      expect(text, label).not.toContain("*");
+      expect(rentalRequest({ ...typed, [key]: "" }, null).ok, label).toBe(true);
+    }
+  });
+
+  it("a chosen existing renter takes the renter fields away, so their stars go with them", async () => {
+    render(<RentalDeskPage now={() => NOW} />);
+    await screen.findByRole("option", { name: /Ozmózis víztisztító/ });
+    fireEvent.change(screen.getByLabelText("Telefon"), {
+      target: { value: "+36 30 123 4567" },
+    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Ezt választom" }),
+    );
+    expect(screen.queryByLabelText("Név")).toBeNull();
+    expect(screen.queryByLabelText("Város")).toBeNull();
+    // the device and the times stay required
+    expect(screen.getByLabelText("Eszköz").getAttribute("aria-required")).toBe(
+      "true",
+    );
+  });
+
   it("marks an overdue rental", async () => {
     openListIs({
       items: [rental("2026-11-05T09:00:00.000Z")],

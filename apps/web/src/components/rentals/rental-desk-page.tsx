@@ -40,6 +40,37 @@ import { RentalReturnedList } from "./rental-returned-list";
  * existing customer register; while the desk types the name, phone or e-mail, matching customers are offered, so a returning
  * renter is not written twice. A device out is taken back from its row (S4): the panel settles the fee and the deposit.
  */
+/**
+ * A KÖTELEZŐ ÉS A NEM KÖTELEZŐ MEZŐ JELÖLÉSE (Picasso 3.14, acrobot): ugyanaz a két jel, mint az új hibajegy, munkalap és karbantartás űrlapokon: a kötelező mező
+ * címkéje után piros csillag (a felolvasónak "kötelező"), a nem kötelezőé után szürkén "(nem kötelező)". A felirat szövege az `aria-label`-ben változatlan
+ * marad, a kötelezőséget az `aria-required` mondja ki. A mezők kötelezősége a `rentalRequest` szabálya: ez a felirat nem új szabály, csak kimondja.
+ */
+function FieldLabel({
+  text,
+  requirement,
+}: {
+  text: string;
+  requirement: "required" | "optional";
+}) {
+  return (
+    <span className="text-sm font-medium text-dusk-700">
+      {text}
+      {requirement === "required" ? (
+        <>
+          <span aria-hidden="true" className="text-red-600">
+            *
+          </span>
+          <span className="sr-only"> (kötelező)</span>
+        </>
+      ) : (
+        <span className="ml-1.5 text-xs font-normal text-dusk-400">
+          (nem kötelező)
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function RentalDeskPage({
   now = () => new Date(),
 }: {
@@ -192,12 +223,20 @@ export function RentalDeskPage({
   const field = (
     key: keyof RentalForm,
     label: string,
-    options: { type?: string; inputMode?: "numeric" | "tel" | "email" } = {},
+    options: {
+      type?: string;
+      inputMode?: "numeric" | "tel" | "email";
+      requirement?: "required" | "optional";
+    } = {},
   ) => (
     <label className="block space-y-1">
-      <span className="text-sm font-medium text-dusk-700">{label}</span>
+      <FieldLabel
+        text={label}
+        requirement={options.requirement ?? "required"}
+      />
       <Input
         aria-label={label}
+        aria-required={(options.requirement ?? "required") === "required"}
         type={options.type}
         inputMode={options.inputMode}
         value={form[key]}
@@ -329,9 +368,10 @@ export function RentalDeskPage({
           </CardHeader>
           <CardContent className="space-y-5">
             <label className="block space-y-1">
-              <span className="text-sm font-medium text-dusk-700">Eszköz</span>
+              <FieldLabel text="Eszköz" requirement="required" />
               <Select
                 aria-label="Eszköz"
+                aria-required="true"
                 value={form.equipmentId}
                 onChange={(event) => chooseEquipment(event.target.value)}
               >
@@ -373,11 +413,10 @@ export function RentalDeskPage({
               ) : (
                 <>
                   <label className="block space-y-1">
-                    <span className="text-sm font-medium text-dusk-700">
-                      Típus
-                    </span>
+                    <FieldLabel text="Típus" requirement="required" />
                     <Select
                       aria-label="Bérlő típusa"
+                      aria-required="true"
                       value={form.customerType}
                       onChange={(event) =>
                         set("customerType")(event.target.value)
@@ -443,7 +482,10 @@ export function RentalDeskPage({
               {field("plannedReturnAt", "Tervezett visszahozás", {
                 type: "datetime-local",
               })}
-              {field("depositHuf", "Kaució (Ft)", { inputMode: "numeric" })}
+              {field("depositHuf", "Kaució (Ft)", {
+                inputMode: "numeric",
+                requirement: "optional",
+              })}
             </div>
             <p className="text-sm text-dusk-700">
               Várható díj:{" "}
@@ -452,9 +494,7 @@ export function RentalDeskPage({
                 : "válassz eszközt és érvényes időszakot"}
             </p>
             <label className="block space-y-1">
-              <span className="text-sm font-medium text-dusk-700">
-                Megjegyzés
-              </span>
+              <FieldLabel text="Megjegyzés" requirement="optional" />
               <Textarea
                 aria-label="Megjegyzés"
                 value={form.note}
