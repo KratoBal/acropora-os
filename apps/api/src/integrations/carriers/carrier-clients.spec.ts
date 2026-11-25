@@ -755,7 +755,7 @@ describe("the read-only live mode", () => {
     );
   });
 
-  it("refuses to create or cancel a parcel, with READ_ONLY, before any call", async () => {
+  it("refuses to create or cancel a parcel, or print its label, with READ_ONLY, before any call", async () => {
     const fetch = fakeFetch();
     const client = carrierClientFor("foxpost", LIVE_READ, fetch.impl);
     const created = await carrierError(
@@ -771,6 +771,11 @@ describe("the read-only live mode", () => {
       client.cancelParcel({ parcelNumber: "CLFOX000000000000009" }),
     );
     assert.equal(cancelled.code, "READ_ONLY");
+    // the Foxpost label is a POST whose effect was never measured (barracuda on #2842): refused too
+    const label = await carrierError(
+      client.labelPdf({ parcelNumber: "CLFOX000000000000009" }),
+    );
+    assert.equal(label.code, "READ_ONLY");
     assert.equal(fetch.calls.length, 0);
   });
 

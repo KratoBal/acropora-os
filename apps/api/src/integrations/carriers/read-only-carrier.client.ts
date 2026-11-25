@@ -8,9 +8,10 @@ import {
 
 /**
  * THE READ-ONLY CARRIER (card 6ae05968; acrobot 61316, a decision without Balázs: the live mode is not switched on, because the
- * Csomag button would open REAL shipments). The mode `live-read` reaches the carrier's LIVE system for what only reads (the
- * tracking, so the status code observer and the status sync, and an existing parcel's label), and refuses what would create or
- * cancel a shipment there, with a named reason (`READ_ONLY`, a 409) before anything is called.
+ * Csomag button would open REAL shipments). The mode `live-read` reaches the carrier's LIVE system ONLY for the tracking (the status
+ * code observer, the status sync), and refuses everything else with a named reason (`READ_ONLY`, a 409) before anything is called.
+ * The label too (barracuda on #2842): the Foxpost label is a POST (/api/label/A6) whose effect on the shipment was never measured,
+ * and in this mode the OS has no parcel row whose label it would ask for, so letting it through would be risk without use.
  */
 export class ReadOnlyCarrierClient implements CarrierClient {
   constructor(private readonly live: CarrierClient) {}
@@ -27,8 +28,8 @@ export class ReadOnlyCarrierClient implements CarrierClient {
     return Promise.reject(new CarrierError("READ_ONLY", this.live.carrier));
   }
 
-  labelPdf(parcel: ParcelRef): Promise<Buffer> {
-    return this.live.labelPdf(parcel);
+  labelPdf(): Promise<Buffer> {
+    return Promise.reject(new CarrierError("READ_ONLY", this.live.carrier));
   }
 
   tracking(parcel: ParcelRef): Promise<TrackingEvent[]> {
