@@ -761,7 +761,12 @@ export function PilotServiceJobListPage() {
       <PageHeader
         eyebrow="Szerviz / Munkatér"
         title="Hibajegyek"
-        description="Minden bejelentésnek legyen következő lépése. A hibajegy a lánc első eleme; mögötte állnak a munkalapok."
+        // telefonon a három soros leírás nélkül: a lista első sora így 600 helyett kb. 440 px-nél kezdődik (mérve a stage-en, picasso terv 5. pont)
+        description={
+          phone
+            ? undefined
+            : "Minden bejelentésnek legyen következő lépése. A hibajegy a lánc első eleme; mögötte állnak a munkalapok."
+        }
         actions={
           canManage ? (
             <Link href="/szerviz/hibajegyek/uj">
@@ -809,7 +814,7 @@ export function PilotServiceJobListPage() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-1" role="tablist">
+      <div className="flex flex-wrap gap-0.5 sm:gap-1" role="tablist">
         {PILOT_TABS.map((entry) => (
           <button
             key={entry.id}
@@ -817,7 +822,7 @@ export function PilotServiceJobListPage() {
             role="tab"
             aria-selected={tab === entry.id}
             onClick={() => selectTab(entry.id)}
-            className={`cursor-pointer rounded-md px-4 py-2 text-sm transition-colors ${
+            className={`cursor-pointer rounded-md px-2.5 py-2 text-sm transition-colors sm:px-4 ${
               tab === entry.id
                 ? "bg-pilot-aqua-50 font-semibold text-pilot-aqua-700"
                 : "text-pilot-grey-600 hover:text-pilot-grey-900"
@@ -843,7 +848,7 @@ export function PilotServiceJobListPage() {
           placeholder="Hibajegyszám, partner vagy hiba"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          className="w-full max-w-[390px] rounded-md bg-white px-3 py-2.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-400 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+          className="min-w-0 flex-[1_1_10rem] rounded-md bg-white px-3 py-2.5 sm:w-full sm:max-w-[390px] sm:flex-none text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-400 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
         />
         {/*
           THE PARTNER AND LOCATION FILTERS are not in the design, but they exist today and stay (the brief: nothing working is lost).

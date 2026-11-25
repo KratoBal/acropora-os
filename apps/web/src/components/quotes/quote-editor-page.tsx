@@ -329,7 +329,10 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
                 >
                   {unsaved > 0
                     ? "Előbb mentsd a mentetlen részeket."
-                    : `A publikált v${mail.sendable.versionNumber} megy ki, nem a szerkesztett piszkozat.`}
+                    : // without a draft there is nothing "edited" to contrast with: the plain sentence (measured on the stage, AJ-2026-0011)
+                      version
+                      ? `A publikált v${mail.sendable.versionNumber} megy ki, nem a szerkesztett piszkozat.`
+                      : `A publikált v${mail.sendable.versionNumber} megy ki.`}
                 </span>
               </>
             ) : null}
