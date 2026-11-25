@@ -23,14 +23,44 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { brandsApi } from "@/lib/api/brands";
+import { sortFromParams, useUrlSort } from "@/lib/navigation/use-url-sort";
 import { CatalogActionsPanel } from "./catalog-actions-panel";
 
 type BrandRow = BrandListResponse["items"][number];
+
+/** A lista rendezhető oszlopai: a táblázat oszlop-azonosítója -> a szerver rendezési mezeje (`BRAND_LIST_SORT_FIELDS`). */
+export const BRAND_SORT_COLUMNS = {
+  name: "name",
+  products: "productCount",
+  updated: "updatedAt",
+} as const;
+
+/**
+ * A kérés az oldal URL-jéből. Az oldal az URL paramétereit továbbadja az API-nak, ezért a rendezés CSAK akkor marad benne, ha ismert
+ * mezőre és érvényes irányra szól: egy régi vagy kézzel írt link ne törje el a listát 400-zal.
+ */
+export function brandListQuery(params: URLSearchParams): URLSearchParams {
+  const q = new URLSearchParams(params.toString());
+  q.delete("sort");
+  q.delete("direction");
+  const sort = sortFromParams(params, BRAND_SORT_COLUMNS);
+  if (sort) {
+    q.set(
+      "sort",
+      BRAND_SORT_COLUMNS[sort.id as keyof typeof BRAND_SORT_COLUMNS],
+    );
+    q.set("direction", sort.direction);
+  }
+  if (!q.has("page")) q.set("page", "1");
+  if (!q.has("pageSize")) q.set("pageSize", "25");
+  return q;
+}
 
 // The shared table: on the phone every row is a card with the brand as its title.
 const columns: PilotTableColumn<BrandRow>[] = [
   {
     id: "name",
+    sortable: true,
     header: "Márka",
     cell: (brand) => (
       <>
@@ -63,6 +93,7 @@ const columns: PilotTableColumn<BrandRow>[] = [
   },
   {
     id: "products",
+    sortable: true,
     header: "Termékek",
     cell: (brand) => brand.usage.productCount,
   },
@@ -76,6 +107,7 @@ const columns: PilotTableColumn<BrandRow>[] = [
   },
   {
     id: "updated",
+    sortable: true,
     header: "Frissítve",
     nowrap: true,
     cell: (brand) => new Date(brand.updatedAt).toLocaleDateString("hu-HU"),
@@ -102,12 +134,8 @@ export function BrandListPage() {
     session && hasPermission(session.user, PERMISSIONS.SETTINGS_MANAGE),
   );
   const token = session?.token ?? "";
-  const query = useMemo(() => {
-    const q = new URLSearchParams(params.toString());
-    if (!q.has("page")) q.set("page", "1");
-    if (!q.has("pageSize")) q.set("pageSize", "25");
-    return q;
-  }, [params]);
+  const { sort, onSort } = useUrlSort(BRAND_SORT_COLUMNS);
+  const query = useMemo(() => brandListQuery(params), [params]);
   const load = useCallback(
     async (signal?: AbortSignal) => {
       if (!canView) return;
@@ -257,6 +285,8 @@ export function BrandListPage() {
               </div>
               <PilotDataTable
                 columns={columns}
+                sort={sort}
+                onSort={onSort}
                 rows={data.items}
                 rowKey={(brand) => brand.id}
                 rowTestId="brand-row"

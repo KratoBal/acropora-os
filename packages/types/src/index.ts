@@ -548,6 +548,7 @@ export type {
   BrandDetail,
   BrandExternalMapping,
   BrandListResponse,
+  BrandListSortField,
   BrandMutationResponse,
   BrandStatusFilter,
   BrandSummary,
@@ -555,6 +556,7 @@ export type {
   CreateBrandInput,
   UpdateBrandInput,
 } from "./brand-management.js";
+export { BRAND_LIST_SORT_FIELDS } from "./brand-management.js";
 export type {
   AuthenticatedUser,
   PermissionSubject,
