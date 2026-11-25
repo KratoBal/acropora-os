@@ -23,15 +23,41 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { usersApi } from "@/lib/api/users";
+import { sortFromParams, useUrlSort } from "@/lib/navigation/use-url-sort";
 import { ROLE_LABELS, ROLE_OPTIONS } from "./role-labels";
 import { personDisplayName } from "@acropora/types";
 
 type UserRow = UserListResponse["items"][number];
 
+/** A lista rendezhető oszlopai: a táblázat oszlop-azonosítója -> a szerver rendezési mezeje (`USER_LIST_SORT_FIELDS`). A "Név" a megjelenítendő név szerint rendez (a becenév nem külön mező). */
+export const USER_SORT_COLUMNS = {
+  name: "displayName",
+  email: "email",
+} as const;
+
+/**
+ * A kérés az oldal URL-jéből. Az oldal az URL paramétereit továbbadja az API-nak, ezért a rendezés CSAK akkor marad benne, ha ismert
+ * mezőre és érvényes irányra szól: egy régi vagy kézzel írt link ne törje el a listát 400-zal.
+ */
+export function userListQuery(params: URLSearchParams): URLSearchParams {
+  const q = new URLSearchParams(params.toString());
+  q.delete("sort");
+  q.delete("direction");
+  const sort = sortFromParams(params, USER_SORT_COLUMNS);
+  if (sort) {
+    q.set("sort", USER_SORT_COLUMNS[sort.id as keyof typeof USER_SORT_COLUMNS]);
+    q.set("direction", sort.direction);
+  }
+  if (!q.has("page")) q.set("page", "1");
+  if (!q.has("pageSize")) q.set("pageSize", "25");
+  return q;
+}
+
 // The shared table: on the phone every row is a card with the name as its title.
 const columns: PilotTableColumn<UserRow>[] = [
   {
     id: "name",
+    sortable: true,
     header: "Név",
     cell: (item) => (
       <Link
@@ -42,7 +68,7 @@ const columns: PilotTableColumn<UserRow>[] = [
       </Link>
     ),
   },
-  { id: "email", header: "E-mail", cell: (item) => item.email },
+  { id: "email", sortable: true, header: "E-mail", cell: (item) => item.email },
   {
     id: "role",
     header: "Szerepkör",
@@ -77,12 +103,8 @@ export function UserListPage() {
     session && hasPermission(session.user, PERMISSIONS.USERS_MANAGE),
   );
   const token = session?.token ?? "";
-  const query = useMemo(() => {
-    const q = new URLSearchParams(params.toString());
-    if (!q.has("page")) q.set("page", "1");
-    if (!q.has("pageSize")) q.set("pageSize", "25");
-    return q;
-  }, [params]);
+  const { sort, onSort } = useUrlSort(USER_SORT_COLUMNS);
+  const query = useMemo(() => userListQuery(params), [params]);
   const load = useCallback(
     async (signal?: AbortSignal) => {
       if (!canManage) return;
@@ -218,6 +240,8 @@ export function UserListPage() {
               </div>
               <PilotDataTable
                 columns={columns}
+                sort={sort}
+                onSort={onSort}
                 rows={data.items}
                 rowKey={(item) => item.id}
                 rowTestId="user-row"

@@ -1178,9 +1178,11 @@ export type {
   UpdateUserInput,
   UserDetail,
   UserListResponse,
+  UserListSortField,
   UserStatusFilter,
   UserSummary,
 } from "./user-management.js";
+export { USER_LIST_SORT_FIELDS } from "./user-management.js";
 export {
   formatWorksheetNumber,
   formatWorksheetSequence,

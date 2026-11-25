@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -9,7 +10,7 @@ import type { UserListResponse, Session } from "@acropora/types";
 import { useSyncExternalStore } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { UserListPage } from "./user-list-page";
+import { UserListPage, userListQuery } from "./user-list-page";
 
 const navigation = vi.hoisted(() => ({
   params: new URLSearchParams(),
@@ -112,5 +113,93 @@ describe("UserListPage paging", () => {
     await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
     const target = String(navigation.replace.mock.calls.at(-1)?.[0]);
     expect(new URLSearchParams(target.split("?")[1]).get("page")).toBe("3");
+  });
+});
+
+/*
+  A LISTA RENDEZÉSE AZ OSZLOPFEJEN (Balázs kérése, kártya 2f6369a4). MI PIROSÍT: ha a név vagy az e-mail fejléce nem a saját
+  szerver-mezőjét írja az URL-be; ha a ciklus (növekvő, csökkenő, alap) elakad; ha a rendezés nem nullázza a lapot, vagy elveszíti a
+  szűrőt; ha az URL rendezése nem jut a kérésbe, vagy egy ismeretlen mező (régi vagy kézzel írt link) igen (az API 400-at adna, és az
+  egész lista eltörne); ha a szerepkör, a státusz vagy a jelszó oszlop rendezhetőnek látszik.
+*/
+describe("UserListPage sorting", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.params = new URLSearchParams("page=3&status=ALL");
+    navigation.replace.mockReset();
+    api.list.mockReset().mockResolvedValue(response(3));
+  });
+
+  const lastReplace = () =>
+    new URLSearchParams(
+      String(navigation.replace.mock.calls.at(-1)?.[0]).split("?")[1],
+    );
+
+  it("a header writes its own server field, ascending first, drops the page and keeps the filter", async () => {
+    render(<UserListPage />);
+    const table = await screen.findByRole("table");
+    for (const [name, field] of [
+      ["Név", "displayName"],
+      ["E-mail", "email"],
+    ] as const) {
+      navigation.replace.mockReset();
+      fireEvent.click(within(table).getByRole("button", { name }));
+      const url = lastReplace();
+      expect(url.get("sort"), name).toBe(field);
+      expect(url.get("direction"), name).toBe("asc");
+      expect(url.has("page"), name).toBe(false);
+      expect(url.get("status"), name).toBe("ALL");
+    }
+  });
+
+  it("the second click is descending, the third clears the sort", async () => {
+    navigation.params = new URLSearchParams("sort=email&direction=asc");
+    render(<UserListPage />);
+    const table = await screen.findByRole("table");
+    fireEvent.click(within(table).getByRole("button", { name: "E-mail" }));
+    expect(lastReplace().get("direction")).toBe("desc");
+
+    // a mock a címet csak értesítésre olvassa újra: az URL "megváltozott"
+    navigation.params = new URLSearchParams("sort=email&direction=desc");
+    act(() => {
+      for (const listener of navigation.listeners) listener();
+    });
+    navigation.replace.mockReset();
+    fireEvent.click(within(table).getByRole("button", { name: "E-mail" }));
+    expect(lastReplace().has("sort")).toBe(false);
+    expect(lastReplace().has("direction")).toBe(false);
+  });
+
+  it("the URL's sort reaches the request, and an unknown or incomplete one does not", async () => {
+    navigation.params = new URLSearchParams("sort=displayName&direction=desc");
+    render(<UserListPage />);
+    await screen.findByRole("table");
+    const sent = api.list.mock.calls.at(-1)?.[1] as URLSearchParams;
+    expect(sent.get("sort")).toBe("displayName");
+    expect(sent.get("direction")).toBe("desc");
+
+    for (const bad of [
+      "sort=role&direction=asc",
+      "sort=email",
+      "sort=email&direction=up",
+      "direction=asc",
+    ]) {
+      const query = userListQuery(new URLSearchParams(bad));
+      expect(query.has("sort"), bad).toBe(false);
+      expect(query.has("direction"), bad).toBe(false);
+    }
+    expect(
+      Object.fromEntries(userListQuery(new URLSearchParams("status=ALL"))),
+    ).toEqual({ status: "ALL", page: "1", pageSize: "25" });
+  });
+
+  it("only the name and the e-mail columns have a sort button", async () => {
+    render(<UserListPage />);
+    const table = await screen.findByRole("table");
+    const sortable = within(table)
+      .getAllByRole("columnheader")
+      .filter((header) => within(header).queryByRole("button"))
+      .map((header) => header.textContent?.replace(/[⇅↑↓]/g, ""));
+    expect(sortable).toEqual(["Név", "E-mail"]);
   });
 });

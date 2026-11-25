@@ -9,9 +9,11 @@ import type {
   UserListResponse,
 } from "@acropora/types";
 
+import { listOrderBy } from "../common/list-sort.js";
 import { hashPassword } from "./password.util.js";
 import { DEFAULT_SIGNING_CODE } from "../worksheets/worksheet-signing-code.js";
 import { userAuditMetadata } from "./user-audit.js";
+import { USER_LIST_SORT } from "./user-list-sort.js";
 import { toUserDetail, toUserSummary } from "./user-view.js";
 import type {
   CreateUserDto,
@@ -49,7 +51,7 @@ export class UsersRepository extends Repository {
     const [users, totalItems] = await Promise.all([
       prisma.user.findMany({
         where,
-        orderBy: [{ lastName: "asc" }, { firstName: "asc" }, { id: "asc" }],
+        orderBy: listOrderBy(USER_LIST_SORT, query.sort, query.direction),
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),

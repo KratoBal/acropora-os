@@ -1,3 +1,4 @@
+import { USER_LIST_SORT_FIELDS, type UserListSortField } from "@acropora/types";
 import { Type } from "class-transformer";
 import {
   IsArray,
@@ -84,4 +85,7 @@ export class UserListQueryDto {
   @IsIn(["ACTIVE", "INACTIVE", "ALL"]) @IsOptional() status:
     "ACTIVE" | "INACTIVE" | "ALL" = "ACTIVE";
   @IsIn(ASSIGNABLE_ROLES) @IsOptional() role?: UserRole;
+  /** The sort column and direction (whitelist: `USER_LIST_SORT_FIELDS`); without them the last name, the first name. */
+  @IsIn(USER_LIST_SORT_FIELDS) @IsOptional() sort?: UserListSortField;
+  @IsIn(["asc", "desc"]) @IsOptional() direction?: "asc" | "desc";
 }
