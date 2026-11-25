@@ -10,28 +10,17 @@ import { useRef, type KeyboardEvent } from "react";
 export const BILLING_VIEWS = ["kimeno", "bejovo", "nyugtak"] as const;
 export type BillingView = (typeof BILLING_VIEWS)[number];
 
-const TILES: Record<BillingView, { title: string; subtitle: string }> = {
-  kimeno: {
-    title: "Kimenő számlák",
-    subtitle: "Saját és külső rendszerben kiállított bizonylatok",
-  },
-  bejovo: {
-    title: "Bejövő számlák",
-    subtitle: "Beszállítóktól érkező számlák és kifizetési állapotok",
-  },
-  nyugtak: {
-    title: "Nyugták",
-    subtitle: "Pénztárgépes és Számlázz.hu nyugták",
-  },
+const TITLES: Record<BillingView, string> = {
+  kimeno: "Kimenő számlák",
+  bejovo: "Bejövő számlák",
+  nyugtak: "Nyugták",
 };
 
 /**
- * A HÁROM CSEMPE (Figma 330:355, 374:651, 374:1033), fül-mintával: a nyilak
- * és a Home/End a fókuszt viszik, az Enter vagy a szóköz vált. A váltás
- * adatot tölt, ezért a fókusz mozgása magában nem vált nézetet.
- *
- * Az inaktív csempe kerete egységesen szürke: a Figma bejövő keretében a
- * Nyugták csempe kerete fehér volt fehéren (a prompt QA-pontja).
+ * A HÁROM NÉZET FÜLEI (Picasso 3.12, acrobot 61971): a három nézet fül, nem nagy kártya (a három csempe fél képernyőnyi helyet vitt, és
+ * a lista a hajtás alá csúszott). A fül-minta ugyanaz, mint az eszköz- és a hibajegy-listán: aláhúzott aktív fül, a címe egy sor. Az
+ * alcímeket az oldal leírása mondja ki nézetenként (`VIEW_DESCRIPTIONS`). A nyilak és a Home/End a fókuszt viszik, az Enter vagy a
+ * szóköz vált. A váltás adatot tölt, ezért a fókusz mozgása magában nem vált nézetet.
  */
 export function BillingViewTiles({
   active,
@@ -70,7 +59,7 @@ export function BillingViewTiles({
     <div
       role="tablist"
       aria-label="Számlázási nézet"
-      className="grid grid-cols-1 gap-4 md:grid-cols-3"
+      className="flex gap-0 overflow-x-auto border-b border-pilot-grey-200"
     >
       {BILLING_VIEWS.map((view, index) => {
         const selected = view === active;
@@ -87,30 +76,13 @@ export function BillingViewTiles({
             tabIndex={selected ? 0 : -1}
             onClick={() => onSelect(view)}
             onKeyDown={(event) => onKeyDown(event, index)}
-            className={`flex cursor-pointer flex-col gap-1.5 rounded-2xl px-[18px] py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-pilot-aqua-700 focus-visible:ring-offset-2 ${
+            className={`-mb-px cursor-pointer whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-pilot-aqua-700 ${
               selected
-                ? "border-[1.5px] border-pilot-aqua-600 bg-pilot-aqua-50"
-                : "border border-pilot-grey-200 bg-white hover:border-pilot-grey-300"
+                ? "border-pilot-aqua-600 text-pilot-aqua-700"
+                : "border-transparent text-pilot-grey-500 hover:text-pilot-grey-800"
             }`}
           >
-            <span className="flex items-center gap-2">
-              <span
-                aria-hidden="true"
-                className={`h-2.5 w-2.5 rounded-full ${
-                  selected ? "bg-pilot-aqua-600" : "bg-pilot-grey-300"
-                }`}
-              />
-              <span
-                className={`text-sm font-semibold ${
-                  selected ? "text-pilot-aqua-700" : "text-pilot-grey-900"
-                }`}
-              >
-                {TILES[view].title}
-              </span>
-            </span>
-            <span className="text-xs text-pilot-grey-600">
-              {TILES[view].subtitle}
-            </span>
+            {TITLES[view]}
           </button>
         );
       })}
