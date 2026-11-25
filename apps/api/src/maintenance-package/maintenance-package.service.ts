@@ -121,17 +121,11 @@ export class MaintenancePackageService {
     const issuedInvoice = job.completionCertificate?.invoices[0] ?? null;
 
     const blockers = maintenancePackageBlockers({
-      worksheets: job.worksheets.map((worksheet) => ({
-        id: worksheet.id,
-        number: worksheet.number,
-        subject: worksheet.versions[0]?.subject ?? null,
-        hidden: worksheet.hiddenAt !== null,
-        closed: worksheet.versions[0]?.closedAt != null,
-        hasIssuedSheet: worksheet.documents.some(
-          (document) =>
-            document.worksheetVersionId === worksheet.versions[0]?.id,
-        ),
-      })),
+      worksheets: job.worksheets.map(worksheetState),
+      // a hozzárendelt (kapcsolódó) lapok ugyanazzal a kapuval, külön mondattal (Luca, kártya 5afb868a)
+      linkedWorksheets: job.linkedWorksheets.map(({ worksheet }) =>
+        worksheetState(worksheet),
+      ),
       hasCertificate: job.completionCertificate != null,
       certificateSigned: signedCertificate != null,
       /*
@@ -176,6 +170,26 @@ export class MaintenancePackageService {
       });
     }
 
+    /*
+      A HOZZÁRENDELT (KAPCSOLÓDÓ) MUNKALAPOK KIADOTT PDF-JE (Luca, 2026-11-25, kártya 5afb868a; a hibajegy-csomag mintája,
+      `service-job-package.service.ts`): `kapcsolodo-` előtaggal, hogy a csomagban látszik a hivatkozás, és a fájlneve nem ütközhet
+      a lapon létrehozott lapokéval. A rejtett lapot a saját lapokhoz hasonlóan kihagyjuk.
+    */
+    for (const { worksheet } of job.linkedWorksheets) {
+      if (worksheet.hiddenAt !== null) continue;
+      const currentVersionId = worksheet.versions[0]?.id;
+      const document = preferSignedSheet(
+        worksheet.documents.filter(
+          (candidate) => candidate.worksheetVersionId === currentVersionId,
+        ),
+      );
+      if (!document) continue;
+      entries.push({
+        name: `kapcsolodo-${document.fileName}`,
+        bytes: await this.worksheetBytes(worksheet.id, document),
+      });
+    }
+
     // the download goes without a certificate (Luca): then there is no certificate entry; the send gate lets a call through to here only with one
     if (certificateDocument) {
       entries.push({
@@ -213,6 +227,26 @@ export class MaintenancePackageService {
       bytes: serviceJobPackageZip(entries),
     };
   }
+}
+
+/** A munkalap kapu-állapota (lezárt-e, van-e kiadott példánya a legutóbbi verzióhoz): a lapon létrehozott és a hozzárendelt lapra ugyanaz. */
+function worksheetState(worksheet: {
+  id: string;
+  number: string | null;
+  hiddenAt: Date | null;
+  versions: { id: string; closedAt: Date | null; subject: string | null }[];
+  documents: { worksheetVersionId: string | null }[];
+}) {
+  return {
+    id: worksheet.id,
+    number: worksheet.number,
+    subject: worksheet.versions[0]?.subject ?? null,
+    hidden: worksheet.hiddenAt !== null,
+    closed: worksheet.versions[0]?.closedAt != null,
+    hasIssuedSheet: worksheet.documents.some(
+      (document) => document.worksheetVersionId === worksheet.versions[0]?.id,
+    ),
+  };
 }
 
 function maintenancePackageFileName(jobNumber: string): string {
