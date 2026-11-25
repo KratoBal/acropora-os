@@ -35,6 +35,10 @@ describe(
       });
       const ids = customers.map((customer) => customer.id);
       if (ids.length) {
+        // a munkalapok (a lapon létrehozott és a hozzárendelt) a lap előtt: a kapcsolat a lappal együtt törlődik
+        await prisma.worksheet.deleteMany({
+          where: { customerId: { in: ids } },
+        });
         await prisma.serviceJob.deleteMany({
           where: { customerId: { in: ids } },
         });
@@ -147,6 +151,30 @@ describe(
       const none = await job("KT-2097-003");
       const b = await repository.packageData(none.id);
       assert.equal(b?.completionCertificate, null);
+    });
+
+    it("a hozzárendelt (kapcsolódó) munkalap a linkedWorksheets-ben jön vissza, nem a worksheets-ben (Luca, kártya 5afb868a)", async () => {
+      const { id } = await job("KT-2097-004");
+      const own = await prisma.worksheet.create({
+        data: { customerId, departmentId, serviceJobId: id },
+        select: { id: true },
+      });
+      const assigned = await prisma.worksheet.create({
+        data: { customerId, departmentId },
+        select: { id: true },
+      });
+      await prisma.serviceJobLinkedWorksheet.create({
+        data: { serviceJobId: id, worksheetId: assigned.id },
+      });
+      const data = await repository.packageData(id);
+      assert.deepEqual(
+        data?.worksheets.map((sheet) => sheet.id),
+        [own.id],
+      );
+      assert.deepEqual(
+        data?.linkedWorksheets.map((link) => link.worksheet.id),
+        [assigned.id],
+      );
     });
   },
 );

@@ -1,7 +1,32 @@
 import { Injectable } from "@nestjs/common";
-import { prisma } from "@acropora/database";
+import { prisma, type Prisma } from "@acropora/database";
 
 import { WORKSHEET_ISSUED_SHEET_TYPES } from "@acropora/types";
+
+/** A munkalap oszlopai a csomaghoz: a szám, a legutóbbi verzió, és a kiadott PDF-ek (a lapon létrehozott és a hozzárendelt lapra ugyanaz). */
+const PACKAGE_WORKSHEET_SELECT = {
+  id: true,
+  number: true,
+  hiddenAt: true,
+  versions: {
+    orderBy: { version: "desc" },
+    take: 1,
+    select: { id: true, closedAt: true, subject: true },
+  },
+  documents: {
+    where: { type: { in: [...WORKSHEET_ISSUED_SHEET_TYPES] } },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: {
+      id: true,
+      worksheetVersionId: true,
+      type: true,
+      fileName: true,
+      contentType: true,
+      content: true,
+      storageKey: true,
+    },
+  },
+} satisfies Prisma.WorksheetSelect;
 
 @Injectable()
 export class MaintenancePackageRepository {
@@ -24,29 +49,15 @@ export class MaintenancePackageRepository {
         customerId: true,
         worksheets: {
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-          select: {
-            id: true,
-            number: true,
-            hiddenAt: true,
-            versions: {
-              orderBy: { version: "desc" },
-              take: 1,
-              select: { id: true, closedAt: true, subject: true },
-            },
-            documents: {
-              where: { type: { in: [...WORKSHEET_ISSUED_SHEET_TYPES] } },
-              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-              select: {
-                id: true,
-                worksheetVersionId: true,
-                type: true,
-                fileName: true,
-                contentType: true,
-                content: true,
-                storageKey: true,
-              },
-            },
-          },
+          select: PACKAGE_WORKSHEET_SELECT,
+        },
+        /*
+          A HOZZÁRENDELT (KAPCSOLÓDÓ) MUNKALAPOK (kártya 5b366f5d; Luca kérése 2026-11-25, kártya 5afb868a): a lapon létrehozottak
+          mellett ezek kiadott PDF-je is a csomagba kerül, ugyanazzal a kapuval. Belső (PARTNERS_MANAGE) hatókör: nincs partner-egység szűrő.
+        */
+        linkedWorksheets: {
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          select: { worksheet: { select: PACKAGE_WORKSHEET_SELECT } },
         },
         maintenanceOrder: {
           select: {
