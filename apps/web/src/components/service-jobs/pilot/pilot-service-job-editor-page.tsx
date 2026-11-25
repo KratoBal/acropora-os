@@ -9,6 +9,7 @@ import {
   PilotFormLayout,
   PilotSelect,
   PAGE_GUTTER_X,
+  PILOT_FIELD_HINT_CLASS,
 } from "@acropora/ui";
 import type {
   WorksheetDepartmentSummary,
@@ -355,14 +356,12 @@ export function PilotServiceJobEditorPage() {
               error={errorOf("Helyszín", "Válassz helyszínt.")}
             >
               {!customer ? (
-                <p className="text-sm text-pilot-grey-400">
+                <p className={PILOT_FIELD_HINT_CLASS}>
                   Előbb válassz partnert. A helyszínek a partner saját fájából
                   jönnek.
                 </p>
               ) : !departmentsLoaded ? (
-                <p className="text-sm text-pilot-grey-400">
-                  Helyszínek betöltése…
-                </p>
+                <p className={PILOT_FIELD_HINT_CLASS}>Helyszínek betöltése…</p>
               ) : nincsValaszthatoHelyszin ? (
                 <p className="text-sm text-pilot-grey-400">
                   Ehhez a partnerhez nincs felvéve helyszín, ezért egyelőre nem
@@ -390,6 +389,7 @@ export function PilotServiceJobEditorPage() {
               {/* A `JobAssetPicker` REGI STILUSBAN marad -- tobbszoros
                   valasztast tud, a Figma egyetlen legordulojenel tobbet. */}
               <JobAssetPicker
+                hintClassName={PILOT_FIELD_HINT_CLASS}
                 departmentId={departmentId}
                 selected={assetIds}
                 onChange={setAssetIds}

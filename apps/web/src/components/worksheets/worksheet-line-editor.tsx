@@ -334,7 +334,6 @@ export function WorksheetLineEditor({
                         })
                       }
                     />
-                    <span className="md:hidden">Munkaóra</span>
                   </label>
                 </div>
                 <div className="space-y-1">
@@ -354,7 +353,7 @@ export function WorksheetLineEditor({
                 </div>
                 <PilotButton
                   type="button"
-                  variant="ghost"
+                  variant="secondary"
                   disabled={disabled}
                   aria-label={`${index + 1}. tétel törlése`}
                   onClick={() =>
@@ -507,7 +506,6 @@ export function WorksheetLineEditor({
                       })
                     }
                   />
-                  <span className="md:hidden">Munkaóra</span>
                 </label>
               </div>
               <div className="space-y-1">

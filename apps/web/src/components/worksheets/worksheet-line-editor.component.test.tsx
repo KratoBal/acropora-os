@@ -274,3 +274,35 @@ describe("WorksheetLineEditor munkaóra-mezői", () => {
     ).toBe(false);
   });
 });
+
+/*
+  A TÉTELSOR A STAGE-KÉPEN (acrobot 2026-11-25): a "Munkaóra" felirat kétszer állt (a mező címkéje és a jelölőnégyzet saját felirata), a "Törlés"
+  pedig sima, keret nélküli szöveg volt. MI PIROSÍT: ha a felirat újra duplán áll; ha a Törlés újra keret nélküli.
+*/
+describe("WorksheetLineEditor tételsora", () => {
+  for (const pilot of [false, true]) {
+    it(`the Munkaóra label stands once per row, next to the header cell (${pilot ? "pilot" : "old"} look)`, () => {
+      render(
+        <WorksheetLineEditor
+          lines={[line()]}
+          onChange={vi.fn()}
+          pilot={pilot}
+        />,
+      );
+      // one header cell plus ONE narrow-view label; the checkbox keeps its own aria-label
+      expect(screen.getAllByText("Munkaóra")).toHaveLength(2);
+      expect(
+        screen.getByRole("checkbox", { name: "1. tétel munkaóra" }),
+      ).toBeTruthy();
+    });
+  }
+
+  it("the delete button of a row in the pilot look has a frame (secondary), not bare text", () => {
+    render(
+      <WorksheetLineEditor lines={[line()]} onChange={vi.fn()} pilot bare />,
+    );
+    const del = screen.getByRole("button", { name: "1. tétel törlése" });
+    expect(del.className).toContain("ring-1");
+    expect(del.className).not.toContain("bg-transparent");
+  });
+});

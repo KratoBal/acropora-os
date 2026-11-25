@@ -16,6 +16,12 @@ import { PilotCard } from "./pilot-ui";
  * A váz a mezők TARTALMÁHOZ és a kötelezőségi szabályokhoz nem nyúl: csak a helyükhöz és a feliratukhoz.
  */
 
+/**
+ * A MEZŐ ALATTI SÚGÓ ÉS A FÜGGŐ MEZŐ "ELŐBB VÁLASSZ ..." MONDATA EGY STÍLUS (acrobot 2026-11-25, a stage-képről): kicsi, szürke. Eddig a függő mező
+ * mondata sötét és nagy volt (a hibajegy és a karbantartás űrlapon), dőlt (a munkalapon) vagy a másik szürke volt, a súgó pedig kicsi és halvány.
+ */
+export const PILOT_FIELD_HINT_CLASS = "text-xs text-pilot-grey-400";
+
 /** Egy űrlap-csoport kártyája: a címe a kérdés ("Kinek és hol?"), a mezők egy oszlopban, a rövid párok egy sorban (`PilotFieldPair`). */
 export function PilotFormCard({
   title,
@@ -99,7 +105,7 @@ export function PilotField({
         )}
       </label>
       {children}
-      {help ? <p className="text-xs text-pilot-grey-400">{help}</p> : null}
+      {help ? <p className={PILOT_FIELD_HINT_CLASS}>{help}</p> : null}
       {error ? (
         <p role="alert" className="text-xs font-medium text-pilot-red-700">
           {error}
@@ -159,7 +165,7 @@ export function PilotFormActions({
         <button
           type="button"
           onClick={onCancel}
-          className="inline-flex h-10 flex-1 cursor-pointer items-center justify-center rounded-md bg-white px-4 text-sm font-semibold text-pilot-grey-900 ring-1 ring-pilot-grey-200 transition-colors hover:bg-pilot-grey-50 sm:flex-none"
+          className="inline-flex h-10 flex-none cursor-pointer items-center justify-center rounded-md bg-white px-4 text-sm font-semibold text-pilot-grey-900 ring-1 ring-pilot-grey-200 transition-colors hover:bg-pilot-grey-50"
         >
           {cancelLabel}
         </button>
