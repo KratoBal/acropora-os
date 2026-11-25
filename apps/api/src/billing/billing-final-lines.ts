@@ -117,10 +117,10 @@ export function finalLineOfQuoteItem(item: QuoteBasisItem): FinalDraftLine {
 /**
  * HONNAN JÖNNEK A VÉGSZÁMLA TÉTELEI (kártya 2650d371; barracuda #2639: fail-closed). Tiszta döntés, a szolgáltatás csak végrehajtja:
  *
- * - `PROFORMA`: nincs ajánlat-kötés: a díjbekérő tételei, a mai viselkedés;
- * - `QUOTE`: egy mérföldkő (a 100%-os is), és az ajánlatnak NINCS másik díjbekérős mérföldköve: az ajánlat teljes elfogadott tételei.
- *   A 100%-os mérföldkő eddig a díjbekérő kulcsonkénti "1 db" sorát örökölte, így a végszámla egyetlen ajánlat-tételt sem mutatott
- *   (barracuda számla-sor söprése, L4; acrobot 61290, kártya c37ea343, Balázs szabálya: a számla a valódi tételeket viszi);
+ * - `PROFORMA`: nincs kötés, vagy a mérföldkő 100%-os (teljes ellenérték): a díjbekérő tételei, a mai viselkedés;
+ *   a 100%-os mérföldkőnél SZÁNDÉKOSAN: a díjbekérő kulcsonként egyszer kerekít, az ajánlat tételei tételenként, és a levonás után
+ *   a különbözet fillérre nem nulla (2 × 1001 Ft, 27%: előleg 2543, tételek 2542; barracuda #2847, acrobot 61431, kártya c37ea343);
+ * - `QUOTE`: egy 100% alatti mérföldkő, és az ajánlatnak NINCS másik díjbekérős mérföldköve: az ajánlat teljes elfogadott tételei;
  * - `EMPTY`: több előleg-mérföldkő is van díjbekérővel: SEM a százalékos sor (az a nulla végszámla), SEM az ajánlat teljes tételei (a
  *   másik előleget kétszer számlázná): üres vázlat, a kezelő írja be a tételeket (mint előleg nélküli díjbekérőnél);
  * - `REFUSED`: kötött ajánlat, de elfogadott tétel nélkül: nincs miből összeállítani, és nem esünk vissza a százalékos sorra.
@@ -144,7 +144,7 @@ export function finalInvoiceNoticeOf(
 }
 
 export function finalLinesSource(basis: QuoteBasis | null): FinalLinesSource {
-  if (basis === null) return { kind: "PROFORMA" };
+  if (basis === null || !basis.percent.lt(100)) return { kind: "PROFORMA" };
   if (basis.otherProformaMilestones > 0)
     return { kind: "EMPTY", reason: "MULTIPLE_ADVANCES" };
   if (basis.items.length === 0)
