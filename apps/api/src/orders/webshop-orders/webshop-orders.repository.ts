@@ -12,7 +12,10 @@ import {
   euKey,
   huBase,
 } from "../../partner-duplicates/partner-duplicate-groups.js";
-import type { OrderTaxKey } from "./webshop-order-invoice.rules.js";
+import {
+  isAdvanceProformaLines,
+  type OrderTaxKey,
+} from "./webshop-order-invoice.rules.js";
 import { shortageCountsOf } from "./webshop-orders.rules.js";
 
 import {
@@ -573,6 +576,20 @@ export class WebshopOrdersRepository {
   }
 
   /** A díjbekérő bruttó összege és devizája (a kézi rögzítés ezt írja be). */
+  /** Whether the order's recorded transfer paid an advance proforma (its lines, `isAdvanceProformaLines`). */
+  async receiptProformaIsAdvance(orderId: string): Promise<boolean> {
+    const receipt = await prisma.webshopTransferReceipt.findUnique({
+      where: { orderId },
+      select: { proformaId: true },
+    });
+    if (!receipt) return false;
+    const lines = await prisma.invoiceLine.findMany({
+      where: { invoiceId: receipt.proformaId },
+      select: { description: true },
+    });
+    return isAdvanceProformaLines(lines.map((line) => line.description));
+  }
+
   async proformaAmount(
     proformaId: string,
   ): Promise<{ amount: Prisma.Decimal; currency: string } | null> {

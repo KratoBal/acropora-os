@@ -1240,7 +1240,12 @@ function ProformaSection({
   };
   return (
     <div className="mt-4 space-y-3 border-t border-pilot-grey-100 pt-4">
-      {receipt || paidByInvoice ? (
+      {order.payment?.state === "PARTIALLY_CAPTURED" ? (
+        // an advance arrived, the balance not yet (card d31a66a3, 2b): not "Kifizetve"
+        <span className="inline-block rounded-full bg-pilot-amber-50 px-3 py-1 text-xs font-medium text-pilot-amber-700">
+          Előleg beérkezett
+        </span>
+      ) : receipt || paidByInvoice ? (
         <span className="inline-block rounded-full bg-pilot-green-50 px-3 py-1 text-xs font-medium text-pilot-green-700">
           Kifizetve
         </span>

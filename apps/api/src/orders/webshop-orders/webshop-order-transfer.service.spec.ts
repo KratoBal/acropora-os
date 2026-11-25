@@ -29,6 +29,8 @@ function setup(
     shop?: Error;
     /** Már rögzített beérkezés (a lezárás újraküldéséhez). */
     receipt?: boolean;
+    /** A beérkezés díjbekérője előleg-díjbekérő (2b). */
+    advance?: boolean;
   } = {},
 ) {
   const created: Record<string, unknown>[] = [];
@@ -88,6 +90,7 @@ function setup(
         return true;
       },
       transferRecipients: async () => ["user_9", "user_7"],
+      receiptProformaIsAdvance: async () => over.advance ?? false,
       // a lezárás a TÁROLT beérkezést küldi: a rögzítés után ez már áll
       transferReceipts: async () =>
         new Map(
@@ -235,6 +238,29 @@ describe("closing the payment in the shop", () => {
         },
       },
     ]);
+  });
+
+  /*
+    AN ADVANCE PROFORMA'S TRANSFER (2b; barracuda on commerce #908). MI PIROSÍT: the shop is not told it is an advance (it would
+    refuse the smaller amount), or a full proforma's transfer is marked as one (an underpaid order would read partly paid).
+  */
+  it("an advance proforma's transfer goes to the shop marked as the advance; a full one is not marked", async () => {
+    const { service, shopCalls } = setup({ advance: true });
+    await service.recordManual(
+      "order_55",
+      { receivedOn: "2026-10-06", reference: "ELO-1" },
+      USER,
+      NOW,
+    );
+    assert.equal(shopCalls[0]!.receipt.advance, true);
+    const full = setup();
+    await full.service.recordManual(
+      "order_55",
+      { receivedOn: "2026-10-06", reference: "OTP 1" },
+      USER,
+      NOW,
+    );
+    assert.equal("advance" in full.shopCalls[0]!.receipt, false);
   });
 
   it("a shop failure keeps the OS record and the notice", async () => {

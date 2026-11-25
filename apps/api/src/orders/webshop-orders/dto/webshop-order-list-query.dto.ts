@@ -25,6 +25,7 @@ const PAYMENT_STATES: WebshopOrderPaymentState[] = [
   "AWAITING",
   "AUTHORIZED",
   "CAPTURED",
+  "PARTIALLY_CAPTURED",
   "PARTIALLY_REFUNDED",
   "REFUNDED",
   "CANCELED",

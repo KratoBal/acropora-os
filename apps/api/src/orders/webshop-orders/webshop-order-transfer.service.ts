@@ -149,12 +149,15 @@ export class WebshopOrderTransferService {
       orderId,
     );
     if (!receipt) return "Nincs rögzített beérkezés.";
+    // the shop takes a transfer below the order as an advance only when it is told so (commerce #908): an advance proforma's
+    const advance = await this.repository.receiptProformaIsAdvance(orderId);
     try {
       const client = await this.orders.adminClient();
       await client.recordTransferReceipt(orderId, {
         reference: receipt.reference,
         received_at: receipt.receivedOn,
         amount: Number(receipt.amount),
+        ...(advance ? { advance: true } : {}),
       });
       return null;
     } catch (error) {

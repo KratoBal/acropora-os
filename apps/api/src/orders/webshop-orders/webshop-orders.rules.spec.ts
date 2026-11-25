@@ -163,6 +163,34 @@ describe("payment", () => {
     );
   });
 
+  /*
+    AN ADVANCE BY TRANSFER (card d31a66a3, 2b). WHAT TURNS IT RED: a transfer order with only its advance captured reads paid
+    ("Levonva", and the switch's "már kifizették" stops being the reason it is); the balance captured does not read paid; a card
+    order captured for less than its hold after an order edit (paid in full) reads as an advance.
+  */
+  it("a transfer with its advance captured reads as an advance; with the balance, paid; a card captured below its hold, paid", () => {
+    const transfer = (captured: number) =>
+      paymentStateOf({
+        provider_id: "pp_acropora_transfer",
+        status: captured >= 4800 ? "completed" : "partially_captured",
+        amount: 4800,
+        captured_amount: captured,
+        refunded_amount: 0,
+      });
+    assert.equal(transfer(1920), "PARTIALLY_CAPTURED");
+    assert.equal(transfer(4800), "CAPTURED");
+    assert.equal(
+      paymentStateOf({
+        provider_id: "pp_stripe_stripe",
+        status: "partially_captured",
+        amount: 14000,
+        captured_amount: 12000,
+        refunded_amount: 0,
+      }),
+      "CAPTURED",
+    );
+  });
+
   it("names only the providers it knows, and says the rest as they are", () => {
     assert.deepEqual(
       [

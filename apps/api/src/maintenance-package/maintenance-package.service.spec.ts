@@ -36,6 +36,8 @@ function job(overrides: Record<string, unknown> = {}) {
     jobNumber: "KL-2026-00001",
     customerId: "customer-a",
     worksheets: [worksheet()],
+    // a hozzárendelt (kapcsolódó) munkalapok: a tároló mindig megadja, alapból nincs
+    linkedWorksheets: [],
     maintenanceOrder: {
       id: "order-1",
       number: "MR-2026-001",
@@ -325,5 +327,120 @@ describe("a karbantartási lap dokumentumcsomagja", () => {
     ).assemble("job-a", "download");
     assert.ok(!csomag.bytes.includes(Buffer.from("munkalap.pdf")));
     assert.ok(csomag.bytes.includes(Buffer.from("megrendelolap-alairt.pdf")));
+  });
+
+  /*
+    A HOZZÁRENDELT (KAPCSOLÓDÓ) MUNKALAPOK A CSOMAGBAN (Luca, 2026-11-25, kártya 5afb868a: "azokat nem rakja be hozzá, amiket
+    hozzárendelek"). MI PIROSÍT: ha a hozzárendelt lap PDF-je nem kerül a csomagba; ha nem `kapcsolodo-` előtaggal kerül be (a
+    lapon létrehozottal egy névtérben ütközne); ha a lezáratlan hozzárendelt lap nem tartja vissza a letöltést, vagy a SAJÁT
+    lapra szóló mondattal ("vedd le a karbantartási lapról") tartja vissza; ha a kiadott példány nélküli hozzárendelt lap átmegy.
+  */
+  const linked = (overrides: Record<string, unknown> = {}) => ({
+    worksheet: worksheet({
+      id: "ws-linked",
+      number: "ML-2026-050",
+      documents: [
+        {
+          id: "doc-linked",
+          worksheetVersionId: "v1",
+          type: "GENERATED_SHEET",
+          fileName: "munkalap-hozzarendelt.pdf",
+          contentType: "application/pdf",
+          content: Buffer.from("%PDF-1.4\nlinked-worksheet"),
+          storageKey: null,
+        },
+      ],
+      ...overrides,
+    }),
+  });
+
+  it("a hozzárendelt munkalap kiadott PDF-je kapcsolodo- előtaggal a csomagba kerül, a sajátok előtag nélkül", async () => {
+    const csomag = await serviceWith(
+      job({ linkedWorksheets: [linked()] }),
+    ).assemble("job-a", "download");
+    assert.ok(
+      csomag.bytes.includes(
+        Buffer.from("kapcsolodo-munkalap-hozzarendelt.pdf"),
+      ),
+    );
+    assert.ok(csomag.bytes.includes(Buffer.from("linked-worksheet")));
+    // a lapon létrehozott lap nem kapott előtagot, és nem tűnt el
+    assert.ok(csomag.bytes.includes(Buffer.from("munkalap.pdf")));
+    assert.ok(!csomag.bytes.includes(Buffer.from("kapcsolodo-munkalap.pdf")));
+  });
+
+  it("a kiküldés csomagjába is bekerül a hozzárendelt lap", async () => {
+    const csomag = await serviceWith(
+      job({
+        linkedWorksheets: [linked()],
+        completionCertificate: {
+          id: "cert-1",
+          number: "ALT-2026-001",
+          documents: [
+            {
+              type: "SIGNED_FORM",
+              fileName: "igazolas-alairt.pdf",
+              contentType: "application/pdf",
+              content: Buffer.from("%PDF-1.4\ncertificate"),
+            },
+          ],
+          invoices: [{ id: "inv-1", invoiceNumber: "SZ2026-00042" }],
+        },
+      }),
+    ).assemble("job-a", "send");
+    assert.ok(
+      csomag.bytes.includes(
+        Buffer.from("kapcsolodo-munkalap-hozzarendelt.pdf"),
+      ),
+    );
+  });
+
+  it("a lezáratlan hozzárendelt lap visszatartja a letöltést, a hozzárendelt lapra szóló mondattal és névvel", async () => {
+    await assert.rejects(
+      () =>
+        serviceWith(
+          job({
+            linkedWorksheets: [
+              linked({
+                versions: [{ id: "v1", closedAt: null }],
+                documents: [],
+              }),
+            ],
+          }),
+        ).assemble("job-a", "download"),
+      (error: unknown) => {
+        assert.ok(error instanceof BadRequestException);
+        assert.match(
+          error.message,
+          /A hozzárendelt munkalap nincs lezárva: ML-2026-050\. Zárd le, vagy vedd le a kapcsolatot/,
+        );
+        // nem a saját lapra szóló "vedd le a karbantartási lapról" mondat
+        assert.doesNotMatch(error.message, /Nincs lezárva: ML-2026-050/);
+        return true;
+      },
+    );
+  });
+
+  it("a lezárt, de kiadott példány nélküli hozzárendelt lap is visszatartja, és ezt kimondja", async () => {
+    await assert.rejects(
+      () =>
+        serviceWith(
+          job({ linkedWorksheets: [linked({ documents: [] })] }),
+        ).assemble("job-a", "download"),
+      /A hozzárendelt munkalap le van zárva, de a kiadott példánya hiányzik: ML-2026-050/,
+    );
+  });
+
+  it("a rejtett hozzárendelt lap kimarad a csomagból, de nem tartja vissza", async () => {
+    const csomag = await serviceWith(
+      job({ linkedWorksheets: [linked({ hiddenAt: new Date() })] }),
+    ).assemble("job-a", "download");
+    assert.ok(!csomag.bytes.includes(Buffer.from("munkalap-hozzarendelt.pdf")));
+    assert.ok(csomag.bytes.includes(Buffer.from("munkalap.pdf")));
+  });
+
+  it("hozzárendelt lap nélkül a csomag változatlan", async () => {
+    const csomag = await serviceWith(job()).assemble("job-a", "download");
+    assert.ok(!csomag.bytes.includes(Buffer.from("kapcsolodo-")));
   });
 });

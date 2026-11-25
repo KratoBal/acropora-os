@@ -181,3 +181,47 @@ describe("maintenancePackageBlockMessage", () => {
     assert.match(message, /Nincs lezárva: szám nélküli munkalap\./);
   });
 });
+
+describe("a hozzárendelt (kapcsolódó) munkalapok a kapuban (Luca, kártya 5afb868a)", () => {
+  const LEZARATLAN = {
+    ...KESZ_LAP,
+    id: "ws-2",
+    number: "ML-2026-050",
+    closed: false,
+  };
+
+  it("a kész hozzárendelt lap nem tartja vissza a letöltést", () => {
+    const blockers = maintenancePackageBlockers(
+      input({ linkedWorksheets: [KESZ_LAP] }),
+    );
+    assert.equal(maintenancePackageIsBlocked(blockers), false);
+  });
+
+  it("a lezáratlan hozzárendelt lap önmagában is visszatart, a lapon létrehozott lista üresen marad", () => {
+    const blockers = maintenancePackageBlockers(
+      input({ linkedWorksheets: [LEZARATLAN] }),
+    );
+    assert.equal(maintenancePackageIsBlocked(blockers), true);
+    assert.equal(blockers.worksheets.length, 0);
+    assert.deepEqual(
+      blockers.linkedWorksheets.map((item) => [item.sheet.number, item.reason]),
+      [["ML-2026-050", "not-closed"]],
+    );
+  });
+
+  it("a mondat a hozzárendelt lapra szól: lezárni vagy a kapcsolatot levenni, nem a lapról levenni", () => {
+    const message = maintenancePackageBlockMessage(
+      maintenancePackageBlockers(input({ linkedWorksheets: [LEZARATLAN] })),
+    );
+    assert.match(
+      message,
+      /A hozzárendelt munkalap nincs lezárva: ML-2026-050\. Zárd le, vagy vedd le a kapcsolatot a karbantartási lapról\./,
+    );
+    assert.doesNotMatch(message, /Nincs lezárva:/);
+  });
+
+  it("hozzárendelt lap megadása nélkül a kapu a régi (a mező elhagyható)", () => {
+    const blockers = maintenancePackageBlockers(input());
+    assert.deepEqual(blockers.linkedWorksheets, []);
+  });
+});

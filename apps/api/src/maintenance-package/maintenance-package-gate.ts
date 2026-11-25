@@ -29,11 +29,19 @@ export type MaintenancePackageJobBlockReason =
 
 export interface MaintenancePackageBlockers {
   worksheets: readonly BlockingPackageWorksheet[];
+  /**
+   * A HOZZÁRENDELT (KAPCSOLÓDÓ) MUNKALAPOK (Luca, 2026-11-25, kártya 5afb868a): a csomagba a kiadott PDF-jük kerül, ezért ugyanaz a
+   * kapu áll rájuk (lezárt és kiadott példányos), de a mondat más, mert a teendő más: a hozzárendelt lap nem ide tartozik, tehát
+   * nem "vedd le a lapról", hanem "zárd le, vagy vedd le a kapcsolatot".
+   */
+  linkedWorksheets: readonly BlockingPackageWorksheet[];
   job: readonly MaintenancePackageJobBlockReason[];
 }
 
 export function maintenancePackageBlockers(input: {
   worksheets: readonly PackageWorksheetState[];
+  /** Hiányában nincs hozzárendelt lap (a régi hívók és tesztek változatlanok). */
+  linkedWorksheets?: readonly PackageWorksheetState[];
   hasCertificate: boolean;
   certificateSigned: boolean;
   /**
@@ -56,6 +64,11 @@ export function maintenancePackageBlockers(input: {
     scope: "internal",
   });
 
+  const linkedWorksheets = worksheetsBlockingPackage({
+    worksheets: input.linkedWorksheets ?? [],
+    scope: "internal",
+  });
+
   const job: MaintenancePackageJobBlockReason[] = [];
   if (input.purpose === "send") {
     if (!input.hasCertificate) job.push("no-certificate");
@@ -63,13 +76,17 @@ export function maintenancePackageBlockers(input: {
     if (!input.invoicePresent) job.push("no-invoice");
   }
 
-  return { worksheets, job };
+  return { worksheets, linkedWorksheets, job };
 }
 
 export function maintenancePackageIsBlocked(
   blockers: MaintenancePackageBlockers,
 ): boolean {
-  return blockers.worksheets.length > 0 || blockers.job.length > 0;
+  return (
+    blockers.worksheets.length > 0 ||
+    blockers.linkedWorksheets.length > 0 ||
+    blockers.job.length > 0
+  );
 }
 
 /**
@@ -95,6 +112,12 @@ export function maintenancePackageBlockMessage(
       .map((tetel) => nev(tetel.sheet))
       .join(", ");
 
+  const kapcsolodoNevekAhol = (ok: "not-closed" | "no-issued-sheet"): string =>
+    blockers.linkedWorksheets
+      .filter((tetel) => tetel.reason === ok)
+      .map((tetel) => nev(tetel.sheet))
+      .join(", ");
+
   const reszek: string[] = [];
   const lezaratlan = nevekAhol("not-closed");
   if (lezaratlan)
@@ -105,6 +128,17 @@ export function maintenancePackageBlockMessage(
   if (peldanytalan)
     reszek.push(
       `Le van zárva, de a kiadott munkalap hiányzik: ${peldanytalan}. ` +
+        "Ezt lezárással nem lehet pótolni, szólj a fejlesztésnek.",
+    );
+  const kapcsolodoLezaratlan = kapcsolodoNevekAhol("not-closed");
+  if (kapcsolodoLezaratlan)
+    reszek.push(
+      `A hozzárendelt munkalap nincs lezárva: ${kapcsolodoLezaratlan}. Zárd le, vagy vedd le a kapcsolatot a karbantartási lapról.`,
+    );
+  const kapcsolodoPeldanytalan = kapcsolodoNevekAhol("no-issued-sheet");
+  if (kapcsolodoPeldanytalan)
+    reszek.push(
+      `A hozzárendelt munkalap le van zárva, de a kiadott példánya hiányzik: ${kapcsolodoPeldanytalan}. ` +
         "Ezt lezárással nem lehet pótolni, szólj a fejlesztésnek.",
     );
   if (blockers.job.includes("no-certificate"))

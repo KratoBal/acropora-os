@@ -34,6 +34,10 @@ export class QuotesController {
       q: query.q,
       status: query.status,
       closeReason: query.closeReason,
+      createdFrom: query.createdFrom,
+      createdTo: query.createdTo,
+      sort: query.sort,
+      direction: query.direction,
       expired: query.expired === "1" || query.expired === "true",
     });
   }
