@@ -21,10 +21,16 @@ import {
   PilotDateField,
   PilotDialog,
   PilotDrawer,
+  PilotField,
+  PilotFieldPair,
   PilotFileInput,
+  PilotFormActions,
+  PilotFormCard,
   PilotFormField,
+  PilotFormLayout,
   PilotInput,
   PilotLinkTabs,
+  PilotMissingSummary,
   PilotMonthField,
   PilotPairedRows,
   PilotRadioGroup,
@@ -341,6 +347,51 @@ export function ComponentCatalogPage() {
             onPageChange={setOldal}
             variant="directionF"
           />
+        </div>
+      </PilotSection>
+
+      <PilotSection
+        title="Űrlap-váz"
+        subtitle="Csoportkártyák, kötelező jelölés, hiányzó mezők összesítője és a Mi történik ezután sáv: minden új űrlap ezen áll."
+      >
+        <div className="space-y-5">
+          <PilotFormLayout
+            afterText="Mentés után megnyílik az új elem adatlapja."
+            actions={
+              <PilotFormActions
+                missing={["Partner"]}
+                busy={false}
+                submitLabel="Mentés"
+                busyLabel="Mentés…"
+                onCancel={() => undefined}
+                onSubmit={() => undefined}
+              />
+            }
+          >
+            <PilotFormCard title="Kinek és hol?">
+              <PilotFieldPair>
+                <PilotField
+                  label="Partner"
+                  requirement="required"
+                  htmlFor="katalogus-partner"
+                  error="Válassz partnert."
+                >
+                  <PilotInput id="katalogus-partner" />
+                </PilotField>
+                <PilotField
+                  label="Eszköz"
+                  requirement="optional"
+                  htmlFor="katalogus-eszkoz"
+                  help="Nem kötelező, később is megadható."
+                >
+                  <PilotInput id="katalogus-eszkoz" />
+                </PilotField>
+              </PilotFieldPair>
+            </PilotFormCard>
+          </PilotFormLayout>
+          <Minta cim="Hiányzó mezők összesítője">
+            <PilotMissingSummary missing={["Partner", "Tárgy"]} />
+          </Minta>
         </div>
       </PilotSection>
 
