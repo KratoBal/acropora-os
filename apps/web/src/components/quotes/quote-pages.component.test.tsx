@@ -318,6 +318,74 @@ describe("Árajánlatok lista (567:2)", () => {
     expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q1");
   });
 
+  /* Luca (kártya 7e5d3658): Készítve oszlop, szűrés a készítés napjára; Balázs (kártya 2f6369a4): rendezés az oszlopfejre kattintva */
+  it("a Készítve oszlop a létrehozás BUDAPESTI napját mutatja, nem az UTC dátumot", async () => {
+    api.list.mockResolvedValue({
+      ...LIST,
+      items: [
+        { ...LIST.items[0]! },
+        {
+          ...LIST.items[0]!,
+          id: "q-late",
+          quoteNumber: "AJ-2026-0099",
+          // 22:30 UTC = 00:30 on the 8th in Budapest (summer time)
+          createdAt: "2026-10-07T22:30:00Z",
+        },
+      ],
+    });
+    render(<QuoteListPage />);
+    const early = (await screen.findByText("AJ-2026-0042")).closest("tr")!;
+    const late = screen.getByText("AJ-2026-0099").closest("tr")!;
+    expect(within(early).getByText("2026. 10. 07.")).toBeTruthy();
+    expect(within(late).getByText("2026. 10. 08.")).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: /Készítve/ })).toBeTruthy();
+  });
+
+  it("a készítés napja és a rendezés az URL-ből a lekérésbe megy", async () => {
+    navigation.search = new URLSearchParams(
+      "createdFrom=2026-10-01&createdTo=2026-10-31&sort=createdAt&direction=desc",
+    );
+    render(<QuoteListPage />);
+    await screen.findByText("AJ-2026-0042");
+    const query = new URLSearchParams(String(api.list.mock.calls[0]?.[1]));
+    expect(query.get("createdFrom")).toBe("2026-10-01");
+    expect(query.get("createdTo")).toBe("2026-10-31");
+    expect(query.get("sort")).toBe("createdAt");
+    expect(query.get("direction")).toBe("desc");
+  });
+
+  it("a dátum beírása az URL-be írja a szűrőt, és a lapot nullázza", async () => {
+    navigation.search = new URLSearchParams("page=3");
+    render(<QuoteListPage />);
+    await screen.findByText("AJ-2026-0042");
+    fireEvent.change(screen.getByLabelText("Készítve ettől a naptól"), {
+      target: { value: "2026-10-01" },
+    });
+    const target = String(navigation.replace.mock.calls.at(-1)?.[0]);
+    expect(target).toContain("createdFrom=2026-10-01");
+    expect(target).not.toContain("page=");
+  });
+
+  it("a Készítve fejlécre kattintva növekvő, majd csökkenő, végül alap rendezés jön, és a lap nullázódik", async () => {
+    navigation.search = new URLSearchParams("page=2");
+    const view = render(<QuoteListPage />);
+    await screen.findByText("AJ-2026-0042");
+    fireEvent.click(screen.getByRole("button", { name: /Készítve/ }));
+    const first = String(navigation.replace.mock.calls.at(-1)?.[0]);
+    expect(first).toContain("sort=createdAt");
+    expect(first).toContain("direction=asc");
+    expect(first).not.toContain("page=");
+    view.unmount();
+
+    navigation.search = new URLSearchParams("sort=createdAt&direction=asc");
+    render(<QuoteListPage />);
+    await screen.findByText("AJ-2026-0042");
+    fireEvent.click(screen.getByRole("button", { name: /Készítve/ }));
+    expect(String(navigation.replace.mock.calls.at(-1)?.[0])).toContain(
+      "direction=desc",
+    );
+  });
+
   it("quotes.view nélkül nincs lekérés, csak a jogosultsági üzenet", () => {
     auth.role = "VIEWER";
     render(<QuoteListPage />);
