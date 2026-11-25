@@ -327,3 +327,38 @@ export function chargeAmountText(
     return formatMoney(row.amount, row.currency);
   return formatMoney(-abs, row.currency);
 }
+
+/**
+ * A HÓNAP-LISTA RENDEZÉSE (Balázs kérése, kártya 2f6369a4): a táblázat oszlop-azonosítója -> a rendezési érték. A lista minden hónapot
+ * betölt, ezért a böngészőben rendezünk (`sortRows`). A kivonat nélküli hónap számai ISMERETLENEK (a cella "—"), ezért az értékük `null`,
+ * és a rendezésben mindkét irányban a végén állnak, nem 0-ként elöl. A hiányzó összeg decimális szöveg: `Number()`-rel megy be.
+ * Nem rendezhető: az "Állapot" (a kijelzett felirat nem az állapot sorrendje).
+ */
+export const MONTH_SORT_COLUMNS = {
+  month: "month",
+  charges: "charges",
+  found: "found",
+  unmatched: "unmatched",
+  noInvoice: "noInvoice",
+  originalMissing: "originalMissing",
+  missingAmount: "missingAmount",
+} as const;
+
+const monthUnknown = (row: MonthRow) => row.state === "STATEMENT_MISSING";
+
+export const MONTH_SORT_GETTERS: Readonly<
+  Record<
+    keyof typeof MONTH_SORT_COLUMNS,
+    (row: MonthRow) => string | number | null
+  >
+> = {
+  month: (row) => row.month,
+  charges: (row) => (monthUnknown(row) ? null : row.counts.charges),
+  found: (row) => (monthUnknown(row) ? null : row.counts.found),
+  unmatched: (row) => (monthUnknown(row) ? null : row.counts.notMatched),
+  noInvoice: (row) => (monthUnknown(row) ? null : row.counts.noInvoice),
+  originalMissing: (row) =>
+    monthUnknown(row) ? null : row.counts.originalMissing,
+  missingAmount: (row) =>
+    monthUnknown(row) ? null : Number(row.missingAmountHuf),
+};
