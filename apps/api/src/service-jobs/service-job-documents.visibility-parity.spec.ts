@@ -56,13 +56,19 @@ async function szolgaltatasSzuroje(
   let kapott: Prisma.ServiceJobWhereInput | undefined;
   const repository: Pick<
     ServiceJobsRepository,
-    "list" | "assignedUnitIds" | "countsByStatus"
+    | "list"
+    | "assignedUnitIds"
+    | "countsByStatus"
+    | "countCommonDone"
+    | "commonWorksheetFacts"
   > = {
     assignedUnitIds: async () => EGYSEGEK,
     list: async (_scope, visibility) => {
       kapott = visibility;
       return { rows: [], truncated: false };
     },
+    countCommonDone: async () => 0,
+    commonWorksheetFacts: async () => new Map(),
     countsByStatus: async () => ({
       NEW: 0,
       TRIAGED: 0,

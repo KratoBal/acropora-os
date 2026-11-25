@@ -30,12 +30,18 @@ function serviceWith() {
   const seen: { list: unknown[]; counts: unknown[] } = { list: [], counts: [] };
   const repository: Pick<
     ServiceJobsRepository,
-    "list" | "countsByStatus" | "maintenanceStateCounts"
+    | "list"
+    | "countsByStatus"
+    | "countCommonDone"
+    | "commonWorksheetFacts"
+    | "maintenanceStateCounts"
   > = {
     list: async (_scope, visibility) => {
       seen.list.push(visibility);
       return { rows: [], truncated: false };
     },
+    countCommonDone: async () => 0,
+    commonWorksheetFacts: async () => new Map(),
     countsByStatus: async (visibility) => {
       seen.counts.push(visibility);
       return STATUSES;

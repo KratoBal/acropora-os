@@ -35,7 +35,9 @@ function keszit(options?: {
     | "assignmentContext"
     | "hasWorksheet"
     | "updateFields"
+    | "commonWorksheetFacts"
   > = {
+    commonWorksheetFacts: async () => new Map(),
     detail: async () =>
       ({
         id: "job-1",

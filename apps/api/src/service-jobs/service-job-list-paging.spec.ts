@@ -49,6 +49,8 @@ function serviceWith(totalItems: number | undefined) {
         ...(totalItems === undefined ? {} : { totalItems }),
       };
     },
+    countCommonDone: async () => 0,
+    commonWorksheetFacts: async () => new Map(),
     countsByStatus: async () => ZERO_COUNTS,
     listFacets: async (...args: unknown[]) => {
       facetCalls.push(args);
@@ -107,6 +109,7 @@ describe("a hibajegy-lista lapozása", () => {
         sort: "jobNumber",
         direction: "desc",
         statuses: ["NEW", "TRIAGED"],
+        commonStatuses: ["DONE"],
         customerId: "cust-1",
         departmentId: "dep-1",
       },
@@ -114,6 +117,7 @@ describe("a hibajegy-lista lapozása", () => {
     );
     assert.deepEqual(calls[0], {
       statuses: ["NEW", "TRIAGED"],
+      commonStatuses: ["DONE"],
       customerId: "cust-1",
       departmentId: "dep-1",
       page: 1,
@@ -126,14 +130,20 @@ describe("a hibajegy-lista lapozása", () => {
   it("a szűrő-lehetőségek az állapot-szűrőt kapják, a partner- és helyszín-szűrőt NEM", async () => {
     const { service, facetCalls } = serviceWith(0);
     await service.listFacets(
-      { statuses: ["NEW"], customerId: "cust-1", departmentId: "dep-1" },
+      {
+        statuses: ["NEW"],
+        commonStatuses: ["WAITING"],
+        customerId: "cust-1",
+        departmentId: "dep-1",
+      },
       admin,
     );
     const args = facetCalls[0]!;
     assert.equal(args[0], "open");
     assert.equal(args[3], "REPAIR");
     assert.deepEqual(args[6], ["NEW"]);
-    assert.equal(args.length, 7);
+    assert.deepEqual(args[7], ["WAITING"]);
+    assert.equal(args.length, 8);
   });
 });
 
