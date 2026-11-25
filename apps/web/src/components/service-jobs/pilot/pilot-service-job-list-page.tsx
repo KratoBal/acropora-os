@@ -177,7 +177,14 @@ export const JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
     header: "Hibajegy",
     cell: (item) => (
       <>
-        <p className="break-words font-semibold text-pilot-grey-900">
+        {/*
+          A HOSSZÚ CÍM LEGFELJEBB KÉT SOR (picasso, f0b70dbd, 4. pont): a teljes szöveg a `title` tooltipben áll, a végén "…". A cím az
+          automatikus jegyeknél az eszköz kódját is tartalmazza; azt a listaelem nem hordozza külön mezőben, ezért itt nem szedjük szét.
+        */}
+        <p
+          title={item.title}
+          className="line-clamp-2 break-words font-semibold text-pilot-grey-900"
+        >
           {item.title}
         </p>
         <p className="mt-1 font-mono text-xs text-pilot-grey-500">
@@ -223,7 +230,7 @@ export const JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
       );
     },
   },
-  // THE PARTNER'S STATUS STAYS UNDER THE INTERNAL ONE, as a separate fact (the brief, point 1).
+  // A PARTNER ÁLLAPOTA NEM áll a lista soraiban (picasso, f0b70dbd, 2. pont: mind a sorban ugyanazt mondta, zaj); az adatlapon marad.
   {
     id: "status",
     header: "Állapot",
@@ -233,9 +240,6 @@ export const JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
         <PilotBadge variant={STATUS_BADGE_VARIANT[item.status]}>
           {serviceJobStatusLabel[item.status]}
         </PilotBadge>
-        <p className="mt-2 text-xs text-pilot-grey-500">
-          A partner ezt látja: {item.partnerStatusLabel}
-        </p>
       </>
     ),
   },
@@ -244,11 +248,17 @@ export const JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
     header: "Munkalap",
     width: "120px",
     nowrap: true,
-    cell: (item) => (
-      <span className="rounded-full bg-pilot-grey-100 px-3 py-1 text-xs text-pilot-grey-700">
-        {item.worksheetCount} munkalap
-      </span>
-    ),
+    // A "0 munkalap" NEM JELVÉNY (picasso, f0b70dbd, 5. pont): ahol nincs munkalap, halvány kötőjel áll; csak a van munkalap kap jelvényt
+    cell: (item) =>
+      item.worksheetCount > 0 ? (
+        <span className="rounded-full bg-pilot-grey-100 px-3 py-1 text-xs text-pilot-grey-700">
+          {item.worksheetCount} munkalap
+        </span>
+      ) : (
+        <span className="text-pilot-grey-300" aria-label="Nincs munkalap">
+          —
+        </span>
+      ),
   },
   {
     id: "createdAt",
@@ -535,6 +545,14 @@ export function PilotServiceJobListPage() {
             }`}
           >
             {entry.label}
+            {/* A FÜL SZÁMA UGYANABBÓL A `counts`-BÓL, mint a csempék (egy függvény, két megjelenítés: pilotTabCounts) */}
+            {counts ? (
+              <span
+                className={`ml-1.5 tabular-nums ${tab === entry.id ? "" : "text-pilot-grey-400"}`}
+              >
+                {counts[entry.id]}
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
@@ -673,6 +691,19 @@ export function PilotServiceJobListPage() {
                 : "Hozz létre egy új hibajegyet a bejelentett problémák nyomon követéséhez."}
             </p>
           </div>
+          {appliedSearch || hasActiveFilters ? (
+            <PilotButton
+              variant="secondary"
+              onClick={() => {
+                setSearch("");
+                setAppliedSearch("");
+                setPartner(ALL_PARTNERS);
+                setLocation(ALL_LOCATIONS);
+              }}
+            >
+              Szűrők törlése
+            </PilotButton>
+          ) : null}
           {!appliedSearch && !hasActiveFilters && canManage ? (
             <Link href="/szerviz/hibajegyek/uj">
               <PilotButton variant="primary">
