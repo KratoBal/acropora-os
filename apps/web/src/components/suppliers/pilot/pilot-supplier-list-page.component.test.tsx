@@ -419,6 +419,26 @@ describe("PilotSupplierListPage: kapcsolattartó, szűrősor, leírás", () => {
     expect(supplierColumnsFor([])).toBe(SUPPLIER_COLUMNS);
   });
 
+  it("the contact column stays while the list is sorted by it, even when nobody on the page has contact data (barracuda, #2913)", async () => {
+    const bare = row({ contactPersonName: null, email: null, phone: null });
+    expect(
+      supplierColumnsFor([bare, bare], "contact").map((c) => c.id),
+    ).toContain("contact");
+    expect(
+      supplierColumnsFor([bare, bare], "name").map((c) => c.id),
+    ).not.toContain("contact");
+
+    navigation.params = new URLSearchParams(
+      "sort=contactPersonName&direction=asc",
+    );
+    api.list.mockResolvedValue({ ...response(1), items: [bare] });
+    render(<PilotSupplierListPage />);
+    await screen.findByText("Aqua Kereskedés Kft.");
+    expect(
+      screen.getByRole("columnheader", { name: /Kapcsolattartó/ }),
+    ).toHaveAttribute("aria-sort", "ascending");
+  });
+
   it("a partner without contact data shows a pale dash in the column the others fill", async () => {
     api.list.mockResolvedValue({
       ...response(1),
