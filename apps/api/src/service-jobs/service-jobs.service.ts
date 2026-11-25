@@ -557,7 +557,11 @@ export class ServiceJobsService {
   ): Promise<ServiceJobDetail> {
     this.requireWriteScope(user);
     const userIds = normalizeAssigneeIds(input.userIds);
-    await this.requireAssignableUsers(userIds);
+    // a már rajta lévők maradhatnak (egy rájuk kiosztott gépi fiók sem akadályoz), csak az ÚJAK mennek át a szűrőn
+    await this.requireAssignableUsers(
+      userIds,
+      await this.repository.currentAssigneeIds(id),
+    );
 
     const updated = await this.repository.setAssignees({
       serviceJobId: id,
@@ -596,10 +600,14 @@ export class ServiceJobsService {
    * kollega / a szerepkore nem engedi), es ez szandekos: a kettot
    * szetvalasztva a valasz elarulna, letezik-e egy adott azonosito.
    */
-  private async requireAssignableUsers(userIds: readonly string[]) {
-    if (userIds.length === 0) return;
-    const assignable = await this.repository.assignableUserIds(userIds);
-    const rejected = userIds.filter((userId) => !assignable.has(userId));
+  private async requireAssignableUsers(
+    userIds: readonly string[],
+    keep: ReadonlySet<string> = new Set(),
+  ) {
+    const asked = userIds.filter((userId) => !keep.has(userId));
+    if (asked.length === 0) return;
+    const assignable = await this.repository.assignableUserIds(asked);
+    const rejected = asked.filter((userId) => !assignable.has(userId));
     if (rejected.length > 0) {
       throw new BadRequestException(
         "A delegált kolléga nem található, vagy a szerepköre nem engedi a szerviz-munka kezelését.",

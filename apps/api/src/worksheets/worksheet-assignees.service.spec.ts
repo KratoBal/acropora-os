@@ -120,6 +120,7 @@ function repository(
   return {
     detail: async () => worksheetRow(),
     assignableUserIds: async (ids: readonly string[]) => new Set(ids),
+    currentAssigneeIds: async () => new Set<string>(),
     setAssignees: async () => ({ ok: true, added: [] }),
     ...overrides,
   } as unknown as WorksheetsRepository;
@@ -170,6 +171,62 @@ describe("WorksheetsService assignees", () => {
       BELSOS_KERO,
     );
     assert.deepEqual(received, ["user-2", "user-3"]);
+  });
+
+  /*
+    A GÉPI FIÓK (`isServiceAccount`) NEM OSZTHATÓ ÚJRA, DE A MÁR RAJTA LÉVŐ MARAD (acrobot, 2026-11-25, card b2e74712). MI PIROSÍT: ha egy
+    rajta lévő gépi fiók miatt a többi felelős mentése 400-at kap (a szűrő a rajta lévőt is kérdőre vonná); ha egy ÚJ gépi fiókot a
+    "rajta lévők" kivétele átenged; ha a kivétel a nem rajta lévőre is kiterjed.
+  */
+  it("keeps a service account that is already on the sheet, so saving the other colleagues is not refused", async () => {
+    let received: readonly string[] | null = null;
+    const asked: (readonly string[])[] = [];
+    const service = new WorksheetsService(
+      repository({
+        // the bot is no longer assignable; the person is
+        assignableUserIds: async (ids: readonly string[]) => {
+          asked.push(ids);
+          return new Set(ids.filter((id) => id !== "bot-1"));
+        },
+        currentAssigneeIds: async () => new Set(["bot-1"]),
+        setAssignees: async (input: { userIds: readonly string[] }) => {
+          received = input.userIds;
+          return { ok: true, added: [] };
+        },
+      }),
+    );
+    await service.setAssignees(
+      "worksheet-1",
+      { userIds: ["bot-1", "user-2"] },
+      BELSOS_KERO,
+    );
+    assert.deepEqual(received, ["bot-1", "user-2"]);
+    // only the NEW one went to the filter
+    assert.deepEqual(asked, [["user-2"]]);
+  });
+
+  it("still refuses a service account that is NOT on the sheet yet", async () => {
+    let written = false;
+    const service = new WorksheetsService(
+      repository({
+        assignableUserIds: async (ids: readonly string[]) =>
+          new Set(ids.filter((id) => id !== "bot-2")),
+        currentAssigneeIds: async () => new Set(["bot-1"]),
+        setAssignees: async () => {
+          written = true;
+          return { ok: true, added: [] };
+        },
+      }),
+    );
+    await assert.rejects(
+      service.setAssignees(
+        "worksheet-1",
+        { userIds: ["bot-1", "bot-2"] },
+        BELSOS_KERO,
+      ),
+      BadRequestException,
+    );
+    assert.equal(written, false);
   });
 
   it("accepts an empty list: a wrongly assigned worksheet can be taken back", async () => {

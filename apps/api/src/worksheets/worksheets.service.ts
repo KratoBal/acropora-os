@@ -740,7 +740,11 @@ export class WorksheetsService {
     );
     await this.requireWorksheet(id, scope);
     const userIds = normalizeAssigneeIds(input.userIds);
-    await this.requireAssignableUsers(userIds);
+    // a már rajta lévők maradhatnak (egy rájuk kiosztott gépi fiók sem akadályoz), csak az ÚJAK mennek át a szűrőn
+    await this.requireAssignableUsers(
+      userIds,
+      await this.repository.currentAssigneeIds(id),
+    );
 
     const updated = await this.repository.setAssignees({
       worksheetId: id,
@@ -1959,10 +1963,14 @@ export class WorksheetsService {
    * hívó számára ugyanaz a teendő: mást kell választani. A kettő
    * szétválasztása annyit árulna el, hogy egy adott azonosító létezik-e.
    */
-  private async requireAssignableUsers(userIds: readonly string[]) {
-    if (userIds.length === 0) return;
-    const assignable = await this.repository.assignableUserIds(userIds);
-    const rejected = userIds.filter((userId) => !assignable.has(userId));
+  private async requireAssignableUsers(
+    userIds: readonly string[],
+    keep: ReadonlySet<string> = new Set(),
+  ) {
+    const asked = userIds.filter((userId) => !keep.has(userId));
+    if (asked.length === 0) return;
+    const assignable = await this.repository.assignableUserIds(asked);
+    const rejected = asked.filter((userId) => !assignable.has(userId));
     if (rejected.length > 0) {
       throw new BadRequestException(
         "A felelősnek jelölt kolléga nem található, vagy a szerepköre nem engedi a munkalap szerkesztését.",

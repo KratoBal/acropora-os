@@ -68,6 +68,7 @@ function setup(
   const repository = {
     lastNumberOfYear: async () => null,
     assignableUserIds: async (ids: readonly string[]) => new Set(ids),
+    currentAssigneeIds: async () => new Set<string>(),
     create: async (input: Record<string, unknown>) => {
       created.push(input);
       return { id: "job-1", jobNumber: "HJ-2026-0001" };
@@ -310,6 +311,67 @@ describe("a hibajegy delegálása a felvitel után", () => {
 
     assert.deepEqual(world.assigned[0]?.userIds, []);
     assert.equal(world.notified.length, 0);
+  });
+
+  /*
+    A GÉPI FIÓK NEM OSZTHATÓ ÚJRA, DE A RAJTA LÉVŐ MARAD (acrobot, 2026-11-25, card b2e74712). MI PIROSÍT: ha egy rajta lévő gépi fiók miatt a
+    többi delegált mentése 400-at kap; ha egy ÚJ gépi fiókot a "rajta lévők" kivétele átenged.
+  */
+  it("a jegyen már álló gépi fiók marad, és a többi delegált mentése nem akad el rajta", async () => {
+    const asked: (readonly string[])[] = [];
+    const world = setup({
+      assignableUserIds: async (ids: readonly string[]) => {
+        asked.push(ids);
+        return new Set(ids.filter((id) => id !== "bot-1"));
+      },
+      currentAssigneeIds: async () => new Set(["bot-1"]),
+    });
+
+    await world.service.setAssignees(
+      "job-1",
+      { userIds: ["bot-1", "user-2"] },
+      BELSOS,
+    );
+
+    assert.deepEqual(world.assigned[0]?.userIds, ["bot-1", "user-2"]);
+    // only the NEW one went to the filter
+    assert.deepEqual(asked, [["user-2"]]);
+  });
+
+  it("egy MÉG NEM a jegyen álló gépi fiókot a kivétel nem enged át, és semmi nem íródik", async () => {
+    const world = setup({
+      assignableUserIds: async (ids: readonly string[]) =>
+        new Set(ids.filter((id) => id !== "bot-2")),
+      currentAssigneeIds: async () => new Set(["bot-1"]),
+    });
+
+    await assert.rejects(
+      () =>
+        world.service.setAssignees(
+          "job-1",
+          { userIds: ["bot-1", "bot-2"] },
+          BELSOS,
+        ),
+      BadRequestException,
+    );
+
+    assert.equal(world.assigned.length, 0);
+  });
+
+  it("felvitelkor a gépi fiókot a szűrő elutasítja (nincs rajta kivétel: új jegyen nincs, aki már rajta állna)", async () => {
+    const world = setup({
+      assignableUserIds: async (ids: readonly string[]) =>
+        new Set(ids.filter((id) => id !== "bot-1")),
+    });
+    await assert.rejects(
+      () =>
+        world.service.create(
+          { title: "Nem indul a szivattyú", assigneeIds: ["bot-1"] },
+          "user-1",
+        ),
+      BadRequestException,
+    );
+    assert.equal(world.created.length, 0);
   });
 
   it("ismeretlen kolléga esetén semmi nem íródik", async () => {

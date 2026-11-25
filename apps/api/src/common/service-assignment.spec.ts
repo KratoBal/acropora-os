@@ -144,3 +144,18 @@ describe("assignableUserWhere", () => {
     );
   });
 });
+
+/**
+ * A GÉPI / FLOTTA FIÓK NEM OSZTHATÓ (Balázs D4, acrobot 2026-11-25, card b2e74712; a jelölő `User.isServiceAccount`, card f6694b49).
+ * MI PIROSÍT: ha a kioszthatóság feltételéből kimarad a jelölő (a flotta ADMIN fiókja ugyanolyan szerepű, mint egy ember-admin, a szerep
+ * ezt nem választja el); ha a többi feltétel (aktív, belső, nem partner) közben elvész.
+ */
+describe("assignableUserWhere: a gépi fiók kizárva", () => {
+  it("a jelölő benne van a feltételben, és a többi feltétel megmaradt", () => {
+    const where = assignableUserWhere();
+    assert.equal(where.isServiceAccount, false);
+    assert.equal(where.isActive, true);
+    assert.equal(where.customerId, null);
+    assert.equal(where.supplierId, null);
+  });
+});
