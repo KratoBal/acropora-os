@@ -183,6 +183,43 @@ export class MaintenanceInvoiceDraftService {
   }
 
   /**
+   * A PISZKOZAT TÖRLÉSE (Luca kérése, acrobot 61225): utána a "Piszkozat készítése" újra, friss előnézettel, a TIG mostani
+   * leképezésével. A szabály és az írás a tárolóban (`deleteDraft`); az előnézet PDF a tranzakció UTÁN törlődik a dokumentum-
+   * tárolóból, és ha az nem sikerül, a sor akkor is törölve van (a PDF kulcsa a sor azonosítójához kötött, egy árva fájl nem
+   * ütközik semmivel, és nem látszik sehol). A tároló hibája naplózódik, nem dobódik tovább.
+   */
+  async deleteDraft(
+    invoiceId: string,
+    actor: { id: string } | null,
+  ): Promise<{ deleted: true }> {
+    const result = await this.repository.deleteDraft({
+      invoiceId,
+      actorUserId: actor?.id ?? null,
+    });
+    if ("refusal" in result) {
+      if (result.refusal.code === "NOT_FOUND")
+        throw new NotFoundException(result.refusal.message);
+      throw new ConflictException(result.refusal.message);
+    }
+    if (result.removed.pdfStorageKey) {
+      await this.documentStore
+        .delete({
+          owner: "invoice",
+          ownerId: invoiceId,
+          documentId: PREVIEW_PDF,
+        })
+        .catch((error: unknown) =>
+          this.logger.warn(
+            `A törölt piszkozat előnézet-PDF-je nem törölhető a tárolóból (${invoiceId}): ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          ),
+        );
+    }
+    return { deleted: true };
+  }
+
+  /**
    * A SZÁMLA PDF-JE: piszkozatnál az előnézet, kiállított számlánál a VALÓDI.
    *
    * 2026-09-29-ig ez beégetetten az előnézetet adta vissza, és a karbantartási

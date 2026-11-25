@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Header,
   Param,
@@ -105,6 +106,19 @@ export class MaintenanceInvoiceController {
    * szerepek közül az OWNER, az ADMIN és a MANAGER kapja; a WAREHOUSE-nak
    * `PARTNERS_MANAGE`-e van, tehát piszkozatot készíthet, kiállítani nem.
    */
+  /**
+   * A PISZKOZAT TÖRLÉSE (Luca kérése, acrobot 61225): csak sorszám nélküli piszkozat, a szabály és az írás a
+   * `deleteDraft`-ban. Ugyanaz a jog, mint a piszkozat készítésé (`PARTNERS_MANAGE`, az osztályon): aki készíthet, törölhet is,
+   * és utána újra készíthet. Kiállított vagy kiállítás alatti számlára 409.
+   */
+  @Delete(":invoiceId")
+  deleteDraft(
+    @Param("invoiceId") invoiceId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.draftService.deleteDraft(invoiceId, user);
+  }
+
   @Get(":invoiceId/issue-summary")
   @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
   issueSummary(@Param("invoiceId") invoiceId: string) {

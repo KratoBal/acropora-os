@@ -8,6 +8,7 @@ import {
   type BillingDocumentStatus,
   type BillingDocumentType,
   type BillingEmailStatus,
+  type BillingMaintenanceDraftLink,
   type InvoiceFormat,
 } from "@acropora/types";
 
@@ -18,6 +19,7 @@ import {
   EXTERNAL_KIND_LABELS,
   type ExternalInvoicePayment,
 } from "./external-szamlazz-invoice.js";
+import { TIG_DRAFT_ROWS } from "./billing-own-rows.js";
 import { OWN_ROWS } from "./billing-documents.repository.js";
 import { externalSourceOf } from "./external-billing-one-row.js";
 
@@ -25,9 +27,12 @@ import { externalSourceOf } from "./external-billing-one-row.js";
  * A BIZONYLATLISTA (Számlázás v0.1; szerződés:
  * agents/nautilus/megosztas/szamlazas-kiallitas-lista-reszletek-vegpontok.md).
  *
- * A HATÓKÖR PONTOSAN A RÉSZLETEKÉ (`OWN_ROWS`, murena repository-ja): ami a
- * listán áll, azt a részletek meg is nyitják. A karbantartási számla és a
- * bejövő vagy tükör-sor nem kerül ide, mert a részletek 404-et adnának rá.
+ * A HATÓKÖR A RÉSZLETEKÉ (`OWN_ROWS`, murena repository-ja) ÉS EGY KIVÉTEL: ami a
+ * listán áll, azt a részletek meg is nyitják. A bejövő vagy tükör-sor nem kerül
+ * ide, mert a részletek 404-et adnának rá. A KIVÉTEL a TIG-számla PISZKOZATA
+ * (`TIG_DRAFT_ROWS`, Luca kérése 2026-11-25): a részletek 404-et adnának rá, ezért a
+ * sora nem a részletekre mutat, hanem a szerviz munka vagy a megrendelés lapjára
+ * (`maintenanceDraft`, `billingDocumentPath`), ahol törölhető és újra elkészíthető.
  *
  * TISZTA FÜGGVÉNYEK: a szűrő, a rendezés és a sor-leképezés; a repository csak
  * lefuttatja őket. A `select` a repository-ban áll, a hívás mellett: a
@@ -37,7 +42,10 @@ import { externalSourceOf } from "./external-billing-one-row.js";
 export function listWhere(
   query: BillingDocumentListQuery,
 ): Prisma.InvoiceWhereInput {
-  const where: Prisma.InvoiceWhereInput = { ...OWN_ROWS };
+  // a saját sorok ÉS a TIG-számla piszkozatai (`TIG_DRAFT_ROWS`); a keresés saját `OR`-ja külön áll, ezért `AND` alatt
+  const where: Prisma.InvoiceWhereInput = {
+    AND: [{ OR: [OWN_ROWS, TIG_DRAFT_ROWS] }],
+  };
   if (query.documentType) where.documentType = query.documentType;
   if (query.invoiceFormat) where.invoiceFormat = query.invoiceFormat;
   if (query.status) where.status = query.status;
@@ -181,10 +189,40 @@ function customerName(row: BillingDocumentListRow): string {
   );
 }
 
+/**
+ * A TIG-SZÁMLA PISZKOZATA-E, ÉS HOVA VIGYEN A SORA: csak a `TIG_DRAFT_ROWS` alakú sor (vázlat, `sourceType` nélkül, igazoláshoz
+ * kötött), egyébként `null`. Egy kiállított TIG-számla saját sor, a részletei megnyílnak: annak nincs ilyen jelölése.
+ */
+export function maintenanceDraftOf(row: {
+  status: string;
+  sourceType: string | null;
+  completionCertificate?: {
+    number: string;
+    serviceJobId: string | null;
+    partnerOrderId: string | null;
+    serviceJob: { kind: string } | null;
+  } | null;
+}): BillingMaintenanceDraftLink | null {
+  const certificate = row.completionCertificate;
+  if (row.status !== "DRAFT" || row.sourceType !== null || !certificate)
+    return null;
+  return {
+    serviceJobId: certificate.serviceJobId,
+    jobKind:
+      certificate.serviceJob?.kind === "MAINTENANCE" ||
+      certificate.serviceJob?.kind === "REPAIR"
+        ? certificate.serviceJob.kind
+        : null,
+    partnerOrderId: certificate.partnerOrderId,
+    certificateNumber: certificate.number,
+  };
+}
+
 export function toListItem(
   row: BillingDocumentListRow,
 ): BillingDocumentListItem {
   const status = row.status as BillingDocumentStatus;
+  const maintenanceDraft = maintenanceDraftOf(row);
   return {
     id: row.id,
     documentType: row.documentType as BillingDocumentType,
@@ -199,7 +237,12 @@ export function toListItem(
     currency: row.currency,
     status,
     emailStatus: (row.emailStatus as BillingEmailStatus | null) ?? null,
-    opens: status === "DRAFT" ? "EDITOR" : "DETAIL",
+    opens: maintenanceDraft
+      ? "DETAIL"
+      : status === "DRAFT"
+        ? "EDITOR"
+        : "DETAIL",
+    ...(maintenanceDraft ? { maintenanceDraft } : {}),
     origin: "OWN",
     externalKindLabel: null,
     // a saját bizonylat kifizetéséről ma nincs forrásunk

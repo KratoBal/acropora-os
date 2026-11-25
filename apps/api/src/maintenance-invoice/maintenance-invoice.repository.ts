@@ -2,7 +2,14 @@ import { Injectable } from "@nestjs/common";
 import { prisma, Prisma } from "@acropora/database";
 
 import type { BuyerSnapshot } from "../billing/billing-document-issue.js";
+import {
+  draftDeleteRefusal,
+  type DraftDeleteRefusal,
+} from "../billing/billing-draft-delete.js";
 import type { CertificateAmounts } from "../completion-certificates/completion-certificate-amounts.js";
+
+/** The draft changed between the read and the conditional delete (an issue started): the transaction rolls back. */
+class DraftChangedDuringDelete extends Error {}
 
 @Injectable()
 export class MaintenanceInvoiceRepository {
@@ -56,6 +63,113 @@ export class MaintenanceInvoiceRepository {
       where: { id: invoiceId },
       include: { lines: true },
     });
+  }
+
+  /**
+   * A TIG PISZKOZAT TÖRLÉSE (Luca kérése, acrobot 61225; KT-2026-009): a szabály a számlázás vázlat-törlésének
+   * `draftDeleteRefusal`-ja (csak sorszám nélküli DRAFT, amire nem hivatkozik másik bizonylat), az írás itt, egy tranzakcióban.
+   * A TIG piszkozat forrás nélküli sor (`sourceType` null), ezért a számlázás saját törlése (`OWN_ROWS`) nem éri el: ez a
+   * karbantartási modul saját útja, és CSAK a teljesítési igazoláshoz kötött sort találja meg (`completionCertificateId` nem null).
+   *
+   * A kiállítás kezdete (`claimForIssue`: DRAFT -> ISSUING) és ez a törlés ugyanarra a sorra FELTÉTELES írás: a törlés a
+   * `status = DRAFT` és az olvasáskori `updatedAt` mellett fut, tehát a kettő közül pontosan egy nyer. A tétel-sorok és a
+   * levelezési rekordok nem maradnak lógva; levelezési rekord egy piszkozaton nem létezhet, ezért ha mégis van, a törlés megáll.
+   * Az eredmény a törölt sor tárolt PDF-kulcsa (a hívó a tárolóból törli), vagy az elutasítás.
+   */
+  async deleteDraft(input: {
+    invoiceId: string;
+    actorUserId: string | null;
+  }): Promise<
+    | { refusal: DraftDeleteRefusal }
+    | { removed: { pdfStorageKey: string | null } }
+  > {
+    try {
+      return await this.database.$transaction(async (transaction) => {
+        const row = await transaction.invoice.findFirst({
+          where: {
+            id: input.invoiceId,
+            completionCertificateId: { not: null },
+          },
+          select: {
+            id: true,
+            status: true,
+            invoiceNumber: true,
+            updatedAt: true,
+            partnerName: true,
+            grossAmount: true,
+            currency: true,
+            pdfStorageKey: true,
+            completionCertificateId: true,
+          },
+        });
+        if (!row)
+          return {
+            refusal: {
+              code: "NOT_FOUND" as const,
+              message: "A piszkozat-számla nem található.",
+            },
+          };
+        const referencedBy = await transaction.invoice.count({
+          where: {
+            OR: [
+              { referencedInvoiceId: row.id },
+              { proformaInvoiceId: row.id },
+            ],
+          },
+        });
+        const mailRecords = await transaction.billingDocumentMailDelivery.count(
+          { where: { invoiceId: row.id } },
+        );
+        const refusal =
+          draftDeleteRefusal(row, referencedBy, row.updatedAt) ??
+          (mailRecords > 0
+            ? {
+                code: "REFERENCED" as const,
+                message:
+                  "Ehhez a piszkozathoz levelezési rekord tartozik, ezért nem törölhető.",
+              }
+            : null);
+        if (refusal) return { refusal };
+        await transaction.invoiceLine.deleteMany({
+          where: { invoiceId: row.id },
+        });
+        const removed = await transaction.invoice.deleteMany({
+          where: {
+            id: row.id,
+            completionCertificateId: { not: null },
+            status: "DRAFT",
+            invoiceNumber: null,
+            updatedAt: row.updatedAt,
+          },
+        });
+        if (removed.count !== 1) throw new DraftChangedDuringDelete();
+        await transaction.auditLog.create({
+          data: {
+            userId: input.actorUserId,
+            action: "maintenance-invoice.draft-deleted",
+            entityType: "Invoice",
+            entityId: row.id,
+            metadata: {
+              completionCertificateId: row.completionCertificateId,
+              partnerName: row.partnerName,
+              grossAmount: row.grossAmount?.toString() ?? null,
+              currency: row.currency,
+            },
+          },
+        });
+        return { removed: { pdfStorageKey: row.pdfStorageKey } };
+      });
+    } catch (error) {
+      if (error instanceof DraftChangedDuringDelete)
+        return {
+          refusal: {
+            code: "STALE" as const,
+            message:
+              "A piszkozat közben megváltozott (például elindult a kiállítása), ezért nem törölhető. Töltsd újra az oldalt.",
+          },
+        };
+      throw error;
+    }
   }
 
   /**

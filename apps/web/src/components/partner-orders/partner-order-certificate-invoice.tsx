@@ -15,6 +15,7 @@ import {
   InvoiceMailNotice,
   useMaintenanceInvoiceIssue,
 } from "@/components/service-jobs/maintenance-invoice-issue-confirm";
+import { MaintenanceInvoiceDraftDelete } from "@/components/service-jobs/maintenance-invoice-draft-delete";
 import { maintenanceInvoiceApi } from "@/lib/api/maintenance-invoice";
 
 /**
@@ -203,6 +204,23 @@ export function PartnerOrderCertificateInvoice({
                 >
                   {issuing.busy ? "Kiállítás…" : "Kiállítás"}
                 </PilotButton>
+                <MaintenanceInvoiceDraftDelete
+                  token={token}
+                  invoiceId={invoice.id}
+                  size="action"
+                  onDeleted={() => {
+                    setError(null);
+                    setInvoice(null);
+                  }}
+                  onError={(message) => {
+                    setError(message);
+                    // the server decided (for example the issue started meanwhile): read the state again
+                    void maintenanceInvoiceApi
+                      .byCertificate(token, certificateId)
+                      .then((found) => setInvoice(found ?? null))
+                      .catch(() => undefined);
+                  }}
+                />
                 {!invoice.issueEnabled ? (
                   <span className="text-xs text-pilot-grey-500">
                     A kiállítás még nincs bekapcsolva.

@@ -6,7 +6,10 @@ import {
   BILLING_EMAIL_STATUSES,
   type BillingEmailStatus,
 } from "./billing-document.js";
-import { billingEmailModeFor } from "./billing-document-read.js";
+import {
+  billingDocumentPath,
+  billingEmailModeFor,
+} from "./billing-document-read.js";
 
 describe("billingEmailModeFor", () => {
   it("offers a mode only for an issued document", () => {
@@ -34,6 +37,68 @@ describe("billingEmailModeFor", () => {
         billingEmailModeFor("ISSUED", emailStatus),
       ]),
       expected,
+    );
+  });
+});
+
+describe("billingDocumentPath", () => {
+  const link = (overrides: Record<string, unknown> = {}) => ({
+    serviceJobId: null,
+    jobKind: null,
+    partnerOrderId: null,
+    certificateNumber: "TI-2026-009",
+    ...overrides,
+  });
+
+  it("keeps the billing routes for an ordinary row", () => {
+    assert.equal(
+      billingDocumentPath({ id: "a", opens: "EDITOR" }),
+      "/penzugy/szamlazas/a/szerkesztes",
+    );
+    assert.equal(
+      billingDocumentPath({ id: "a", opens: "DETAIL", maintenanceDraft: null }),
+      "/penzugy/szamlazas/a",
+    );
+  });
+
+  it("takes a TIG invoice draft to its job's or order's page, not to a billing page", () => {
+    assert.equal(
+      billingDocumentPath({
+        id: "a",
+        opens: "DETAIL",
+        maintenanceDraft: link({
+          serviceJobId: "job-9",
+          jobKind: "MAINTENANCE",
+        }),
+      }),
+      "/szerviz/karbantartas/job-9",
+    );
+    assert.equal(
+      billingDocumentPath({
+        id: "a",
+        opens: "DETAIL",
+        maintenanceDraft: link({ serviceJobId: "job-9", jobKind: "REPAIR" }),
+      }),
+      "/szerviz/hibajegyek/job-9",
+    );
+    assert.equal(
+      billingDocumentPath({
+        id: "a",
+        opens: "DETAIL",
+        maintenanceDraft: link({ partnerOrderId: "order-3" }),
+      }),
+      "/megrendelesek/order-3",
+    );
+  });
+
+  it("falls back to the billing detail when the draft names neither a job nor an order", () => {
+    assert.equal(
+      billingDocumentPath({
+        id: "a",
+        opens: "DETAIL",
+        maintenanceDraft: link(),
+      }),
+      "/penzugy/szamlazas/a",
     );
   });
 });

@@ -17,6 +17,7 @@ const invoiceApi = vi.hoisted(() => ({
   issueSummary: vi.fn(),
   issue: vi.fn(),
   downloadPdf: vi.fn(),
+  deleteDraft: vi.fn(),
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
@@ -349,5 +350,78 @@ describe("MaintenanceInvoicePanel -- újratöltés a testvér-panel jelzésére"
     await waitFor(() => expect(certificatesApi.list).toHaveBeenCalledTimes(1));
     rerender(<MaintenanceInvoicePanel serviceJobId="job-1" refreshKey={1} />);
     await waitFor(() => expect(certificatesApi.list).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("MaintenanceInvoicePanel -- a piszkozat törlése (Luca kérése, KT-2026-009)", () => {
+  const withDraft = () => {
+    certificatesApi.list.mockResolvedValue([signedCertificate]);
+    invoiceApi.byCertificate.mockResolvedValue(invoiceSummary);
+  };
+
+  it("offers the delete on a draft, asks first, and after the delete offers a fresh draft", async () => {
+    withDraft();
+    invoiceApi.deleteDraft.mockResolvedValue({ deleted: true });
+    render(<MaintenanceInvoicePanel serviceJobId="job-1" />);
+    await screen.findByText("127 000 Ft");
+    // the reload after the delete finds no invoice any more
+    invoiceApi.byCertificate.mockResolvedValue(null);
+
+    fireEvent.click(screen.getByRole("button", { name: "Piszkozat törlése" }));
+    expect(invoiceApi.deleteDraft).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "Törlöm" }));
+
+    await waitFor(() =>
+      expect(invoiceApi.deleteDraft).toHaveBeenCalledWith(
+        "dev-token",
+        "invoice-1",
+      ),
+    );
+    await screen.findByRole("button", { name: "Piszkozat készítése" });
+    expect(screen.queryByText("127 000 Ft")).toBeNull();
+  });
+
+  it("sends nothing when the question is cancelled", async () => {
+    withDraft();
+    render(<MaintenanceInvoicePanel serviceJobId="job-1" />);
+    await screen.findByText("127 000 Ft");
+
+    fireEvent.click(screen.getByRole("button", { name: "Piszkozat törlése" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Mégsem" }));
+
+    expect(invoiceApi.deleteDraft).not.toHaveBeenCalled();
+    expect(screen.getByText("127 000 Ft")).toBeTruthy();
+  });
+
+  it("shows the server's sentence and keeps the draft when the delete is refused", async () => {
+    withDraft();
+    invoiceApi.deleteDraft.mockRejectedValue(
+      new Error(
+        "A kiállítás elindult, és a kimenete még nem ismert, ezért a bizonylat nem törölhető.",
+      ),
+    );
+    render(<MaintenanceInvoicePanel serviceJobId="job-1" />);
+    await screen.findByText("127 000 Ft");
+
+    fireEvent.click(screen.getByRole("button", { name: "Piszkozat törlése" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Törlöm" }));
+
+    await screen.findByText(/A kiállítás elindult/);
+    expect(screen.getByText("127 000 Ft")).toBeTruthy();
+  });
+
+  it("offers no delete on an issued invoice", async () => {
+    certificatesApi.list.mockResolvedValue([signedCertificate]);
+    invoiceApi.byCertificate.mockResolvedValue({
+      ...invoiceSummary,
+      status: "ISSUED",
+      invoiceNumber: "E-ACR-2026-77",
+    });
+    render(<MaintenanceInvoicePanel serviceJobId="job-1" />);
+
+    await screen.findByText("E-ACR-2026-77");
+    expect(
+      screen.queryByRole("button", { name: "Piszkozat törlése" }),
+    ).toBeNull();
   });
 });

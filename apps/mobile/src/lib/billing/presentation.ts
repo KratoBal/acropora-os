@@ -110,8 +110,10 @@ export function outgoingRow(item: OutgoingDocumentListItem): ListRow {
           label: DOCUMENT_STATUS_LABELS.ISSUED,
           tone: "neutral" as const,
         });
-  const opens =
-    item.opens === "DETAIL"
+  // a TIG-számla piszkozatának nincs számlázási adatlapja (a részletek 404-et adnának): zárt sor, a weben kezelhető
+  const opens = item.maintenanceDraft
+    ? null
+    : item.opens === "DETAIL"
       ? "own"
       : item.opens === "EXTERNAL_DETAIL"
         ? "external"
@@ -124,7 +126,11 @@ export function outgoingRow(item: OutgoingDocumentListItem): ListRow {
     amount: formatAmount(item.grossAmount, item.currency),
     badge,
     opens,
-    closedReason: opens ? null : "A piszkozat a weben szerkeszthető.",
+    closedReason: item.maintenanceDraft
+      ? "A TIG-számla piszkozata a weben, a szerviz munka vagy a megrendelés lapján kezelhető."
+      : opens
+        ? null
+        : "A piszkozat a weben szerkeszthető.",
   };
 }
 

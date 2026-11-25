@@ -135,6 +135,7 @@ export type {
   BillingDocumentListQuery,
   BillingDocumentListResponse,
   BillingDocumentListTarget,
+  BillingMaintenanceDraftLink,
   BillingDocumentOrigin,
   BillingListPaymentFilter,
   BillingDocumentPdfInfo,

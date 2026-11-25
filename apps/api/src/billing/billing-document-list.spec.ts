@@ -16,6 +16,7 @@ import {
   simplePayOrderKey,
   toExternalListItem,
   toListItem,
+  maintenanceDraftOf,
   withoutOwnTwins,
   withTwinPayment,
   type ExternalListRow,
@@ -23,6 +24,7 @@ import {
   type SimplePaySettlementLine,
   type MergeRow,
 } from "./billing-document-list.js";
+import { OWN_ROWS, TIG_DRAFT_ROWS } from "./billing-own-rows.js";
 import {
   BillingDocumentListRepository,
   orderNumbersByBuyerName,
@@ -291,18 +293,103 @@ describe("the date and payment method filters of the outgoing list", () => {
   });
 });
 
+describe("a TIG invoice draft on the list", () => {
+  const certificate = (overrides: Record<string, unknown> = {}) => ({
+    number: "TI-2026-009",
+    serviceJobId: "job-9",
+    partnerOrderId: null,
+    serviceJob: { kind: "MAINTENANCE" },
+    ...overrides,
+  });
+  const tigDraft = (overrides: Partial<BillingDocumentListRow> = {}) =>
+    row({
+      status: "DRAFT",
+      sourceType: null,
+      completionCertificate: certificate(),
+      ...overrides,
+    } as Partial<BillingDocumentListRow>);
+
+  it("points to the service job's panel, not to the billing editor", () => {
+    const item = toListItem(tigDraft());
+    assert.equal(item.opens, "DETAIL");
+    assert.deepEqual(item.maintenanceDraft, {
+      serviceJobId: "job-9",
+      jobKind: "MAINTENANCE",
+      partnerOrderId: null,
+      certificateNumber: "TI-2026-009",
+    });
+  });
+
+  it("points to the order for an order-based TIG", () => {
+    const item = toListItem(
+      tigDraft({
+        completionCertificate: certificate({
+          serviceJobId: null,
+          partnerOrderId: "order-3",
+          serviceJob: null,
+        }),
+      } as Partial<BillingDocumentListRow>),
+    );
+    assert.deepEqual(item.maintenanceDraft, {
+      serviceJobId: null,
+      jobKind: null,
+      partnerOrderId: "order-3",
+      certificateNumber: "TI-2026-009",
+    });
+  });
+
+  it("is not marked for a billing draft (it has a source), an issued TIG invoice, or a row with no certificate", () => {
+    assert.equal(
+      toListItem(
+        row({ sourceType: "MANUAL" } as Partial<BillingDocumentListRow>),
+      ).maintenanceDraft,
+      undefined,
+    );
+    assert.equal(
+      toListItem(tigDraft({ status: "ISSUED", invoiceNumber: "E-1" }))
+        .maintenanceDraft,
+      undefined,
+    );
+    assert.equal(
+      maintenanceDraftOf({
+        status: "DRAFT",
+        sourceType: null,
+        completionCertificate: null,
+      }),
+      null,
+    );
+    // an ordinary billing draft keeps opening in the editor
+    assert.equal(toListItem(row()).opens, "EDITOR");
+  });
+});
+
 describe("listWhere", () => {
-  it("always keeps the detail's own-rows scope, with or without filters", () => {
+  it("always keeps the own-rows scope, plus the TIG invoice draft, with or without filters", () => {
     for (const where of [
       listWhere({}),
       listWhere({ q: "x", status: "ISSUED", documentType: "PROFORMA" }),
     ]) {
-      assert.equal(where.direction, "OUTBOUND");
-      assert.equal(where.source, "SZAMLAZZ");
-      assert.deepEqual(where.sourceType, { not: null });
-      // the issued TIG invoice is an own row (Balázs 2026-11-11 13:22 UTC): its source decides, not the certificate
-      assert.equal("completionCertificateId" in where, false);
+      // the scope sits under AND so the search's own OR cannot replace it
+      assert.deepEqual(where.AND, [{ OR: [OWN_ROWS, TIG_DRAFT_ROWS] }]);
+      // and nothing of it leaks to the top level where a filter could overwrite it
+      assert.equal("direction" in where, false);
+      assert.equal("sourceType" in where, false);
     }
+    // the details' own rows stay exactly as they were: sourced, not tied to the certificate (Balázs 2026-11-11 13:22 UTC)
+    assert.equal(OWN_ROWS.direction, "OUTBOUND");
+    assert.equal(OWN_ROWS.source, "SZAMLAZZ");
+    assert.deepEqual(OWN_ROWS.sourceType, { not: null });
+    assert.equal("completionCertificateId" in OWN_ROWS, false);
+  });
+
+  it("the TIG draft scope is only an unsourced DRAFT tied to a certificate", () => {
+    assert.deepEqual(TIG_DRAFT_ROWS, {
+      direction: "OUTBOUND",
+      source: "SZAMLAZZ",
+      status: "DRAFT",
+      sourceType: null,
+      completionCertificateId: { not: null },
+    });
   });
 
   it("matches the stored buyer name only on issued rows", () => {
