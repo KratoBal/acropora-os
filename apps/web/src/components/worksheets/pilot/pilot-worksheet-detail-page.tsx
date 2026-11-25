@@ -57,7 +57,12 @@ import {
 type WorksheetVersionRow = WorksheetDetail["versions"][number];
 
 export const WORKSHEET_LINE_TABLE_MIN_WIDTH = 640;
-export const WORKSHEET_VERSION_TABLE_MIN_WIDTH = 920;
+/*
+  THE VERSIONS TABLE FITS THE LEFT COLUMN AT 1440 (picasso's screen inventory, 2026-11-25, f0b70dbd): the column is about 710 px
+  there (the card is 760 px), and at 920 the signature column was off to the right. The fixed columns take 630 px and the reason
+  keeps at least 120; below 750 the table scrolls (the card's border leaves a little less than 760 inside).
+*/
+export const WORKSHEET_VERSION_TABLE_MIN_WIDTH = 750;
 
 /*
   A MUNKALAP TÁBLÁI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). A munkalapot a szerelő
@@ -130,13 +135,13 @@ export const WORKSHEET_VERSION_COLUMNS: PilotTableColumn<WorksheetVersionRow>[] 
     {
       id: "version",
       header: "Verzió",
-      width: "120px",
+      width: "96px",
       cell: (version) => version.label ?? `${version.version}. verzió`,
     },
     {
       id: "status",
       header: "Állapot",
-      width: "130px",
+      width: "104px",
       cell: (version) => (
         <PilotBadge variant={worksheetStatusPilotVariant(version.status)}>
           {worksheetStatusLabel[version.status]}
@@ -146,7 +151,7 @@ export const WORKSHEET_VERSION_COLUMNS: PilotTableColumn<WorksheetVersionRow>[] 
     {
       id: "createdBy",
       header: "Készítette",
-      width: "150px",
+      width: "140px",
       cell: (version) => (
         <span className="text-xs text-pilot-grey-600">
           {version.createdByName ?? "—"}
@@ -159,7 +164,7 @@ export const WORKSHEET_VERSION_COLUMNS: PilotTableColumn<WorksheetVersionRow>[] 
     {
       id: "closedBy",
       header: "Lezárta",
-      width: "150px",
+      width: "140px",
       cell: (version) => (
         <span className="text-xs text-pilot-grey-600">
           {version.closedByName ?? "—"}
@@ -181,7 +186,7 @@ export const WORKSHEET_VERSION_COLUMNS: PilotTableColumn<WorksheetVersionRow>[] 
     {
       id: "signature",
       header: "Aláírás",
-      width: "220px",
+      width: "150px",
       cell: (version) => (
         <span className="text-xs text-pilot-grey-600">
           {version.signature ? (

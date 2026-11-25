@@ -161,9 +161,11 @@ describe("WORKSHEET_VERSION_COLUMNS", () => {
     expect(screen.getByText("Rendben")).toBeTruthy();
   });
 
-  it("leaves the flexible reason column at least 150 px at the table minimum", () => {
-    expect(fixedSum(WORKSHEET_VERSION_COLUMNS) + 150).toBeLessThanOrEqual(
+  // f0b70dbd: 150 px for the reason made the table 920 wide, wider than its 760 px card at 1440; 120 keeps a short reason on a line
+  it("leaves the flexible reason column at least 120 px at the table minimum, and fits the 760 px card at 1440", () => {
+    expect(fixedSum(WORKSHEET_VERSION_COLUMNS) + 120).toBeLessThanOrEqual(
       WORKSHEET_VERSION_TABLE_MIN_WIDTH,
     );
+    expect(WORKSHEET_VERSION_TABLE_MIN_WIDTH).toBeLessThan(760);
   });
 });
