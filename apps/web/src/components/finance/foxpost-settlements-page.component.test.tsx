@@ -223,6 +223,34 @@ describe("FoxpostSettlementsPage", () => {
     expect(screen.queryByText("FX01015386")).not.toBeInTheDocument();
   });
 
+  // f0b70dbd: a failed mail had no date, code or amounts, and its row was dashes and "Hiba"; it now says which mail and why
+  it("a failed mail's row shows the mail's day, that processing failed, and the error code", async () => {
+    api.list.mockResolvedValue({
+      ...settlements,
+      items: [
+        {
+          id: "failed-1",
+          gmailInternalDate: "2026-05-10T22:30:00.000Z",
+          gmailSubject: "Foxpost elszámolás 26H18",
+          currency: "HUF",
+          status: "ERROR",
+          matchedLineCount: 0,
+          unresolvedLineCount: 0,
+          errorCode: "FOXPOST_MESSAGE_PROCESSING_FAILED",
+          createdAt: "2026-05-11T06:00:00.000Z",
+        },
+      ],
+    });
+    render(createElement(FoxpostSettlementsPage));
+    await answered(api.reports);
+    // the mail came at 00:30 Budapest time on the 11th: the day is Budapest's, not UTC's
+    expect(await screen.findByText("levél: 2026. 05. 11.")).toBeInTheDocument();
+    expect(screen.getByText("Feldolgozási hiba")).toBeInTheDocument();
+    expect(
+      screen.getByText("FOXPOST_MESSAGE_PROCESSING_FAILED"),
+    ).toBeInTheDocument();
+  });
+
   it("picks the month to download, and says when that month has no report", async () => {
     api.reports.mockResolvedValue([
       {

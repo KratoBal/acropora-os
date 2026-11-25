@@ -50,6 +50,19 @@ function formatDate(value?: string): string {
     : "—";
 }
 
+/*
+  A HIBÁS FELDOLGOZÁS IS MEGNEVEZI MAGÁT (picasso képernyő-leltára, 2026-11-25, f0b70dbd): egy sikertelenül feldolgozott levélnek
+  nincs számla-kelte, elszámolás-kódja és összege, ezért a listán csupa "—" állt "Hiba" jelvénnyel, és nem lehetett tudni, melyik
+  levélről van szó. A levél napja (Budapest szerint), a tárgya és a hibakód mind megvan: azokat mutatjuk.
+*/
+function mailDay(value?: string): string | null {
+  return value
+    ? new Date(value).toLocaleDateString("hu-HU", {
+        timeZone: "Europe/Budapest",
+      })
+    : null;
+}
+
 const STATUS_LABEL: Record<FoxpostSettlementStatus, string> = {
   COMPLETED: "Kész",
   NEEDS_REVIEW: "Ellenőrzendő",
@@ -473,7 +486,16 @@ export function FoxpostSettlementsPage() {
             { label: "Állapot", value: STATUS_LABEL[selected.status] },
           ]}
         />
-        {selected.errorCode || selected.unresolvedLineCount > 0 ? (
+        {selected.status === "ERROR" ? (
+          <SettlementNotice
+            tone="check"
+            title="A levél feldolgozása nem sikerült"
+          >
+            {selected.gmailSubject ? `Levél: ${selected.gmailSubject}. ` : ""}
+            Hibakód: {selected.errorCode ?? "ismeretlen"}. Az Újrafeldolgozás a
+            tárolt mellékletekből újra megpróbálja.
+          </SettlementNotice>
+        ) : selected.errorCode || selected.unresolvedLineCount > 0 ? (
           <SettlementNotice
             tone="check"
             title={`${selected.unresolvedLineCount.toLocaleString("hu-HU")} tétel kézi ellenőrzést kér`}
@@ -517,13 +539,28 @@ export function FoxpostSettlementsPage() {
       header: "Kelte",
       nowrap: true,
       width: "16%",
-      cell: (item) => formatDate(item.invoiceIssueDate),
+      cell: (item) =>
+        item.invoiceIssueDate || !mailDay(item.gmailInternalDate)
+          ? formatDate(item.invoiceIssueDate)
+          : `levél: ${mailDay(item.gmailInternalDate)}`,
     },
     {
       id: "code",
       header: "Elszámolás",
       width: "18%",
-      cell: (item) => item.settlementCode ?? "—",
+      cell: (item) =>
+        item.status === "ERROR" && !item.settlementCode ? (
+          <span className="block min-w-0" title={item.gmailSubject}>
+            <span className="block text-pilot-grey-900">Feldolgozási hiba</span>
+            {item.errorCode ? (
+              <span className="block truncate font-mono text-xs text-pilot-grey-500">
+                {item.errorCode}
+              </span>
+            ) : null}
+          </span>
+        ) : (
+          (item.settlementCode ?? "—")
+        ),
     },
     {
       id: "collected",
