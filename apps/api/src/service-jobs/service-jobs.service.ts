@@ -1700,6 +1700,7 @@ export class ServiceJobsService {
     const attached = await this.repository.attachWorksheet({
       serviceJobId: jobId,
       worksheetId,
+      actorUserId: user.id,
     });
     // A FELTETEL A `WHERE`-BEN IS OTT VOLT: ha kozben mas csatolta, itt derul
     // ki, es nem irjuk felul csendben.

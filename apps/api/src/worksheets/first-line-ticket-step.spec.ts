@@ -4,9 +4,12 @@ import { describe, it } from "node:test";
 import type { ServiceJobStatus } from "@acropora/database";
 
 import {
+  advanceTicketOnAttach,
   advanceTicketOnFirstLine,
+  ATTACH_STEP_NOTE,
   FIRST_LINE_STEP_NOTE,
   firstLineStep,
+  type AttachTransaction,
   type FirstLineTransaction,
 } from "./first-line-ticket-step.js";
 
@@ -152,6 +155,109 @@ describe("advanceTicketOnFirstLine", () => {
       null,
     );
     assert.equal(writes.updates.length, 1);
+    assert.deepEqual(writes.events, []);
+  });
+});
+
+/**
+ * A CSATOLÁS LÉPÉSE (közös állapot-lista, terv 8/a). A bekötés és a naplósor
+ * valódi sorokon a `service-jobs-write-scope.integration.spec.ts`-ben
+ * mérődik; itt a feltétel: a legutolsó verzió tételsora, és a kiinduló állapot.
+ */
+describe("advanceTicketOnAttach", () => {
+  function attachTransaction(input: {
+    status: ServiceJobStatus;
+    /** A legutolsó verzió tételsorainak száma; `null`, ha nincs verzió. */
+    lines: number | null;
+    movedCount?: number;
+  }) {
+    const writes: { updates: unknown[]; events: unknown[] } = {
+      updates: [],
+      events: [],
+    };
+    const transaction = {
+      worksheetVersion: {
+        findFirst: async () =>
+          input.lines === null ? null : { _count: { lines: input.lines } },
+      },
+      serviceJob: {
+        findUnique: async () => ({ status: input.status }),
+        updateMany: async (args: unknown) => {
+          writes.updates.push(args);
+          return { count: input.movedCount ?? 1 };
+        },
+      },
+      serviceJobEvent: {
+        create: async (args: unknown) => {
+          writes.events.push(args);
+          return {};
+        },
+      },
+    } as unknown as AttachTransaction;
+    return { transaction, writes };
+  }
+
+  const INPUT = {
+    serviceJobId: "job-1",
+    worksheetId: "ws-1",
+    actorUserId: "user-1",
+  };
+
+  it("tételsoros lap: az Új jegy Folyamatban lesz, a csatolás naplósorával", async () => {
+    const { transaction, writes } = attachTransaction({
+      status: "NEW",
+      lines: 2,
+    });
+
+    const lepes = await advanceTicketOnAttach(transaction, INPUT);
+
+    assert.deepEqual(lepes, { from: "NEW", to: "IN_PROGRESS" });
+    assert.deepEqual(writes.updates, [
+      {
+        where: { id: "job-1", status: "NEW" },
+        data: { status: "IN_PROGRESS" },
+      },
+    ]);
+    assert.deepEqual(writes.events, [
+      {
+        data: {
+          serviceJobId: "job-1",
+          fromStatus: "NEW",
+          toStatus: "IN_PROGRESS",
+          note: ATTACH_STEP_NOTE,
+          actorUserId: "user-1",
+        },
+      },
+    ]);
+  });
+
+  it("ugyanaz a három kiinduló állapot, mint az első sornál", async () => {
+    const lepett: ServiceJobStatus[] = [];
+    for (const status of ALL) {
+      const { transaction } = attachTransaction({ status, lines: 1 });
+      if (await advanceTicketOnAttach(transaction, INPUT)) lepett.push(status);
+    }
+    assert.deepEqual(lepett, ["NEW", "TRIAGED", "SCHEDULED"]);
+  });
+
+  it("tétel nélküli vagy verzió nélküli lap nem léptet, és nem ír", async () => {
+    for (const lines of [0, null]) {
+      const { transaction, writes } = attachTransaction({
+        status: "NEW",
+        lines,
+      });
+      assert.equal(await advanceTicketOnAttach(transaction, INPUT), null);
+      assert.deepEqual(writes, { updates: [], events: [] }, String(lines));
+    }
+  });
+
+  it("ha közben más léptette a jegyet, naplósor sem keletkezik", async () => {
+    const { transaction, writes } = attachTransaction({
+      status: "NEW",
+      lines: 1,
+      movedCount: 0,
+    });
+    assert.equal(await advanceTicketOnAttach(transaction, INPUT), null);
     assert.deepEqual(writes.events, []);
   });
 });

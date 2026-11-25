@@ -5,6 +5,7 @@ import { prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
 
 import { AuthUserResolver } from "../auth/auth-user-resolver.js";
+import { ATTACH_STEP_NOTE } from "../worksheets/first-line-ticket-step.js";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { ServiceJobsRepository } from "./service-jobs.repository.js";
 import { ServiceJobsService } from "./service-jobs.service.js";
@@ -256,10 +257,10 @@ describe(
           const jobId = await newJob(customerA);
           return {
             hivas: (user) =>
-              service.move(jobId, { to: "TRIAGED" }, user.id, user),
+              service.move(jobId, { to: "IN_PROGRESS" }, user.id, user),
             olvas: () => statusOf(jobId),
             elott: "NEW",
-            utana: "TRIAGED",
+            utana: "IN_PROGRESS",
           };
         },
       },
@@ -373,6 +374,90 @@ describe(
         assert.equal(await eset.olvas(), eset.utana);
       });
     }
+
+    /**
+     * A CSATOLÁS LÉPTETI AZ ÚJ JEGYET (közös állapot-lista, terv 8/a).
+     *
+     * Valódi sorokon, mert a lépés a csatolással EGY tranzakcióban fut: a
+     * `first-line-ticket-step.spec.ts` a szabályt méri hamis tranzakción, ez a
+     * bekötést és a naplósort. A három eset a szabály három ága: léptet, a
+     * várakozó jegyhez nem nyúl, az üres lap nem bizonyíték.
+     */
+    async function newWorksheetWithLine(): Promise<string> {
+      sorszam += 1;
+      const sheet = await prisma.worksheet.create({
+        data: {
+          customerId: customerA,
+          departmentId: departmentA,
+          versions: {
+            create: {
+              version: 1,
+              status: "SIGNED",
+              // a séma CHECK-je: nem piszkozat verzió csak lezárási idővel
+              closedAt: new Date(),
+              subject: `Lezárt munka ${sorszam}`,
+              lines: {
+                create: {
+                  position: 1,
+                  description: "Szivattyú cseréje",
+                  quantity: 1,
+                  unit: "db",
+                },
+              },
+            },
+          },
+        },
+        select: { id: true },
+      });
+      return sheet.id;
+    }
+
+    async function stepEvents(jobId: string) {
+      return prisma.serviceJobEvent.findMany({
+        where: { serviceJobId: jobId, kind: "STATUS_CHANGE" },
+        select: { fromStatus: true, toStatus: true, note: true },
+      });
+    }
+
+    it("tételsoros lap csatolása az Új jegyet Folyamatban állapotba lépteti, naplósorral", async () => {
+      const jobId = await newJob(customerA);
+      const worksheetId = await newWorksheetWithLine();
+      assert.equal(await statusOf(jobId), "NEW");
+
+      await service.attachWorksheet(jobId, worksheetId, belsos);
+
+      assert.equal(await ticketOf(worksheetId), jobId);
+      assert.equal(await statusOf(jobId), "IN_PROGRESS");
+      assert.deepEqual(await stepEvents(jobId), [
+        { fromStatus: "NEW", toStatus: "IN_PROGRESS", note: ATTACH_STEP_NOTE },
+      ]);
+    });
+
+    it("a várakozó jegyet a csatolás nem lépteti", async () => {
+      const jobId = await newJob(customerA);
+      await prisma.serviceJob.update({
+        where: { id: jobId },
+        data: { status: "WAITING_FOR_CUSTOMER" },
+      });
+      const worksheetId = await newWorksheetWithLine();
+
+      await service.attachWorksheet(jobId, worksheetId, belsos);
+
+      assert.equal(await ticketOf(worksheetId), jobId);
+      assert.equal(await statusOf(jobId), "WAITING_FOR_CUSTOMER");
+      assert.deepEqual(await stepEvents(jobId), []);
+    });
+
+    it("tétel nélküli lap csatolása nem léptet", async () => {
+      const jobId = await newJob(customerA);
+      const worksheetId = await newWorksheet(null);
+
+      await service.attachWorksheet(jobId, worksheetId, belsos);
+
+      assert.equal(await ticketOf(worksheetId), jobId);
+      assert.equal(await statusOf(jobId), "NEW");
+      assert.deepEqual(await stepEvents(jobId), []);
+    });
 
     /**
      * A TAKARITAS TENYLEG LEFUTOTT-E -- ES EZ MIERT TESZT, NEM HOOK.

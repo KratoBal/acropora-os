@@ -42,6 +42,7 @@ import {
   type NotificationRole,
 } from "@acropora/database";
 import { unitPathFor, unitPathsFor } from "../common/unit-path-lookup.js";
+import { advanceTicketOnAttach } from "../worksheets/first-line-ticket-step.js";
 
 /**
  * A LISTA HATARA. Nevet kapott, mert ket helyen kell: a lekerdezesben es abban
@@ -1825,12 +1826,21 @@ export class ServiceJobsRepository {
    * menne, hanem mert az ATSOROLAS mas muvelet, mas kerdesekkel (mi tortenjen a
    * regi jegy naplojaval, latja-e a partner) - es azokra ma nincs dontes.
    */
-  async attachWorksheet(input: { serviceJobId: string; worksheetId: string }) {
-    const attached = await this.database.worksheet.updateMany({
-      where: { id: input.worksheetId, serviceJobId: null },
-      data: { serviceJobId: input.serviceJobId },
+  async attachWorksheet(input: {
+    serviceJobId: string;
+    worksheetId: string;
+    actorUserId: string;
+  }) {
+    // a jegy léptetése a csatolással egy tranzakcióban (`advanceTicketOnAttach`, közös állapot-lista 8/a)
+    return this.database.$transaction(async (transaction) => {
+      const attached = await transaction.worksheet.updateMany({
+        where: { id: input.worksheetId, serviceJobId: null },
+        data: { serviceJobId: input.serviceJobId },
+      });
+      if (attached.count !== 1) return { ok: false };
+      await advanceTicketOnAttach(transaction, input);
+      return { ok: true };
     });
-    return { ok: attached.count === 1 };
   }
 
   /**

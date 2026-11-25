@@ -410,13 +410,14 @@ export async function runTrialFlows(
     },
   );
 
-  await step("ticket: the ticket moves to TRIAGED", [jobOk], async () => {
+  // the shared status list (card 7f23785c): TRIAGED is no target any more, a new ticket goes straight to IN_PROGRESS
+  await step("ticket: the ticket moves to IN_PROGRESS", [jobOk], async () => {
     const moved = ok(
       "move ticket",
-      await call("POST", `/service/jobs/${jobId}/move`, { to: "TRIAGED" }),
+      await call("POST", `/service/jobs/${jobId}/move`, { to: "IN_PROGRESS" }),
     );
-    if (field(moved.json, "status") !== "TRIAGED")
-      throw new StepError("the ticket is not TRIAGED");
+    if (field(moved.json, "status") !== "IN_PROGRESS")
+      throw new StepError("the ticket is not IN_PROGRESS");
   });
 
   return checks;

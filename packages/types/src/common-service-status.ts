@@ -234,6 +234,12 @@ export function commonServiceStateTone(
  * KÉT SZÁNDÉKOS ELTÉRÉS a mai `partnerVisibleStatus`-tól, név szerint a
  * tesztben: a COMPLETED jegy Lezárva lesz (ma Elkészült), és a kész lapú
  * IN_PROGRESS jegy Elkészült (ma Feldolgozás alatt). Ezt a 4. szelet köti be.
+ *
+ * A MEGHIÚSULT OK NEM VÉSZ EL (acrobot döntése, 2026-11-25, 61894, barracuda
+ * észrevétele nyomán, 61891): ma a partner a COMPLETED és a CANCELLED jegyet
+ * meg tudja különböztetni, a közösből rövidítve mindkettő Lezárva. A felirat
+ * marad Lezárva, de a `closedReason` kimondja, ha a munka nem teljesült, és a
+ * partner adatlapja és lista-kártyája ezt második sorként rajzolja.
  */
 const PARTNER_FROM_COMMON: Record<
   CommonServiceStatus,
@@ -246,8 +252,28 @@ const PARTNER_FROM_COMMON: Record<
   CLOSED: "CLOSED",
 };
 
+/** Lezárt jegynél a kimenetel a partnernek; ma egy értéke van. */
+export type PartnerClosedReason = "CANCELLED";
+
+/** A második sor szövege a partner lapján. */
+export const partnerClosedReasonLabel: Record<PartnerClosedReason, string> = {
+  CANCELLED: "Nem teljesült",
+};
+
+export interface PartnerCommonState {
+  status: ServiceJobPartnerStatus;
+  /** `CANCELLED`, ha a lezárt jegy meghiúsult; minden más esetben `null`. */
+  closedReason: PartnerClosedReason | null;
+}
+
 export function partnerStatusFromCommon(
-  status: CommonServiceStatus,
-): ServiceJobPartnerStatus {
-  return PARTNER_FROM_COMMON[status];
+  state: CommonServiceState,
+): PartnerCommonState {
+  return {
+    status: PARTNER_FROM_COMMON[state.status],
+    closedReason:
+      state.status === "CLOSED" && state.reason === "CANCELLED"
+        ? "CANCELLED"
+        : null,
+  };
 }
