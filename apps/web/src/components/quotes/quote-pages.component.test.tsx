@@ -31,6 +31,27 @@ import { QuoteTemplateEditorPage } from "./quote-template-editor-page";
 import { QuoteTemplatesPage } from "./quote-templates-page";
 
 /** Az árajánlat modul képernyői (#1582 P1, Figma 35). */
+
+/*
+  A "TOVÁBBIAK" MENÜ MÖGÖTT ÁLLÓ MŰVELETEK (Picasso 3.4, acrobot 61933): az Elutasítás, a Halasztás, a Visszavonás, a Másolat,
+  a Cím szerkesztése és a Partner cseréje a lenyíló menüben van. A zárt menü gombjai nem látszanak a szerepkör-lekérdezésnek,
+  ezért ezek a segédek nyitják le előbb. A HIÁNY-állítás is lenyitja a menüt: zárt menünél egy `toBeNull` üresen igaz lenne.
+*/
+function openMoreMenu(): void {
+  const trigger = screen.queryByRole("button", { name: "Továbbiak" });
+  if (trigger && trigger.getAttribute("aria-expanded") !== "true")
+    fireEvent.click(trigger);
+}
+async function moreItem(name: string): Promise<HTMLElement> {
+  await screen.findByRole("button", { name: "Továbbiak" });
+  openMoreMenu();
+  return screen.findByRole("button", { name });
+}
+function queryMoreItem(name: string): HTMLElement | null {
+  openMoreMenu();
+  return screen.queryByRole("button", { name });
+}
+
 vi.mock("next/font/local", () => ({
   default: () => ({ className: "pilot-inter-stub" }),
 }));
@@ -519,6 +540,191 @@ describe("Ajánlat adatlap (569:504)", () => {
 });
 
 /*
+  AZ AJÁNLAT ADATLAP MŰVELETEI (Picasso 3.4, acrobot 61933): nyolc egyforma gomb helyett EGY elsődleges (Szerkesztés vagy Új
+  verzió), mellette a Kiküldés/Újraküldés, ahol van publikált verzió; a ritkább műveletek a "Továbbiak" menüben; a Törlés
+  elkülönítve, az oldal alján, piros gombbal és megerősítéssel. MI PIROSÍT: ha egy ritka művelet kikerül a menüből a sorba; ha
+  a Törlés bekerül a menübe; ha a veszélyes menüpont nem piros; ha a menü nem zárul Escape-re; ha a verziók sora újra magas.
+*/
+describe("Ajánlat adatlap: egy elsődleges gomb, a többi a Továbbiak mögött (3.4)", () => {
+  const draftOnly = () =>
+    quote([version({ id: "v1", versionNumber: 1, status: "DRAFT" })], {
+      status: "DRAFT",
+    });
+  const published = () =>
+    quote(
+      [
+        version({
+          id: "v1",
+          versionNumber: 1,
+          status: "PUBLISHED",
+          publishedAt: "2026-10-07T10:42:00Z",
+        }),
+      ],
+      { status: "SENT" },
+    );
+  const MOVED = [
+    "Elutasítás",
+    "Halasztás",
+    "Visszavonás",
+    "Másolat új ajánlatként",
+    "Cím szerkesztése",
+    "Partner cseréje",
+  ];
+
+  it("a draft shows Szerkesztés and Továbbiak in the row, and none of the rare actions until the menu opens", async () => {
+    api.detail.mockResolvedValue(draftOnly());
+    render(<QuoteDetailPage quoteId="q1" />);
+    expect(
+      await screen.findByRole("button", { name: "Szerkesztés" }),
+    ).toBeInTheDocument();
+    const trigger = screen.getByRole("button", { name: "Továbbiak" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    for (const name of MOVED)
+      expect(screen.queryByRole("button", { name })).toBeNull();
+
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    for (const name of MOVED)
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+  });
+
+  it("the send sits next to the primary button on a published quote, not in the menu", async () => {
+    api.detail.mockResolvedValue(published());
+    render(<QuoteDetailPage quoteId="q1" />);
+    const send = await screen.findByRole("button", { name: "Kiküldés" });
+    const trigger = screen.getByRole("button", { name: "Továbbiak" });
+    const group = document.getElementById(
+      trigger.getAttribute("aria-controls") ?? "",
+    );
+    expect(group).not.toBeNull();
+    expect(group!.contains(send)).toBe(false);
+    expect(
+      screen.getByRole("button", { name: "Új verzió" }),
+    ).toBeInTheDocument();
+  });
+
+  // the primary button is the filled one; the secondary ones are not (PilotButton variants)
+  const isPrimary = (name: string) =>
+    screen
+      .getByRole("button", { name })
+      .className.includes("bg-pilot-aqua-600");
+
+  it("with a published version the Kiküldés is the primary button and Új verzió is secondary (acrobot 61941)", async () => {
+    api.detail.mockResolvedValue(published());
+    render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByRole("button", { name: "Kiküldés" });
+    expect(isPrimary("Kiküldés")).toBe(true);
+    expect(isPrimary("Új verzió")).toBe(false);
+  });
+
+  it("a draft the user can publish: Publikálás is primary and asks first, Szerkesztés is secondary", async () => {
+    api.detail.mockResolvedValue(draftOnly());
+    api.publish.mockResolvedValue(
+      quote(
+        [
+          version({
+            id: "v1",
+            versionNumber: 1,
+            status: "PUBLISHED",
+            publishedAt: "2026-10-07T10:42:00Z",
+          }),
+        ],
+        { status: "DRAFT" },
+      ),
+    );
+    render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByRole("button", { name: "Publikálás" });
+    expect(isPrimary("Publikálás")).toBe(true);
+    expect(isPrimary("Szerkesztés")).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Publikálás" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(api.publish).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Publikálás" }));
+    await waitFor(() =>
+      expect(api.publish).toHaveBeenCalledWith("token-1", "q1", "v1"),
+    );
+    // the page now offers the send, the step after the publish
+    expect(
+      await screen.findByRole("button", { name: "Kiküldés" }),
+    ).toBeInTheDocument();
+  });
+
+  it("without the publish permission the Szerkesztés stays the primary button and there is no Publikálás", async () => {
+    auth.permissions = ["quotes.view", "quotes.manage"] as Permission[];
+    api.detail.mockResolvedValue(draftOnly());
+    render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByRole("button", { name: "Szerkesztés" });
+    expect(isPrimary("Szerkesztés")).toBe(true);
+    expect(screen.queryByRole("button", { name: "Publikálás" })).toBeNull();
+  });
+
+  it("Elutasítás and Visszavonás are red in the menu, Halasztás is not", async () => {
+    api.detail.mockResolvedValue(published());
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Továbbiak" }));
+    const red = (name: string) =>
+      screen
+        .getByRole("button", { name })
+        .className.includes("text-pilot-red-700");
+    expect(red("Elutasítás")).toBe(true);
+    expect(red("Visszavonás")).toBe(true);
+    expect(red("Halasztás")).toBe(false);
+  });
+
+  it("choosing an item closes the menu and opens its dialog; Escape closes without choosing", async () => {
+    api.detail.mockResolvedValue(published());
+    render(<QuoteDetailPage quoteId="q1" />);
+    const trigger = await screen.findByRole("button", { name: "Továbbiak" });
+    fireEvent.click(trigger);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "Elutasítás" }));
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("the Törlés is NOT in the menu: it is its own card at the bottom, red, and still asks first", async () => {
+    api.detail.mockResolvedValue(draftOnly());
+    render(<QuoteDetailPage quoteId="q1" />);
+    const del = await screen.findByRole("button", { name: "Törlés" });
+    fireEvent.click(screen.getByRole("button", { name: "Továbbiak" }));
+    const group = screen.getByRole("group", { name: "További műveletek" });
+    expect(group.contains(del)).toBe(false);
+    // the card comes after the versions table in the page
+    const versions = screen.getByText("Verziók");
+    expect(
+      versions.compareDocumentPosition(del) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    fireEvent.click(del);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("button", { name: "Törlés" })).toBeTruthy();
+    expect(api.deleteDraft).not.toHaveBeenCalled();
+  });
+
+  it("a published quote has no Törlés card at all", async () => {
+    api.detail.mockResolvedValue(published());
+    render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByRole("button", { name: "Új verzió" });
+    expect(screen.queryByRole("button", { name: "Törlés" })).toBeNull();
+  });
+
+  it("the versions table rows are the dense ones", async () => {
+    api.detail.mockResolvedValue(published());
+    const { container } = render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByRole("button", { name: "Új verzió" });
+    const rows = container.querySelectorAll("tbody tr");
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.className).toContain("md:h-[44px]");
+      expect(row.className).not.toContain("md:h-[72px]");
+    }
+  });
+});
+
+/*
   A TERVEZET TÖRLÉSE ÉS A LEZÁRT AJÁNLAT MÁSOLATA (Luca, kártya 5937bdf2).
   MI PIROSÍT: ha a Törlés megerősítés nélkül törölne; ha publikált vagy küldött
   ajánlaton megjelenne a Törlés; ha nyitott ajánlaton megjelenne a másolat; ha
@@ -574,9 +780,7 @@ describe("Tervezet törlése és másolat (5937bdf2)", () => {
     render(<QuoteDetailPage quoteId="q1" />);
     await screen.findByRole("button", { name: "Új verzió" });
     expect(screen.queryByRole("button", { name: "Törlés" })).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Másolat új ajánlatként" }),
-    ).toBeTruthy();
+    expect(queryMoreItem("Másolat új ajánlatként")!).toBeTruthy();
   });
 
   it("an open quote: Másolat új ajánlatként creates the copy, opens the NEW quote, and leaves the open one alone", async () => {
@@ -587,9 +791,7 @@ describe("Tervezet törlése és másolat (5937bdf2)", () => {
     );
     api.copyAsNew.mockResolvedValue({ id: "q9", quoteNumber: "AJ-2026-0099" });
     render(<QuoteDetailPage quoteId="q1" />);
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Másolat új ajánlatként" }),
-    );
+    fireEvent.click(await moreItem("Másolat új ajánlatként"));
     await waitFor(() =>
       expect(api.copyAsNew).toHaveBeenCalledWith("token-1", "q1"),
     );
@@ -606,9 +808,7 @@ describe("Tervezet törlése és másolat (5937bdf2)", () => {
     );
     api.copyAsNew.mockResolvedValue({ id: "q9", quoteNumber: "AJ-2026-0099" });
     render(<QuoteDetailPage quoteId="q1" />);
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Másolat új ajánlatként" }),
-    );
+    fireEvent.click(await moreItem("Másolat új ajánlatként"));
     await waitFor(() =>
       expect(api.copyAsNew).toHaveBeenCalledWith("token-1", "q1"),
     );
@@ -737,7 +937,7 @@ describe("Az ajánlat kimenetele (P4a)", () => {
       quote([published()], { status: "REJECTED", closeReason: "COMPETITOR" }),
     );
     render(<QuoteDetailPage quoteId="q1" />);
-    fireEvent.click(await screen.findByRole("button", { name: "Elutasítás" }));
+    fireEvent.click(await moreItem("Elutasítás"));
     const submit = screen.getByRole("button", { name: "Elutasítom" });
     expect((submit as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText("Ok"), {
@@ -766,7 +966,7 @@ describe("Az ajánlat kimenetele (P4a)", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Elfogadás visszavonása" }),
     );
-    expect(screen.queryByRole("button", { name: "Elutasítás" })).toBeNull();
+    expect(queryMoreItem("Elutasítás")).toBeNull();
     expect(screen.queryByRole("button", { name: "Új verzió" })).toBeNull();
     const submit = screen.getByRole("button", {
       name: "Visszavonom az elfogadást",
@@ -2237,9 +2437,12 @@ describe("Az ajánlat címe: a másolat átnevezhető (quote-masolat-cim)", () =
       status: "DRAFT",
       title: "180 cm-es irodai bemutató akvárium (másolat)",
     });
-  const open = async () =>
+  // the detail page keeps it behind "Továbbiak"; the editor page shows the button itself
+  const open = async (viaMenu = true) =>
     fireEvent.click(
-      await screen.findByRole("button", { name: "Cím szerkesztése" }),
+      viaMenu
+        ? await moreItem("Cím szerkesztése")
+        : await screen.findByRole("button", { name: "Cím szerkesztése" }),
     );
   const field = () => screen.getByLabelText("Az ajánlat címe");
 
@@ -2274,9 +2477,7 @@ describe("Az ajánlat címe: a másolat átnevezhető (quote-masolat-cim)", () =
     api.detail.mockResolvedValue(quote([version({ status: "PUBLISHED" })]));
     const { unmount } = render(<QuoteDetailPage quoteId="q1" />);
     await screen.findByText("Aktuális verzió: v2", { exact: false });
-    expect(
-      screen.queryByRole("button", { name: "Cím szerkesztése" }),
-    ).toBeNull();
+    expect(queryMoreItem("Cím szerkesztése")).toBeNull();
     unmount();
 
     // a DRAFT quote that already has a published version (a new draft on a sent one) is refused by the API too
@@ -2291,18 +2492,14 @@ describe("Az ajánlat címe: a másolat átnevezhető (quote-masolat-cim)", () =
     );
     const second = render(<QuoteDetailPage quoteId="q1" />);
     await screen.findByText("Aktuális verzió: v2", { exact: false });
-    expect(
-      screen.queryByRole("button", { name: "Cím szerkesztése" }),
-    ).toBeNull();
+    expect(queryMoreItem("Cím szerkesztése")).toBeNull();
     second.unmount();
 
     auth.permissions = ["quotes.view"];
     api.detail.mockResolvedValue(draftOnly());
     render(<QuoteDetailPage quoteId="q1" />);
     await screen.findByText("AJ-2026-0042 · Blue Office Kft.");
-    expect(
-      screen.queryByRole("button", { name: "Cím szerkesztése" }),
-    ).toBeNull();
+    expect(queryMoreItem("Cím szerkesztése")).toBeNull();
   });
 
   it("shows the API's refusal and keeps the old title", async () => {
@@ -2349,7 +2546,7 @@ describe("Az ajánlat címe: a másolat átnevezhető (quote-masolat-cim)", () =
       title: "Új cím a szerkesztőben",
     });
     render(<QuoteEditorPage quoteId="q1" />);
-    await open();
+    await open(false);
     fireEvent.change(field(), { target: { value: "Új cím a szerkesztőben" } });
     fireEvent.click(screen.getByRole("button", { name: "Cím mentése" }));
     await waitFor(() =>
@@ -2394,9 +2591,7 @@ describe("Az ajánlat partnere: a piszkozaton cserélhető", () => {
       customerName: "Állatkert Zrt.",
     });
     render(<QuoteDetailPage quoteId="q1" />);
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Partner cseréje" }),
-    );
+    fireEvent.click(await moreItem("Partner cseréje"));
     await searchFor("Állat");
     // the same search as on the new-quote page: the partners' mirrors are included
     await waitFor(() => expect(customers.list).toHaveBeenCalled());
@@ -2422,9 +2617,7 @@ describe("Az ajánlat partnere: a piszkozaton cserélhető", () => {
     api.detail.mockResolvedValue(quote([version({ status: "PUBLISHED" })]));
     const first = render(<QuoteDetailPage quoteId="q1" />);
     await screen.findByText("Aktuális verzió: v2", { exact: false });
-    expect(
-      screen.queryByRole("button", { name: "Partner cseréje" }),
-    ).toBeNull();
+    expect(queryMoreItem("Partner cseréje")).toBeNull();
     first.unmount();
 
     api.detail.mockResolvedValue(
@@ -2438,18 +2631,14 @@ describe("Az ajánlat partnere: a piszkozaton cserélhető", () => {
     );
     const second = render(<QuoteDetailPage quoteId="q1" />);
     await screen.findByText("Aktuális verzió: v2", { exact: false });
-    expect(
-      screen.queryByRole("button", { name: "Partner cseréje" }),
-    ).toBeNull();
+    expect(queryMoreItem("Partner cseréje")).toBeNull();
     second.unmount();
 
     auth.permissions = ["quotes.view"];
     api.detail.mockResolvedValue(draftOnly());
     render(<QuoteDetailPage quoteId="q1" />);
     await screen.findByText("AJ-2026-0042 · Blue Office Kft.");
-    expect(
-      screen.queryByRole("button", { name: "Partner cseréje" }),
-    ).toBeNull();
+    expect(queryMoreItem("Partner cseréje")).toBeNull();
   });
 
   it("does not save the partner it already has", async () => {
@@ -2458,9 +2647,7 @@ describe("Az ajánlat partnere: a piszkozaton cserélhető", () => {
       items: [{ id: "c1", displayName: "Blue Office Kft." }],
     });
     render(<QuoteDetailPage quoteId="q1" />);
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Partner cseréje" }),
-    );
+    fireEvent.click(await moreItem("Partner cseréje"));
     await searchFor("Blue");
     fireEvent.click(
       await screen.findByRole("button", { name: "Blue Office Kft." }),
@@ -2485,9 +2672,7 @@ describe("Az ajánlat partnere: a piszkozaton cserélhető", () => {
       ),
     );
     render(<QuoteDetailPage quoteId="q1" />);
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Partner cseréje" }),
-    );
+    fireEvent.click(await moreItem("Partner cseréje"));
     await searchFor("Állat");
     fireEvent.click(
       await screen.findByRole("button", { name: /Állatkert Zrt\./ }),
@@ -2504,9 +2689,7 @@ describe("Az ajánlat partnere: a piszkozaton cserélhető", () => {
   it("Mégse closes the editor without saving", async () => {
     api.detail.mockResolvedValue(draftOnly());
     render(<QuoteDetailPage quoteId="q1" />);
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Partner cseréje" }),
-    );
+    fireEvent.click(await moreItem("Partner cseréje"));
     fireEvent.click(screen.getByRole("button", { name: "Mégse" }));
     expect(screen.queryByLabelText("Partner keresése")).toBeNull();
     expect(api.updateHeader).not.toHaveBeenCalled();

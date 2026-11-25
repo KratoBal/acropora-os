@@ -47,6 +47,7 @@ import {
   quoteMailState,
   QuoteSendDrawer,
 } from "./quote-send";
+import { QuoteMoreMenu, type QuoteMoreMenuItem } from "./quote-more-menu";
 import { QuotePartnerEditor } from "./quote-partner-editor";
 import { canEditQuoteTitle, QuoteTitleEditor } from "./quote-title-editor";
 
@@ -80,6 +81,9 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const canSend = Boolean(
     session && hasPermission(session.user, PERMISSIONS.QUOTES_SEND),
   );
+  const canPublish = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.QUOTES_PUBLISH),
+  );
   const canLink = Boolean(
     session &&
     hasPermission(session.user, PERMISSIONS.QUOTES_ACCEPTANCE_LINK_MANAGE),
@@ -100,6 +104,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -174,6 +179,21 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       setBusy(false);
     }
   };
+  // The draft the primary "Publikálás" publishes (acrobot 61941): the same call and the same confirmation as the PDF page.
+  const draftVersion = quote.versions.find((v) => v.status === "DRAFT") ?? null;
+  const publishDraft = async () => {
+    if (!draftVersion) return;
+    setPublishing(false);
+    setBusy(true);
+    setError(null);
+    try {
+      setQuote(await quotesApi.publish(token, quote.id, draftVersion.id));
+    } catch (cause) {
+      setError(errorText(cause, "A publikálás nem sikerült."));
+    } finally {
+      setBusy(false);
+    }
+  };
   const copyAsNew = async () => {
     setBusy(true);
     setError(null);
@@ -185,6 +205,69 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       setBusy(false);
     }
   };
+
+  // Picasso 3.4 (acrobot 61933): one primary button (Szerkesztés / Új verzió), the send next to it where a published
+  // version exists, everything else behind "Továbbiak". The delete stays out of the menu, at the bottom of the page.
+  const titleEditable = canEditQuoteTitle(quote, canManage);
+  const moreItems: QuoteMoreMenuItem[] = [
+    ...(editable && canManage
+      ? [
+          {
+            key: "reject",
+            label: "Elutasítás",
+            danger: true,
+            onSelect: () => setOutcome("reject"),
+          },
+          {
+            key: "postpone",
+            label: "Halasztás",
+            onSelect: () => setOutcome("postpone"),
+          },
+          {
+            key: "cancel",
+            label: "Visszavonás",
+            danger: true,
+            onSelect: () => setOutcome("cancel"),
+          },
+        ]
+      : []),
+    ...(canManage
+      ? [
+          {
+            key: "copy",
+            label: "Másolat új ajánlatként",
+            disabled: busy,
+            onSelect: () => void copyAsNew(),
+          },
+        ]
+      : []),
+    ...(titleEditable
+      ? [
+          {
+            key: "title",
+            label: "Cím szerkesztése",
+            disabled: busy,
+            onSelect: () => setEditingTitle(true),
+          },
+          {
+            key: "partner",
+            label: "Partner cseréje",
+            disabled: busy,
+            onSelect: () => setEditingPartner(true),
+          },
+        ]
+      : []),
+  ];
+  // acrobot 61941: the send is the primary button where a version is published, else the Publikálás of the draft; the
+  // Szerkesztés / Új verzió becomes the secondary one then. The order of the steps (Publikálás, then Küldés) is unchanged.
+  const canPublishDraft =
+    !canMail && canPublish && draftVersion !== null && editable;
+  const sendOrPublishIsPrimary = canMail || canPublishDraft;
+  const primaryActions =
+    canPublishDraft ||
+    canMail ||
+    (editable && canManage) ||
+    (editable && canRecord && hasPublished);
 
   const columns: PilotTableColumn<QuoteInternalVersion>[] = [
     {
@@ -266,38 +349,20 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
           </div>
         }
         actions={
-          (editable && (canManage || canRecord)) || canMail || canManage ? (
-            <div className="flex flex-wrap gap-2">
+          primaryActions || moreItems.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
               {canMail ? (
-                <PilotButton
-                  size="regular"
-                  variant="secondary"
-                  onClick={() => setSending(true)}
-                >
+                <PilotButton size="regular" onClick={() => setSending(true)}>
                   {mailLabel}
                 </PilotButton>
-              ) : null}
-              {editable && canManage ? (
-                <>
-                  <PilotButton
-                    variant="ghost"
-                    onClick={() => setOutcome("reject")}
-                  >
-                    Elutasítás
-                  </PilotButton>
-                  <PilotButton
-                    variant="ghost"
-                    onClick={() => setOutcome("postpone")}
-                  >
-                    Halasztás
-                  </PilotButton>
-                  <PilotButton
-                    variant="ghost"
-                    onClick={() => setOutcome("cancel")}
-                  >
-                    Visszavonás
-                  </PilotButton>
-                </>
+              ) : canPublishDraft ? (
+                <PilotButton
+                  size="regular"
+                  disabled={busy}
+                  onClick={() => setPublishing(true)}
+                >
+                  Publikálás
+                </PilotButton>
               ) : null}
               {editable && canRecord && hasPublished ? (
                 <PilotButton
@@ -308,47 +373,11 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
                   Elfogadás rögzítése
                 </PilotButton>
               ) : null}
-              {canManage ? (
-                <PilotButton
-                  size="regular"
-                  variant="secondary"
-                  disabled={busy}
-                  onClick={() => void copyAsNew()}
-                >
-                  Másolat új ajánlatként
-                </PilotButton>
-              ) : null}
-              {canEditQuoteTitle(quote, canManage) ? (
-                <PilotButton
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => setEditingTitle(true)}
-                >
-                  Cím szerkesztése
-                </PilotButton>
-              ) : null}
-              {canEditQuoteTitle(quote, canManage) ? (
-                <PilotButton
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => setEditingPartner(true)}
-                >
-                  Partner cseréje
-                </PilotButton>
-              ) : null}
-              {canManage && deletable ? (
-                <PilotButton
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => setDeleting(true)}
-                >
-                  Törlés
-                </PilotButton>
-              ) : null}
               {editable && canManage ? (
                 hasDraft ? (
                   <PilotButton
                     size="regular"
+                    variant={sendOrPublishIsPrimary ? "secondary" : "primary"}
                     onClick={() =>
                       router.push(`${QUOTES_PATH}/${quote.id}/szerkesztes`)
                     }
@@ -358,6 +387,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
                 ) : (
                   <PilotButton
                     size="regular"
+                    variant={sendOrPublishIsPrimary ? "secondary" : "primary"}
                     disabled={busy}
                     onClick={() => void newVersion()}
                   >
@@ -365,6 +395,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
                   </PilotButton>
                 )
               ) : null}
+              <QuoteMoreMenu items={moreItems} />
             </div>
           ) : undefined
         }
@@ -474,9 +505,30 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
             rows={[...quote.versions].reverse()}
             rowKey={(v) => v.id}
             minWidth={640}
+            dense
           />
         </div>
       </PilotCard>
+
+      {canManage && deletable ? (
+        <PilotCard>
+          <PilotCardHeader title="Törlés" />
+          <div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-pilot-grey-600">
+              Ez a tervezet még sosem lett publikálva, ezért törölhető. A törlés
+              végleges.
+            </p>
+            <PilotButton
+              size="regular"
+              variant="danger"
+              disabled={busy}
+              onClick={() => setDeleting(true)}
+            >
+              Törlés
+            </PilotButton>
+          </div>
+        </PilotCard>
+      ) : null}
 
       <QuoteHandoffDrawer
         token={token}
@@ -491,6 +543,16 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         }}
       />
 
+      <ConfirmDialog
+        open={publishing}
+        title={`v${draftVersion?.versionNumber ?? ""} publikálása`}
+        consequence="A verzió zárolódik, a PDF-je rögzül a dokumentumtárban, és az előző publikált verzió felülírtnak számít. Ez még nem küld semmit az ügyfélnek."
+        recovery="Publikált verzió nem szerkeszthető; módosításhoz új verziót kell nyitni az adatlapon."
+        confirmLabel="Publikálás"
+        busy={busy}
+        onConfirm={() => void publishDraft()}
+        onCancel={() => setPublishing(false)}
+      />
       <ConfirmDialog
         open={deleting}
         title={`${quote.quoteNumber} törlése`}
