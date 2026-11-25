@@ -34,6 +34,22 @@ export interface FoxpostSettlementLine {
   updatedAt: string;
 }
 
+/**
+ * A FOXPOST-ELSZÁMOLÁSOK LISTÁJÁNAK RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4). A lista lapozott, ezért a rendezés a
+ * szerveren történik. A "Kelte" a számla kelte szerint rendez; ahol nincs (a lap "levél: <nap>" felirattal mutatja), ott az üres érték
+ * a végén áll, és a sorok a létrehozás ideje szerint követik egymást (ami a levél érkezéséhez közel áll). Az üres érték (a számla kelte,
+ * az elszámolás kódja, a beszedett és az utalt összeg) MINDKÉT irányban a végén áll. A "Párosítva" (két számláló hányadosa) és az
+ * "Állapot" (a kijelzett felirat nem az enum sorrendje) nem rendezhető.
+ */
+export const FOXPOST_SETTLEMENT_SORT_FIELDS = [
+  "invoiceIssueDate",
+  "settlementCode",
+  "collectedAmount",
+  "transferredAmount",
+] as const;
+export type FoxpostSettlementSortField =
+  (typeof FOXPOST_SETTLEMENT_SORT_FIELDS)[number];
+
 export interface FoxpostSettlementSummary {
   id: string;
   gmailInternalDate?: string;

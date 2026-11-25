@@ -5,6 +5,7 @@ import type {
   FoxpostReprocessResult,
   FoxpostSettlementDetail,
   FoxpostSettlementListResponse,
+  FoxpostSettlementSortField,
   FoxpostSyncStatus,
   FoxpostSyncSummary,
 } from "@acropora/types";
@@ -18,6 +19,8 @@ export interface FoxpostSettlementListQuery {
   status?: string;
   year?: number;
   month?: number;
+  sort?: FoxpostSettlementSortField;
+  direction?: "asc" | "desc";
 }
 
 function listQueryString(query: FoxpostSettlementListQuery): string {
@@ -27,6 +30,10 @@ function listQueryString(query: FoxpostSettlementListQuery): string {
   if (query.status) params.set("status", query.status);
   if (query.year) params.set("year", String(query.year));
   if (query.month) params.set("month", String(query.month));
+  if (query.sort && query.direction) {
+    params.set("sort", query.sort);
+    params.set("direction", query.direction);
+  }
   return params.toString();
 }
 

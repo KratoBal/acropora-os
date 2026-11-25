@@ -1033,12 +1033,14 @@ export type {
   FoxpostSettlementLineStatus,
   FoxpostSettlementListResponse,
   FoxpostSettlementStatus,
+  FoxpostSettlementSortField,
   FoxpostSettlementSummary,
   FoxpostSyncRunSummary,
   FoxpostSyncState,
   FoxpostSyncStatus,
   FoxpostSyncSummary,
 } from "./integrations/foxpost-settlement.js";
+export { FOXPOST_SETTLEMENT_SORT_FIELDS } from "./integrations/foxpost-settlement.js";
 export type {
   GlsCodLineError,
   GlsCodLineStatus,
