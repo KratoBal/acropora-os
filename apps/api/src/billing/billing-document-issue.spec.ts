@@ -681,7 +681,12 @@ describe("an invoice paid by the recorded transfer", () => {
       ),
       true,
     );
-    assert.deepEqual(asked, ["transfer order_38 p-1", "feed D-2026-7"]);
+    // a webshop advance invoice asks the transfer first (S2); this one is a whole transfer, so the feed decides
+    assert.deepEqual(asked, [
+      "transfer order_38 p-1",
+      "transfer order_38 p-1",
+      "feed D-2026-7",
+    ]);
   });
 });
 
@@ -802,13 +807,47 @@ describe("the transfer-paid invoice on the shared issue", () => {
       webshopTransferInvoiceProblem(webshop, null, ["E-ACR-77"]),
       null,
     );
+    for (const documentType of ["FINAL_INVOICE", "DELIVERY_NOTE", "PROFORMA"])
+      assert.equal(
+        webshopTransferInvoiceProblem(
+          row({ ...webshop, documentType }),
+          facts("1"),
+          ["E-ACR-77"],
+        ),
+        null,
+        documentType,
+      );
+  });
+
+  /*
+    AZ ELŐLEGSZÁMLA (S2): az előleg-utalás előlegszámláját ugyanez a három szabály védi, fordított párral. MI PIROSÍT: egy teljes
+    utalásra előlegszámla megy ki; az előleg-utalás előlegszámlája fillérnyi eltéréssel vagy idegen feed-számla mellett kimegy;
+    vagy a helyes előlegszámla nem kapja meg a fizetve jelet.
+  */
+  it("the advance invoice: an advance transfer passes and is paid, a whole one is refused", () => {
+    const advance = row({ ...webshop, documentType: "ADVANCE_INVOICE" });
+    const advanceFacts = facts("2985.0000", { advance: true });
     assert.equal(
-      webshopTransferInvoiceProblem(
-        row({ ...webshop, documentType: "ADVANCE_INVOICE" }),
-        facts("1"),
-        ["E-ACR-77"],
-      ),
+      webshopTransferInvoiceProblem(advance, advanceFacts, []),
       null,
+    );
+    assert.equal(invoicePaidByTransfer(advance, advanceFacts), true);
+    assert.match(
+      webshopTransferInvoiceProblem(advance, facts(), []) ?? "",
+      /teljes összegét/,
+    );
+    assert.equal(invoicePaidByTransfer(advance, facts()), false);
+    assert.match(
+      webshopTransferInvoiceProblem(
+        advance,
+        facts("2984.0000", { advance: true }),
+        [],
+      ) ?? "",
+      /nem egyezik/,
+    );
+    assert.match(
+      webshopTransferInvoiceProblem(advance, advanceFacts, ["E-ACR-78"]) ?? "",
+      /E-ACR-78/,
     );
   });
 });

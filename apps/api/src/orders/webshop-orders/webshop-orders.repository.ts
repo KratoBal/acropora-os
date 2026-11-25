@@ -326,7 +326,8 @@ export class WebshopOrdersRepository {
    */
   async invoices(
     orderIds: string[],
-    documentType: "INVOICE" | "DELIVERY_NOTE" | "PROFORMA" = "INVOICE",
+    documentType:
+      "INVOICE" | "DELIVERY_NOTE" | "PROFORMA" | "ADVANCE_INVOICE" = "INVOICE",
   ): Promise<Map<string, WebshopOrderInvoiceRow>> {
     if (!orderIds.length) return new Map();
     const rows = await prisma.invoice.findMany({
@@ -357,12 +358,15 @@ export class WebshopOrdersRepository {
    * kimenő számlák, és hogy melyik nyers üzenet nevezi meg a díjbekérő számát.
    * `paid`: a számla a saját kifizetései szerint ki van egyenlítve.
    */
-  async externalInvoices(
-    orderIds: string[],
-  ): Promise<
+  async externalInvoices(orderIds: string[]): Promise<
     Map<
       string,
-      LinkedExternalInvoice & { paid: boolean; paidOn: string | null }
+      LinkedExternalInvoice & {
+        paid: boolean;
+        paidOn: string | null;
+        /** The feed's kind: SZ invoice, ES advance, VS final (the parcel gate opens on SZ and VS only). */
+        kindCode: string;
+      }
     >
   > {
     if (!orderIds.length) return new Map();
@@ -405,8 +409,27 @@ export class WebshopOrdersRepository {
       input[0]!.issuedOn,
     );
     const sinceDate = new Date(`${since}T00:00:00Z`);
+    /*
+      THE OS'S OWN DOCUMENTS ARE NOT "EXTERNAL" (card d31a66a3, S2; the plan's 4th risk). An invoice or advance invoice the OS issued
+      for the order comes back through the outgoing feed as its twin, with the order number on it, and would link here as the
+      Számlázz.hu's invoice: the step would look done, and an advance would open the parcel. The order's own numbers are left out.
+    */
+    const ownNumbers = (
+      await prisma.invoice.findMany({
+        where: {
+          sourceType: "WEBSHOP_ORDER",
+          sourceId: { in: orderIds },
+          invoiceNumber: { not: null },
+          documentType: { not: "PROFORMA" },
+        },
+        select: { invoiceNumber: true },
+      })
+    ).flatMap((row) => (row.invoiceNumber ? [row.invoiceNumber] : []));
     const documents = await prisma.externalBillingDocument.findMany({
-      where: { issueDate: { gte: sinceDate } },
+      where: {
+        issueDate: { gte: sinceDate },
+        ...(ownNumbers.length ? { documentNumber: { notIn: ownNumbers } } : {}),
+      },
       select: {
         id: true,
         externalId: true,
@@ -467,6 +490,7 @@ export class WebshopOrdersRepository {
             paidOn: doc.lastPaymentDate
               ? doc.lastPaymentDate.toISOString().slice(0, 10)
               : null,
+            kindCode: doc.kindCode.toUpperCase(),
           },
         ];
       }),
@@ -545,6 +569,30 @@ export class WebshopOrdersRepository {
         },
       ]),
     );
+  }
+
+  /**
+   * THE ADVANCE INVOICE DRAFT'S DAYS (card d31a66a3, S2): fulfilled and due on the day the advance came in. Only on a draft, as
+   * `linkInvoiceProforma`; answers whether it wrote (a write moves `updatedAt`, which the issue checks).
+   */
+  async setDraftDays(invoiceId: string, day: string): Promise<boolean> {
+    const row = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { status: true, fulfillmentDate: true, dueDate: true },
+    });
+    const date = new Date(`${day}T00:00:00.000Z`);
+    if (
+      !row ||
+      row.status !== "DRAFT" ||
+      (row.fulfillmentDate?.getTime() === date.getTime() &&
+        row.dueDate?.getTime() === date.getTime())
+    )
+      return false;
+    await prisma.invoice.update({
+      where: { id: invoiceId },
+      data: { fulfillmentDate: date, dueDate: date },
+    });
+    return true;
   }
 
   /**

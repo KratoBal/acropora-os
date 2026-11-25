@@ -543,6 +543,7 @@ export function toDetail(input: {
   /** A belső megjegyzés (csak OS). */
   internalNote?: WebshopOrderDetail["internalNote"];
   deliveryNote?: WebshopOrderDetail["deliveryNote"];
+  advanceInvoice?: WebshopOrderDetail["advanceInvoice"];
   /** A díjbekérő (bb3a6bd5); nincs: `null`. */
   proforma?: WebshopOrderDetail["proforma"];
   transferReceipt?: WebshopOrderDetail["transferReceipt"];
@@ -620,6 +621,7 @@ export function toDetail(input: {
     bankTransfer,
     proforma: input.proforma ?? null,
     transferReceipt: input.transferReceipt ?? null,
+    advanceInvoice: input.advanceInvoice ?? null,
     externalInvoice: input.externalInvoice ?? null,
     parcel: facts.parcel,
     cardPayment: cardPaymentOf(input.orderPayment ?? null, code, now),

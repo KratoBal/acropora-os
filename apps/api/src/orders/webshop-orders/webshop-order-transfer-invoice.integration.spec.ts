@@ -398,6 +398,86 @@ describe(
       );
     });
 
+    /*
+      S2: AZ OS SAJÁT ELŐLEGSZÁMLÁJA NEM „KÜLSŐ” SZÁMLA. MI PIROSÍT: az OS előlegszámlájának feed-ikre a rendeléshez kötődik (a lépés
+      késznek, a csomag feladhatónak látszana); a kötött idegen számla fajtája nem jön át; a vázlat napjai kiállított bizonylatot is
+      átírnak, vagy változatlan napnál is írnak.
+    */
+    it("the order's own advance twin is not linked as external; a foreign one carries its kind", async () => {
+      const reference = `${FEED}Webshop rendelés #8`;
+      await invoice(8, {
+        documentType: "PROFORMA",
+        status: "ISSUED",
+        invoiceNumber: "D-ITTRINV-8",
+        reference,
+        createdAt: new Date("2026-11-20T09:00:00Z"),
+      });
+      await invoice(8, {
+        documentType: "ADVANCE_INVOICE",
+        status: "ISSUED",
+        invoiceNumber: "E-ITTRINV-8-OWN",
+      });
+      await feedDocument("own-advance", {
+        kindCode: "ES",
+        documentNumber: "E-ITTRINV-8-OWN",
+        orderNumber: reference,
+        issueDate: "2026-11-21",
+      });
+      assert.equal(
+        (await orders.externalInvoices([`${ORDER}8`])).get(`${ORDER}8`),
+        undefined,
+      );
+
+      const reference9 = `${FEED}Webshop rendelés #9`;
+      await invoice(9, {
+        documentType: "PROFORMA",
+        status: "ISSUED",
+        invoiceNumber: "D-ITTRINV-9",
+        reference: reference9,
+        createdAt: new Date("2026-11-20T09:00:00Z"),
+      });
+      await feedDocument("foreign-advance", {
+        kindCode: "ES",
+        documentNumber: "E-ITTRINV-9",
+        orderNumber: reference9,
+        issueDate: "2026-11-21",
+      });
+      const linked = (await orders.externalInvoices([`${ORDER}9`])).get(
+        `${ORDER}9`,
+      );
+      assert.deepEqual(linked && [linked.number, linked.kindCode], [
+        "E-ITTRINV-9",
+        "ES",
+      ]);
+    });
+
+    it("the advance draft's days are set once, on a draft only", async () => {
+      const draft = await invoice(10, {
+        documentType: "ADVANCE_INVOICE",
+        status: "DRAFT",
+      });
+      assert.equal(await orders.setDraftDays(draft.id, "2026-11-22"), true);
+      const set = await prisma.invoice.findUniqueOrThrow({
+        where: { id: draft.id },
+      });
+      assert.deepEqual(
+        [set.fulfillmentDate?.toISOString(), set.dueDate?.toISOString()],
+        ["2026-11-22T00:00:00.000Z", "2026-11-22T00:00:00.000Z"],
+      );
+      assert.equal(await orders.setDraftDays(draft.id, "2026-11-22"), false);
+      assert.deepEqual(
+        (await prisma.invoice.findUniqueOrThrow({ where: { id: draft.id } }))
+          .updatedAt,
+        set.updatedAt,
+      );
+      const issued = await invoice(11, {
+        documentType: "ADVANCE_INVOICE",
+        status: "ISSUED",
+        invoiceNumber: "E-ITTRINV-11",
+      });
+      assert.equal(await orders.setDraftDays(issued.id, "2026-11-22"), false);
+    });
+
     after(async () => {
       if (gate.mode !== "run") return;
       await removeLeftovers();

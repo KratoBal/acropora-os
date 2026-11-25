@@ -37,6 +37,7 @@ import {
   BANK_TRANSFER_PROVIDER_ID,
   orderPaymentProviderId,
   primaryPaymentCollection,
+  externalSettlingNumber,
 } from "./webshop-orders.rules.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
@@ -139,7 +140,10 @@ export class WebshopOrderParcelService {
       status: statusOf(status?.status),
       storePickup: shipping.storePickup,
       carrier: shipping.carrier,
-      invoiceIssued: invoice?.status === "ISSUED" || external !== undefined,
+      // an advance invoice (ES, or the OS's own advance) does not release the parcel: only an invoice or a final invoice (S2)
+      invoiceIssued:
+        invoice?.status === "ISSUED" ||
+        externalSettlingNumber(external) !== null,
       bankTransfer:
         orderPaymentProviderId(
           primaryPaymentCollection(order.payment_collections),

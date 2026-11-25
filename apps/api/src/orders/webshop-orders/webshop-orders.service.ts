@@ -57,6 +57,7 @@ import {
   proformaMissingOf,
   sortItems,
   toListItem,
+  externalSettlingNumber,
 } from "./webshop-orders.rules.js";
 import { toDetail } from "./webshop-order-detail.rules.js";
 import {
@@ -270,6 +271,7 @@ export class WebshopOrdersService {
       proformas,
       receipts,
       externals,
+      advanceInvoices,
     ] = await Promise.all([
       this.repository.invoices([id]),
       this.parcels.activeParcelsFor([id]),
@@ -298,6 +300,7 @@ export class WebshopOrdersService {
       this.repository.proformas([id]),
       this.repository.transferReceipts([id]),
       this.repository.externalInvoices([id]),
+      this.repository.invoices([id], "ADVANCE_INVOICE"),
     ]);
     /*
       A VEVŐ JELZÉSEI (a lista „korábbi sikertelen” és „másik nyitott”
@@ -341,6 +344,7 @@ export class WebshopOrdersService {
       osCustomer,
       internalNote,
       deliveryNote: deliveryNotes.get(id) ?? null,
+      advanceInvoice: advanceInvoices.get(id) ?? null,
       proforma,
       transferReceipt,
       externalInvoice,
@@ -363,7 +367,7 @@ export class WebshopOrdersService {
         parcelOf(parcels[id]),
         proforma?.expired ?? false,
         paid,
-        externalInvoice?.number ?? null,
+        externalSettlingNumber(externalInvoice),
       ),
       customerOrderCount,
       relatedDisplayId: related?.display_id ?? null,
@@ -549,7 +553,7 @@ export class WebshopOrdersService {
       parcelOf(parcels[id]),
       false,
       false,
-      externals.get(id)?.number ?? null,
+      externalSettlingNumber(externals.get(id)),
     );
     return {
       storePickup,
@@ -618,7 +622,7 @@ export class WebshopOrdersService {
           parcelOf(parcels[row.id]),
           proformaExpiredOf(proformas.get(row.id), now),
           receipts.has(row.id) || !!externals.get(row.id)?.paid,
-          externals.get(row.id)?.number ?? null,
+          externalSettlingNumber(externals.get(row.id)),
           proformaMissingOf({
             providerId: row.payment?.provider_id ?? null,
             statusCode: row.business_status.code,

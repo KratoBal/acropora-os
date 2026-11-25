@@ -48,6 +48,8 @@ const api = vi.hoisted(() => ({
   replacementVariants: vi.fn(),
   issueInvoice: vi.fn(),
   invoiceSummary: vi.fn(),
+  issueAdvanceInvoice: vi.fn(),
+  advanceInvoiceSummary: vi.fn(),
   issueDeliveryNote: vi.fn(),
   sendProforma: vi.fn(),
   proformaSummary: vi.fn(),
@@ -245,6 +247,7 @@ const detail: WebshopOrderDetail = {
   invoiceNumber: null,
   invoice: null,
   deliveryNote: null,
+  advanceInvoice: null,
   bankTransfer: false,
   proforma: null,
   transferReceipt: null,
@@ -337,6 +340,8 @@ beforeEach(() => {
   api.replacementVariants.mockReset();
   api.issueInvoice.mockReset();
   api.invoiceSummary.mockReset().mockResolvedValue(INVOICE_SUMMARY);
+  api.issueAdvanceInvoice.mockReset();
+  api.advanceInvoiceSummary.mockReset().mockResolvedValue(INVOICE_SUMMARY);
   api.issueDeliveryNote.mockReset();
   api.sendProforma.mockReset();
   api.proformaSummary.mockReset().mockResolvedValue(PROFORMA_SUMMARY);
@@ -3120,7 +3125,61 @@ describe("the proforma on the Fizetés card", () => {
     render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
     const invoiceCard = await screen.findByRole("region", { name: "Számla" });
     expect(invoiceCard.textContent).toContain("Előleg érkezett");
-    expect(within(invoiceCard).queryByRole("button")).toBeNull();
+    expect(
+      within(invoiceCard).queryByRole("button", { name: "Számla kiállítása" }),
+    ).toBeNull();
+  });
+
+  /*
+    AZ ELŐLEGSZÁMLA (d31a66a3, S2). MI PIROSÍT: az előleg-beérkezés után nincs Előlegszámla gomb; a gomb ablak nélkül állít ki, vagy
+    a számla útját hívja; a kiállított előlegszámla száma nem látszik; teljes utalásnál is megjelenik.
+  */
+  it("an advance transfer offers the advance invoice through the window, and shows it issued", async () => {
+    const before = paid({ advance: true });
+    api.detail.mockResolvedValue(before);
+    api.issueAdvanceInvoice.mockResolvedValue({
+      order: {
+        ...before,
+        advanceInvoice: {
+          id: "advance-proforma_38",
+          status: "ISSUED",
+          number: "E-ACR-2026-80",
+        },
+      },
+      mail: null,
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Számla" });
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Előlegszámla kiállítása" }),
+    );
+    const confirm = await screen.findByRole("dialog", {
+      name: "Biztos, hogy kiállítod az előlegszámlát?",
+    });
+    expect(confirm.textContent).toContain("valódi előlegszámla készül");
+    // the window shows the advance's own summary before it can be confirmed
+    await vi.waitFor(() =>
+      expect(confirm.textContent).toContain(INVOICE_SUMMARY.buyerAddress),
+    );
+    expect(api.advanceInvoiceSummary).toHaveBeenCalledWith("token", "order_38");
+    expect(api.issueAdvanceInvoice).not.toHaveBeenCalled();
+    fireEvent.click(within(confirm).getByRole("button", { name: "Kiállítom" }));
+    expect(await within(card).findByText("E-ACR-2026-80")).toBeTruthy();
+    expect(api.issueAdvanceInvoice).toHaveBeenCalledWith("token", "order_38", {
+      ...CONFIRMED,
+      send: false,
+    });
+    expect(api.issueInvoice).not.toHaveBeenCalled();
+    expect(api.invoiceSummary).not.toHaveBeenCalled();
+  });
+
+  it("a whole transfer has no advance invoice button", async () => {
+    api.detail.mockResolvedValue(paid());
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Számla" });
+    expect(
+      within(card).queryByRole("button", { name: "Előlegszámla kiállítása" }),
+    ).toBeNull();
   });
 
   it("the whole transfer in, the Számla card offers the invoice", async () => {

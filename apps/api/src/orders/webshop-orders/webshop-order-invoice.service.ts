@@ -63,6 +63,25 @@ const statusOf = (
     : null;
 
 /**
+ * THE DOCUMENT IS THE MONEY THAT CAME IN (S1, S2): it goes out paid, so its gross must be the transfer, to the fillér. An order
+ * changed since the proforma (a line edit) would issue a paid document for an amount nobody paid.
+ */
+function requireTransferGross(
+  saved: BillingDocumentDetail,
+  paid: { amount: string; currency: string },
+  what: string,
+): void {
+  if (
+    Math.round(Number(saved.totals.grossAmount) * 100) !==
+      Math.round(Number(paid.amount) * 100) ||
+    saved.currency.toUpperCase() !== paid.currency.toUpperCase()
+  )
+    throw new ConflictException(
+      `${what} bruttója (${Number(saved.totals.grossAmount)} ${saved.currency}) nem egyezik a beérkezett utalással (${Number(paid.amount)} ${paid.currency}): a rendelés a díjbekérő óta változott. ${what} nem készül el; nézd meg a rendelést és a díjbekérőt.`,
+    );
+}
+
+/**
  * A WEBSHOP RENDELÉS SZÁMLÁJA (Rendelések, 4. PR). A rendelésből vázlat
  * készül a számlázásban (`WEBSHOP_ORDER` forrás, rendelésenként egy, fix
  * azonosítóval), és ugyanaz a kiállítás állítja ki, ami a kézi számlát: a
@@ -370,8 +389,52 @@ export class WebshopOrderInvoiceService {
     confirmation?: WebshopInvoiceConfirmation,
   ): Promise<WebshopInvoiceIssueResult<WebshopOrderDetail>> {
     return this.serial(orderId, () =>
-      this.issueNow(orderId, user, now, confirmation),
+      this.issueNow(
+        (id, by, at) => this.prepareInvoice(id, by, at),
+        orderId,
+        user,
+        now,
+        confirmation,
+      ),
     );
+  }
+
+  /**
+   * THE ADVANCE INVOICE OF AN ADVANCE TRANSFER (card d31a66a3, S2): the same window and issue as the order's invoice, on the
+   * draft made from the advance proforma (`prepareAdvance`). The route requires the confirmation.
+   */
+  issueAdvance(
+    orderId: string,
+    user: AuthenticatedUser,
+    now = new Date(),
+    confirmation?: WebshopInvoiceConfirmation,
+  ): Promise<WebshopInvoiceIssueResult<WebshopOrderDetail>> {
+    return this.serial(orderId, () =>
+      this.issueNow(
+        (id, by, at) => this.prepareAdvance(id, by, at),
+        orderId,
+        user,
+        now,
+        confirmation,
+      ),
+    );
+  }
+
+  /** The advance invoice's confirmation window: the draft the issue makes, saved, and the shared summary of it. */
+  advanceSummary(
+    orderId: string,
+    user: AuthenticatedUser,
+    now = new Date(),
+  ): Promise<WebshopInvoiceSummary> {
+    return this.serial(orderId, async () => {
+      const prepared = await this.prepareAdvance(orderId, user, now);
+      if (prepared.kind === "issued")
+        throw new ConflictException(
+          "A rendelés előlegszámlája már ki van állítva.",
+        );
+      const summary = await this.issuing.summary(prepared.saved.id, now);
+      return { ...summary, documentId: prepared.saved.id };
+    });
   }
 
   /**
@@ -404,12 +467,17 @@ export class WebshopOrderInvoiceService {
   }
 
   private async issueNow(
+    prepare: (
+      orderId: string,
+      user: AuthenticatedUser,
+      now: Date,
+    ) => ReturnType<WebshopOrderInvoiceService["prepareInvoice"]>,
     orderId: string,
     user: AuthenticatedUser,
     now: Date,
     confirmation?: WebshopInvoiceConfirmation,
   ): Promise<WebshopInvoiceIssueResult<WebshopOrderDetail>> {
-    const prepared = await this.prepareInvoice(orderId, user, now);
+    const prepared = await prepare(orderId, user, now);
     if (prepared.kind === "issued")
       return { order: await this.orders.detail(orderId, now), mail: null };
     const { saved, order } = prepared;
@@ -525,7 +593,7 @@ export class WebshopOrderInvoiceService {
       orderPaymentProviderId(
         primaryPaymentCollection(order.payment_collections),
       ) === BANK_TRANSFER_PROVIDER_ID
-        ? await this.paidTransfer(orderId)
+        ? await this.paidTransfer(orderId, "whole")
         : null;
 
     /*
@@ -565,19 +633,70 @@ export class WebshopOrderInvoiceService {
       // the invoice names the proforma it settles; a write moves `updatedAt`, so the issue goes on with the fresh draft
       if (await this.repository.linkInvoiceProforma(saved.id, paid.proformaId))
         saved = await this.documents.detail(saved.id);
-      /*
-        THE INVOICE IS THE MONEY THAT CAME IN (S1): it goes out paid, so its gross must be the transfer, to the fillér. An
-        order changed since the proforma (a line edit) would issue a paid invoice for an amount nobody paid.
-      */
-      if (
-        Math.round(Number(saved.totals.grossAmount) * 100) !==
-          Math.round(Number(paid.amount) * 100) ||
-        saved.currency.toUpperCase() !== paid.currency.toUpperCase()
-      )
-        throw new ConflictException(
-          `A számla bruttója (${Number(saved.totals.grossAmount)} ${saved.currency}) nem egyezik a beérkezett utalással (${Number(paid.amount)} ${paid.currency}): a rendelés a díjbekérő óta változott. A számla nem készül el; nézd meg a rendelést és a díjbekérőt.`,
-        );
+      requireTransferGross(saved, paid, "A számla");
     }
+    return { kind: "draft", saved, order };
+  }
+
+  /**
+   * THE ADVANCE INVOICE DRAFT (card d31a66a3, S2). Made from the advance proforma the recorded transfer paid, through the
+   * billing's own `advanceFromProforma` (one per proforma, linked to it, so Számlázz.hu gets its number), fulfilled and due on
+   * the day the advance came in, and its gross must be the advance to the fillér. The same three gates as the invoice's,
+   * turned the other way: no transfer, a WHOLE transfer (that is the order's invoice), or a foreign Számlázz.hu invoice stops it.
+   * Not tied to the order's confirmation: an advance is invoiced when it comes in.
+   */
+  private async prepareAdvance(
+    orderId: string,
+    user: AuthenticatedUser,
+    _now: Date,
+  ): Promise<
+    | { kind: "issued" }
+    | {
+        kind: "draft";
+        saved: BillingDocumentDetail;
+        order: MedusaOrderDetailRow;
+      }
+  > {
+    this.requireIssuing();
+    const existing = (
+      await this.repository.invoices([orderId], "ADVANCE_INVOICE")
+    ).get(orderId);
+    if (existing?.status === "ISSUED") return { kind: "issued" };
+    if (existing?.status === "ISSUING")
+      throw new ConflictException(
+        "A rendelés előlegszámlája már kiállítás alatt van, és ellenőrzésre vár: nézd meg a Számlázz.hu-n, mielőtt újra próbálod.",
+      );
+    if (existing?.status === "ISSUE_FAILED")
+      throw new ConflictException(
+        "A rendelés előlegszámlájának kiállítása elutasítva maradt. Nyisd meg a bizonylatot a Számlázásban, ott látod az okát.",
+      );
+
+    const { order, status } = await this.orders.source(orderId);
+    const refusal = proformaRefusal(statusOf(status?.status));
+    if (refusal) throw new ConflictException(refusal);
+    if (
+      orderPaymentProviderId(
+        primaryPaymentCollection(order.payment_collections),
+      ) !== BANK_TRANSFER_PROVIDER_ID
+    )
+      throw new ConflictException(
+        "Előlegszámla csak előre utalásos rendeléshez állítható ki.",
+      );
+    const paid = await this.paidTransfer(orderId, "advance");
+    const made = await this.documents.advanceFromProforma(
+      paid.proformaId,
+      user,
+    );
+    // a concurrent issue from the billing editor: the order page then shows it
+    if (made.status === "ISSUED") return { kind: "issued" };
+    if (made.status !== "DRAFT")
+      throw new ConflictException(
+        "A rendelés előlegszámlája kiállítás alatt van vagy elutasítva maradt: nézd meg a Számlázásban.",
+      );
+    const saved = (await this.repository.setDraftDays(made.id, paid.receivedOn))
+      ? await this.documents.detail(made.id)
+      : made;
+    requireTransferGross(saved, paid, "Az előlegszámla");
     return { kind: "draft", saved, order };
   }
 
@@ -592,7 +711,10 @@ export class WebshopOrderInvoiceService {
    * - ha a Számlázz.hu-n már van NEM az OS által kiállított számla ehhez a rendeléshez (az Autokassza visszakapcsolva, vagy
    *   kézzel kiállítva), a kiállítás megáll a számával: két számla ugyanarra a pénzre sztornót jelent.
    */
-  private async paidTransfer(orderId: string): Promise<{
+  private async paidTransfer(
+    orderId: string,
+    kind: "whole" | "advance",
+  ): Promise<{
     receivedOn: string;
     amount: string;
     currency: string;
@@ -603,11 +725,18 @@ export class WebshopOrderInvoiceService {
     );
     if (!receipt)
       throw new ConflictException(
-        "Előre utalásnál a számla az utalás beérkezése után állítható ki: előbb rögzítsd a beérkezést.",
+        kind === "whole"
+          ? "Előre utalásnál a számla az utalás beérkezése után állítható ki: előbb rögzítsd a beérkezést."
+          : "Az előlegszámla az előleg beérkezése után állítható ki: előbb rögzítsd a beérkezést.",
       );
-    if (receipt.advance)
+    // the whole transfer is invoiced by the order's invoice (S1), an advance one by the advance invoice (S2): never crosswise
+    if (kind === "whole" && receipt.advance)
       throw new ConflictException(
-        "Erre a rendelésre előleg érkezett: az előlegre előlegszámla, a hátralékra végszámla jár, nem egy teljes számla. Ezeket az adatlap még nem állítja ki.",
+        "Erre a rendelésre előleg érkezett: az előlegre előlegszámla jár (Előlegszámla kiállítása), a hátralékra később végszámla, nem egy teljes számla.",
+      );
+    if (kind === "advance" && !receipt.advance)
+      throw new ConflictException(
+        "Erre a rendelésre a teljes összeg érkezett: a rendelés számlája jár, nem előlegszámla.",
       );
     const proforma = await this.repository.transferReceiptProforma(orderId);
     if (!proforma?.number)

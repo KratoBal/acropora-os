@@ -64,7 +64,7 @@ function setup(
   over: {
     invoice?: WebshopOrderInvoiceRow;
     /** A Számlázz.hu számlája, a rendeléshez kötve (előre utalás, bb3a6bd5). */
-    external?: { id: string; number: string };
+    external?: { id: string; number: string; kindCode?: string };
     parcelNumber?: string;
     createError?: CarrierError;
     noticeError?: Error;
@@ -102,7 +102,17 @@ function setup(
     externalInvoices: async (ids: string[]) =>
       new Map(
         over.external
-          ? [[ids[0]!, { ...over.external, link: "ORDER_NUMBER", paid: true }]]
+          ? [
+              [
+                ids[0]!,
+                {
+                  kindCode: "SZ",
+                  ...over.external,
+                  link: "ORDER_NUMBER",
+                  paid: true,
+                },
+              ],
+            ]
           : [],
       ),
     recordCarrierUnexpectedResponse: async (input: Record<string, unknown>) => {
@@ -339,6 +349,20 @@ describe("WebshopOrderParcelService", () => {
     });
     await service.create("order_38", undefined, USER);
     assert.equal(created.length, 1);
+  });
+
+  /*
+    AZ ELŐLEGSZÁMLA NEM ENGEDI EL A CSOMAGOT (d31a66a3, S2). MI PIROSÍT: egy Számlázz.hu előlegszámla (ES) a rendelés számlájaként
+    elengedi a csomagot, pedig a rendelés hátraléka még nincs számlázva.
+  */
+  it("a Számlázz.hu advance invoice (ES) does not let the parcel go", async () => {
+    const { created, service } = setup({
+      external: { id: "ext_2", number: "E-ACR-2026-78", kindCode: "ES" },
+    });
+    await assert.rejects(service.create("order_38", undefined, USER), {
+      status: 409,
+    });
+    assert.equal(created.length, 0);
   });
 
   it("after a released hold, no parcel until the link is paid", async () => {

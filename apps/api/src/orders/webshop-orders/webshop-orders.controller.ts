@@ -396,6 +396,39 @@ export class WebshopOrdersController {
   }
 
   /**
+   * AZ ELŐLEGSZÁMLA (kártya d31a66a3, S2): az előleg-díjbekérő rögzített beérkezésére, a rendelés számlájával azonos két joggal,
+   * megerősítő ablakkal. A válasz a friss adatlap.
+   */
+  @Post(":id/advance-invoice")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.BILLING_ISSUE)
+  issueAdvanceInvoice(
+    @Param("id") id: string,
+    @Body() input: WebshopOrderInvoiceIssueDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.invoices.issueAdvance(id, user, new Date(), {
+      issueDate: input.issueDate,
+      fulfillmentDate: input.fulfillmentDate,
+      dueDate: input.dueDate ?? null,
+      fingerprint: input.fingerprint,
+      send: input.send,
+    });
+  }
+
+  /** Az előlegszámla megerősítő ablakának értékei; POST, mert a vázlatot elkészíti és menti, ahogy a kiállítás. */
+  @Post(":id/advance-invoice/summary")
+  @HttpCode(200)
+  @Header("Cache-Control", "private, no-store")
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.BILLING_ISSUE)
+  advanceInvoiceSummary(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.invoices.advanceSummary(id, user);
+  }
+
+  /**
    * A RENDELÉS SZÁLLÍTÓLEVELE a kiállított számla tételeiből, ugyanazzal a
    * kiállítással (kártya 0a14f739 C/1). Ugyanaz a két jog kell, mint a
    * számlához. A válasz a friss adatlap.

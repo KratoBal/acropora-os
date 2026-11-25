@@ -185,7 +185,8 @@ export class BillingDocumentIssueService {
   ): Promise<string | null> {
     const proformaId = row.proformaInvoice?.id;
     if (
-      row.documentType !== "INVOICE" ||
+      (row.documentType !== "INVOICE" &&
+        row.documentType !== "ADVANCE_INVOICE") ||
       row.sourceType !== "WEBSHOP_ORDER" ||
       !row.sourceId ||
       !proformaId
