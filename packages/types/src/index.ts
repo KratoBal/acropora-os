@@ -1022,12 +1022,14 @@ export type {
   NavIncomingInvoiceListResponse,
   NavIncomingInvoiceOperation,
   NavIncomingInvoiceProductCode,
+  NavIncomingInvoiceSortField,
   NavIncomingInvoiceStatus,
   NavIncomingInvoiceSummary,
   NavInvoiceSyncRun,
   NavInvoiceSyncRunStatus,
   NavInvoiceSyncSummary,
 } from "./integrations/nav-incoming-invoice.js";
+export { NAV_INCOMING_INVOICE_SORT_FIELDS } from "./integrations/nav-incoming-invoice.js";
 export type {
   FoxpostManualApprovalInput,
   FoxpostManualApprovalResult,

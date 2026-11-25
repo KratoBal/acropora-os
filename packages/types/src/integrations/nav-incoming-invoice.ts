@@ -7,6 +7,21 @@ export type NavIncomingInvoiceStatus =
  */
 export type NavIncomingInvoiceOperation = "CREATE" | "MODIFY" | "STORNO";
 
+/**
+ * A NAV BEJÖVŐ SZÁMLÁK LISTÁJÁNAK RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4). A lista lapozott, ezért a rendezés a
+ * szerveren történik. A teljesítés napja üres is lehet: a kiválasztott rendezésben az üres érték MINDKÉT irányban a végén áll.
+ * Nem rendezhető: a "Bruttó" (a nettó és az ÁFA összege, nem tárolt mező, és ÁFA nélkül nincs), a "NAV" (a művelet) és az "OS"
+ * (az állapot): a kijelzett felirat nem az enum sorrendje. Az alap sorrend a NAV beérkezési ideje (`insDate`), nem a számla kelte.
+ */
+export const NAV_INCOMING_INVOICE_SORT_FIELDS = [
+  "navInvoiceNumber",
+  "supplierName",
+  "invoiceIssueDate",
+  "invoiceDeliveryDate",
+] as const;
+export type NavIncomingInvoiceSortField =
+  (typeof NAV_INCOMING_INVOICE_SORT_FIELDS)[number];
+
 export interface NavIncomingInvoiceSummary {
   id: string;
   navInvoiceNumber: string;
