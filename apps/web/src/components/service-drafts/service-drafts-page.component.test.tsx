@@ -555,6 +555,22 @@ describe("splitQuotedReply", () => {
     ).toContain("régi");
   });
 
+  it("does not split at a line the reporter wrote in their own words ('A szerelő ezt írta:'): the own lines after it stay on the card (barracuda, #2915)", () => {
+    const own =
+      "A telefonban a szerelő ezt írta:\nA szűrő csöpög, a 3-as medencénél.\nKérlek jöjjetek ki.";
+    expect(splitQuotedReply(own)).toEqual({ own, quoted: null });
+    // ... but a real header after such own text still splits there
+    const both = `${own}\n\n2026. nov. 25., Sze, 10:12 időpontban Béla <b@x.hu> ezt írta:\n> régi`;
+    const { own: shown, quoted } = splitQuotedReply(both);
+    expect(shown).toBe(own);
+    expect(quoted?.startsWith("2026. nov. 25.")).toBe(true);
+    // the English form needs its evidence too
+    expect(splitQuotedReply("I said it wrote:\nmore own text")).toEqual({
+      own: "I said it wrote:\nmore own text",
+      quoted: null,
+    });
+  });
+
   it("leaves a mail without a quote alone, and never hides a mail that is ALL quote", () => {
     expect(splitQuotedReply("Csak új szöveg.")).toEqual({
       own: "Csak új szöveg.",
