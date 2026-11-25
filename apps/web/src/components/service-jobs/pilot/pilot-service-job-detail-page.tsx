@@ -53,6 +53,7 @@ import { ServiceJobDelete } from "../service-job-delete";
 import { CompletionCertificatePanel } from "../completion-certificate-panel";
 import { MaintenanceInvoicePanel } from "../maintenance-invoice-panel";
 import { MaintenancePackagePanel } from "../maintenance-package-panel";
+import { MaintenanceProcessSteps } from "../maintenance-process-steps";
 import {
   serviceJobNoteDescription,
   completionCertificateBlockedReason,
@@ -297,6 +298,8 @@ export function PilotServiceJobDetailPage({
   const [job, setJob] = useState<ServiceJobDetail | null>(null);
   // A teljesítési igazolás panel változása (kiállítás, aláírt PDF) újratölti a mellette álló számla-kártyát (stage-végigjárás, 2026-11-18).
   const [certificateVersion, setCertificateVersion] = useState(0);
+  // a számla-panel változása (piszkozat, kiállítás, törlés): a lépéssor újraolvas (a panelek maguktól nem szólnak egymásnak)
+  const [invoiceVersion, setInvoiceVersion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   /*
@@ -853,6 +856,18 @@ export function PilotServiceJobDetailPage({
         onSend={(input) => void sendHandoverMail(input)}
         onCancel={() => setMailOpen(false)}
       />
+
+      {/* A FOLYAMAT LÉPÉSSORA (Picasso 3.3, acrobot 62058): csak megjelenít, a gombok kapuja a szerveren marad */}
+      {maintenance ? (
+        <MaintenanceProcessSteps
+          serviceJobId={job.id}
+          worksheets={worksheets}
+          certificateBlockedReason={completionCertificateBlockedReason(
+            job.source,
+          )}
+          refreshKey={certificateVersion + invoiceVersion}
+        />
+      ) : null}
 
       <div className="grid flex-1 grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_368px]">
         <div className="flex min-w-0 flex-col gap-5">
@@ -1558,6 +1573,7 @@ export function PilotServiceJobDetailPage({
             <MaintenanceInvoicePanel
               serviceJobId={job.id}
               refreshKey={certificateVersion}
+              onChanged={() => setInvoiceVersion((value) => value + 1)}
             />
           ) : null}
           {job.kind === "MAINTENANCE" ? (
