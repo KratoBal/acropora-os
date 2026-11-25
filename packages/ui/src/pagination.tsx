@@ -118,7 +118,7 @@ export function Pagination({
             type="button"
             disabled={page <= 1}
             onClick={() => onPageChange(page - 1)}
-            className="inline-flex h-9 items-center rounded-md bg-white px-4 text-sm font-semibold text-pilot-grey-900 ring-1 ring-pilot-grey-200 transition-colors hover:bg-pilot-grey-50 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex h-11 items-center md:h-9 rounded-md bg-white px-4 text-sm font-semibold text-pilot-grey-900 ring-1 ring-pilot-grey-200 transition-colors hover:bg-pilot-grey-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Előző
           </button>
@@ -131,7 +131,7 @@ export function Pagination({
             disabled={page >= safeTotal}
             onClick={() => onPageChange(page + 1)}
             className={cn(
-              "inline-flex h-9 items-center rounded-md px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+              "inline-flex h-11 items-center md:h-9 rounded-md px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40",
               position === "bottom"
                 ? "bg-pilot-aqua-600 text-white hover:bg-pilot-aqua-700"
                 : "bg-white text-pilot-grey-900 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50",

@@ -20,7 +20,13 @@ import {
 } from "@acropora/types";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
@@ -362,6 +368,27 @@ export function resolveUrlFilters(
 }
 
 /**
+ * TELEFON-E A KÉPERNYŐ (639 px és alatta, a Tailwind `sm` alatt). Telefonon a szűrősorban csak a kereső és a "Továbbiak szűrők" gomb marad,
+ * a partner- és helyszín-szűrő a gomb mögé kerül. Ahol nincs `matchMedia` (szerver, tesztkörnyezet), az asztali nézet áll.
+ */
+const PHONE_QUERY = "(max-width: 639px)";
+function usePhone(): boolean {
+  return useSyncExternalStore(
+    (notify) => {
+      if (typeof window === "undefined" || !window.matchMedia) return () => {};
+      const query = window.matchMedia(PHONE_QUERY);
+      query.addEventListener("change", notify);
+      return () => query.removeEventListener("change", notify);
+    },
+    () =>
+      typeof window === "undefined" || !window.matchMedia
+        ? false
+        : window.matchMedia(PHONE_QUERY).matches,
+    () => false,
+  );
+}
+
+/**
  * A LEGÖRDÜLŐ OPCIÓI A KIVÁLASZTOTT ÉRTÉKKEL: az opciók a fülre és a keresésre szűrtek, a kiválasztott partner vagy helyszín viszont lehet,
  * hogy azon a fülön nem szerepel (nincs ott hibajegye). Ilyenkor az ellenőrzés fül nélküli listájából kerül be, hogy a választó ne
  * mutasson üres vagy más értéket, miközben a szűrő él.
@@ -432,6 +459,11 @@ export function PilotServiceJobListPage() {
     initial.partner === ALL_PARTNERS && initial.location === ALL_LOCATIONS,
   );
   const [staleFilter, setStaleFilter] = useState(false);
+  const phone = usePhone();
+  /* A "Továbbiak szűrők" panel nyitva indul, ha az URL már hordoz ilyen szűrőt: a szűrt lista ne tűnjön szűretlennek. */
+  const [moreOpen, setMoreOpen] = useState(
+    Boolean(initial.includeHidden || initial.createdFrom || initial.createdTo),
+  );
   const checkedRef = useRef(filtersChecked);
   const [known, setKnown] = useState<ServiceJobListFacets | null>(null);
   const canView = Boolean(
@@ -658,6 +690,55 @@ export function PilotServiceJobListPage() {
   const counts = data ? pilotTabCounts(data.counts) : null;
   const hasActiveFilters =
     partner !== ALL_PARTNERS || location !== ALL_LOCATIONS;
+  /*
+    A "TOVÁBBIAK SZŰRŐK" GOMB SZÁMA: a panelben álló, éppen aktív szűrők. A létrehozás napjának tól-ig tartománya EGY szűrő (akkor is, ha
+    mindkét határ ki van töltve), a "Rejtettek is" egy. Telefonon a partner és a helyszín is a panelben áll, ott ők is számítanak.
+  */
+  const moreCount =
+    (createdFrom || createdTo ? 1 : 0) +
+    (includeHidden ? 1 : 0) +
+    (phone
+      ? (partner !== ALL_PARTNERS ? 1 : 0) +
+        (location !== ALL_LOCATIONS ? 1 : 0)
+      : 0);
+  // a fordított tartomány hibaüzenete a panelben áll: zárt panel mögött nem maradhat észrevétlen
+  const moreVisible = moreOpen || reversedRange;
+
+  const selectClass = phone ? "w-full" : "max-w-[240px]";
+  const partnerSelect = (
+    <PilotSelect
+      aria-label="Partner szűrő"
+      value={partner}
+      onChange={(nextValue) => setPartner(nextValue)}
+      className={selectClass}
+      chevron
+    >
+      <option value={ALL_PARTNERS}>Minden partner</option>
+      {withChosen(facets?.partners, known?.partners, partner).map((entry) => (
+        <option key={entry.id} value={entry.id}>
+          {entry.name}
+        </option>
+      ))}
+    </PilotSelect>
+  );
+  const locationSelect = (
+    <PilotSelect
+      aria-label="Helyszín szűrő"
+      value={location}
+      onChange={(nextValue) => setLocation(nextValue)}
+      className={selectClass}
+      chevron
+    >
+      <option value={ALL_LOCATIONS}>Minden helyszín</option>
+      {withChosen(facets?.locations, known?.locations, location).map(
+        (entry) => (
+          <option key={entry.id} value={entry.id}>
+            {entry.label}
+          </option>
+        ),
+      )}
+    </PilotSelect>
+  );
 
   if (!canView)
     return (
@@ -699,12 +780,14 @@ export function PilotServiceJobListPage() {
       */}
       <div
         aria-label="Összesítés"
-        className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:max-w-[780px]"
+        className="grid grid-cols-3 gap-2 sm:gap-4 lg:max-w-[780px]"
       >
         {(data ? pilotStatTiles(data.counts) : []).map((tile) => (
-          <PilotCard key={tile.key} className="px-4 py-4">
-            <p className="text-sm text-pilot-grey-600">{tile.label}</p>
-            <p className="mt-2 flex items-baseline gap-4">
+          <PilotCard key={tile.key} className="px-3 py-3 sm:px-4 sm:py-4">
+            <p className="text-xs text-pilot-grey-600 sm:text-sm">
+              {tile.label}
+            </p>
+            <p className="mt-1 flex items-baseline gap-4 sm:mt-2">
               <span
                 className={`text-2xl font-semibold ${
                   tile.tone === "amber"
@@ -717,7 +800,7 @@ export function PilotServiceJobListPage() {
                 {tile.value}
               </span>
               {tile.detail ? (
-                <span className="text-xs text-pilot-grey-500">
+                <span className="hidden text-xs text-pilot-grey-500 sm:inline">
                   {tile.detail}
                 </span>
               ) : null}
@@ -763,96 +846,96 @@ export function PilotServiceJobListPage() {
           className="w-full max-w-[390px] rounded-md bg-white px-3 py-2.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-400 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
         />
         {/*
-          THE PARTNER AND LOCATION FILTERS are not in the design, but they
-          exist today and stay (the brief: nothing working is lost).
+          THE PARTNER AND LOCATION FILTERS are not in the design, but they exist today and stay (the brief: nothing working is lost).
+          On the phone they move behind "Továbbiak szűrők" (the plan: only the search and that button stay in the row).
         */}
-        <PilotSelect
-          aria-label="Partner szűrő"
-          value={partner}
-          onChange={(nextValue) => setPartner(nextValue)}
-          className="max-w-[240px]"
-          chevron
+        {phone ? null : (
+          <>
+            {partnerSelect}
+            {locationSelect}
+          </>
+        )}
+        <button
+          type="button"
+          aria-expanded={moreVisible}
+          aria-controls="service-job-more-filters"
+          onClick={() => setMoreOpen((current) => !current)}
+          className={`h-10 shrink-0 cursor-pointer whitespace-nowrap rounded-md px-4 text-sm font-semibold ring-1 transition-colors ${
+            moreCount > 0
+              ? "bg-pilot-aqua-50 text-pilot-aqua-700 ring-pilot-aqua-200"
+              : "bg-white text-pilot-grey-900 ring-pilot-grey-200 hover:bg-pilot-grey-50"
+          }`}
         >
-          <option value={ALL_PARTNERS}>Minden partner</option>
-          {withChosen(facets?.partners, known?.partners, partner).map(
-            (entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.name}
-              </option>
-            ),
-          )}
-        </PilotSelect>
-        <PilotSelect
-          aria-label="Helyszín szűrő"
-          value={location}
-          onChange={(nextValue) => setLocation(nextValue)}
-          className="max-w-[240px]"
-          chevron
+          Továbbiak szűrők{moreCount > 0 ? ` · ${moreCount}` : ""}
+        </button>
+      </div>
+      {moreVisible ? (
+        <div
+          id="service-job-more-filters"
+          className="flex flex-wrap items-center gap-3 rounded-lg bg-white p-3 ring-1 ring-pilot-grey-200"
         >
-          <option value={ALL_LOCATIONS}>Minden helyszín</option>
-          {withChosen(facets?.locations, known?.locations, location).map(
-            (entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.label}
-              </option>
-            ),
-          )}
-        </PilotSelect>
-        {/* A JELÖLŐ CSAK ANNAK LÁTSZIK, aki vissza is tudja állítani a
+          {phone ? (
+            <>
+              {partnerSelect}
+              {locationSelect}
+            </>
+          ) : null}
+          {/* A JELÖLŐ CSAK ANNAK LÁTSZIK, aki vissza is tudja állítani a
             rejtett jegyeket -- ugyanaz a szabály, mint a mai listán. */}
-        {canHide ? (
-          <button
-            type="button"
-            aria-pressed={includeHidden}
-            onClick={() => setIncludeHidden((current) => !current)}
-            className={`h-10 shrink-0 cursor-pointer whitespace-nowrap rounded-md px-4 text-sm font-semibold ring-1 transition-colors ${
-              includeHidden
-                ? "bg-pilot-aqua-50 text-pilot-aqua-700 ring-pilot-aqua-200"
-                : "bg-white text-pilot-grey-900 ring-pilot-grey-200 hover:bg-pilot-grey-50"
-            }`}
-          >
-            Rejtettek is
-          </button>
-        ) : null}
-        {/*
+          {canHide ? (
+            <button
+              type="button"
+              aria-pressed={includeHidden}
+              onClick={() => setIncludeHidden((current) => !current)}
+              className={`h-10 shrink-0 cursor-pointer whitespace-nowrap rounded-md px-4 text-sm font-semibold ring-1 transition-colors ${
+                includeHidden
+                  ? "bg-pilot-aqua-50 text-pilot-aqua-700 ring-pilot-aqua-200"
+                  : "bg-white text-pilot-grey-900 ring-pilot-grey-200 hover:bg-pilot-grey-50"
+              }`}
+            >
+              Rejtettek is
+            </button>
+          ) : null}
+          {/*
           A LÉTREHOZÁS NAPJÁNAK TÓL-IG SZŰRŐJE (Luca, 2026-11-20): a felirat kimondja, melyik dátumra szűr (a jegy létrehozására,
           ugyanaz, mint a Létrehozva oszlop), mindkét határnap benne van, bármelyik elhagyható. A szerver szűr, és a csempék száma
           is a szűrt listáé. A sor TÖRHET: 390 pixelen a két 160 pixeles mező a felirattal nem fér egy sorba (a munkalap-lista
           ugyanitt lógott ki, OS hibakör 2026-11-19).
         */}
-        <div
-          className="flex flex-wrap items-center gap-2 text-sm text-pilot-grey-700"
-          role="group"
-          aria-label="Létrehozás napja"
-        >
-          <span>Létrehozva</span>
-          <PilotDateField
-            aria-label="Létrehozva ettől a naptól"
-            value={createdFrom}
-            max={createdTo || undefined}
-            onChange={(day) => {
-              // gépelés közben a félig beírt nap üres értéket ad: az nem szűrőváltozás
-              if (day !== createdFrom) setCreatedFrom(day);
-            }}
-            className="w-40"
-          />
-          <span aria-hidden="true">–</span>
-          <PilotDateField
-            aria-label="Létrehozva eddig a napig"
-            value={createdTo}
-            min={createdFrom || undefined}
-            onChange={(day) => {
-              if (day !== createdTo) setCreatedTo(day);
-            }}
-            className="w-40"
-          />
-          {reversedRange ? (
-            <span role="alert" className="text-xs font-medium text-red-600">
-              A kezdő dátum a záró dátum után van.
-            </span>
-          ) : null}
+          <div
+            className="flex flex-wrap items-center gap-2 text-sm text-pilot-grey-700"
+            role="group"
+            aria-label="Létrehozás napja"
+          >
+            <span>Létrehozva</span>
+            <PilotDateField
+              aria-label="Létrehozva ettől a naptól"
+              value={createdFrom}
+              max={createdTo || undefined}
+              onChange={(day) => {
+                // gépelés közben a félig beírt nap üres értéket ad: az nem szűrőváltozás
+                if (day !== createdFrom) setCreatedFrom(day);
+              }}
+              className="w-40"
+            />
+            <span aria-hidden="true">–</span>
+            <PilotDateField
+              aria-label="Létrehozva eddig a napig"
+              value={createdTo}
+              min={createdFrom || undefined}
+              onChange={(day) => {
+                if (day !== createdTo) setCreatedTo(day);
+              }}
+              className="w-40"
+            />
+            {reversedRange ? (
+              <span role="alert" className="text-xs font-medium text-red-600">
+                A kezdő dátum a záró dátum után van.
+              </span>
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {staleFilter ? (
         <Alert
@@ -877,8 +960,9 @@ export function PilotServiceJobListPage() {
 
       {loading && !data ? (
         <div aria-label="Hibajegyek betöltése" className="space-y-3">
-          <Skeleton className="h-16" />
-          <Skeleton className="h-64" />
+          {[0, 1, 2].map((row) => (
+            <Skeleton key={row} className="h-20" />
+          ))}
         </div>
       ) : null}
 
