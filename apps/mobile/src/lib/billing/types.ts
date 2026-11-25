@@ -35,6 +35,8 @@ export interface OutgoingDocumentListItem {
   currency: string;
   status: BillingDocumentStatus;
   opens: BillingDocumentListTarget;
+  /** A TIG-számla piszkozata (a közösben `BillingMaintenanceDraftLink`): nincs számlázási adatlapja, a weben a munka vagy a megrendelés lapján kezelhető. */
+  maintenanceDraft?: { certificateNumber: string } | null;
   externalKindLabel: string | null;
   paymentState: BillingPaymentState | null;
   cancelled?: boolean;

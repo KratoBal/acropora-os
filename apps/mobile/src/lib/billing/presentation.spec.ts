@@ -73,6 +73,24 @@ describe("a kimenő számla sora", () => {
     assert.match(row.meta, /^Sztornó számla · /);
   });
 
+  it("a TIG-számla piszkozata nem nyitható (a részletei 404-et adnának), és kimondja, hol kezelhető", () => {
+    const row = outgoingRow(
+      kimeno({
+        opens: "DETAIL",
+        status: "DRAFT",
+        documentNumber: null,
+        issueDate: null,
+        paymentState: null,
+        maintenanceDraft: { certificateNumber: "TI-2026-009" },
+      }),
+    );
+    assert.equal(row.opens, null);
+    assert.equal(row.title, "Számla (piszkozat)");
+    assert.match(row.closedReason ?? "", /szerviz munka vagy a megrendelés/);
+    // a sima kiállított számla ettől nem változik
+    assert.equal(outgoingRow(kimeno()).opens, "own");
+  });
+
   it("a vázlat nem nyitható, és kimondja, miért", () => {
     const row = outgoingRow(
       kimeno({

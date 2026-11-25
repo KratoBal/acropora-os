@@ -32,3 +32,18 @@ export function isOwnRow(row: {
     row.sourceType !== null
   );
 }
+
+/**
+ * A TIG-SZÁMLA PISZKOZATA A LISTÁN (Luca kérése, acrobot 61225; KT-2026-009): a piszkozat forrás nélküli sor (`sourceType` null, lásd
+ * fent), ezért az `OWN_ROWS` kizárja, és a Kimenő számlák listán sehol nem volt ott (az éles mérés 2026-11-25-én: 1 ilyen piszkozat,
+ * a 4 kiállítottal szemben, amik látszottak). A lista ezt a halmazt FELVESZI a saját sorok mellé, de CSAK a lista lekérdezésébe:
+ * a `OWN_ROWS` nem változik, tehát a számlázás vázlat-szerkesztője, törlése, kiállítása és sztornója ugyanúgy nem éri el
+ * (a tétel az igazolásból jön, nem szerkeszthető; a törlése a karbantartási modul saját útja).
+ */
+export const TIG_DRAFT_ROWS = {
+  direction: "OUTBOUND",
+  source: "SZAMLAZZ",
+  status: "DRAFT",
+  sourceType: null,
+  completionCertificateId: { not: null },
+} satisfies Prisma.InvoiceWhereInput;
