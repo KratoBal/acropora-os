@@ -88,7 +88,9 @@ export type CarrierErrorCode =
   | "UNCONFIRMED"
   | "NO_PARCEL"
   | "REJECTED"
-  | "UNEXPECTED_RESPONSE";
+  | "UNEXPECTED_RESPONSE"
+  /** the connection is read-only (`live-read`): no shipment is created or cancelled from here (card 6ae05968) */
+  | "READ_ONLY";
 
 export const CARRIER_ERROR_MESSAGE: Record<CarrierErrorCode, string> = {
   NOT_CONFIGURED:
@@ -113,6 +115,8 @@ export const CARRIER_ERROR_MESSAGE: Record<CarrierErrorCode, string> = {
     "A szállító elutasította a csomagot. Ellenőrizd a rendelés adatait, és próbáld újra.",
   UNEXPECTED_RESPONSE:
     "A szállító válasza nem értelmezhető. A csomag létrejöhetett: mielőtt újra próbálod, nézd meg a szállító felületén.",
+  READ_ONLY:
+    "A szállító kapcsolata csak olvasó módban fut (követés): csomagot innen most nem lehet feladni vagy lemondani. A csomagot a szállító felületén add fel.",
 };
 
 export class CarrierError extends Error {
@@ -133,5 +137,19 @@ export class CarrierError extends Error {
 /** A szolgaltato elerese: alszolgaltato, teszt-host vagy eles. */
 export type CarrierMode = "stub" | "test" | "live";
 
+/**
+ * The setting `live-read` (card 6ae05968): the LIVE system, read-only (`carrierReadOnly`, `ReadOnlyCarrierClient`). For the host
+ * it is `live`; anything else unknown stays the stub.
+ */
+export const LIVE_READ_SETTING = "live-read";
+
 export const carrierMode = (value: string | undefined): CarrierMode =>
-  value === "test" || value === "live" ? value : "stub";
+  value === "test" || value === "live"
+    ? value
+    : value === LIVE_READ_SETTING
+      ? "live"
+      : "stub";
+
+/** The setting asks for the live system read-only: no shipment is created or cancelled. */
+export const carrierReadOnly = (value: string | undefined): boolean =>
+  value === LIVE_READ_SETTING;
