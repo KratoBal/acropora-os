@@ -58,11 +58,13 @@ type WorksheetVersionRow = WorksheetDetail["versions"][number];
 
 export const WORKSHEET_LINE_TABLE_MIN_WIDTH = 640;
 /*
-  THE VERSIONS TABLE FITS THE LEFT COLUMN AT 1440 (picasso's screen inventory, 2026-11-25, f0b70dbd): the column is about 710 px
-  there (the card is 760 px), and at 920 the signature column was off to the right. The fixed columns take 630 px and the reason
-  keeps at least 120; below 750 the table scrolls (the card's border leaves a little less than 760 inside).
+  THE VERSIONS TABLE IS FULL WIDTH, BELOW THE TWO COLUMNS (picasso's screen inventory, 2026-11-25, f0b70dbd; acrobot 2026-11-25). In the
+  left column its card was 760 px at 1440 but only 600 px at 1280 and 344 px at 1024 (measured on the stage), so the signature column
+  was cut off with no sign that it scrolls. Full width, the card is the content area: 992 px at 1280 and 736 px at 1024 (the
+  1024 px sidebar layout). The fixed columns take 630 px and the reason keeps at least 90; below 720 the table scrolls, and below
+  md it is the shared card list.
 */
-export const WORKSHEET_VERSION_TABLE_MIN_WIDTH = 750;
+export const WORKSHEET_VERSION_TABLE_MIN_WIDTH = 720;
 
 /*
   A MUNKALAP TÁBLÁI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). A munkalapot a szerelő
@@ -619,17 +621,6 @@ export function PilotWorksheetDetailPage({
             canView={canView}
             canRegenerate={canManage}
           />
-
-          <PilotCard>
-            <PilotCardHeader title="Verziók" />
-            <PilotDataTable
-              columns={WORKSHEET_VERSION_COLUMNS}
-              rows={worksheet.versions}
-              rowKey={(version) => version.id}
-              rowTestId="worksheet-version-row"
-              minWidth={WORKSHEET_VERSION_TABLE_MIN_WIDTH}
-            />
-          </PilotCard>
         </div>
 
         <div className="flex flex-col gap-5">
@@ -713,7 +704,9 @@ export function PilotWorksheetDetailPage({
             worksheetId={worksheet.id}
             token={token}
             assignees={worksheet.assignees}
-            canManage={canManage}
+            // a lezárt (aláírt) lapon a felelősök és az eszközök csak olvashatók (picasso 3.1/4, acrobot 2026-11-25); a szerver ma NEM tiltja
+            // az írást (mérve a teszten: 200), ezt a felület kezeli, a szerveroldali tiltás külön döntés
+            canManage={canManage && !isSigned}
             onSaved={setWorksheet}
           />
 
@@ -722,7 +715,7 @@ export function PilotWorksheetDetailPage({
             token={token}
             departmentId={worksheet.department.id}
             assets={worksheet.assets}
-            canManage={canManage}
+            canManage={canManage && !isSigned}
             onSaved={setWorksheet}
           />
 
@@ -1019,6 +1012,18 @@ export function PilotWorksheetDetailPage({
           ) : null}
         </div>
       </div>
+
+      {/* THE VERSIONS TABLE IS FULL WIDTH, below the two columns (picasso 3.1/2, acrobot 2026-11-25): in the left column it had 600 px at 1280 and 344 px at 1024, so its Aláírás column was cut off. */}
+      <PilotCard>
+        <PilotCardHeader title="Verziók" />
+        <PilotDataTable
+          columns={WORKSHEET_VERSION_COLUMNS}
+          rows={worksheet.versions}
+          rowKey={(version) => version.id}
+          rowTestId="worksheet-version-row"
+          minWidth={WORKSHEET_VERSION_TABLE_MIN_WIDTH}
+        />
+      </PilotCard>
     </PilotThemeRoot>
   );
 }

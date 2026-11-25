@@ -57,10 +57,16 @@ import { PANEL_CIM } from "./frame";
  * `ticketScopeTotal` importjának indokát.
  */
 
-const SCOPE_TABS: { key: "open" | "closed" | "all"; label: string }[] = [
-  { key: "open", label: "Nyitott ügyek" },
-  { key: "closed", label: "Lezárt ügyek" },
-  { key: "all", label: "Összes ügy" },
+// `short`: telefonon (sm alatt) a rövid felirat látszik, hogy a három fül egy sorba férjen (picasso 1b, acrobot 2026-11-25); a teljes felirat az
+// elérhető név (`aria-label`) és az sm fölötti látvány
+const SCOPE_TABS: {
+  key: "open" | "closed" | "all";
+  label: string;
+  short: string;
+}[] = [
+  { key: "open", label: "Nyitott ügyek", short: "Nyitott" },
+  { key: "closed", label: "Lezárt ügyek", short: "Lezárt" },
+  { key: "all", label: "Összes ügy", short: "Összes" },
 ];
 
 const dateFormatter = new Intl.DateTimeFormat("hu-HU", { dateStyle: "medium" });
@@ -114,9 +120,11 @@ export function TicketList({ kind = "REPAIR" }: { kind?: TicketKind }) {
         </div>
         {kind === "REPAIR" ? (
           <Link href="/hibajegyek/uj" className="self-start sm:self-auto">
-            <PilotButton variant="primary">
+            {/* telefonon "Új hibajegy" (a hosszú felirat három sorra tört); az elérhető név mindenhol a teljes */}
+            <PilotButton variant="primary" aria-label="Új hibajegy nyitása">
               <Icon name="plus" size={14} />
-              Új hibajegy nyitása
+              <span className="sm:hidden">Új hibajegy</span>
+              <span className="hidden sm:inline">Új hibajegy nyitása</span>
             </PilotButton>
           </Link>
         ) : null}
@@ -138,19 +146,21 @@ export function TicketList({ kind = "REPAIR" }: { kind?: TicketKind }) {
         maga helyesen all, a hianyzo darab ez az egy sor volt.
       */}
       {kind === "REPAIR" ? (
-        <div className="flex items-center gap-1 border-b border-pilot-grey-100 bg-white px-8 py-4">
+        <div className="flex items-center gap-1 overflow-x-auto border-b border-pilot-grey-100 bg-white px-5 py-4 sm:px-8">
           {SCOPE_TABS.map((tab) => (
             <button
               key={tab.key}
               type="button"
               onClick={() => setScope(tab.key)}
-              className={`cursor-pointer rounded-md px-4 py-2 text-sm font-medium transition-all ${
+              aria-label={tab.label}
+              className={`cursor-pointer whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-all sm:px-4 ${
                 scope === tab.key
                   ? "bg-pilot-aqua-50 text-pilot-aqua-700"
                   : "bg-transparent text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
               }`}
             >
-              {tab.label}
+              <span className="sm:hidden">{tab.short}</span>
+              <span className="hidden sm:inline">{tab.label}</span>
             </button>
           ))}
         </div>
