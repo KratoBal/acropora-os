@@ -66,6 +66,18 @@ export interface GlsCodReportDetail extends GlsCodReportSummary {
   lines: GlsCodReportLine[];
 }
 
+/**
+ * A GLS-UTÁNVÉT LISTÁJÁNAK RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4). A lista lapozott, ezért a rendezés a szerveren
+ * történik. A fájlnév szöveg, egy táblából jön, így az adatbázis sorrendje az egyetlen sorrend; a "Párosítva" (két számláló hányadosa)
+ * és az "Állapot" (a kijelzett felirat nem az enum sorrendje) nem rendezhető.
+ */
+export const GLS_COD_REPORT_SORT_FIELDS = [
+  "transferDate",
+  "fileName",
+  "total",
+] as const;
+export type GlsCodReportSortField = (typeof GLS_COD_REPORT_SORT_FIELDS)[number];
+
 export interface GlsCodReportListResponse {
   items: GlsCodReportSummary[];
   pagination: {

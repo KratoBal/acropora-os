@@ -1046,6 +1046,7 @@ export type {
   GlsCodReportLine,
   GlsCodReportListResponse,
   GlsCodReportStatus,
+  GlsCodReportSortField,
   GlsCodReportSummary,
   GlsCodResolutionSource,
   GlsDocumentUploadResult,
@@ -1055,6 +1056,7 @@ export type {
   GlsSyncState,
   GlsSyncStatus,
 } from "./integrations/gls-settlement.js";
+export { GLS_COD_REPORT_SORT_FIELDS } from "./integrations/gls-settlement.js";
 export type {
   SimplePayLineError,
   SimplePayLineStatus,

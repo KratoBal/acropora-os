@@ -1,5 +1,9 @@
+import {
+  GLS_COD_REPORT_SORT_FIELDS,
+  type GlsCodReportSortField,
+} from "@acropora/types";
 import { Type } from "class-transformer";
-import { IsEnum, IsInt, IsOptional, Max, Min } from "class-validator";
+import { IsEnum, IsIn, IsInt, IsOptional, Max, Min } from "class-validator";
 
 const STATUSES = ["COMPLETED", "NEEDS_REVIEW"] as const;
 
@@ -18,4 +22,13 @@ export class GlsCodReportListQueryDto {
   @Min(1)
   @Max(100)
   pageSize = 25;
+
+  /** The sort column and direction (whitelist: `GLS_COD_REPORT_SORT_FIELDS`); without them the transfer day, newest first. */
+  @IsOptional()
+  @IsIn(GLS_COD_REPORT_SORT_FIELDS)
+  sort?: GlsCodReportSortField;
+
+  @IsOptional()
+  @IsIn(["asc", "desc"])
+  direction?: "asc" | "desc";
 }
