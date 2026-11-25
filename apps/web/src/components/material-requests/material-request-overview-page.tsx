@@ -4,7 +4,7 @@ import type {
   MaterialRequestStatusCounts,
   MaterialRequestSummary,
 } from "@acropora/types";
-import { PageHeader, PAGE_GUTTER_X } from "@acropora/ui";
+import { EmptyState, Icon, PageHeader, PAGE_GUTTER_X } from "@acropora/ui";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -144,6 +144,15 @@ export function MaterialRequestOverviewPage() {
     else router.push(`/szerviz/anyagigenyek/${encodeURIComponent(id)}`);
   };
 
+  // az ismeretlen (betöltés alatt álló vagy hibás) szám nem nulla: csak a valóban megszámolt nulla és az üres, szűretlen lista számít
+  const nothingAtAll =
+    list.kind === "ready" &&
+    list.items.length === 0 &&
+    !query &&
+    filter === "active" &&
+    counts !== null &&
+    Object.values(counts).every((value) => value === 0);
+
   return (
     <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
       <PageHeader
@@ -155,106 +164,120 @@ export function MaterialRequestOverviewPage() {
       <div
         className={`mx-auto flex max-w-[1320px] flex-col gap-4 ${PAGE_GUTTER_X} py-6`}
       >
-        <StatusMetrics counts={counts} />
-        <div className="flex flex-wrap items-center gap-2 rounded-[14px] border border-pilot-grey-200 bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-          <div
-            role="group"
-            aria-label="Szűrés"
-            className="flex flex-wrap gap-2"
-          >
-            {OVERVIEW_FILTERS.map((option) => (
-              <button
-                key={option}
-                type="button"
-                aria-pressed={filter === option}
-                onClick={() => {
-                  setFilter(option);
-                  setSelected(null);
-                }}
-                className="rounded-full"
-              >
-                <RequestPill tone={filter === option ? "accent" : "neutral"}>
-                  {OVERVIEW_FILTER_LABEL[option]}
-                </RequestPill>
-              </button>
-            ))}
-          </div>
-          <PilotInput
-            aria-label="Keresés"
-            placeholder="Keresés: munkalap, ügyfél, tétel…"
-            value={search}
-            onChange={setSearch}
-            className="min-w-[220px] flex-1"
+        {nothingAtAll ? (
+          /* MINDEN KPI NULLA ÉS A LISTA ÜRES: egy üres állapot egy mondattal (a Feladataim mintájára), nem öt nulla és két üres doboz (Picasso 3.17) */
+          <EmptyState
+            icon={<Icon name="clipboard" size={20} />}
+            title="Nincs anyagigény"
+            description="Ha egy munkalapon anyagot kell beszerezni, az igény itt jelenik meg."
           />
-        </div>
-        <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_480px]">
-          <div className="flex min-w-0 flex-col gap-2.5">
-            {list.kind === "loading" ? (
-              <div aria-busy="true" className="flex flex-col gap-2.5">
-                {[0, 1, 2].map((key) => (
-                  <div
-                    key={key}
-                    className="h-[150px] animate-pulse rounded-[12px] border border-pilot-grey-200 bg-white"
-                  />
+        ) : null}
+        {nothingAtAll ? null : <StatusMetrics counts={counts} />}
+        {nothingAtAll ? null : (
+          <>
+            <div className="flex flex-wrap items-center gap-2 rounded-[14px] border border-pilot-grey-200 bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+              <div
+                role="group"
+                aria-label="Szűrés"
+                className="flex flex-wrap gap-2"
+              >
+                {OVERVIEW_FILTERS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    aria-pressed={filter === option}
+                    onClick={() => {
+                      setFilter(option);
+                      setSelected(null);
+                    }}
+                    className="rounded-full"
+                  >
+                    <RequestPill
+                      tone={filter === option ? "accent" : "neutral"}
+                    >
+                      {OVERVIEW_FILTER_LABEL[option]}
+                    </RequestPill>
+                  </button>
                 ))}
               </div>
-            ) : list.kind === "error" ? (
-              <p
-                role="alert"
-                className="rounded-[14px] border border-pilot-red-100 bg-pilot-red-50 px-4 py-3 text-sm leading-5 text-pilot-red-700"
-              >
-                {list.message}
-              </p>
-            ) : list.items.length === 0 ? (
-              <p
-                role="status"
-                className="rounded-[14px] border border-pilot-grey-200 bg-white px-4 py-3 text-sm leading-5 text-pilot-grey-600"
-              >
-                {query
-                  ? "Nincs a keresésnek megfelelő anyagigény."
-                  : EMPTY_MESSAGE[filter]}
-              </p>
-            ) : (
-              <>
-                {list.items.map((item) => (
-                  <RequestCard
-                    key={item.id}
-                    request={item}
-                    now={now}
-                    selected={item.id === selected}
-                    onSelect={() => open(item.id)}
-                  />
-                ))}
-                {list.nextCursor ? (
-                  <div>
-                    <PilotButton
-                      variant="secondary"
-                      size="regular"
-                      disabled={loadingMore}
-                      onClick={() => void loadMore()}
-                    >
-                      {loadingMore ? "Betöltés…" : "Továbbiak betöltése"}
-                    </PilotButton>
-                  </div>
-                ) : null}
-              </>
-            )}
-          </div>
-          <div className="hidden lg:block">
-            {selected ? (
-              <MaterialRequestDetail
-                key={selected}
-                id={selected}
-                variant="panel"
-                onChanged={() => void load()}
+              <PilotInput
+                aria-label="Keresés"
+                placeholder="Keresés: munkalap, ügyfél, tétel…"
+                value={search}
+                onChange={setSearch}
+                className="min-w-[220px] flex-1"
               />
-            ) : (
-              <p className="rounded-[14px] border border-dashed border-pilot-grey-300 px-4 py-6 text-center text-sm leading-5 text-pilot-grey-500">
-                Válassz egy anyagigényt a listából.
-              </p>
-            )}
-          </div>
-        </div>
+            </div>
+            <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_480px]">
+              <div className="flex min-w-0 flex-col gap-2.5">
+                {list.kind === "loading" ? (
+                  <div aria-busy="true" className="flex flex-col gap-2.5">
+                    {[0, 1, 2].map((key) => (
+                      <div
+                        key={key}
+                        className="h-[150px] animate-pulse rounded-[12px] border border-pilot-grey-200 bg-white"
+                      />
+                    ))}
+                  </div>
+                ) : list.kind === "error" ? (
+                  <p
+                    role="alert"
+                    className="rounded-[14px] border border-pilot-red-100 bg-pilot-red-50 px-4 py-3 text-sm leading-5 text-pilot-red-700"
+                  >
+                    {list.message}
+                  </p>
+                ) : list.items.length === 0 ? (
+                  <p
+                    role="status"
+                    className="rounded-[14px] border border-pilot-grey-200 bg-white px-4 py-3 text-sm leading-5 text-pilot-grey-600"
+                  >
+                    {query
+                      ? "Nincs a keresésnek megfelelő anyagigény."
+                      : EMPTY_MESSAGE[filter]}
+                  </p>
+                ) : (
+                  <>
+                    {list.items.map((item) => (
+                      <RequestCard
+                        key={item.id}
+                        request={item}
+                        now={now}
+                        selected={item.id === selected}
+                        onSelect={() => open(item.id)}
+                      />
+                    ))}
+                    {list.nextCursor ? (
+                      <div>
+                        <PilotButton
+                          variant="secondary"
+                          size="regular"
+                          disabled={loadingMore}
+                          onClick={() => void loadMore()}
+                        >
+                          {loadingMore ? "Betöltés…" : "Továbbiak betöltése"}
+                        </PilotButton>
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </div>
+              <div className="hidden lg:block">
+                {selected ? (
+                  <MaterialRequestDetail
+                    key={selected}
+                    id={selected}
+                    variant="panel"
+                    onChanged={() => void load()}
+                  />
+                ) : (
+                  <p className="rounded-[14px] border border-dashed border-pilot-grey-300 px-4 py-6 text-center text-sm leading-5 text-pilot-grey-500">
+                    Válassz egy anyagigényt a listából.
+                  </p>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </PilotThemeRoot>
   );

@@ -100,6 +100,14 @@ describe("UserListPage paging", () => {
     expect(labels).toEqual(["Név", "E-mail", "Szerepkör", "Státusz", "Jelszó"]);
   });
 
+  // Picasso 3.17: the only two screens with purple links were this and the tutorials list; the name link is the system's green now
+  it("the name link is the system's link green, not the purple brand colour", async () => {
+    render(<UserListPage />);
+    const link = await screen.findByRole("link", { name: "Szerelő Sándor" });
+    expect(link.className).toContain("text-pilot-aqua-700");
+    expect(link.className).not.toContain("brand");
+  });
+
   it("moves to the next page instead of returning to the first", async () => {
     render(<UserListPage />);
     await screen.findByText("Szerelő Sándor");

@@ -61,7 +61,7 @@ const columns: PilotTableColumn<UserRow>[] = [
     header: "Név",
     cell: (item) => (
       <Link
-        className="font-semibold text-brand-700"
+        className="font-semibold text-pilot-aqua-700"
         href={`/admin/users/${item.id}`}
       >
         {personDisplayName(item)}

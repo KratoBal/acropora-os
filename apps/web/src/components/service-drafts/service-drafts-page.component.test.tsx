@@ -5,6 +5,7 @@ import {
   ServiceDraftsPage,
   draftIntakeBadge,
   draftSourceLabel,
+  splitQuotedReply,
 } from "./service-drafts-page";
 vi.mock("next/font/local", () => ({ default: () => ({ className: "inter" }) }));
 const mock = vi.hoisted(() => ({
@@ -527,5 +528,110 @@ describe("draftIntakeBadge and draftSourceLabel", () => {
   it("names the source", () => {
     expect(draftSourceLabel("TICKET_MAIL")).toBe("Ticket levél");
     expect(draftSourceLabel("CAPASULI_DAILY_REPORT")).toBe("Cápasuli");
+  });
+});
+
+/*
+  PISZKOZATOK (Picasso 3.17, acrobot 61999). MI PIROSÍT: ha az Elfogadom halvány, de egy mondat sem mondja meg, miért; ha az idézett válasz-levél
+  újra az egész kártyán látszik; ha a szűrő-pirulák aktív állapota újra sárga; ha az idézés-felismerés elnyeli az új szöveget.
+*/
+describe("splitQuotedReply", () => {
+  const reply =
+    "Köszönöm, megnézzük.\nÜdv: Béla\n\n2026. nov. 25., Sze, 10:12 időpontban Szerelő Sándor <s@acropora.hu> ezt írta:\n> A szűrő csöpög.\n> Kérlek nézzétek meg.";
+
+  it("splits the new text from the quoted chain at the 'ezt írta' header", () => {
+    const { own, quoted } = splitQuotedReply(reply);
+    expect(own).toBe("Köszönöm, megnézzük.\nÜdv: Béla");
+    expect(quoted?.startsWith("2026. nov. 25., Sze")).toBe(true);
+    expect(quoted).toContain("> A szűrő csöpög.");
+  });
+
+  it("knows the English header and the Eredeti üzenet separator", () => {
+    expect(
+      splitQuotedReply("Thanks.\nOn Tue, Bob <b@x.hu> wrote:\n> old").quoted,
+    ).toContain("wrote:");
+    expect(
+      splitQuotedReply("Köszi.\n-----Eredeti üzenet-----\nrégi").quoted,
+    ).toContain("régi");
+  });
+
+  it("leaves a mail without a quote alone, and never hides a mail that is ALL quote", () => {
+    expect(splitQuotedReply("Csak új szöveg.")).toEqual({
+      own: "Csak új szöveg.",
+      quoted: null,
+    });
+    const allQuote = "2026. nov. 25. Béla ezt írta:\n> minden idézet";
+    expect(splitQuotedReply(allQuote)).toEqual({
+      own: allQuote,
+      quoted: null,
+    });
+    // blank lines before the header are not "new text" either: nothing would stay on the card
+    const blankThenQuote = "\n\n2026. nov. 25. Béla ezt írta:\n> minden idézet";
+    expect(splitQuotedReply(blankThenQuote)).toEqual({
+      own: blankThenQuote,
+      quoted: null,
+    });
+  });
+});
+
+describe("Service draft review -- Picasso 3.17", () => {
+  it("says why the Elfogadom is pale until a place is chosen, and the sentence goes away with the choice", async () => {
+    mock.list.mockResolvedValue(ticketData());
+    mock.places.mockResolvedValue({
+      items: [
+        {
+          id: "p1",
+          name: "Akvárium 1",
+          customerId: "c1",
+          customerName: "Állatkert Kft",
+        },
+      ],
+    });
+    render(<ServiceDraftsPage />);
+    const select = (await screen.findByLabelText(
+      "Helyszín",
+    )) as HTMLSelectElement;
+    await waitFor(() => expect(select.options.length).toBe(2));
+    const accept = screen.getByRole("button", {
+      name: "Elfogadom: Szűrő csöpög",
+    });
+    const hint = screen.getByText("Előbb válassz helyszínt.");
+    expect(hint.className).toBe("text-xs text-pilot-grey-400");
+    expect(accept.getAttribute("aria-describedby")).toBe(hint.id);
+    expect((accept as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(select, { target: { value: "p1" } });
+    expect(screen.queryByText("Előbb válassz helyszínt.")).toBeNull();
+    expect(accept.getAttribute("aria-describedby")).toBeNull();
+  });
+
+  it("collapses the quoted reply under 'Idézett levél megnyitása', the new text stays on the card", async () => {
+    mock.list.mockResolvedValue(
+      ticketData({
+        originalProblem:
+          "A szivattyú továbbra is zúg.\n\n2026. nov. 25., Sze, 10:12 időpontban Szerelő Sándor <s@acropora.hu> ezt írta:\n> Kérlek nézzétek meg a szivattyút.",
+      }),
+    );
+    render(<ServiceDraftsPage />);
+    const own = await screen.findByText("A szivattyú továbbra is zúg.");
+    expect(own.closest("details")).toBeNull();
+    const summary = screen.getByText("Idézett levél megnyitása");
+    const details = summary.closest("details")!;
+    expect(details.hasAttribute("open")).toBe(false);
+    expect(details.textContent).toContain("ezt írta:");
+    expect(details.textContent).toContain("Kérlek nézzétek meg a szivattyút.");
+  });
+
+  it("the active filter pill is the system's green, not yellow", async () => {
+    mock.list.mockResolvedValue(data());
+    render(<ServiceDraftsPage />);
+    await screen.findByText("Venturi szivattyú");
+    const active = screen
+      .getAllByRole("tab")
+      .filter((tab) => tab.getAttribute("aria-selected") === "true");
+    expect(active.length).toBeGreaterThan(0);
+    for (const tab of active) {
+      expect(tab.className).toContain("bg-pilot-aqua-50");
+      expect(tab.className).not.toContain("amber");
+    }
   });
 });
