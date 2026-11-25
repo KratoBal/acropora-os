@@ -11,11 +11,12 @@ import type { Prisma, ServiceJobStatus } from "@acropora/database";
  *
  * === EZ A TÁBLÁN KÍVÜLI LÉPÉS, ÉS EZT KI KELL MONDANI ===
  *
- * A kézi léptetés táblája (`service-job-transitions.ts`, Balázs 2026-09-02-i
- * menete) `NEW`-ból és `TRIAGED`-ből NEM enged közvetlenül `IN_PROGRESS`-be.
- * Ez a szabály ettől szándékosan eltér: nem egy ember választ lépést, hanem a
- * munka maga mutatja, hogy elkezdődött -- a tételsor a munka bizonyítéka. A
- * kézi tábla nem változik; ez a függvény nem hívja, és nem is lazítja.
+ * A kézi léptetés táblája (`service-job-transitions.ts`) 2026-11-25-ig
+ * `NEW`-ból és `TRIAGED`-ből NEM engedett közvetlenül `IN_PROGRESS`-be; a
+ * közös állapot-lista óta enged. Ez a lépés ettől függetlenül nem a táblán
+ * megy: nem egy ember választ lépést, hanem a munka maga mutatja, hogy
+ * elkezdődött -- a tételsor a munka bizonyítéka. Ez a függvény a táblát nem
+ * hívja, és nem is lazítja.
  *
  * === AMI NEM TÖRTÉNIK, ÉS SZÁNDÉKOSAN ===
  *
@@ -75,8 +76,20 @@ export async function advanceTicketOnFirstLine(
   const serviceJobId = version?.worksheet.serviceJobId ?? null;
   if (serviceJobId === null) return null;
 
+  return stepTicket(transaction, {
+    serviceJobId,
+    note: FIRST_LINE_STEP_NOTE,
+    actorUserId: input.actorUserId,
+  });
+}
+
+/** A jegy léptetése naplósorral: a két automatikus lépés (első sor, csatolás) közös vége. */
+async function stepTicket(
+  transaction: Pick<FirstLineTransaction, "serviceJob" | "serviceJobEvent">,
+  input: { serviceJobId: string; note: string; actorUserId: string | null },
+): Promise<{ from: ServiceJobStatus; to: ServiceJobStatus } | null> {
   const job = await transaction.serviceJob.findUnique({
-    where: { id: serviceJobId },
+    where: { id: input.serviceJobId },
     select: { status: true },
   });
   if (!job) return null;
@@ -84,7 +97,7 @@ export async function advanceTicketOnFirstLine(
   if (to === null) return null;
 
   const moved = await transaction.serviceJob.updateMany({
-    where: { id: serviceJobId, status: job.status },
+    where: { id: input.serviceJobId, status: job.status },
     data: { status: to },
   });
   if (moved.count !== 1) return null;
@@ -93,12 +106,67 @@ export async function advanceTicketOnFirstLine(
   // (`ServiceJobEvent_kind_fields_agree`), a lapot a megjegyzés nevezi meg.
   await transaction.serviceJobEvent.create({
     data: {
-      serviceJobId,
+      serviceJobId: input.serviceJobId,
       fromStatus: job.status,
       toStatus: to,
-      note: FIRST_LINE_STEP_NOTE,
+      note: input.note,
       actorUserId: input.actorUserId,
     },
   });
   return { from: job.status, to };
+}
+
+/**
+ * A TÉTELSOROS MUNKALAP CSATOLÁSA IS FOLYAMATBAN ÁLLAPOTBA LÉPTETI A JEGYET.
+ *
+ * A közös állapot-lista terve, 8/a pont (barracuda 1. javaslata, 61820): egy
+ * már lezárt munkalap hozzácsatolható egy Új jegyhez, és a jegy addig Újnak
+ * látszana, holott a munka kész. A levezetett Elkészült szándékosan csak a
+ * Folyamatban jegyre fut (`commonJobStatus`), mert NEW alól nincs COMPLETED,
+ * tehát a csatolás lépteti a jegyet, ugyanúgy, mint az első tételsor: ugyanaz
+ * a három kiinduló állapot, ugyanaz a cél, naplósorral.
+ *
+ * A FELTÉTEL A TÉTELSOR, NEM A LAP ÁLLAPOTA. Ez ugyanaz a bizonyíték, mint az
+ * első sornál: van-e munka a lapon. Egy üres piszkozat csatolása nem léptet;
+ * ha később kap sort, az első-sor lépés viszi tovább, mert a lap akkor már a
+ * jegy alatt áll. A lezárt lap mindig tételsoros (üres lap nem zárható le,
+ * `worksheet-close-blockers.ts`, NO_LINES), tehát a 8/a esete ide tartozik.
+ *
+ * A várakozó, a kész és az elállt jegyhez nem nyúl (8/a: a csatolás egy
+ * WAITING_* jegyet NEM léptet).
+ */
+export const ATTACH_STEP_NOTE =
+  "Automatikus lépés: tételsoros munkalap került a jegy alá.";
+
+export type AttachTransaction = Pick<
+  FirstLineTransaction,
+  "serviceJob" | "serviceJobEvent"
+> & {
+  worksheetVersion: Pick<
+    Prisma.TransactionClient["worksheetVersion"],
+    "findFirst"
+  >;
+};
+
+/** A lépés a csatolással egy tranzakcióban; a visszatérés a megtett lépés, vagy `null`. */
+export async function advanceTicketOnAttach(
+  transaction: AttachTransaction,
+  input: {
+    serviceJobId: string;
+    worksheetId: string;
+    actorUserId: string | null;
+  },
+): Promise<{ from: ServiceJobStatus; to: ServiceJobStatus } | null> {
+  // a legutolsó verzió, ugyanaz a fogalom, mint a modul többi lekérdezésében
+  const latest = await transaction.worksheetVersion.findFirst({
+    where: { worksheetId: input.worksheetId },
+    orderBy: { version: "desc" },
+    select: { _count: { select: { lines: true } } },
+  });
+  if (!latest || latest._count.lines === 0) return null;
+  return stepTicket(transaction, {
+    serviceJobId: input.serviceJobId,
+    note: ATTACH_STEP_NOTE,
+    actorUserId: input.actorUserId,
+  });
 }

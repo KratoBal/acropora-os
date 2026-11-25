@@ -61,7 +61,11 @@ describe("egy meglévő munkalap a hibajegy alá", () => {
     await service.attachWorksheet("job-1", "worksheet-1", BELSOS);
 
     assert.deepEqual(calls, [
-      { serviceJobId: "job-1", worksheetId: "worksheet-1" },
+      {
+        serviceJobId: "job-1",
+        worksheetId: "worksheet-1",
+        actorUserId: "user-1",
+      },
     ]);
   });
 

@@ -168,7 +168,7 @@ const UTAK: {
   {
     nev: "move",
     hivas: (service, user) =>
-      service.move("job-1", { to: "TRIAGED" }, user.id, user),
+      service.move("job-1", { to: "IN_PROGRESS" }, user.id, user),
   },
   {
     nev: "attachWorksheet",
@@ -274,7 +274,11 @@ describe("a kontroller atadja a hivot, es a partner igy sem ir", () => {
     {
       nev: "move",
       hivas: (controller, user) =>
-        controller.move("job-1", { to: "TRIAGED" }, user) as Promise<unknown>,
+        controller.move(
+          "job-1",
+          { to: "IN_PROGRESS" },
+          user,
+        ) as Promise<unknown>,
     },
     {
       nev: "attachWorksheet",
@@ -413,7 +417,7 @@ describe("a karbantartási jegy tiltott belépői a szerveren", () => {
     {
       nev: "move",
       hivas: (c, u) =>
-        c.move("job-1", { to: "TRIAGED" }, u) as Promise<unknown>,
+        c.move("job-1", { to: "IN_PROGRESS" }, u) as Promise<unknown>,
     },
     {
       nev: "attachWorksheet",
@@ -506,7 +510,11 @@ describe("a karbantartási jegy tiltott belépői a szerveren", () => {
     const { controller, irasok } = controllerOf({ kindOf: async () => null });
     await assert.rejects(
       () =>
-        controller.move("nincs", { to: "TRIAGED" }, ADMIN) as Promise<unknown>,
+        controller.move(
+          "nincs",
+          { to: "IN_PROGRESS" },
+          ADMIN,
+        ) as Promise<unknown>,
       (hiba: { status?: number }) => hiba.status === 404,
     );
     assert.deepEqual(irasok, []);

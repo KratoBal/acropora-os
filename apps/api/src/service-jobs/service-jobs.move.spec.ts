@@ -93,13 +93,13 @@ describe("egy lépés a hibajegyen", () => {
   it("a megengedett lépés átmegy, és a naplóhoz továbbadja, honnan hova", async () => {
     const { service, calls } = serviceWith({ status: "NEW" });
 
-    await service.move("job-1", { to: "TRIAGED" }, "user-1", BELSOS);
+    await service.move("job-1", { to: "IN_PROGRESS" }, "user-1", BELSOS);
 
     assert.equal(calls.length, 1);
     assert.deepEqual(calls[0], {
       id: "job-1",
       from: "NEW",
-      to: "TRIAGED",
+      to: "IN_PROGRESS",
       note: null,
       actorUserId: "user-1",
     });
@@ -119,7 +119,7 @@ describe("egy lépés a hibajegyen", () => {
 
     await assert.rejects(
       () => service.move("job-1", { to: "COMPLETED" }, "user-1", BELSOS),
-      /TRIAGED/,
+      /IN_PROGRESS/,
     );
     assert.equal(calls.length, 0);
   });
@@ -379,7 +379,7 @@ describe("egy lépés a hibajegyen", () => {
     const { service } = serviceWith({ status: "NEW", moved: false });
 
     await assert.rejects(
-      () => service.move("job-1", { to: "TRIAGED" }, "user-1", BELSOS),
+      () => service.move("job-1", { to: "IN_PROGRESS" }, "user-1", BELSOS),
       /időközben/,
     );
   });
@@ -452,7 +452,7 @@ describe("egy lépés a hibajegyen", () => {
     const { service } = serviceWith({ status: null });
 
     await assert.rejects(
-      () => service.move("hianyzik", { to: "TRIAGED" }, "user-1", BELSOS),
+      () => service.move("hianyzik", { to: "IN_PROGRESS" }, "user-1", BELSOS),
       /nem található/,
     );
   });
@@ -475,11 +475,11 @@ describe("egy lépés a hibajegyen", () => {
    * hiányzott.
    */
   it("a lépés a friss részletlapot adja vissza, nem nyugtát", async () => {
-    const { service } = serviceWith({ status: "NEW", utana: "TRIAGED" });
+    const { service } = serviceWith({ status: "NEW", utana: "IN_PROGRESS" });
 
     const valasz = await service.move(
       "job-1",
-      { to: "TRIAGED" },
+      { to: "IN_PROGRESS" },
       "user-1",
       BELSOS,
     );
@@ -487,7 +487,7 @@ describe("egy lépés a hibajegyen", () => {
     // A LEPES UTANI ALLAPOT: a valasz a tarolotol frissen olvasott sorbol
     // epul, nem a keresben kuldott cel-allapotbol. Enelkul egy valasz, ami
     // egyszeruen visszatukrozi a bemenetet, ugyanigy zold lenne.
-    assert.equal(valasz.status, "TRIAGED");
+    assert.equal(valasz.status, "IN_PROGRESS");
     // A NAPLO A LEPES BIZONYITEKA, es a telefon ebbol rajzolja a lap aljat.
     assert.ok(valasz.timeline.length > 0);
     // A KOVETKEZO LEPESEKET IS VISZI: enelkul a kepernyo gombjai a lepes utan
