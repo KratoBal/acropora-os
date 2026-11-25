@@ -34,6 +34,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { ServiceIcon } from "@/components/service/service-list-chrome";
 import { assetsApi } from "@/lib/api/assets";
 import { assetCategoriesApi } from "@/lib/api/asset-categories";
+import { useUrlSort } from "@/lib/navigation/use-url-sort";
 import {
   assetKindLabel,
   assetStatusLabel,
@@ -41,6 +42,7 @@ import {
 } from "../asset-labels";
 import { TABS } from "../asset-list-page";
 import {
+  ASSET_SORT_COLUMNS,
   assetListQuery,
   DEFAULT_PAGE_SIZE,
   manualFilterOf,
@@ -104,6 +106,7 @@ export const ASSET_TABLE_MIN_WIDTH = 1220;
 export const ASSET_COLUMNS: PilotTableColumn<AssetRow>[] = [
   {
     id: "asset",
+    sortable: true,
     header: "Eszköz",
     width: "300px",
     cell: (asset) => (
@@ -123,6 +126,7 @@ export const ASSET_COLUMNS: PilotTableColumn<AssetRow>[] = [
   },
   {
     id: "partner",
+    sortable: true,
     header: "Partner",
     width: "160px",
     cell: (asset) => (
@@ -190,6 +194,7 @@ export const ASSET_COLUMNS: PilotTableColumn<AssetRow>[] = [
   },
   {
     id: "status",
+    sortable: true,
     header: "Státusz",
     width: "110px",
     cell: (asset) => (
@@ -220,6 +225,7 @@ export function PilotAssetListPage() {
   const token = session?.token ?? "";
   const activeStatus = params.get("status") ?? "IN_PLACE";
 
+  const { sort, onSort } = useUrlSort(ASSET_SORT_COLUMNS);
   const query = useMemo(() => assetListQuery(params), [params]);
 
   /*
@@ -535,6 +541,8 @@ export function PilotAssetListPage() {
         <>
           <PilotDataTable
             columns={ASSET_COLUMNS}
+            sort={sort}
+            onSort={onSort}
             rows={data.items}
             rowKey={(asset) => asset.id}
             rowTestId="asset-row"
