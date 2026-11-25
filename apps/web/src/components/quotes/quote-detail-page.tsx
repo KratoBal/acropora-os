@@ -47,6 +47,7 @@ import {
   quoteMailState,
   QuoteSendDrawer,
 } from "./quote-send";
+import { QuoteMoreMenu, type QuoteMoreMenuItem } from "./quote-more-menu";
 import { QuotePartnerEditor } from "./quote-partner-editor";
 import { canEditQuoteTitle, QuoteTitleEditor } from "./quote-title-editor";
 
@@ -186,6 +187,63 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
     }
   };
 
+  // Picasso 3.4 (acrobot 61933): one primary button (Szerkesztés / Új verzió), the send next to it where a published
+  // version exists, everything else behind "Továbbiak". The delete stays out of the menu, at the bottom of the page.
+  const titleEditable = canEditQuoteTitle(quote, canManage);
+  const moreItems: QuoteMoreMenuItem[] = [
+    ...(editable && canManage
+      ? [
+          {
+            key: "reject",
+            label: "Elutasítás",
+            danger: true,
+            onSelect: () => setOutcome("reject"),
+          },
+          {
+            key: "postpone",
+            label: "Halasztás",
+            onSelect: () => setOutcome("postpone"),
+          },
+          {
+            key: "cancel",
+            label: "Visszavonás",
+            danger: true,
+            onSelect: () => setOutcome("cancel"),
+          },
+        ]
+      : []),
+    ...(canManage
+      ? [
+          {
+            key: "copy",
+            label: "Másolat új ajánlatként",
+            disabled: busy,
+            onSelect: () => void copyAsNew(),
+          },
+        ]
+      : []),
+    ...(titleEditable
+      ? [
+          {
+            key: "title",
+            label: "Cím szerkesztése",
+            disabled: busy,
+            onSelect: () => setEditingTitle(true),
+          },
+          {
+            key: "partner",
+            label: "Partner cseréje",
+            disabled: busy,
+            onSelect: () => setEditingPartner(true),
+          },
+        ]
+      : []),
+  ];
+  const primaryActions =
+    canMail ||
+    (editable && canManage) ||
+    (editable && canRecord && hasPublished);
+
   const columns: PilotTableColumn<QuoteInternalVersion>[] = [
     {
       id: "v",
@@ -266,8 +324,8 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
           </div>
         }
         actions={
-          (editable && (canManage || canRecord)) || canMail || canManage ? (
-            <div className="flex flex-wrap gap-2">
+          primaryActions || moreItems.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
               {canMail ? (
                 <PilotButton
                   size="regular"
@@ -277,28 +335,6 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
                   {mailLabel}
                 </PilotButton>
               ) : null}
-              {editable && canManage ? (
-                <>
-                  <PilotButton
-                    variant="ghost"
-                    onClick={() => setOutcome("reject")}
-                  >
-                    Elutasítás
-                  </PilotButton>
-                  <PilotButton
-                    variant="ghost"
-                    onClick={() => setOutcome("postpone")}
-                  >
-                    Halasztás
-                  </PilotButton>
-                  <PilotButton
-                    variant="ghost"
-                    onClick={() => setOutcome("cancel")}
-                  >
-                    Visszavonás
-                  </PilotButton>
-                </>
-              ) : null}
               {editable && canRecord && hasPublished ? (
                 <PilotButton
                   size="regular"
@@ -306,43 +342,6 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
                   onClick={() => setOutcome("accept")}
                 >
                   Elfogadás rögzítése
-                </PilotButton>
-              ) : null}
-              {canManage ? (
-                <PilotButton
-                  size="regular"
-                  variant="secondary"
-                  disabled={busy}
-                  onClick={() => void copyAsNew()}
-                >
-                  Másolat új ajánlatként
-                </PilotButton>
-              ) : null}
-              {canEditQuoteTitle(quote, canManage) ? (
-                <PilotButton
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => setEditingTitle(true)}
-                >
-                  Cím szerkesztése
-                </PilotButton>
-              ) : null}
-              {canEditQuoteTitle(quote, canManage) ? (
-                <PilotButton
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => setEditingPartner(true)}
-                >
-                  Partner cseréje
-                </PilotButton>
-              ) : null}
-              {canManage && deletable ? (
-                <PilotButton
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => setDeleting(true)}
-                >
-                  Törlés
                 </PilotButton>
               ) : null}
               {editable && canManage ? (
@@ -365,6 +364,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
                   </PilotButton>
                 )
               ) : null}
+              <QuoteMoreMenu items={moreItems} />
             </div>
           ) : undefined
         }
@@ -474,9 +474,30 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
             rows={[...quote.versions].reverse()}
             rowKey={(v) => v.id}
             minWidth={640}
+            dense
           />
         </div>
       </PilotCard>
+
+      {canManage && deletable ? (
+        <PilotCard>
+          <PilotCardHeader title="Törlés" />
+          <div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-pilot-grey-600">
+              Ez a tervezet még sosem lett publikálva, ezért törölhető. A törlés
+              végleges.
+            </p>
+            <PilotButton
+              size="regular"
+              variant="danger"
+              disabled={busy}
+              onClick={() => setDeleting(true)}
+            >
+              Törlés
+            </PilotButton>
+          </div>
+        </PilotCard>
+      ) : null}
 
       <QuoteHandoffDrawer
         token={token}
