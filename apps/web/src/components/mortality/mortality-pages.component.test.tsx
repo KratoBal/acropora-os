@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type {
   MortalityDetail,
   MortalityListResponse,
@@ -626,5 +632,91 @@ describe("űrlap", () => {
     expect(
       screen.getByText("Nincs jogosultságod elhullási bejegyzést rögzíteni"),
     ).toBeTruthy();
+  });
+});
+
+/*
+  A LISTA RENDEZÉSE AZ OSZLOPFEJEN (Balázs kérése, kártya 2f6369a4). MI PIROSÍT: ha a példányszám, a rögzítő vagy az elhullás napja
+  fejléce nem a saját szerver-mezőjét írja az URL-be; ha a ciklus (növekvő, csökkenő, alap) elakad; ha a rendezés nem nullázza a lapot,
+  vagy elveszíti a szűrőt; ha az URL rendezése nem jut a kérésbe, vagy egy ismeretlen mező (régi vagy kézzel írt link) igen (az API
+  400-at adna, és az egész lista eltörne); ha az élőlény, az akvárium vagy a forrás oszlop rendezhetőnek látszik.
+*/
+describe("lista rendezése", () => {
+  const lastReplace = () =>
+    new URL(String(navigation.replace.mock.calls.at(-1)![0]), "http://x")
+      .searchParams;
+
+  it("egy fejléc a saját mezőjét írja, növekvőben kezd, az első oldalra lapoz és megtartja a szűrőt", async () => {
+    navigation.search = new URLSearchParams("page=3&sourceType=TRADE");
+    render(<MortalityListPage />);
+    const table = await screen.findByRole("table");
+    for (const [name, field] of [
+      ["Példány", "quantity"],
+      ["Rögzítette", "recordedByName"],
+      ["Elhullás napja", "occurredOn"],
+    ] as const) {
+      navigation.replace.mockClear();
+      fireEvent.click(within(table).getByRole("button", { name }));
+      const url = lastReplace();
+      expect(url.get("sort"), name).toBe(field);
+      expect(url.get("direction"), name).toBe("asc");
+      expect(url.has("page"), name).toBe(false);
+      expect(url.get("sourceType"), name).toBe("TRADE");
+    }
+  });
+
+  it("a második kattintás csökkenő, a harmadik törli a rendezést", async () => {
+    navigation.search = new URLSearchParams("sort=occurredOn&direction=asc");
+    const { unmount } = render(<MortalityListPage />);
+    const table = await screen.findByRole("table");
+    fireEvent.click(
+      within(table).getByRole("button", { name: "Elhullás napja" }),
+    );
+    expect(lastReplace().get("direction")).toBe("desc");
+    unmount();
+
+    navigation.search = new URLSearchParams("sort=occurredOn&direction=desc");
+    navigation.replace.mockClear();
+    render(<MortalityListPage />);
+    const again = await screen.findByRole("table");
+    fireEvent.click(
+      within(again).getByRole("button", { name: "Elhullás napja" }),
+    );
+    expect(lastReplace().has("sort")).toBe(false);
+    expect(lastReplace().has("direction")).toBe(false);
+  });
+
+  it("az URL rendezése átmegy a szerverhez", async () => {
+    navigation.search = new URLSearchParams("sort=quantity&direction=desc");
+    render(<MortalityListPage />);
+    await waitFor(() => expect(api.list).toHaveBeenCalled());
+    const sent = api.list.mock.calls.at(-1)![1] as URLSearchParams;
+    expect(sent.get("sort")).toBe("quantity");
+    expect(sent.get("direction")).toBe("desc");
+  });
+
+  it.each([
+    "sort=productName&direction=asc",
+    "sort=quantity",
+    "sort=quantity&direction=up",
+    "direction=asc",
+  ])("az érvénytelen rendezés (%s) nem megy el a szerverhez", async (bad) => {
+    navigation.search = new URLSearchParams(bad);
+    render(<MortalityListPage />);
+    await waitFor(() => expect(api.list).toHaveBeenCalled());
+    const sent = api.list.mock.calls.at(-1)![1] as URLSearchParams;
+    expect(sent.has("sort")).toBe(false);
+    expect(sent.has("direction")).toBe(false);
+  });
+
+  it("csak a példány, a rögzítő és a nap oszlopnak van rendezés-gombja", async () => {
+    navigation.search = new URLSearchParams();
+    render(<MortalityListPage />);
+    const table = await screen.findByRole("table");
+    const sortable = within(table)
+      .getAllByRole("columnheader")
+      .filter((header) => within(header).queryByRole("button"))
+      .map((header) => header.textContent?.replace(/[⇅↑↓]/g, ""));
+    expect(sortable).toEqual(["Példány", "Rögzítette", "Elhullás napja"]);
   });
 });

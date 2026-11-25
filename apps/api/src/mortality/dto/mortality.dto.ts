@@ -1,10 +1,12 @@
 import {
   MORTALITY_LIST_PAGE_SIZE,
+  MORTALITY_LIST_SORT_FIELDS,
   MORTALITY_PRODUCT_NAME_MAX,
   MORTALITY_SOURCE_NOTE_MAX,
   MORTALITY_SOURCE_TYPES,
   type CreateMortalityInput,
   type MortalityListQuery,
+  type MortalityListSortField,
   type MortalitySourceType,
   type UpdateMortalityInput,
 } from "@acropora/types";
@@ -40,6 +42,9 @@ export class MortalityListQueryDto implements MortalityListQuery {
   @IsString() @IsOptional() recordedById?: string;
   @Matches(DAY) @IsOptional() from?: string;
   @Matches(DAY) @IsOptional() to?: string;
+  /** The sort column and direction (whitelist: `MORTALITY_LIST_SORT_FIELDS`); without them the day of the loss, newest first. */
+  @IsIn(MORTALITY_LIST_SORT_FIELDS) @IsOptional() sort?: MortalityListSortField;
+  @IsIn(["asc", "desc"]) @IsOptional() direction?: "asc" | "desc";
 }
 
 /** `POST /mortality`. A rögzítő és a rögzítés ideje NEM bemenet: automatikus. */

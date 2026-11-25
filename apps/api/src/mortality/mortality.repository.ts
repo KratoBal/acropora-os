@@ -16,6 +16,8 @@ import {
   type MortalitySupplierOption,
 } from "@acropora/types";
 
+import { listOrderBy } from "../common/list-sort.js";
+import { MORTALITY_LIST_SORT } from "./mortality-list-sort.js";
 import { generateCode } from "../common/code-generator.util.js";
 import { retryOnTakenCode } from "../common/unique-code.util.js";
 import {
@@ -180,11 +182,7 @@ export class MortalityRepository {
         where,
         select: LIST_SELECT,
         // az elhullás napja szerint; egy napon belül a rögzítés sorrendje
-        orderBy: [
-          { occurredOn: "desc" },
-          { recordedAt: "desc" },
-          { id: "desc" },
-        ],
+        orderBy: listOrderBy(MORTALITY_LIST_SORT, query.sort, query.direction),
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),

@@ -130,6 +130,20 @@ export interface MortalityDetail extends MortalityListItem {
   photos: MortalityPhoto[];
 }
 
+/**
+ * AZ ELHULLÁSI NAPLÓ RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4). A lista lapozott, ezért a rendezés a szerveren történik.
+ * Három oszlop rendezhető: a példányszám, az elhullás napja és a rögzítő neve (a felhasználó táblából). Nem rendezhető: az "Élőlény"
+ * (a termék neve vagy egy szabad szöveg, két forrásból), az "Akvárium / rack" (két külön hely egy oszlopban) és a "Forrás" (a kijelzett
+ * felirat nem az enum sorrendje). Az alap sorrend az elhullás napja, azon belül a rögzítés ideje.
+ */
+export const MORTALITY_LIST_SORT_FIELDS = [
+  "quantity",
+  "occurredOn",
+  "recordedByName",
+] as const;
+export type MortalityListSortField =
+  (typeof MORTALITY_LIST_SORT_FIELDS)[number];
+
 export interface MortalityListQuery {
   page?: number;
   pageSize?: number;
@@ -143,6 +157,9 @@ export interface MortalityListQuery {
   from?: string;
   /** ÉÉÉÉ-HH-NN, az elhullás napja eddig (zárt) */
   to?: string;
+  /** A rendezett oszlop és az irány (`MORTALITY_LIST_SORT_FIELDS`); nélkülük az alap sorrend. */
+  sort?: MortalityListSortField;
+  direction?: "asc" | "desc";
 }
 
 export interface MortalityListResponse {

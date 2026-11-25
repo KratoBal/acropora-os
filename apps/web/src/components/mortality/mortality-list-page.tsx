@@ -31,6 +31,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { mortalityApi } from "@/lib/api/mortality";
+import { useUrlSort } from "@/lib/navigation/use-url-sort";
 import {
   urlChoice,
   urlPage,
@@ -77,6 +78,7 @@ export function MortalityListPage() {
   );
 
   const { params, update } = useUrlQuery();
+  const { sort, onSort, apiSort } = useUrlSort(MORTALITY_SORT_COLUMNS);
   const sourceType = urlChoice(
     params,
     "sourceType",
@@ -139,6 +141,11 @@ export function MortalityListPage() {
     if (supplierId) value.set("supplierId", supplierId);
     if (aquariumId) value.set("aquariumId", aquariumId);
     if (recordedById) value.set("recordedById", recordedById);
+    // a rendezés csak ismert mezőre és érvényes irányra kerül a kérésbe (a lista kérése amúgy is felsorolt mezőkből épül)
+    if (apiSort) {
+      value.set("sort", apiSort.sort);
+      value.set("direction", apiSort.direction);
+    }
     const range = periodRange(period, new Date());
     if (range) {
       value.set("from", range.from);
@@ -146,6 +153,7 @@ export function MortalityListPage() {
     }
     return value;
   }, [
+    apiSort,
     appliedSearch,
     aquariumId,
     page,
@@ -396,6 +404,8 @@ export function MortalityListPage() {
           <section className="overflow-hidden rounded-2xl border border-pilot-grey-200 bg-white">
             <PilotDataTable
               columns={COLUMNS}
+              sort={sort}
+              onSort={onSort}
               rows={data.items}
               rowKey={(row) => row.id}
               rowLabel={(row) =>
@@ -438,6 +448,13 @@ export function MortalityListPage() {
   );
 }
 
+/** A lista rendezhető oszlopai: a táblázat oszlop-azonosítója -> a szerver rendezési mezeje (`MORTALITY_LIST_SORT_FIELDS`). */
+export const MORTALITY_SORT_COLUMNS = {
+  quantity: "quantity",
+  recordedBy: "recordedByName",
+  occurredOn: "occurredOn",
+} as const;
+
 const COLUMNS: readonly PilotTableColumn<MortalityListItem>[] = [
   {
     id: "product",
@@ -457,6 +474,7 @@ const COLUMNS: readonly PilotTableColumn<MortalityListItem>[] = [
   },
   {
     id: "quantity",
+    sortable: true,
     header: "Példány",
     align: "right",
     cell: (row) => <span className="tabular-nums">{row.quantity} db</span>,
@@ -496,6 +514,7 @@ const COLUMNS: readonly PilotTableColumn<MortalityListItem>[] = [
   },
   {
     id: "recordedBy",
+    sortable: true,
     header: "Rögzítette",
     cell: (row) => row.recordedBy.name,
   },
@@ -503,6 +522,7 @@ const COLUMNS: readonly PilotTableColumn<MortalityListItem>[] = [
     // az elhullás napja (Luca, 2026-10-07); a lista is e szerint rendez és
     // szűr, a rögzítés ideje csak a második sor
     id: "occurredOn",
+    sortable: true,
     header: "Elhullás napja",
     cell: (row) => (
       <div className="whitespace-nowrap tabular-nums">

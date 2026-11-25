@@ -1808,6 +1808,7 @@ export type {
 } from "./my-service-work.js";
 export {
   MORTALITY_LIST_PAGE_SIZE,
+  MORTALITY_LIST_SORT_FIELDS,
   MORTALITY_SOURCE_LABELS,
   MORTALITY_PRODUCT_NAME_MAX,
   MORTALITY_SOURCE_NOTE_MAX,
@@ -1820,6 +1821,7 @@ export type {
   MortalityListItem,
   MortalityListQuery,
   MortalityListResponse,
+  MortalityListSortField,
   MortalityLocationOption,
   MortalityPhoto,
   MortalityProductOption,
