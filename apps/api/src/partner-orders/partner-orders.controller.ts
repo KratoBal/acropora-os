@@ -42,6 +42,8 @@ export class PartnerOrdersController {
       stage: query.stage,
       openOnly: query.open === "1",
       backlogOnly: query.backlog === "1",
+      sort: query.sort,
+      direction: query.direction,
     });
   }
 

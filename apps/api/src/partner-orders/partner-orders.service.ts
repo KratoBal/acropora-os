@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 import type { PartnerOrderDocumentStep } from "@acropora/database";
+import type { SortDirection } from "../common/list-sort.js";
 import {
   PARTNER_ORDER_BACKLOG_DAYS_DEFAULT,
   PARTNER_ORDER_DOCUMENT_STEPS,
@@ -19,6 +20,7 @@ import {
   type PartnerOrderDetailDto,
   type PartnerOrderDocumentDto,
   type PartnerOrderListResponse,
+  type PartnerOrderListSortField,
   type PartnerOrderSettingsDto,
   type PartnerOrderStatusValue,
   type QuotePriceDisplay,
@@ -146,6 +148,8 @@ export class PartnerOrdersService {
       stage?: PartnerOrderChainFilter;
       openOnly?: boolean;
       backlogOnly?: boolean;
+      sort?: PartnerOrderListSortField;
+      direction?: SortDirection;
     },
     /** The moment the back-order rule measures from; the caller's clock unless a test brings its own. */
     now: Date = new Date(),

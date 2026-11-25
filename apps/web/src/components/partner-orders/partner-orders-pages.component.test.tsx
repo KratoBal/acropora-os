@@ -723,3 +723,86 @@ describe("egy megrendelés", () => {
     );
   });
 });
+
+/*
+  A LISTA RENDEZÉSE AZ OSZLOPFEJEN (Balázs kérése, kártya 2f6369a4). MI PIROSÍT: ha a megrendelés vagy a partner fejléce nem a saját
+  szerver-mezőjét írja a címbe; ha a ciklus (növekvő, csökkenő, alap) elakad; ha a rendezés nem nullázza a lapot, vagy elveszíti a
+  szűrőket; ha a cím rendezése nem jut a kérésbe, vagy egy ismeretlen mező igen; ha a nettó összeg, az állapot, a "Hol tart" vagy a
+  hátralék oszlop rendezhetőnek látszik.
+*/
+describe("a megrendelések listájának rendezése", () => {
+  const lastAddress = () =>
+    new URL(String(navigation.replace.mock.calls.at(-1)![0]), "http://x")
+      .searchParams;
+
+  it("a fejléc a saját mezőjét írja a címbe, növekvőben kezd, az első oldalra lapoz és megtartja a szűrőt", async () => {
+    navigation.search = new URLSearchParams("page=3&stage=AWAITING_INVOICE");
+    render(<PartnerOrderListPage />);
+    const table = await screen.findByRole("table");
+    for (const [name, field] of [
+      ["Megrendelés", "orderNumber"],
+      ["Partner", "customerName"],
+    ] as const) {
+      navigation.replace.mockClear();
+      fireEvent.click(within(table).getByRole("button", { name }));
+      const url = lastAddress();
+      expect(url.get("sort"), name).toBe(field);
+      expect(url.get("direction"), name).toBe("asc");
+      expect(url.has("page"), name).toBe(false);
+      expect(url.get("stage"), name).toBe("AWAITING_INVOICE");
+    }
+  });
+
+  it("a második kattintás csökkenő, a harmadik törli a rendezést", async () => {
+    navigation.search = new URLSearchParams("sort=orderNumber&direction=asc");
+    const first = render(<PartnerOrderListPage />);
+    const table = await screen.findByRole("table");
+    fireEvent.click(within(table).getByRole("button", { name: "Megrendelés" }));
+    expect(lastAddress().get("direction")).toBe("desc");
+    first.unmount();
+
+    navigation.search = new URLSearchParams("sort=orderNumber&direction=desc");
+    navigation.replace.mockClear();
+    render(<PartnerOrderListPage />);
+    const again = await screen.findByRole("table");
+    fireEvent.click(within(again).getByRole("button", { name: "Megrendelés" }));
+    expect(lastAddress().has("sort")).toBe(false);
+    expect(lastAddress().has("direction")).toBe(false);
+  });
+
+  it("a cím rendezése átmegy a szerverhez", async () => {
+    navigation.search = new URLSearchParams("sort=customerName&direction=desc");
+    render(<PartnerOrderListPage />);
+    await screen.findByText("MR-2026-0042");
+    const query = api.list.mock.calls.at(-1)![1] as URLSearchParams;
+    expect(query.get("sort")).toBe("customerName");
+    expect(query.get("direction")).toBe("desc");
+  });
+
+  it.each([
+    "sort=netTotal&direction=asc",
+    "sort=orderNumber",
+    "sort=orderNumber&direction=up",
+    "direction=asc",
+  ])(
+    "az érvénytelen rendezés (%s) nem megy el a szerverhez",
+    async (search) => {
+      navigation.search = new URLSearchParams(search);
+      render(<PartnerOrderListPage />);
+      await screen.findByText("MR-2026-0042");
+      const query = api.list.mock.calls.at(-1)![1] as URLSearchParams;
+      expect(query.has("sort")).toBe(false);
+      expect(query.has("direction")).toBe(false);
+    },
+  );
+
+  it("csak a megrendelés és a partner oszlopnak van rendezés-gombja", async () => {
+    render(<PartnerOrderListPage />);
+    const table = await screen.findByRole("table");
+    const sortable = within(table)
+      .getAllByRole("columnheader")
+      .filter((header) => within(header).queryByRole("button"))
+      .map((header) => header.textContent?.replace(/[⇅↑↓]/g, ""));
+    expect(sortable).toEqual(["Megrendelés", "Partner"]);
+  });
+});

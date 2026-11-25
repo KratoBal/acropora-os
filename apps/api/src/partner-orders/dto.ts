@@ -11,8 +11,10 @@ import {
 import {
   PARTNER_ORDER_BACKLOG_DAYS_MAX,
   PARTNER_ORDER_CHAIN_FILTERS,
+  PARTNER_ORDER_LIST_SORT_FIELDS,
   PARTNER_ORDER_STATUSES,
   type PartnerOrderChainFilter,
+  type PartnerOrderListSortField,
   type PartnerOrderStatusValue,
 } from "@acropora/types";
 
@@ -29,6 +31,11 @@ export class PartnerOrderListQueryDto {
   @IsOptional() @IsIn(["1"]) backlog?: "1";
   /** `1`: only the orders with a line no certificate states yet (S4). Anything else is refused. */
   @IsOptional() @IsIn(["1"]) open?: "1";
+  /** The sort column and direction (whitelist: `PARTNER_ORDER_LIST_SORT_FIELDS`); without them the creation time, newest first. */
+  @IsOptional()
+  @IsIn(PARTNER_ORDER_LIST_SORT_FIELDS)
+  sort?: PartnerOrderListSortField;
+  @IsOptional() @IsIn(["asc", "desc"]) direction?: "asc" | "desc";
 }
 
 export class UpdatePartnerOrderSettingsDto {

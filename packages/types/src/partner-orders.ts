@@ -276,3 +276,19 @@ export interface PartnerOrderDetailDto {
   createdAt: string;
   createdByName: string | null;
 }
+
+/**
+ * A MEGRENDELÉSEK LISTÁJÁNAK RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4). A lista lapozott (a lánc- és hátralék-szűrők mellett
+ * minden találatot beolvas, majd az oldalra vág), ezért a rendezés az adatbázis `orderBy`-jával történik, mindkét úton ugyanazzal.
+ * KÉT OSZLOP rendezhető: a megrendelés száma és a partner neve. A partner nem kötelező kapcsolat (egy megrendelésnek nem biztos, hogy
+ * van partnere), és a Prisma a kapcsolaton át nem ad üres-érték szabályt: a partner nélküli megrendelés az adatbázis sajátját követi
+ * (növekvőben a végén, csökkenőben az elején). Nem rendezhető: a "Nettó összeg" (az ajánlat tételeiből számolt), az "Állapot" (a
+ * kijelzett felirat nem az enum sorrendje), a "Hol tart" és a "Hátralék" (a dokumentumokból és a mozgásokból számolt). Az alap
+ * sorrend a létrehozás ideje, a legújabb elöl; az oldal azt nem mutatja oszlopként.
+ */
+export const PARTNER_ORDER_LIST_SORT_FIELDS = [
+  "orderNumber",
+  "customerName",
+] as const;
+export type PartnerOrderListSortField =
+  (typeof PARTNER_ORDER_LIST_SORT_FIELDS)[number];

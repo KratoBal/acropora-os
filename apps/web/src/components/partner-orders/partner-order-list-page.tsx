@@ -33,6 +33,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { partnerOrdersApi } from "@/lib/api/partner-orders";
 import { urlPage, useUrlQuery } from "@/lib/navigation/use-url-query";
+import { useUrlSort } from "@/lib/navigation/use-url-sort";
 import {
   errorText,
   formatQuoteMoney,
@@ -54,6 +55,12 @@ const PAGE_SIZE = 25;
  * állapot és a lap az URL-ben áll. Az „Elfogadott ajánlatok” sáv azokat az ajánlatokat mutatja, amelyekből
  * még nincs megrendelés: innen lehet továbbvinni őket az elfogadás után.
  */
+/** A lista rendezhető oszlopai: a táblázat oszlop-azonosítója -> a szerver rendezési mezeje (`PARTNER_ORDER_LIST_SORT_FIELDS`). Csak a szám és a partner; az indok a típusnál áll. */
+export const PARTNER_ORDER_SORT_COLUMNS = {
+  order: "orderNumber",
+  partner: "customerName",
+} as const;
+
 export function PartnerOrderListPage() {
   const { session } = useAuth();
   const router = useRouter();
@@ -66,6 +73,7 @@ export function PartnerOrderListPage() {
   );
 
   const { params, update } = useUrlQuery();
+  const { sort, onSort, apiSort } = useUrlSort(PARTNER_ORDER_SORT_COLUMNS);
   const page = urlPage(params);
   const appliedSearch = params.get("q") ?? "";
   const statusFilter = params.get("status") ?? "";
@@ -134,8 +142,21 @@ export function PartnerOrderListPage() {
     if (stageFilter) value.set("stage", stageFilter);
     if (openOnly) value.set("open", "1");
     if (backlogOnly) value.set("backlog", "1");
+    // a rendezés csak ismert mezőre és érvényes irányra kerül a kérésbe (a lista kérése amúgy is felsorolt mezőkből épül)
+    if (apiSort) {
+      value.set("sort", apiSort.sort);
+      value.set("direction", apiSort.direction);
+    }
     return value;
-  }, [appliedSearch, backlogOnly, openOnly, page, stageFilter, statusFilter]);
+  }, [
+    apiSort,
+    appliedSearch,
+    backlogOnly,
+    openOnly,
+    page,
+    stageFilter,
+    statusFilter,
+  ]);
 
   useEffect(() => {
     if (!canView) return;
@@ -216,6 +237,7 @@ export function PartnerOrderListPage() {
   const columns: PilotTableColumn<PartnerOrderListItemDto>[] = [
     {
       id: "order",
+      sortable: true,
       header: "Megrendelés",
       width: "24%",
       cell: (row) => (
@@ -227,6 +249,7 @@ export function PartnerOrderListPage() {
     },
     {
       id: "partner",
+      sortable: true,
       header: "Partner",
       width: "17%",
       cell: (row) => row.customerName ?? "—",
@@ -493,6 +516,8 @@ export function PartnerOrderListPage() {
         <>
           <PilotDataTable
             columns={columns}
+            sort={sort}
+            onSort={onSort}
             rows={data.items}
             rowKey={(row) => row.id}
             dense={dense}
