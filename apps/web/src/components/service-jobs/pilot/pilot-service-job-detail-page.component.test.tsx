@@ -6,10 +6,11 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type {
-  ServiceJobDetail,
-  ServiceJobDocumentSummary,
-  Session,
+import {
+  commonJobStatus,
+  type ServiceJobDetail,
+  type ServiceJobDocumentSummary,
+  type Session,
 } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -201,7 +202,35 @@ function sessionAs(role: Session["user"]["role"]): Session {
   };
 }
 
+/*
+  THE SERVER'S COMMON STATUS, BY THE SHARED RULE (card 7f23785c): the fixture computes it the way the server does, from the stored
+  status and the linked sheets, unless a test sets it itself. The page only draws it; a test that wants to prove that sets a common
+  status the sheets would not give.
+*/
 function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
+  const base = baseDetail(overrides);
+  const state = commonJobStatus(
+    base.status,
+    base.timeline.flatMap((entry) =>
+      entry.kind === "worksheet"
+        ? [
+            {
+              currentVersionStatus: entry.worksheet.status,
+              handedOver: entry.worksheet.handedOverAt !== null,
+            },
+          ]
+        : [],
+    ),
+    base.kind,
+  );
+  return {
+    commonStatus: state.status,
+    commonReason: state.reason,
+    ...base,
+  };
+}
+
+function baseDetail(overrides: Partial<ServiceJobDetail>): ServiceJobDetail {
   return {
     id: "job-1",
     jobNumber: "KB-2026-001",
@@ -220,7 +249,8 @@ function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
     scheduledAt: null,
     startedAt: null,
     completedAt: null,
-    allowedSteps: ["SCHEDULED", "CANCELLED"],
+    // the transition table since #2898: TRIAGED goes on to the work, a wait, or a failure; never to SCHEDULED
+    allowedSteps: ["IN_PROGRESS", "CANCELLED"],
     assets: [],
     assignees: [],
     source: null,
@@ -586,7 +616,9 @@ describe("PilotServiceJobDetailPage -- redesign", () => {
     expect(
       await screen.findByText("Partner: Feldolgozás alatt"),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("Felmérve").length).toBeGreaterThan(0);
+    // the stored TRIAGED reads as the common Folyamatban; the old Felmérve is gone from the header
+    expect(screen.getByTestId("job-status")).toHaveTextContent("Folyamatban");
+    expect(screen.queryByText("Felmérve")).toBeNull();
   });
 
   it("draws one button per step the server allows, and no other", async () => {
@@ -598,7 +630,8 @@ describe("PilotServiceJobDetailPage -- redesign", () => {
     const buttons = Array.from(panel.querySelectorAll("button")).map(
       (button) => button.textContent,
     );
-    expect(buttons).toEqual(["Tovább → Ütemezve", "Tovább → Meghiúsult"]);
+    // the labels are verbs (card 7f23785c, picasso point 3), not state names
+    expect(buttons).toEqual(["Munka megkezdése", "Meghiúsultnak jelölés"]);
     // f0b70dbd: one primary button, the main step; the others stay, as secondary
     const primary = Array.from(panel.querySelectorAll("button")).map((button) =>
       button.className.includes("bg-pilot-aqua-600"),
@@ -635,8 +668,11 @@ describe("PilotServiceJobDetailPage -- redesign", () => {
     api.detail.mockResolvedValue(detail({ timeline: [sheet] }));
     render(<PilotServiceJobDetailPage jobId="job-1" />);
     expect(await screen.findByText("ML-2026-00814")).toBeInTheDocument();
-    expect(screen.getByText("Folyamatban")).toBeInTheDocument();
-    expect(screen.getByText("2,5 munkaóra")).toBeInTheDocument();
+    // the sheet's own badge, next to its hours (the job's Folyamatban stands in the header too)
+    const hours = screen.getByText("2,5 munkaóra");
+    expect(
+      within(hours.parentElement!).getByText("Folyamatban"),
+    ).toBeInTheDocument();
   });
 
   /*
@@ -944,13 +980,19 @@ describe("PilotServiceJobDetailPage -- a régi lapról áthozott őrök", () => 
     fireEvent.change(await screen.findByLabelText("Megjegyzés a lépéshez"), {
       target: { value: "Szivattyú rendelve" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Tovább → Ütemezve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Munka megkezdése" }));
     await waitFor(() => expect(api.move).toHaveBeenCalledTimes(1));
     // the step buttons are off while the first move runs: the second click comes after its (failed) answer
     await answered(api.move);
 
+    // the failure is an end state: it asks first, and the note check runs on the confirmed step
     fireEvent.click(
-      screen.getByRole("button", { name: "Tovább → Meghiúsult" }),
+      screen.getByRole("button", { name: "Meghiúsultnak jelölés" }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Meghiúsultnak jelölés",
+      }),
     );
 
     expect(await screen.findByText(/lépéshez készült/)).toBeTruthy();
@@ -1140,9 +1182,14 @@ describe("PilotServiceJobDetailPage -- a karbantartási adatlap nem hibajegy", (
     ).toEqual(["false"]);
   });
 
-  it("az állapot a munkalapok aláírásából jön: minden aláírva = Kész, különben (üresen is) Folyamatban", async () => {
+  /*
+    A KARBANTARTÁS JELVÉNYE A SZERVER KÖZÖS ÁLLAPOTA (kártya 7f23785c): Lezárt, ha minden munkalap aláírva, és ezt az ok ki is mondja
+    (picasso 9. pont); különben Folyamatban. A szabályt a szerver számolja (`commonJobStatus`, a fixtúra is azt hívja); hogy a lap NEM
+    számol újra, azt a következő teszt méri.
+  */
+  it("az állapot a szerver közös állapota: minden aláírva = Lezárt, különben (üresen is) Folyamatban", async () => {
     for (const [statuses, label] of [
-      [["SIGNED", "SIGNED"], "Kész"],
+      [["SIGNED", "SIGNED"], "Lezártminden munkalap aláírva"],
       [["SIGNED", "AWAITING_SIGNATURE"], "Folyamatban"],
       [["DRAFT"], "Folyamatban"],
       [["REJECTED"], "Folyamatban"],
@@ -1153,11 +1200,26 @@ describe("PilotServiceJobDetailPage -- a karbantartási adatlap nem hibajegy", (
         <PilotServiceJobDetailPage jobId="job-1" route="karbantartas" />,
       );
       await screen.findByText("Negyedéves ellenőrzés");
-      expect(screen.getByTestId("maintenance-status")).toHaveTextContent(label);
+      expect(screen.getByTestId("maintenance-status").textContent).toBe(label);
       // the ticket's own state labels are not shown
       expect(screen.queryByText("Szortírozva")).toBeNull();
       unmount();
     }
+  });
+
+  // NEGATÍV KONTROLL: minden lap aláírva, a szerver mégis Folyamatbant mond. Ha a lap a lapokból számolna, Lezártat írna.
+  it("a jelvény a szerver mezőjét rajzolja, nem a munkalapokból számol", async () => {
+    api.detail.mockResolvedValue(
+      maintenance(["SIGNED", "SIGNED"], {
+        commonStatus: "IN_PROGRESS",
+        commonReason: null,
+      }),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" route="karbantartas" />);
+    await screen.findByText("Negyedéves ellenőrzés");
+    expect(screen.getByTestId("maintenance-status").textContent).toBe(
+      "Folyamatban",
+    );
   });
 
   it("a karbantartási lap látható szövegében nincs hibajegy-szó (üres leírás, nincs fájl, nincs eszköz, napló)", async () => {
@@ -1317,5 +1379,201 @@ describe("PilotServiceJobDetailPage -- a karbantartási adatlap nem hibajegy", (
     render(<PilotServiceJobDetailPage jobId="job-1" route="hibajegyek" />);
     await screen.findByText("Negyedéves ellenőrzés");
     expect(screen.getByText("Partner beállítása")).toBeInTheDocument();
+  });
+});
+
+/*
+  A KÖZÖS ÁLLAPOT AZ ADATLAPON (kártya 7f23785c, 3. szelet; terv 9. pont, picasso 1-3. pont). MI PIROSÍT: ha az Elkészült ok nélkül áll,
+  vagy a Lezárás akkor is élő gomb, amikor a közös állapotból biztos, hogy a kapu nem engedi (és nem mondja meg, mi hiányzik); ha a
+  munkalap nélküli jegy Lezárását a lap tiltja (a kapu átengedi); ha a Lezárás vagy a Meghiúsultnak jelölés megerősítés nélkül lép, vagy
+  a Mégse után mégis lép; ha az ütemezett időpont nem látszik sorként.
+*/
+describe("PilotServiceJobDetailPage -- a közös állapot és a két végállapot", () => {
+  beforeEach(() => {
+    auth.session = sessionAs("SERVICE");
+    api.detail.mockReset();
+    api.move.mockReset().mockResolvedValue({ ok: true });
+    api.documents.mockReset().mockResolvedValue({ items: [] });
+    api.uploadDocument.mockReset().mockResolvedValue([]);
+    sheets.attachable.mockReset().mockResolvedValue({ items: [] });
+    sheets.assignableUsers.mockReset().mockResolvedValue({ items: [] });
+    sheets.departments.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  const sheetEntry = (
+    id: string,
+    status: "DRAFT" | "AWAITING_SIGNATURE" | "SIGNED" | "REJECTED",
+    handedOverAt: string | null = null,
+  ) => ({
+    kind: "worksheet" as const,
+    at: "2026-11-25T09:14:00.000Z",
+    sortKey: id,
+    worksheet: {
+      id,
+      number: `ML-${id}`,
+      subject: `Tétel ${id}`,
+      createdAt: "2026-11-25T09:14:00.000Z",
+      handedOverAt,
+      status,
+      lineCount: 1,
+      laborHours: "1",
+    },
+  });
+  const working = (
+    sheetsOnJob: ReturnType<typeof sheetEntry>[],
+    over: Partial<ServiceJobDetail> = {},
+  ) =>
+    detail({
+      status: "IN_PROGRESS",
+      allowedSteps: ["COMPLETED", "WAITING_FOR_PARTS", "WAITING_FOR_CUSTOMER"],
+      timeline: sheetsOnJob,
+      ...over,
+    });
+  const panel = async () =>
+    screen.findByRole("region", { name: "Következő lépés" });
+
+  it("az Elkészült mellett az ok áll, a Lezárás halvány, alatta a hiányzó feltétel", async () => {
+    api.detail.mockResolvedValue(
+      working([
+        sheetEntry("1", "AWAITING_SIGNATURE"),
+        sheetEntry("2", "SIGNED"),
+        sheetEntry("3", "AWAITING_SIGNATURE"),
+      ]),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    const region = await panel();
+    expect(screen.getByTestId("job-status").textContent).toBe(
+      "Elkészültaláírásra vár",
+    );
+    expect(region.textContent).toContain("Jelenleg: Elkészült · aláírásra vár");
+    const close = within(region).getByRole("button", { name: "Lezárás" });
+    expect(close).toBeDisabled();
+    expect(region.textContent).toContain(
+      "Még nem zárható le: 2 munkalap nincs aláírva.",
+    );
+    // the waits stay usable
+    expect(
+      within(region).getByRole("button", { name: "Várakoztatás: alkatrészre" }),
+    ).not.toBeDisabled();
+  });
+
+  it("aláírva, de átadás nélkül: a mondat az átadást nevezi meg", async () => {
+    api.detail.mockResolvedValue(
+      working([sheetEntry("1", "SIGNED"), sheetEntry("2", "SIGNED")]),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    const region = await panel();
+    expect(
+      within(region).getByRole("button", { name: "Lezárás" }),
+    ).toBeDisabled();
+    expect(region.textContent).toContain(
+      "Még nem zárható le: 2 munkalap átadása nincs rögzítve.",
+    );
+  });
+
+  it("befejezetlen munkalappal a Folyamatban jegy Lezárása is halvány", async () => {
+    api.detail.mockResolvedValue(
+      working([
+        sheetEntry("1", "SIGNED", "2026-11-25T10:00:00.000Z"),
+        sheetEntry("2", "DRAFT"),
+      ]),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    const region = await panel();
+    expect(
+      within(region).getByRole("button", { name: "Lezárás" }),
+    ).toBeDisabled();
+    expect(region.textContent).toContain(
+      "Még nem zárható le: 1 munkalap még nincs kész.",
+    );
+  });
+
+  // A KAPU MUNKALAP NÉLKÜL ÁTENGED (worksheet-signature-gate.ts): a lap nem szigoríthat a szerveren túl
+  it("munkalap nélkül a Lezárás él, és megerősítés után lép", async () => {
+    api.detail.mockResolvedValue(working([]));
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    const region = await panel();
+    const close = within(region).getByRole("button", { name: "Lezárás" });
+    expect(close).not.toBeDisabled();
+    expect(region.textContent).not.toContain("Még nem zárható le");
+
+    fireEvent.click(close);
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain(
+      "A KB-2026-001 hibajegy lezárul, és nem nyitható újra.",
+    );
+    expect(dialog.textContent).toContain("Ez nem vonható vissza.");
+    // asking is not stepping
+    expect(api.move).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Lezárás" }));
+    await waitFor(() =>
+      expect(api.move).toHaveBeenCalledWith("token-1", "job-1", {
+        to: "COMPLETED",
+        note: null,
+      }),
+    );
+  });
+
+  it("a lezárható Elkészült Lezárása él", async () => {
+    api.detail.mockResolvedValue(
+      working([sheetEntry("1", "SIGNED", "2026-11-25T10:00:00.000Z")]),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    const region = await panel();
+    expect(screen.getByTestId("job-status").textContent).toBe(
+      "Elkészültlezárható",
+    );
+    expect(
+      within(region).getByRole("button", { name: "Lezárás" }),
+    ).not.toBeDisabled();
+  });
+
+  it("a Meghiúsultnak jelölés kérdez, és a Mégse után nem lép", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        status: "WAITING_FOR_PARTS",
+        allowedSteps: ["IN_PROGRESS", "WAITING_FOR_CUSTOMER", "CANCELLED"],
+      }),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    const region = await panel();
+    expect(
+      Array.from(region.querySelectorAll("button")).map((b) => b.textContent),
+    ).toEqual(["Folytatás", "Várakoztatás: ügyfélre", "Meghiúsultnak jelölés"]);
+    expect(screen.getByTestId("job-status").textContent).toBe(
+      "Vár valamirealkatrészre",
+    );
+
+    fireEvent.click(
+      within(region).getByRole("button", { name: "Meghiúsultnak jelölés" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain(
+      "A KB-2026-001 hibajegy meghiúsultként lezárul, és nem nyitható újra.",
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Mégsem" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(api.move).not.toHaveBeenCalled();
+  });
+
+  it("a meghiúsult jegy Lezárt, és az ok mellette áll", async () => {
+    api.detail.mockResolvedValue(
+      detail({ status: "CANCELLED", allowedSteps: [] }),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    await panel();
+    expect(screen.getByTestId("job-status").textContent).toBe(
+      "Lezártmeghiúsult",
+    );
+  });
+
+  it("az ütemezett időpont sor az ügy adatai között, nem állapot", async () => {
+    api.detail.mockResolvedValue(
+      detail({ scheduledAt: "2026-11-27T08:00:00.000Z" }),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    await panel();
+    expect(screen.getByText("Ütemezve")).toBeInTheDocument();
+    expect(screen.getByTestId("job-status")).not.toHaveTextContent("Ütemezve");
   });
 });
