@@ -2,8 +2,13 @@
 
 import {
   Alert,
-  PilotButton,
+  PageHeader,
+  PAGE_GUTTER_X,
+  PilotField,
   PilotFileInput,
+  PilotFormActions,
+  PilotFormCard,
+  PilotFormLayout,
   PilotInput,
   PilotSelect,
 } from "@acropora/ui";
@@ -14,14 +19,12 @@ import {
   uploadAccept,
 } from "@acropora/types";
 import type { WorksheetDepartmentSummary } from "@acropora/types";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import { ServiceListHeader } from "@/components/service/service-list-chrome";
 import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
-import { ServiceBackLink } from "@/components/service/service-detail-chrome";
+import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { maintenanceOrdersApi } from "@/lib/api/maintenance-orders";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
@@ -36,7 +39,6 @@ import {
 } from "./contract-job-picker";
 import { JobAssetPicker } from "./job-asset-picker";
 import { PartnerPicker } from "./partner-picker";
-import { ServiceJobStepCard } from "./service-job-page-chrome";
 import {
   toggleAssignee,
   useAssignableUsers,
@@ -107,6 +109,8 @@ export function ServiceJobEditorPage({
   const [assetIds, setAssetIds] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
+  // a mező-hibák az első mentési kísérlet UTÁN látszanak (előtte az összesítő és a halvány gomb jelez)
+  const [showErrors, setShowErrors] = useState(false);
   /**
    * A MAR LETREJOTT JEGY, HA A CSATOLMANYOK FELTOLTESE BUKOTT EL.
    *
@@ -241,13 +245,48 @@ export function ServiceJobEditorPage({
    * ag a csatolmany-ujraprobalkozast fedi: ha a jegy mar letrejott, a gomb mar
    * nem felvitel, tehat a mezok ervenyesseget nem kell ujra megkovetelni.
    */
-  const canSubmit =
-    Boolean(created) ||
-    (Boolean(title.trim()) &&
-      Boolean(customer) &&
-      (contractChoice
-        ? contractChoice.itemIds.length > 0
-        : Boolean(departmentId)));
+  // a hiányzó kötelező mezők (a szabály a régi: partner, helyszín vagy szerződéses tétel, cím), a megjelenő név és a doboz azonosítója
+  const missingFields: { label: string; fieldId: string }[] = [];
+  if (!created) {
+    if (!customer)
+      missingFields.push({
+        label: "Partner",
+        fieldId: "hibajegy-partner-mezo",
+      });
+    if (contractChoice) {
+      if (contractChoice.itemIds.length === 0)
+        missingFields.push({
+          label: "Szerződéses tétel",
+          fieldId: "hibajegy-szerzodes-mezo",
+        });
+    } else if (!departmentId)
+      missingFields.push({
+        label: "Helyszín",
+        fieldId: "hibajegy-helyszin-mezo",
+      });
+    if (!title.trim())
+      missingFields.push({ label: titleLabel, fieldId: "hibajegy-cim-mezo" });
+  }
+  const missing = missingFields.map((field) => field.label);
+  const canSubmit = missing.length === 0;
+  const errorOf = (label: string, sentence: string) =>
+    showErrors && missing.includes(label) ? sentence : null;
+  // a halvány mentés gomb kattintható: hiányzó mezőnél megmutatja a hibákat és az első hibás mezőhöz görget (nem ment)
+  const onSubmitClick = () => {
+    if (canSubmit) {
+      void submit();
+      return;
+    }
+    setShowErrors(true);
+    const first = missingFields[0];
+    if (first) {
+      const box = document.getElementById(first.fieldId);
+      box?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+      box
+        ?.querySelector<HTMLElement>("input, select, textarea, button")
+        ?.focus({ preventScroll: true });
+    }
+  };
 
   if (!canManage)
     return (
@@ -405,76 +444,109 @@ export function ServiceJobEditorPage({
     router.push(`${listHref}/${job.id}`);
   };
 
+  const submitLabel = created
+    ? created.viaContract
+      ? "Befejezés újra"
+      : "Csatolmányok feltöltése újra"
+    : maintenance
+      ? "Karbantartási lap megnyitása"
+      : "Hibajegy megnyitása";
+
   return (
-    <div className="space-y-6">
-      <ServiceOfflineNotice state={{ kind: "form" }} />
-      {/*
-        A KILÉPÉS A CÍM FÖLÖTT ÁLL, ÉS NEM HELYETTESÍTI A „MÉGSEM"-ET.
+    <PilotThemeRoot
+      bleed
+      className="flex min-h-screen flex-col bg-pilot-grey-50"
+    >
+      <div className={`${PAGE_GUTTER_X} pt-6`}>
+        {/*
+          A KILÉPÉS A CÍM FÖLÖTT ÁLL, ÉS NEM HELYETTESÍTI A „MÉGSE"-T: a kettő MÁS HELYZETRE való (a gombsor Mégse-je akkor, ha végigolvastad az
+          űrlapot és nem viszed végig; ez akkor, ha rossz lapra jöttél). FIX CÉL, NEM `useReturnTo`: erre a lapra egyetlen helyről lehet eljutni
+          (a lista „Új ..." gombjáról), egy menekülő-útnak pedig kiszámíthatónak kell lennie.
+        */}
+        <nav className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400">
+          <button
+            type="button"
+            onClick={() => router.push(listHref)}
+            className="cursor-pointer transition-colors hover:text-pilot-aqua-600"
+          >
+            Szerviz
+          </button>
+          <span>/</span>
+          <button
+            type="button"
+            onClick={() => router.push(listHref)}
+            className="cursor-pointer transition-colors hover:text-pilot-aqua-600"
+          >
+            {maintenance ? "Karbantartás" : "Hibajegyek"}
+          </button>
+          <span>/</span>
+          <span className="font-medium text-pilot-grey-700">
+            {maintenance ? "Új karbantartási lap" : "Új hibajegy"}
+          </span>
+        </nav>
+        <PageHeader
+          title={maintenance ? "Új karbantartási lap" : "Új hibajegy"}
+          description={
+            maintenance
+              ? "A karbantartási lap is a lánc első eleme. A munkalapokat utólag lehet alá csatolni - a munkalap keletkezhet előbb is, mint a karbantartási lap."
+              : "A hibajegy a lánc első eleme. A munkalapokat utólag lehet alá csatolni - a lap keletkezhet előbb is, mint a jegy."
+          }
+        />
+      </div>
 
-        A kettő MÁS HELYZETRE VALÓ, és a prototípus is mind a kettőt kiteszi: a
-        láblécben álló „Mégsem" akkor, ha végigolvastad az űrlapot és úgy döntesz,
-        hogy nem viszed végig; ez itt akkor, ha rossz lapra jöttél, és azonnal
-        kilépnél - anélkül, hogy a mezők mellett végig kellene görgetned.
-
-        FIX CÉL, NEM `useReturnTo`. A ház mindkét mintát ismeri, de ide a fix
-        cím illik: erre a lapra EGYETLEN helyről lehet eljutni (a lista „Új
-        hibajegy" gombjáról - lemérve, egy hivatkozás az egész alkalmazásban),
-        tehát az előzmény ma ugyanoda vezetne. Egy menekülő-útnak pedig
-        KISZÁMÍTHATÓNAK kell lennie: ugyanaz a link ugyanoda vigyen, ne attól
-        függjön, honnan érkeztél. A hibajegy ADATLAPJA is így áll.
-      */}
-      <ServiceBackLink href={listHref}>
-        {kind === "MAINTENANCE" ? "Karbantartás" : "Hibajegyek"}
-      </ServiceBackLink>
-      <ServiceListHeader
-        eyebrow="Új bejegyzés"
-        title={kind === "MAINTENANCE" ? "Új karbantartási lap" : "Új hibajegy"}
-        lead={
-          kind === "MAINTENANCE"
-            ? "A karbantartási lap is a lánc első eleme. A munkalapokat utólag lehet alá csatolni - a munkalap keletkezhet előbb is, mint a karbantartási lap."
-            : "A hibajegy a lánc első eleme. A munkalapokat utólag lehet alá csatolni - a lap keletkezhet előbb is, mint a jegy."
-        }
-      />
-      {error ? (
-        <Alert variant="danger" title="Nem sikerült" description={error} />
-      ) : null}
-      {/*
-        A SORREND BALAZS KERESE, 2026-09-14, es nem izles kerdese: "Elso helyre
-        keruljon a Partner kivalasztasa. Ez most lejebb van es nem is szepen van
-        megoldva. Utana a Partnerhez kotodo helyszin valasztas jojjon a szokasos
-        fa strukturaban. Ez alatt a Mi a baj mezo, majd ez alatt a reszletek
-        mezo."
-
-        AMIERT A FELVITEL SORRENDJE TARTALMI KERDES: a helyszin a partnertol
-        FUGG. Ha a partner a lap aljan all, a kozbulso mezoket ugy tolti ki a
-        kezelo, hogy a helyszin-valaszto meg ures -- vissza kell lepnie, es a
-        lap ket iranyban olvashato. Elol a fuggoseg feje, alatta ami rola
-        kovetkezik.
-      */}
-      {/*
-        KET HASAB, ES A JOBB OLDALON NINCS MEZO.
-
-        A felvitel MARAD egy oszlopban: egy urlap, aminek a mezoi ket hasabra
-        szakadnak, ket kulonbozo olvasasi sorrendet kinal, es epp a sorrend az,
-        ami itt tartalmi kerdes. A jobb hasab ezert csak ELMONDJA, mi kovetkezik
-        -- nem kertez.
-      */}
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-6">
-          <ServiceJobStepCard number="01" title="Partner és helyszín">
-            <div className="space-y-1">
-              <label
-                className="block text-sm font-semibold"
-                htmlFor="hibajegy-partner"
-              >
-                Partner
-              </label>
+      <div className={`flex-1 ${PAGE_GUTTER_X} py-6`}>
+        {/*
+          A SORREND BALAZS KERESE, 2026-09-14, es nem izles kerdese: eloszor a Partner, utana a partnerhez kotodo helyszin a szokasos fa
+          strukturaban, alatta a Mi a baj, majd a reszletek. A felvitel sorrendje tartalmi kerdes: a helyszin a partnertol FUGG.
+        */}
+        <PilotFormLayout
+          top={
+            <>
+              <ServiceOfflineNotice state={{ kind: "form" }} pilot />
+              {error ? (
+                <Alert
+                  variant="danger"
+                  title="Nem sikerült"
+                  description={error}
+                />
+              ) : null}
+            </>
+          }
+          afterText={
+            maintenance
+              ? "Mentés után megnyílik az új karbantartási lap adatlapja, ahol munkalapot csatolhatsz alá. A felelősnek kiosztott kollégák értesítést kapnak, a fájlok a megnyitás után töltődnek fel."
+              : "Mentés után megnyílik az új hibajegy adatlapja. A felelősnek kiosztott kollégák értesítést kapnak, a fotók a megnyitás után töltődnek fel."
+          }
+          actions={
+            <PilotFormActions
+              missing={missing}
+              busy={saving}
+              submitLabel={submitLabel}
+              busyLabel="Mentés…"
+              onCancel={() => router.push(listHref)}
+              onSubmit={onSubmitClick}
+            />
+          }
+        >
+          <PilotFormCard title="Kinek és hol?">
+            <PilotField
+              id="hibajegy-partner-mezo"
+              label="Partner"
+              requirement="required"
+              htmlFor={customer ? undefined : "hibajegy-partner"}
+              error={errorOf("Partner", "Válassz partnert.")}
+              help={
+                customer
+                  ? undefined
+                  : "Helyszín csak partnerhez rendelve létezik."
+              }
+            >
               {customer ? (
                 <div className="flex items-center gap-2 text-sm">
                   <span className="font-medium">{customer.name}</span>
                   <button
                     type="button"
-                    className="text-xs text-dusk-500 underline disabled:no-underline disabled:opacity-50"
+                    className="text-xs text-pilot-grey-400 underline disabled:no-underline disabled:opacity-50"
                     disabled={contractUnresolved}
                     onClick={() => setCustomer(null)}
                   >
@@ -482,25 +554,37 @@ export function ServiceJobEditorPage({
                   </button>
                 </div>
               ) : (
-                <>
-                  <PartnerPicker id="hibajegy-partner" onPick={setCustomer} />
-                  <p className="pt-1 text-xs text-dusk-500">
-                    Kötelező: helyszín csak partnerhez rendelve létezik.
-                  </p>
-                </>
+                <PartnerPicker
+                  variant="pilot"
+                  id="hibajegy-partner"
+                  onPick={setCustomer}
+                />
               )}
-            </div>
+            </PilotField>
 
             {canUseContract && customer ? (
-              <ContractJobPicker
-                key={customer.customerId}
-                token={token}
-                customerId={customer.customerId}
-                siteOptions={departmentOptions}
-                value={contractChoice}
-                onChange={setContractChoice}
-                locked={contractUnresolved}
-              />
+              <div id="hibajegy-szerzodes-mezo">
+                <ContractJobPicker
+                  key={customer.customerId}
+                  token={token}
+                  customerId={customer.customerId}
+                  siteOptions={departmentOptions}
+                  value={contractChoice}
+                  onChange={setContractChoice}
+                  locked={contractUnresolved}
+                />
+                {errorOf(
+                  "Szerződéses tétel",
+                  "Jelölj ki legalább egy tételt.",
+                ) ? (
+                  <p
+                    role="alert"
+                    className="mt-1 text-xs font-medium text-pilot-red-700"
+                  >
+                    Jelölj ki legalább egy tételt.
+                  </p>
+                ) : null}
+              </div>
             ) : null}
             {contractUnresolved ? (
               <p className="text-sm font-medium text-rose-600">
@@ -512,32 +596,28 @@ export function ServiceJobEditorPage({
             ) : null}
 
             {contractChoice ? null : (
-              <div className="space-y-1">
-                <label
-                  className="block text-sm font-semibold"
-                  htmlFor="hibajegy-helyszin"
-                >
-                  Helyszín
-                </label>
+              <PilotField
+                id="hibajegy-helyszin-mezo"
+                label="Helyszín"
+                requirement="required"
+                htmlFor="hibajegy-helyszin"
+                error={errorOf("Helyszín", "Válassz helyszínt.")}
+              >
                 {/*
-            HAROM KULON ALLAPOT, HAROM KULON MONDAT, es ez nem bobeszedusseg.
-            Nincs partner / meg toltunk / a partnernek nincs helyszine -- a
-            telefonos urlapon pontosan ez a kulonbseg hianyzott, es egy ures
-            valaszto ugy nezett ki, mintha a partnernek nem lenne helyszine.
-            Aki egy ures listat lat magyarazat nelkul, a rossz helyen kezd
-            keresni.
-          */}
+                  HAROM KULON ALLAPOT, HAROM KULON MONDAT: nincs partner / meg toltunk / a partnernek nincs helyszine -- egy ures valaszto ugy
+                  nezne ki, mintha a partnernek nem lenne helyszine.
+                */}
                 {!customer ? (
-                  <p className="text-sm text-dusk-500">
+                  <p className="text-sm text-pilot-grey-500">
                     Előbb válassz partnert. A helyszínek a partner saját fájából
                     jönnek.
                   </p>
                 ) : !departmentsLoaded ? (
-                  <p className="text-sm text-dusk-500">
+                  <p className="text-sm text-pilot-grey-500">
                     Helyszínek betöltése...
                   </p>
                 ) : nincsValaszthatoHelyszin ? (
-                  <p className="text-sm text-dusk-500">
+                  <p className="text-sm text-pilot-grey-500">
                     Ehhez a partnerhez nincs felvéve helyszín, ezért egyelőre
                     nem nyitható {maintenance ? "lap" : "jegy"} rá. Vegyél fel
                     egyet a partner lapján.
@@ -558,18 +638,23 @@ export function ServiceJobEditorPage({
                     ))}
                   </PilotSelect>
                 )}
-              </div>
+              </PilotField>
             )}
-          </ServiceJobStepCard>
+          </PilotFormCard>
 
-          <ServiceJobStepCard
-            number="02"
-            title={maintenance ? "A munka leírása" : "A hiba leírása"}
-          >
-            <div className="space-y-1">
-              <label className="text-sm font-semibold" htmlFor="hibajegy-cim">
-                {titleLabel}
-              </label>
+          <PilotFormCard title="Mi a munka?">
+            <PilotField
+              id="hibajegy-cim-mezo"
+              label={titleLabel}
+              requirement="required"
+              htmlFor="hibajegy-cim"
+              error={errorOf(
+                titleLabel,
+                maintenance
+                  ? "Írd le röviden, mi a feladat."
+                  : "Írd le röviden, mi a baj.",
+              )}
+            >
               <PilotInput
                 id="hibajegy-cim"
                 value={title}
@@ -581,34 +666,26 @@ export function ServiceJobEditorPage({
                     : "Például: a hármas medence szivattyúja nem indul"
                 }
               />
-            </div>
+            </PilotField>
 
-            <div className="space-y-1">
-              <label
-                className="text-sm font-semibold"
-                htmlFor="hibajegy-leiras"
-              >
-                Részletek
-              </label>
+            <PilotField
+              label="Részletek"
+              requirement="optional"
+              htmlFor="hibajegy-leiras"
+            >
               <textarea
                 id="hibajegy-leiras"
-                className="w-full rounded border px-2 py-1 text-sm"
+                className="w-full resize-y rounded-md px-3 py-2 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
                 rows={4}
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
               />
-            </div>
+            </PilotField>
 
-            <div className="space-y-1">
-              <span className="text-sm font-semibold">Érintett eszközök</span>
-              {/*
-            A CIMKE ITT `span`, NEM `label`. Egy `label` egyetlen mezohoz
-            tartozik, itt viszont egy JELOLONEGYZET-LISTA all: a felirat a
-            csoportra vonatkozik, es a sajat feliratat minden sor viszi. Egy
-            `htmlFor` nelkuli `label` csendben semmire nem mutatna.
-          */}
+            <PilotField label="Érintett eszközök" requirement="optional">
+              {/* A CIMKE `label`, de egy JELOLONEGYZET-LISTA all alatta (nincs `htmlFor`): a csoportra vonatkozik, a sorok a sajat feliratukat viszik. */}
               {contractChoice ? (
-                <p className="text-sm text-dusk-500">
+                <p className="text-sm text-pilot-grey-500">
                   A kijelölt szerződéstételek eszközei kerülnek a lapra.
                 </p>
               ) : (
@@ -618,28 +695,20 @@ export function ServiceJobEditorPage({
                   onChange={setAssetIds}
                 />
               )}
-            </div>
-          </ServiceJobStepCard>
+            </PilotField>
 
-          {/*
-          A SORREND BALAZS 2026-09-14-I LISTAJAT KOVETI, es a ket uj mezo a
-          VEGERE megy: a lista a HIBAT irja le, majd azt, amit erint, majd a
-          bizonyitekot. A harmadik lepes EZT a ket mezot fogja ossze.
-        */}
-          <ServiceJobStepCard number="03" title="Fájlok és delegálás">
-            <div className="space-y-1">
-              <label
-                className="block text-sm font-semibold"
-                htmlFor="hibajegy-fajlok"
-              >
-                Fényképek és fájlok
-              </label>
-              {/* A SZAGGATOTT KERET A TERVBOL JON, es CSAK keret: a mezo
-                  maga valtozatlan, az azonositoja es a felirata is. A kettot
-                  nem szabad osszekotni -- egy "szebb" sajat gomb elvenne a
-                  bongeszo sajat fajlvalasztojat, es azzal a billentyuzetes
-                  utat is. */}
-              <div className="rounded-xl border border-dashed border-brand-200 bg-brand-50/40 px-4 py-5">
+            <PilotField
+              label="Fényképek és fájlok"
+              requirement="optional"
+              htmlFor="hibajegy-fajlok"
+              help={
+                files.length
+                  ? `${files.length} fájl feltöltésre vár. A ${maintenance ? "karbantartási lap" : "hibajegy"} megnyitása után töltjük fel.`
+                  : "JPEG, PNG vagy PDF, fájlonként legfeljebb 10 MB."
+              }
+            >
+              {/* A SZAGGATOTT KERET csak keret: a mezo maga valtozatlan (a bongeszo sajat fajlvalasztoja marad, a billentyuzetes utat is megorizve). */}
+              <div className="rounded-xl border border-dashed border-pilot-grey-200 bg-pilot-grey-50 px-4 py-5">
                 <PilotFileInput
                   id="hibajegy-fajlok"
                   multiple
@@ -650,27 +719,17 @@ export function ServiceJobEditorPage({
                   }
                 />
               </div>
-              {/*
-            A SORRENDET KI KELL MONDANI. A fajl a jegy LETREJOTTE UTAN megy fel,
-            mert addig nincs mihez kotni -- es ha errol hallgatnank, egy lassu
-            feltoltes ugy nezne ki, mintha a felvitel akadt volna el.
-          */}
-              <p className="pt-1 text-xs text-dusk-500">
-                {files.length
-                  ? `${files.length} fájl feltöltésre vár. A ${maintenance ? "karbantartási lap" : "hibajegy"} megnyitása után töltjük fel.`
-                  : "Elhagyható. JPEG, PNG vagy PDF, fájlonként legfeljebb 10 MB."}
-              </p>
-            </div>
+            </PilotField>
+          </PilotFormCard>
 
-            <div className="space-y-1">
-              {/*
-            A CIMKE ITT `span`, NEM `label` -- ugyanabbol az okbol, amiert az
-            "Érintett eszközök" felirata is az: egy jelolonegyzet-LISTA all
-            alatta, es a sajat feliratat minden sor viszi. Egy `htmlFor`
-            nelkuli `label` csendben semmire nem mutatna.
-          */}
-              <span className="text-sm font-semibold">Felelős</span>
+          <PilotFormCard title="Ki felel érte?">
+            <PilotField
+              label="Felelős"
+              requirement="optional"
+              help={`A kiosztott kollégák értesítést kapnak a ${maintenance ? "lapról" : "jegyről"}.`}
+            >
               <WorksheetAssigneePicker
+                pilot
                 candidates={candidates}
                 selected={assigneeIds}
                 onToggle={(userId) =>
@@ -682,87 +741,10 @@ export function ServiceJobEditorPage({
                   {candidatesError}
                 </p>
               ) : null}
-              {/*
-            MIERT A VEGEN: Balazs 2026-09-14-i sorrendje a HIBAT irja le, majd
-            azt, amit erint, majd a bizonyitekot. A delegalas az egyetlen mezo,
-            ami nem a hibarol szol, hanem a SZERVEZESROL -- aki a munkat
-            kiadja, a legvegen dont rola.
-          */}
-              <p className="pt-1 text-xs text-dusk-500">
-                Elhagyható. A kiosztott kollégák értesítést kapnak a{" "}
-                {maintenance ? "lapról" : "jegyről"}.
-              </p>
-            </div>
-          </ServiceJobStepCard>
-
-          {/*
-            A ZARO SAV KULON DOBOZ, NEM AZ UTOLSO LEPES ALJA.
-
-            A gomb az EGESZ urlapra vonatkozik, nem a fajlokra es a delegalasra
-            -- az utolso lepesen belul viszont pont ugy nezne ki, mintha csak
-            azt mentene. A "Megsem" is ide tartozik: eddig SEHOL nem allt kiut
-            a lapon, es a bongeszo vissza-gombja nem ugyanaz, mert a felvitt
-            szoveg sorsarol semmit nem mond.
-          */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dusk-200/80 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
-            <p className="text-xs text-dusk-500">
-              A „{titleLabel}”, a partner és a helyszín megadása kötelező, a
-              többi elhagyható.
-            </p>
-            <div className="flex items-center gap-2">
-              <Link href={listHref}>
-                <PilotButton variant="secondary">Mégsem</PilotButton>
-              </Link>
-              <PilotButton
-                disabled={!canSubmit || saving}
-                onClick={() => void submit()}
-              >
-                {created
-                  ? created.viaContract
-                    ? "Befejezés újra"
-                    : "Csatolmányok feltöltése újra"
-                  : contractChoice
-                    ? "Karbantartási lap megnyitása"
-                    : maintenance
-                      ? "Karbantartási lap megnyitása"
-                      : "Hibajegy megnyitása"}
-              </PilotButton>
-            </div>
-          </div>
-        </div>
-
-        {/*
-          A JOBB HASAB NEM ISMETLI A MEZOKET, HANEM A MENETET MONDJA EL.
-
-          Harom sor, ugyanaz a harom lepes, ami balra all. Nem dísz: a felvitel
-          sorrendje itt fuggosegi kerdes (a helyszin a partnertol jon), es ez az
-          egyetlen hely, ahol ez SZOVEGBEN is ki van mondva.
-        */}
-        <aside className="space-y-3 rounded-xl border border-dusk-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
-          <h2 className="text-base font-bold tracking-tight text-dusk-950">
-            Rövid út a kész feladatig
-          </h2>
-          <p className="text-sm leading-6 text-dusk-500">
-            {maintenance
-              ? "A karbantartási lap összefogja a feladatot, az eszközöket és a munkalapokat."
-              : "A hibajegy összefogja a bejelentést, az eszközöket és a munkalapokat."}
-          </p>
-          <ol className="space-y-2 text-sm text-dusk-600">
-            <li className="flex gap-2">
-              <span className="font-semibold text-brand-700">1.</span>
-              Partner és pontos helyszín
-            </li>
-            <li className="flex gap-2">
-              <span className="font-semibold text-brand-700">2.</span>
-              Rövid, felismerhető leírás
-            </li>
-            <li className="flex gap-2">
-              <span className="font-semibold text-brand-700">3.</span>A munka
-              kiosztása a csapatnak
-            </li>
-          </ol>
-        </aside>
+            </PilotField>
+          </PilotFormCard>
+        </PilotFormLayout>
       </div>
-    </div>
+    </PilotThemeRoot>
   );
 }
