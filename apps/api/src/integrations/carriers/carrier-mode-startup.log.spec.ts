@@ -27,15 +27,16 @@ describe("the courier mode line at start-up", () => {
     );
   });
 
+  // the stand-in is not shaped like any provider's key: the image's secret scan flagged an sk_live_ shaped one (#2856 CI)
   it("a value that is not a mode word is not written, only its length", () => {
     const line = carrierModeLine({
-      FOXPOST_API_MODE: "sk_live_Ab12Cd34Ef56Gh78",
+      FOXPOST_API_MODE: "NemModszo1234567890XYZ",
       GLS_API_MODE: "Live-Read",
     });
     assert.equal(
       line,
-      "Futár mód: foxpost=stub (ismeretlen beállítás, 24 karakter), gls=stub (ismeretlen beállítás, 9 karakter)",
+      "Futár mód: foxpost=stub (ismeretlen beállítás, 22 karakter), gls=stub (ismeretlen beállítás, 9 karakter)",
     );
-    assert.ok(!line.includes("Ab12"));
+    assert.ok(!line.includes("NemModszo"));
   });
 });
