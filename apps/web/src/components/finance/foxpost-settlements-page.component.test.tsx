@@ -251,6 +251,47 @@ describe("FoxpostSettlementsPage", () => {
     ).toBeInTheDocument();
   });
 
+  // barracuda on #2860: the reprocess hint names a button only the manager has
+  it("a failed mail's detail points to reprocessing only for the one who can run it", async () => {
+    const failed = {
+      id: "failed-1",
+      gmailInternalDate: "2026-05-10T22:30:00.000Z",
+      gmailSubject: "Foxpost elszámolás 26H18",
+      currency: "HUF",
+      status: "ERROR" as const,
+      matchedLineCount: 0,
+      unresolvedLineCount: 0,
+      errorCode: "FOXPOST_MESSAGE_PROCESSING_FAILED",
+      createdAt: "2026-05-11T06:00:00.000Z",
+    };
+    api.list.mockResolvedValue({ ...settlements, items: [failed] });
+    api.detail.mockResolvedValue({
+      ...failed,
+      gmailMessageId: "gmail-message-9",
+      xlsxFileName: "foxpost.xlsx",
+      pdfFileName: "foxpost.pdf",
+      lines: [],
+    });
+    const hint = /Az Újrafeldolgozás a levél tárolt mellékleteivel/;
+    for (const [role, shown] of [
+      ["OWNER", true],
+      ["SALES", false],
+    ] as const) {
+      auth.session = {
+        ...ownerSession,
+        user: { ...ownerSession.user, role },
+      };
+      const view = render(createElement(FoxpostSettlementsPage));
+      await answered(api.reports);
+      fireEvent.click(await screen.findByText("Feldolgozási hiba"));
+      expect(
+        await screen.findByText("A levél feldolgozása nem sikerült"),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(hint) !== null).toBe(shown);
+      view.unmount();
+    }
+  });
+
   it("picks the month to download, and says when that month has no report", async () => {
     api.reports.mockResolvedValue([
       {

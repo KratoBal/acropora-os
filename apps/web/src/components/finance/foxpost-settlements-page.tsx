@@ -492,8 +492,11 @@ export function FoxpostSettlementsPage() {
             title="A levél feldolgozása nem sikerült"
           >
             {selected.gmailSubject ? `Levél: ${selected.gmailSubject}. ` : ""}
-            Hibakód: {selected.errorCode ?? "ismeretlen"}. Az Újrafeldolgozás a
-            tárolt mellékletekből újra megpróbálja.
+            Hibakód: {selected.errorCode ?? "ismeretlen"}.
+            {/* the button is the manager's (barracuda on #2860): a viewer is not pointed at one they do not have */}
+            {canManage
+              ? " Az Újrafeldolgozás a levél tárolt mellékleteivel újra megpróbálja; ha a melléklet nem tárolódott el, újra hibát ad."
+              : ""}
           </SettlementNotice>
         ) : selected.errorCode || selected.unresolvedLineCount > 0 ? (
           <SettlementNotice
