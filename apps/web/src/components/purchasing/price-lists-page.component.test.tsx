@@ -13,6 +13,7 @@ import type {
 } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { urlNavigation } from "@/test/url-navigation";
 import { CoverageCell, PriceListsPage, todayText } from "./price-lists-page";
 
 /**
@@ -23,11 +24,11 @@ import { CoverageCell, PriceListsPage, todayText } from "./price-lists-page";
 vi.mock("next/font/local", () => ({
   default: () => ({ className: "pilot-inter-stub" }),
 }));
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  usePathname: () => "/beszerzes/arlistak",
-  useSearchParams: () => new URLSearchParams(),
-}));
+// a rendezés az URL-ben áll (`useUrlSort`): a közös, élő URL-hamisító
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/url-navigation")).nextNavigationModule,
+);
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
@@ -112,6 +113,7 @@ const uploaded = (
 });
 
 beforeEach(() => {
+  urlNavigation.reset("/beszerzes/arlistak");
   auth.role = "OWNER";
   for (const fn of [...Object.values(api), ...Object.values(suppliersApi)])
     fn.mockReset();
@@ -159,6 +161,80 @@ describe("PriceListsPage", () => {
     ).toBeInTheDocument();
     expect(within(row).getByText("2026. 10. 12.")).toBeInTheDocument();
     expect(within(row).getByText("7075")).toBeInTheDocument();
+  });
+
+  /* A rendezés (Balázs kérése, kártya 2f6369a4): a lista minden árlistát betölt, a rendezés a böngészőben, az URL-ben. */
+  it("a fejlécre kattintva a lista rendeződik (asc, desc, alap): a dátum időként, a sorok száma számként", async () => {
+    api.list.mockResolvedValue({
+      items: [
+        summary({
+          id: "a",
+          supplierName: "Béla Kft.",
+          listDate: "2026-10-12",
+          rowCount: 1000,
+          fileName: "a.csv",
+        }),
+        summary({
+          id: "b",
+          supplierName: "Ábel Kft.",
+          listDate: "2026-09-01",
+          rowCount: 250,
+          fileName: "b.csv",
+        }),
+        summary({
+          id: "c",
+          supplierName: "Zita Kft.",
+          listDate: "2026-11-05",
+          rowCount: 90000,
+          fileName: "c.csv",
+        }),
+      ],
+    });
+    render(<PriceListsPage />);
+    await screen.findByText("a.csv");
+    const order = () =>
+      screen
+        .getAllByRole("row")
+        .map((row) => /(a|b|c)\.csv/.exec(row.textContent ?? "")?.[1])
+        .filter(Boolean)
+        .join("");
+    expect(order()).toBe("abc");
+    const header = (name: RegExp) =>
+      within(screen.getByRole("columnheader", { name })).getByRole("button");
+    fireEvent.click(header(/Sorok/));
+    await waitFor(() => expect(order()).toBe("bac")); // 250, 1000, 90000: számként
+    fireEvent.click(header(/Sorok/));
+    await waitFor(() => expect(order()).toBe("cab"));
+    fireEvent.click(header(/Sorok/));
+    await waitFor(() => expect(order()).toBe("abc"));
+    fireEvent.click(header(/A lista dátuma/));
+    await waitFor(() => expect(order()).toBe("bac"));
+    fireEvent.click(header(/A lista dátuma/));
+    await waitFor(() => expect(order()).toBe("cab"));
+    fireEvent.click(header(/Beszállító/));
+    await waitFor(() => expect(order()).toBe("bac")); // Ábel, Béla, Zita (az Á az A-val)
+  });
+
+  it("a Párosítás oszlop és a törlés nem rendezhető", async () => {
+    render(<PriceListsPage />);
+    await screen.findByText("dejong-week41.csv");
+    for (const name of [
+      /Beszállító/,
+      /Formátum/,
+      /A lista dátuma/,
+      /Pénznem/,
+      /Sorok/,
+    ])
+      expect(
+        within(screen.getByRole("columnheader", { name })).getAllByRole(
+          "button",
+        ),
+      ).toHaveLength(1);
+    expect(
+      within(
+        screen.getByRole("columnheader", { name: /Párosítás/ }),
+      ).queryByRole("button"),
+    ).toBeNull();
   });
 
   it("keeps the upload button off until the supplier, the format, the date, the currency and the file are all set", async () => {

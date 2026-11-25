@@ -17,7 +17,7 @@ import {
   PilotPageHeader,
   type PilotTableColumn,
 } from "@acropora/ui";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
@@ -27,6 +27,8 @@ import {
   supplierAccountEditable,
 } from "./supplier-account-editor";
 import { formatDayHu } from "@/lib/format/date";
+import { sortRows, type RowGetters } from "@/lib/navigation/sort-rows";
+import { useUrlSort } from "@/lib/navigation/use-url-sort";
 
 /**
  * PÉNZÜGY > LEJÁRÓ SZÁMLÁK (Balázs, Acropora OS szál, 2026-11-20 14:50 UTC; acrobot 58227, 58229). Az átutalással fizetendő, még
@@ -49,6 +51,24 @@ function NoData({ what }: { what: string }) {
   );
 }
 
+/**
+ * A RENDEZHETŐ OSZLOPOK (Balázs kérése, kártya 2f6369a4): a lista minden sort betölt, ezért a rendezés a böngészőben fut (`sortRows`), az
+ * URL-ben álló `sort` és `direction` szerint; a két tábla (lejáró és "valószínűleg nem utalandó") UGYANAZT a rendezést kapja. A bankszámlaszám
+ * nem rendezhető. Az összeg a hátralék nyers száma (a devizák átváltás nélkül).
+ */
+const DUE_SORT_COLUMNS = {
+  supplier: "supplier",
+  dueDate: "dueDate",
+  amount: "amount",
+  reference: "reference",
+} as const;
+const DUE_GETTERS: RowGetters<DueInvoiceItem | ProbablyNotTransferItem> = {
+  supplier: (row) => row.supplierName,
+  dueDate: (row) => row.dueDate,
+  amount: (row) => Number(row.outstanding),
+  reference: (row) => row.reference,
+};
+
 function buildColumns(options: {
   canManage: boolean;
   token: string;
@@ -58,6 +78,7 @@ function buildColumns(options: {
     {
       id: "supplier",
       header: "Cég",
+      sortable: true,
       cell: (row) => (
         <span className="block min-w-0">
           <span className="block truncate font-semibold text-pilot-grey-900">
@@ -80,6 +101,7 @@ function buildColumns(options: {
     {
       id: "dueDate",
       header: "Fizetési határidő",
+      sortable: true,
       width: "170px",
       nowrap: true,
       cell: (row) => (
@@ -137,6 +159,7 @@ function buildColumns(options: {
     {
       id: "amount",
       header: "Összeg (hátralék)",
+      sortable: true,
       width: "150px",
       align: "right",
       nowrap: true,
@@ -149,6 +172,7 @@ function buildColumns(options: {
     {
       id: "reference",
       header: "Közlemény",
+      sortable: true,
       width: "200px",
       cell: (row) => (
         <span className="block min-w-0">
@@ -175,6 +199,15 @@ export function DueInvoicesPage() {
   );
   const [data, setData] = useState<DueInvoicesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { sort, onSort } = useUrlSort(DUE_SORT_COLUMNS);
+  const dueItems = useMemo(
+    () => sortRows(data?.items ?? [], sort, DUE_GETTERS),
+    [data, sort],
+  );
+  const unlikelyItems = useMemo(
+    () => sortRows(data?.probablyNotTransfer ?? [], sort, DUE_GETTERS),
+    [data, sort],
+  );
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -260,7 +293,9 @@ export function DueInvoicesPage() {
               token,
               onSaved: () => void load(),
             })}
-            rows={data.items}
+            rows={dueItems}
+            sort={sort}
+            onSort={onSort}
             rowKey={(row) => row.id}
             rowLabel={(row) => `${row.supplierName} ${row.documentNumber}`}
             minWidth={980}
@@ -294,7 +329,9 @@ export function DueInvoicesPage() {
               token,
               onSaved: () => void load(),
             })}
-            rows={data.probablyNotTransfer}
+            rows={unlikelyItems}
+            sort={sort}
+            onSort={onSort}
             rowKey={(row) => row.id}
             rowLabel={(row) => `${row.supplierName} ${row.documentNumber}`}
             minWidth={980}

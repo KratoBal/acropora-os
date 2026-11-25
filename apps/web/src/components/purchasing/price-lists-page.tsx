@@ -23,7 +23,7 @@ import {
   type SupplierSummary,
 } from "@acropora/types";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import {
@@ -34,6 +34,8 @@ import {
 } from "@/components/pilot/pilot-ui";
 import { priceListsApi } from "@/lib/api/price-lists";
 import { suppliersApi } from "@/lib/api/suppliers";
+import { sortRows, type RowGetters } from "@/lib/navigation/sort-rows";
+import { useUrlSort } from "@/lib/navigation/use-url-sort";
 
 import { PurchasingTabs } from "./purchasing-pilot-shell";
 
@@ -49,6 +51,25 @@ const REJECT_REASON_LABELS: Record<string, string> = {
 const FIELD_LABEL = "text-sm font-medium text-pilot-grey-700";
 
 /** Today in Budapest (YYYY-MM-DD): between midnight and 02:00 the UTC day is still yesterday. */
+/**
+ * A RENDEZHETŐ OSZLOPOK (Balázs kérése, kártya 2f6369a4): a tábla oszlop-azonosítója -> a rendezés kulcsa. A Párosítás (összetett
+ * cella) és a törlés oszlopa nem rendezhető; a formátum a kiírt felirat szerint rendez, a sorok a beolvasott sorok száma szerint.
+ */
+const PRICE_LIST_SORT_COLUMNS = {
+  supplier: "supplier",
+  format: "format",
+  date: "date",
+  currency: "currency",
+  rows: "rows",
+} as const;
+const PRICE_LIST_GETTERS: RowGetters<SupplierPriceListSummary> = {
+  supplier: (list) => list.supplierName,
+  format: (list) => SUPPLIER_PRICE_LIST_FORMAT_LABELS[list.format],
+  date: (list) => list.listDate,
+  currency: (list) => list.currency,
+  rows: (list) => list.rowCount,
+};
+
 export function todayText(now: Date = new Date()): string {
   return now.toLocaleDateString("sv-SE", { timeZone: "Europe/Budapest" });
 }
@@ -165,6 +186,12 @@ export function PriceListsPage() {
   const [suppliers, setSuppliers] = useState<SupplierSummary[]>([]);
   const [suppliersNote, setSuppliersNote] = useState<string | null>(null);
   const [lists, setLists] = useState<SupplierPriceListSummary[] | null>(null);
+  // a rendezés a böngészőben fut (a lista minden árlistát betölt), az URL `sort` és `direction` szerint (Balázs kérése, kártya 2f6369a4)
+  const { sort, onSort } = useUrlSort(PRICE_LIST_SORT_COLUMNS);
+  const sortedLists = useMemo(
+    () => sortRows(lists ?? [], sort, PRICE_LIST_GETTERS),
+    [lists, sort],
+  );
   const [variants, setVariants] = useState<
     SupplierPriceListsResponse["variants"] | null
   >(null);
@@ -293,6 +320,7 @@ export function PriceListsPage() {
     {
       id: "supplier",
       header: "Beszállító",
+      sortable: true,
       cell: (list) => (
         <span className="flex min-w-0 flex-col">
           <span className="truncate font-semibold text-pilot-grey-900">
@@ -307,12 +335,14 @@ export function PriceListsPage() {
     {
       id: "format",
       header: "Formátum",
+      sortable: true,
       width: "220px",
       cell: (list) => SUPPLIER_PRICE_LIST_FORMAT_LABELS[list.format],
     },
     {
       id: "date",
       header: "A lista dátuma",
+      sortable: true,
       nowrap: true,
       width: "130px",
       cell: (list) => formatListDate(list.listDate),
@@ -320,12 +350,14 @@ export function PriceListsPage() {
     {
       id: "currency",
       header: "Pénznem",
+      sortable: true,
       width: "90px",
       cell: (list) => currencyLabel(list.currency),
     },
     {
       id: "rows",
       header: "Sorok",
+      sortable: true,
       width: "130px",
       align: "right",
       cell: (list) =>
@@ -547,7 +579,9 @@ export function PriceListsPage() {
           ) : null}
           <PilotDataTable
             columns={columns}
-            rows={lists}
+            rows={sortedLists}
+            sort={sort}
+            onSort={onSort}
             rowKey={(list) => list.id}
             minWidth={1100}
           />

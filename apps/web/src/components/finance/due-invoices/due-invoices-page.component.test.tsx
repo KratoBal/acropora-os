@@ -1,4 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type {
   DueInvoiceItem,
@@ -9,6 +15,7 @@ import type {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/lib/api/client";
+import { urlNavigation } from "@/test/url-navigation";
 
 import { DueInvoicesPage } from "./due-invoices-page";
 
@@ -21,6 +28,11 @@ import { DueInvoicesPage } from "./due-invoices-page";
 vi.mock("next/font/local", () => ({
   default: () => ({ className: "pilot-inter-stub" }),
 }));
+// a rendezés az URL-ben áll (`useUrlSort`): a közös, élő URL-hamisító
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/url-navigation")).nextNavigationModule,
+);
 
 const api = vi.hoisted(() => ({ list: vi.fn(), setSupplierAccount: vi.fn() }));
 vi.mock("@/lib/api/due-invoices", () => ({ dueInvoicesApi: api }));
@@ -80,6 +92,7 @@ const response = (
 });
 
 beforeEach(() => {
+  urlNavigation.reset("/penzugy/lejaro-szamlak");
   auth.role = "OWNER";
   api.list.mockReset().mockResolvedValue(response([row()]));
   api.setSupplierAccount.mockReset();
@@ -128,6 +141,71 @@ describe("the due invoices page", () => {
     expect(screen.getByText("Lejárt (49 napja)")).toBeInTheDocument();
     // only one row is flagged
     expect(screen.getAllByText(/Lejárt \(/)).toHaveLength(1);
+  });
+
+  /* A rendezés (Balázs kérése, kártya 2f6369a4): kliensoldali (a lista minden sort betölt), az URL-ben, mindkét táblára ugyanaz. */
+  it("a fejlécre kattintva a sorok a böngészőben rendeződnek (asc, desc, alap), a nincs-határidős sor a végén", async () => {
+    api.list.mockResolvedValue(
+      response([
+        row({
+          id: "a",
+          supplierName: "Béla Kft.",
+          dueDate: "2026-12-15",
+          outstanding: "900",
+        }),
+        row({
+          id: "b",
+          supplierName: "Ábel Kft.",
+          dueDate: null,
+          outstanding: "10000",
+        }),
+        row({
+          id: "c",
+          supplierName: "Zita Kft.",
+          dueDate: "2026-10-02",
+          outstanding: "250",
+        }),
+      ]),
+    );
+    render(<DueInvoicesPage />);
+    await screen.findByText("Béla Kft.");
+    const order = () =>
+      screen
+        .getAllByRole("row")
+        .map((r) => /(Béla|Ábel|Zita) Kft\./.exec(r.textContent ?? "")?.[1])
+        .filter(Boolean)
+        .join(",");
+    expect(order()).toBe("Béla,Ábel,Zita"); // a szerver sorrendje
+    const header = (name: RegExp) =>
+      within(screen.getByRole("columnheader", { name })).getByRole("button");
+    fireEvent.click(header(/Összeg/));
+    await waitFor(() => expect(order()).toBe("Zita,Béla,Ábel")); // 250, 900, 10000: számként
+    fireEvent.click(header(/Összeg/));
+    await waitFor(() => expect(order()).toBe("Ábel,Béla,Zita"));
+    fireEvent.click(header(/Összeg/));
+    await waitFor(() => expect(order()).toBe("Béla,Ábel,Zita")); // vissza az alapra
+    fireEvent.click(header(/Fizetési határidő/));
+    await waitFor(() => expect(order()).toBe("Zita,Béla,Ábel")); // az üres határidő a végén
+    fireEvent.click(header(/Fizetési határidő/));
+    await waitFor(() => expect(order()).toBe("Béla,Zita,Ábel")); // csökkenőben is a végén
+    fireEvent.click(header(/Cég/));
+    await waitFor(() => expect(order()).toBe("Ábel,Béla,Zita")); // magyar ábécé: az Á az A-val
+  });
+
+  it("csak a Cég, a Fizetési határidő, az Összeg és a Közlemény rendezhető: a Bankszámlaszám nem", async () => {
+    render(<DueInvoicesPage />);
+    await screen.findByText("Alfa Kft.");
+    for (const name of [/Cég/, /Fizetési határidő/, /Összeg/, /Közlemény/])
+      expect(
+        within(screen.getByRole("columnheader", { name })).getAllByRole(
+          "button",
+        ),
+      ).toHaveLength(1);
+    expect(
+      within(
+        screen.getByRole("columnheader", { name: /Bankszámlaszám/ }),
+      ).queryByRole("button"),
+    ).toBeNull();
   });
 
   it("names the source of a supplied bank account under it, and writes nothing under an own one", async () => {
