@@ -20,6 +20,10 @@ import {
   ValidateNested,
 } from "class-validator";
 
+import {
+  WORKSHEET_LIST_SORT_FIELDS,
+  type WorksheetListSortField,
+} from "@acropora/types";
 import { optionalQueryBoolean } from "../../common/query-boolean.util.js";
 import { DOCUMENT_CAPTION_MAX_LENGTH } from "../../documents/document-caption.js";
 
@@ -112,6 +116,12 @@ export class WorksheetListQueryDto {
   @Transform(({ value }: { value: unknown }) => optionalQueryBoolean(value))
   @IsBoolean()
   includeHidden?: boolean;
+
+  /** The sort column and direction (whitelist: `WORKSHEET_LIST_SORT_FIELDS`); without them the last change, newest first. */
+  @IsIn(WORKSHEET_LIST_SORT_FIELDS)
+  @IsOptional()
+  sort?: WorksheetListSortField;
+  @IsIn(["asc", "desc"]) @IsOptional() direction?: "asc" | "desc";
 }
 
 export class WorksheetLineDto {

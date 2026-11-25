@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type {
   Session,
   WorksheetListItem,
@@ -11,6 +17,7 @@ import {
   WORKSHEET_COLUMNS,
   WORKSHEET_TABLE_MIN_WIDTH,
   worksheetHoursCell,
+  worksheetListQuery,
 } from "./pilot-worksheet-list-page";
 
 /**
@@ -746,5 +753,98 @@ describe("PilotWorksheetListPage -- copy the selected sheets", () => {
     await select();
     expect(screen.getByRole("button", { name: "Letöltés (zip)" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Másolás" })).toBeNull();
+  });
+});
+
+/*
+  A LISTA RENDEZÉSE AZ OSZLOPFEJEN (Balázs kérése, kártya 2f6369a4). MI PIROSÍT: ha a partner vagy a megnyitás fejléce nem a saját
+  szerver-mezőjét írja az URL-be; ha a ciklus (növekvő, csökkenő, alap) elakad; ha a rendezés nem nullázza a lapot, vagy elveszíti a
+  szűrőt; ha az URL rendezése nem jut a kérésbe, vagy egy ismeretlen mező (régi vagy kézzel írt link) igen (az API 400-at adna, és az
+  egész lista eltörne); ha a munkalap, a felelős, az állapot, a munkaóra vagy a jegy oszlop rendezhetőnek látszik (a rendezésük nem
+  tárolt mezőn állna).
+*/
+describe("PilotWorksheetListPage -- a rendezés", () => {
+  const lastReplace = () =>
+    new URL(navigation.replace.mock.calls.at(-1)![0] as string, "http://x")
+      .searchParams;
+
+  it("a partner fejléce a saját mezőjét írja, növekvőben kezd, az első oldalra lapoz és megtartja a szűrőt", async () => {
+    navigation.search = "page=3&jobKind=REPAIR";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    fireEvent.click(
+      screen.getByRole("button", { name: /Partner \/ helyszín/ }),
+    );
+    const url = lastReplace();
+    expect(url.get("sort")).toBe("customerName");
+    expect(url.get("direction")).toBe("asc");
+    expect(url.has("page")).toBe(false);
+    expect(url.get("jobKind")).toBe("REPAIR");
+  });
+
+  it("a megnyitás fejléce a createdAt mezőt írja", async () => {
+    navigation.search = "";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    fireEvent.click(screen.getByRole("button", { name: /Megnyitva/ }));
+    expect(lastReplace().get("sort")).toBe("createdAt");
+  });
+
+  it("a második kattintás csökkenő, a harmadik törli a rendezést", async () => {
+    navigation.search = "sort=createdAt&direction=asc";
+    api.list.mockResolvedValue(response([row()]));
+    const { unmount } = render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    fireEvent.click(screen.getByRole("button", { name: /Megnyitva/ }));
+    expect(lastReplace().get("direction")).toBe("desc");
+    unmount();
+
+    navigation.search = "sort=createdAt&direction=desc";
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    fireEvent.click(screen.getByRole("button", { name: /Megnyitva/ }));
+    expect(lastReplace().has("sort")).toBe(false);
+    expect(lastReplace().has("direction")).toBe(false);
+  });
+
+  it("az URL rendezése átmegy a szerverhez, az ismeretlen vagy félbemaradt nem", async () => {
+    navigation.search = "sort=customerName&direction=desc";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findByText("Ádám, Péter");
+    const sent = api.list.mock.calls.at(-1)![1] as URLSearchParams;
+    expect(sent.get("sort")).toBe("customerName");
+    expect(sent.get("direction")).toBe("desc");
+
+    for (const bad of [
+      "sort=status&direction=asc",
+      "sort=customerName",
+      "sort=customerName&direction=up",
+      "direction=asc",
+    ]) {
+      const query = worksheetListQuery(new URLSearchParams(bad));
+      expect(query.has("sort"), bad).toBe(false);
+      expect(query.has("direction"), bad).toBe(false);
+    }
+    // a többi paraméter és az alapértékek érintetlenek
+    expect(
+      Object.fromEntries(
+        worksheetListQuery(new URLSearchParams("jobKind=REPAIR")),
+      ),
+    ).toEqual({ jobKind: "REPAIR", page: "1", pageSize: "25" });
+  });
+
+  it("csak a partner és a megnyitás oszlopnak van rendezés-gombja", async () => {
+    navigation.search = "";
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    const table = await screen.findByRole("table");
+    const sortable = within(table)
+      .getAllByRole("columnheader")
+      .filter((header) => within(header).queryByRole("button"))
+      .map((header) => header.textContent?.replace(/[⇅↑↓]/g, ""));
+    expect(sortable).toEqual(["Partner / helyszín", "Megnyitva"]);
   });
 });
