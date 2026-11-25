@@ -26,9 +26,7 @@ const SHOWN: (keyof DashboardServiceTicketsWidgetData["byStatus"])[] = [
  * stored IN_PROGRESS, only the server can tell it); the two waits split by the stored status, which is the same set. An older answer
  * without `commonCounts` keeps the stored rows.
  */
-function sharedRows(
-  data: DashboardServiceTicketsWidgetData,
-):
+function sharedRows(data: DashboardServiceTicketsWidgetData):
   | {
       key: string;
       label: string;
