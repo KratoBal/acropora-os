@@ -238,6 +238,55 @@ describe("the detail", () => {
     assert.equal(released.payment?.method, "Stripe");
   });
 
+  /*
+    A FIZETÉSI LINKES RENDELÉS (barracuda, #2835 review): a feloldott kártya-zárolás gyűjtője lemondva, a link gyűjtője kifizetve.
+    Eddig az első (lemondott) gyűjtőt olvastuk, és a rendelés "lemondott" fizetésűnek látszott; MI PIROSÍT: ha a rendelés megint
+    az első gyűjtőt olvassa, az állapot CANCELED, a PaymentIntent a zárolásé, és az átállítás a kifizetett rendelésen is kínálja magát.
+  */
+  it("a payment-link order reads the paid link collection, not the released hold, and refuses the switch as paid", () => {
+    const result = detail({
+      // a single order: the fixture's pickup pair would refuse the switch for its own reason
+      metadata: {},
+      payment_collections: [
+        {
+          status: "canceled",
+          amount: 26390,
+          authorized_amount: 26390,
+          captured_amount: 0,
+          refunded_amount: 0,
+          payments: [
+            { provider_id: "pp_stripe_stripe", data: { id: "pi_hold" } },
+          ],
+          payment_sessions: [
+            { provider_id: "pp_stripe_stripe", status: "canceled" },
+          ],
+        },
+        {
+          status: "completed",
+          amount: 26390,
+          authorized_amount: 26390,
+          captured_amount: 26390,
+          refunded_amount: 0,
+          payments: [
+            { provider_id: "pp_stripe_stripe", data: { id: "pi_link" } },
+          ],
+          payment_sessions: [
+            { provider_id: "pp_stripe_stripe", status: "authorized" },
+          ],
+        },
+      ],
+    } as unknown as Partial<MedusaOrderDetailRow>);
+    assert.equal(result.payment?.method, "Stripe");
+    assert.equal(result.payment?.state, "CAPTURED");
+    assert.equal(result.payment?.captured, 26390);
+    assert.equal(result.payment?.stripePaymentIntentId, "pi_link");
+    assert.equal(result.bankTransfer, false);
+    assert.deepEqual(result.transferSwitch, {
+      allowed: false,
+      reason: "A rendelést már kifizették.",
+    });
+  });
+
   it("the switch is offered on an open, unpaid, uninvoiced, single order with a known method, and says why not otherwise", () => {
     const base: Parameters<typeof transferSwitchOf>[0] = {
       bankTransfer: false,
