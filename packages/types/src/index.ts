@@ -839,6 +839,7 @@ export type {
   PurchaseInvoiceResult,
   PurchaseInvoiceSource,
   PurchaseInvoiceStatus,
+  PurchaseInvoiceSortField,
   PurchaseInvoiceSummary,
   PurchaseProductConflictLookup,
   PurchaseProductConflictOwner,
@@ -859,7 +860,10 @@ export type {
   ExpectedArrivalListResponse,
   ExpectedArrivalSource,
 } from "./purchasing.js";
-export { EXPECTED_ARRIVAL_LIST_PAGE_SIZE } from "./purchasing.js";
+export {
+  EXPECTED_ARRIVAL_LIST_PAGE_SIZE,
+  PURCHASE_INVOICE_SORT_FIELDS,
+} from "./purchasing.js";
 export type {
   CreatePosInternalUseInput,
   CreatePosSaleInput,

@@ -123,6 +123,20 @@ export interface CancelPurchaseInvoiceInput {
  * a várható beérkezésen áll). Sutyerák ebből mondja meg, hogy „felkerült-e
  * már a PDF”.
  */
+/**
+ * A BESZERZÉSI SZÁMLÁK LISTÁJÁNAK RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4). A lista lapozott, ezért a rendezés a
+ * szerveren történik. Az "Összeg" (a tételek összege, nem tárolt mező), a "Fizetve" (kétállapotú jelző, szűrője van) és a "Forrás"
+ * (két belföldi érték egy felirat alatt) nem rendezhető. A beszállító neve a beszállító táblából jön (adatbázis-sorrend).
+ */
+export const PURCHASE_INVOICE_SORT_FIELDS = [
+  "documentNumber",
+  "supplierName",
+  "supplierInvoiceNumber",
+  "invoiceDate",
+] as const;
+export type PurchaseInvoiceSortField =
+  (typeof PURCHASE_INVOICE_SORT_FIELDS)[number];
+
 export interface PurchaseInvoiceListItem extends PurchaseInvoiceSummary {
   hasPdf: boolean;
 }

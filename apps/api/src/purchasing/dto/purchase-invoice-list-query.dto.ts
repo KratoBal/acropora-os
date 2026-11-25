@@ -1,3 +1,7 @@
+import {
+  PURCHASE_INVOICE_SORT_FIELDS,
+  type PurchaseInvoiceSortField,
+} from "@acropora/types";
 import { Type } from "class-transformer";
 import { IsIn, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
 
@@ -20,4 +24,9 @@ export class PurchaseInvoiceListQueryDto {
   @IsIn(PURCHASE_INVOICE_PAYMENT_FILTERS)
   @IsOptional()
   payment?: (typeof PURCHASE_INVOICE_PAYMENT_FILTERS)[number];
+  /** The sort column and direction (whitelist: `PURCHASE_INVOICE_SORT_FIELDS`); without them the invoice date, newest first. */
+  @IsIn(PURCHASE_INVOICE_SORT_FIELDS)
+  @IsOptional()
+  sort?: PurchaseInvoiceSortField;
+  @IsIn(["asc", "desc"]) @IsOptional() direction?: "asc" | "desc";
 }
