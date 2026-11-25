@@ -732,6 +732,8 @@ export class WebshopOrdersRepository {
       | "split"
       | "shipping-method-changed";
     before: unknown;
+    /** Plus mezok a naplosorra (a `before` mellett), pl. a KESEI potlas jelzese; a `before` nem irhato felul. */
+    extra?: Record<string, unknown>;
   }): Promise<void> {
     await prisma.auditLog.create({
       data: {
@@ -739,9 +741,25 @@ export class WebshopOrdersRepository {
         action: `webshop-order.${input.action}`,
         entityType: "WebshopOrder",
         entityId: input.orderId,
-        metadata: { before: input.before } as Prisma.InputJsonValue,
+        metadata: {
+          ...(input.extra ?? {}),
+          before: input.before,
+        } as Prisma.InputJsonValue,
       },
     });
+  }
+
+  /** Van-e mar az OS-ben ilyen rendeles-szerkesztesi naplosor (a keso potlas ebbol dont). */
+  async hasOrderEdit(orderId: string, action: "manual-refund-settled") {
+    const row = await prisma.auditLog.findFirst({
+      where: {
+        action: `webshop-order.${action}`,
+        entityType: "WebshopOrder",
+        entityId: orderId,
+      },
+      select: { id: true },
+    });
+    return row !== null;
   }
 
   async recordAddressEdit(input: {
