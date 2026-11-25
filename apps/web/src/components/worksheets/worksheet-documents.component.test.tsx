@@ -217,6 +217,40 @@ describe("WorksheetDocuments", () => {
     expect(within(kiadott).queryByText("szivattyu.jpg")).toBeNull();
   });
 
+  // f0b70dbd: the closing-time and the signed sheet share one file name; each says which it is, and an upload says nothing
+  it("a két kiadott lap a fajtáját mondja: aláírt, végleges és lezáráskori", async () => {
+    api.documents.mockResolvedValue({
+      items: [
+        doku(),
+        doku({
+          id: "lap-1",
+          type: "GENERATED_SHEET",
+          fileName: "munkalap-TST-2026-030.pdf",
+          contentType: "application/pdf" as const,
+          createdAt: "2026-11-25T13:39:01.000Z",
+        }),
+        doku({
+          id: "lap-2",
+          type: "SIGNED_SHEET",
+          fileName: "munkalap-TST-2026-030.pdf",
+          contentType: "application/pdf" as const,
+          createdAt: "2026-11-25T13:39:20.000Z",
+        }),
+      ],
+    });
+
+    render(<WorksheetDocuments worksheetId="ws-1" token="t" canView />);
+
+    await answered(api.documents);
+    await screen.findByText("A kiadott munkalap");
+    const kiadott = szakasz("A kiadott munkalap");
+    expect(within(kiadott).getByText(/^Aláírt, végleges · /)).toBeTruthy();
+    expect(within(kiadott).getByText(/^Lezáráskori · /)).toBeTruthy();
+    const csatolmanyok = szakasz("Csatolmányok");
+    expect(within(csatolmanyok).queryByText(/Lezáráskori/)).toBeNull();
+    expect(within(csatolmanyok).queryByText(/Aláírt, végleges/)).toBeNull();
+  });
+
   it("piszkozatnál a szakasz ÁLL, és kimondja, miért üres", async () => {
     /*
       MI PIROSIT: ha a szakasz elrejtodik, amikor meg nincs kiadott peldany.

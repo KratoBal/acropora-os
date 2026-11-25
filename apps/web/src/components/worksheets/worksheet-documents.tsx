@@ -41,6 +41,19 @@ import {
  * "torol, de le van tiltva" allapotba kerulni, es nem igerunk olyan gombot,
  * ami a szerveren nem letezik.
  */
+/**
+ * A KIADOTT LAP FAJTÁJA A FELIRATA (picasso képernyő-leltára, 2026-11-25, f0b70dbd): a lezáráskori és az aláírás utáni végleges lap
+ * ugyanazt a fájlnevet kapja (`worksheetSheetFileName`), és Balázs 09-21-i döntése szerint mindkettő megmarad. Felirat nélkül
+ * két egyforma sornak látszottak, és nem lehetett tudni, melyik a hiteles.
+ */
+export function issuedSheetLabel(
+  item: WorksheetDocumentSummary,
+): string | null {
+  if (item.type === "SIGNED_SHEET") return "Aláírt, végleges";
+  if (item.type === "GENERATED_SHEET") return "Lezáráskori";
+  return null;
+}
+
 export function WorksheetDocuments({
   worksheetId,
   token,
@@ -107,9 +120,14 @@ export function WorksheetDocuments({
    * A szetvalasztas a MEGJELENITESROL szol, nem az elerésről: a kiadott lap ma
    * is letoltheto a meglevo vegponton at, es ez a valtozas azt NEM irja at.
    */
-  const galeria = (sorok: WorksheetDocumentSummary[], ures: string) => (
+  const galeria = (
+    sorok: WorksheetDocumentSummary[],
+    ures: string,
+    itemLabel?: (item: WorksheetDocumentSummary) => string | null,
+  ) => (
     <ServiceDocumentGallery
       items={sorok}
+      itemLabel={itemLabel}
       loadBlob={(documentId) =>
         worksheetsApi.downloadDocumentThumbnail(token, worksheetId, documentId)
       }
@@ -171,6 +189,7 @@ export function WorksheetDocuments({
             galeria(
               issued,
               "Ez a munkalap még nincs lezárva, ezért kiadott példány sem készült róla.",
+              issuedSheetLabel,
             )
           )}
         </div>
