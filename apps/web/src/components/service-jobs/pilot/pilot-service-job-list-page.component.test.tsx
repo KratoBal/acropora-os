@@ -166,6 +166,11 @@ function renderAt(search: string) {
   );
 }
 
+// the day range and the hidden-rows switch live behind "Továbbiak szűrők" (closed unless the URL already carries one of them)
+function openMore() {
+  fireEvent.click(screen.getByRole("button", { name: /^Továbbiak szűrők/ }));
+}
+
 async function settle() {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 300));
@@ -409,6 +414,7 @@ describe("service-job list, redesign columns", () => {
   it("asks the server for hidden rows when the switch is on", async () => {
     renderAt("");
     await screen.findByText("Jegy 3");
+    openMore();
     fireEvent.click(screen.getByRole("button", { name: "Rejtettek is" }));
     await settle();
     expect(api.list).toHaveBeenLastCalledWith(
@@ -430,6 +436,9 @@ describe("service-job list, redesign columns", () => {
     try {
       renderAt("");
       await screen.findByText("Jegy 3");
+      openMore();
+      // the panel is open (the day range is there), and the switch is not
+      expect(screen.getByLabelText("Létrehozva ettől a naptól")).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Rejtettek is" })).toBeNull();
       // the service role still opens new jobs
       expect(screen.getByText("Új hibajegy")).toBeTruthy();
@@ -448,6 +457,7 @@ describe("service-job list, the created-day filter", () => {
   it("a felirat a létrehozásra szűr, és a két mező a createdFrom / createdTo paramétert küldi, az URL-be is", async () => {
     renderAt("");
     await screen.findByText("Jegy 3");
+    openMore();
     expect(
       screen.getByRole("group", { name: "Létrehozás napja" }).textContent,
     ).toMatch(/^Létrehozva/);
@@ -497,6 +507,7 @@ describe("service-job list, the created-day filter", () => {
     renderAt("");
     await screen.findByText("Jegy 3");
     await settle();
+    openMore();
     const before = api.list.mock.calls.length;
     fireEvent.change(screen.getByLabelText("Létrehozva ettől a naptól"), {
       target: { value: "20261" },
@@ -969,5 +980,115 @@ describe("service-job list (b): old URLs that carry a name", () => {
       location: "Mind",
       dropped: true,
     });
+  });
+});
+
+/**
+ * (c) KÖR (f0b70dbd): a szűrősor egy sor (kereső, partner, helyszín, "Továbbiak szűrők"), a nap-tartomány és a "Rejtettek is" a gomb mögött,
+ * a gombon az aktív további szűrők száma; telefonon a partner és a helyszín is a gomb mögé kerül. MI PIROSÍT: ha a panel szűrőjét a gomb
+ * száma nem mutatja (a szűrt lista szűretlennek látszik); ha a tartomány kettőnek számít; ha a fordított tartomány hibája zárt panel mögött
+ * marad; ha az URL-ben álló nap mellett zárva indul a panel; ha telefonon a legördülők a sorban maradnak.
+ */
+describe("service-job list (c): the filter row and the button behind it", () => {
+  const moreButton = () =>
+    screen.getByRole("button", { name: /^Továbbiak szűrők/ });
+
+  it("has one row of search, partner, location and the button, and the panel opens closed", async () => {
+    renderAt("");
+    await screen.findByText("Jegy 3");
+    expect(screen.getByLabelText("Hibajegy keresése")).toBeTruthy();
+    expect(screen.getByLabelText("Partner szűrő")).toBeTruthy();
+    expect(screen.getByLabelText("Helyszín szűrő")).toBeTruthy();
+    expect(moreButton().getAttribute("aria-expanded")).toBe("false");
+    expect(moreButton().textContent).toBe("Továbbiak szűrők");
+    expect(screen.queryByLabelText("Létrehozva ettől a naptól")).toBeNull();
+    openMore();
+    expect(moreButton().getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByLabelText("Létrehozva ettől a naptól")).toBeTruthy();
+  });
+
+  it("counts the active further filters on the button: the day range once, the hidden rows once", async () => {
+    renderAt("createdFrom=2026-11-18&createdTo=2026-11-19&hidden=1");
+    await screen.findByText("Jegy 3");
+    // the URL already carries two of them, so the panel starts open
+    expect(moreButton().textContent).toBe("Továbbiak szűrők · 2");
+    expect(moreButton().getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("counts a one-sided range as one filter", async () => {
+    renderAt("createdFrom=2026-11-18");
+    await screen.findByText("Jegy 3");
+    expect(moreButton().textContent).toBe("Továbbiak szűrők · 1");
+  });
+
+  it("opens the panel by itself when the range is reversed, so the error is not hidden", async () => {
+    renderAt("createdFrom=2026-11-20&createdTo=2026-11-19");
+    await screen.findByText("Jegy 3");
+    expect(screen.getByRole("alert").textContent).toMatch(/kezdő dátum/);
+    // closing the panel does not hide the error: it is the one thing that cannot sit behind a closed panel
+    openMore();
+    expect(screen.getByRole("alert").textContent).toMatch(/kezdő dátum/);
+    expect(moreButton().getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("on the phone the partner and location move behind the button and count there", async () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query === "(max-width: 639px)",
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    try {
+      renderAt("partner=cust-beta");
+      await screen.findByText("Jegy 3");
+      // closed panel: only the search and the button are in the row
+      expect(screen.queryByLabelText("Partner szűrő")).toBeNull();
+      expect(screen.queryByLabelText("Helyszín szűrő")).toBeNull();
+      // the partner filter counts on the button, since it is hidden now
+      expect(moreButton().textContent).toBe("Továbbiak szűrők · 1");
+      openMore();
+      expect(
+        (screen.getByLabelText("Partner szűrő") as HTMLSelectElement).value,
+      ).toBe("cust-beta");
+      expect(screen.getByLabelText("Helyszín szűrő")).toBeTruthy();
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
+  // The phone layout cannot be measured in jsdom (no layout): these pin the classes that carry it, and the real 390 px width is
+  // measured on the stage once this is deployed (plan point 5).
+  it("shows three skeleton rows while the first load runs, not an empty page", async () => {
+    api.list.mockReturnValue(new Promise(() => {}));
+    renderAt("");
+    const skeleton = await screen.findByLabelText("Hibajegyek betöltése");
+    expect(skeleton.children).toHaveLength(3);
+  });
+
+  it("keeps the three tiles in ONE row on the phone, and drops their detail line there", async () => {
+    renderAt("");
+    await screen.findByText("Jegy 3");
+    const tiles = screen.getByLabelText("Összesítés");
+    expect(tiles.className).toMatch(/\bgrid-cols-3\b/);
+    expect(tiles.className).not.toMatch(/grid-cols-1/);
+    // "1 új" next to the number is a desktop detail
+    const detail = screen.getByText("1 új");
+    expect(detail.className).toMatch(/\bhidden\b/);
+    expect(detail.className).toMatch(/\bsm:inline\b/);
+  });
+
+  it("gives the pager buttons a 44 px target on the phone", async () => {
+    api.list.mockResolvedValue({
+      ...response,
+      pagination: { page: 1, pageSize: 25, totalItems: 60, totalPages: 3 },
+    });
+    renderAt("");
+    await screen.findByText("Jegy 3");
+    for (const name of ["Előző", "Következő"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button.className).toMatch(/\bh-11\b/);
+      expect(button.className).toMatch(/\bmd:h-9\b/);
+    }
   });
 });
