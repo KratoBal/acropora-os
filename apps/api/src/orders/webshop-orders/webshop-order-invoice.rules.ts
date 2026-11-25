@@ -803,7 +803,7 @@ export function advanceProformaDraftOf(
       };
     lines.push({
       productId: null,
-      description: `Előleg: webshop rendelés #${order.display_id}`,
+      description: `${ADVANCE_LINE_PREFIX}${order.display_id}`,
       quantity: "1",
       unit: "db",
       unitNet: amounts.unitNet,
@@ -830,6 +830,18 @@ export function advanceProformaDraftOf(
     };
   return { ok: true, difference: 0, draft: { ...full.draft, lines } };
 }
+
+/** Every line of an advance proforma starts so (`advanceProformaDraftOf`); `isAdvanceProformaLines` reads it back. */
+export const ADVANCE_LINE_PREFIX = "Előleg: webshop rendelés #";
+
+/**
+ * AN ADVANCE PROFORMA, FROM ITS OWN LINES (2b; barracuda on commerce #908): the shop takes a transfer below the order as an advance
+ * only when the OS says so, and the OS says so only for a proforma it issued as one. Not from the amounts: a full proforma is
+ * also below the order's total when the order was edited after it.
+ */
+export const isAdvanceProformaLines = (descriptions: readonly string[]) =>
+  descriptions.length > 0 &&
+  descriptions.every((text) => text.startsWith(ADVANCE_LINE_PREFIX));
 
 /** The advance in whole forints, or why it cannot be one. */
 export function advanceAmountOf(
