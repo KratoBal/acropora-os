@@ -11,7 +11,11 @@ import type {
   IncomingReadingValues,
   IncomingRelatedDocument,
 } from "@acropora/types";
-import { paymentStateOf as sharedPaymentStateOf } from "@acropora/types";
+import {
+  INCOMING_SORT_FIELDS,
+  paymentStateOf as sharedPaymentStateOf,
+  type IncomingSortField,
+} from "@acropora/types";
 
 import type { DocumentPairing } from "../missing-invoices/missing-invoices.service.js";
 import {
@@ -809,11 +813,75 @@ export function filterIncoming(
     );
 }
 
+/**
+ * A BEJÖVŐ LISTA RENDEZÉSE (Balázs kérése, kártya 2f6369a4: az oszlop nevére kattintva): a lista a memóriában áll össze, a szűrés és
+ * a lapozás is ott fut, ezért a rendezés a szűrés UTÁN, a lapozás ELŐTT megy, a MEGJELENÍTETT értékkel (nem egy tárolt oszloppal). A
+ * mező fehér listáról jön (`INCOMING_SORT_FIELDS`). Az üres érték (nincs összeg) mindkét irányban a végén áll; az egyenlő értékű
+ * sorok az eddigi sorrendjüket tartják (stabil rendezés), majd az azonosító dönt, hogy a lapozás ne cserélgesse őket.
+ * `documentNumber` és `supplierName`: magyar ábécé szerint, a számok számként ("2" a "10" előtt).
+ */
+const HU_COLLATOR = new Intl.Collator("hu", {
+  numeric: true,
+  sensitivity: "base",
+});
+
+export function sortIncoming(
+  items: readonly IncomingDocumentListItem[],
+  sort: IncomingSortField | undefined,
+  direction: "asc" | "desc" | undefined,
+): IncomingDocumentListItem[] {
+  if (!sort || !(INCOMING_SORT_FIELDS as readonly string[]).includes(sort))
+    return [...items];
+  const sign = direction === "desc" ? -1 : 1;
+  const present = (item: IncomingDocumentListItem): boolean =>
+    sort === "grossAmount"
+      ? item.grossAmount !== null
+      : sort === "documentNumber"
+        ? item.documentNumber.length > 0
+        : true;
+  const compare = (
+    a: IncomingDocumentListItem,
+    b: IncomingDocumentListItem,
+  ): number => {
+    switch (sort) {
+      case "documentNumber":
+        return HU_COLLATOR.compare(a.documentNumber, b.documentNumber);
+      case "supplierName":
+        return HU_COLLATOR.compare(a.supplierName, b.supplierName);
+      case "issueDate":
+        return a.issueDate < b.issueDate
+          ? -1
+          : a.issueDate > b.issueDate
+            ? 1
+            : 0;
+      case "grossAmount":
+        return new Prisma.Decimal(a.grossAmount ?? 0).comparedTo(
+          new Prisma.Decimal(b.grossAmount ?? 0),
+        );
+    }
+  };
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const aHas = present(a.item);
+      const bHas = present(b.item);
+      if (aHas !== bHas) return aHas ? -1 : 1;
+      const order = compare(a.item, b.item) * sign;
+      if (order !== 0) return order;
+      return a.index - b.index;
+    })
+    .map(({ item }) => item);
+}
+
 export function incomingListResponse(
   all: readonly IncomingDocumentListItem[],
   query: IncomingDocumentListQuery & { page: number; pageSize: number },
 ): IncomingDocumentListResponse {
-  const filtered = filterIncoming(all, query);
+  const filtered = sortIncoming(
+    filterIncoming(all, query),
+    query.sort,
+    query.direction,
+  );
   const offset = (query.page - 1) * query.pageSize;
   const kinds = [...new Set(all.map((item) => item.kindCode))].sort();
   return {
