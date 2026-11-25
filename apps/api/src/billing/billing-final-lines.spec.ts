@@ -16,7 +16,8 @@ import {
 /**
  * A VÉGSZÁMLA TÉTELEI AZ AJÁNLATBÓL (kártya 2650d371). MI PIROSÍT: ha egy mérföldkő nem az ELFOGADOTT verzión is alapot adna; ha egy
  * opcionális tétel, amit az elfogadó NEM kért, a végszámlára kerülne (vagy egy kért kimaradna); ha az ajánlat sorrendje felborulna; ha a
- * 100%-os (teljes ellenértékű) mérföldkő is az ajánlat tételeit használná; ha az ajánlat-sor termékhez vagy variánshoz kötve menne
+ * 100%-os (teljes ellenértékű) mérföldkő végszámlája NEM az ajánlat tételeit használná (kártya c37ea343, L4: eddig a díjbekérő
+ * kulcsonkénti "1 db" sorát örökölte, a 2650d371 akkori döntése szerint); ha az ajánlat-sor termékhez vagy variánshoz kötve menne
  * (a kiállításkor készletet mozgatna).
  */
 const d = (value: string) => new Prisma.Decimal(value);
@@ -119,16 +120,15 @@ describe("finalLinesSource", () => {
     ...over,
   });
 
-  it("a milestone below 100 percent with no other proforma milestone uses the quote's items", () => {
-    for (const percent of ["60", "99.99"]) {
+  it("a milestone, the 100 percent one too, with no other proforma milestone uses the quote's items", () => {
+    for (const percent of ["60", "99.99", "100"]) {
       const source = finalLinesSource(basis(percent));
       assert.equal(source.kind, "QUOTE", percent);
       if (source.kind === "QUOTE") assert.deepEqual(source.items, items);
     }
   });
 
-  it("100 percent or no tie keeps the proforma's items", () => {
-    assert.deepEqual(finalLinesSource(basis("100")), { kind: "PROFORMA" });
+  it("no tie to a quote keeps the proforma's items", () => {
     assert.deepEqual(finalLinesSource(null), { kind: "PROFORMA" });
   });
 

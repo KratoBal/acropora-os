@@ -738,6 +738,26 @@ describe("a rendelés jóváírásai a számlán", () => {
     );
   });
 
+  // L5 (c37ea343): the issue no longer fills an empty unit, so the credit lines say "db" themselves, in both shapes
+  it("a jóváírás sorai maguk mondják az egységet (db), mindkét alakban", () => {
+    for (const loyaltyShape of ["discount", "payment"] as const) {
+      const result = invoiceDraftOf(withCredit([points(400)], 26440), {
+        customerId: "c",
+        now: NOW,
+        loyaltyShape,
+      });
+      assert.ok(result.ok, !result.ok ? result.message : "");
+      const credits = result.draft.lines.filter((line) =>
+        line.unitNet.startsWith("-"),
+      );
+      assert.ok(credits.length > 0, loyaltyShape);
+      assert.ok(
+        credits.every((line) => line.unit === "db"),
+        loyaltyShape,
+      );
+    }
+  });
+
   it("a díjbekérő is viszi a jóváírást: a fizetendő összeg a végösszeg", () => {
     const result = proformaDraftOf(withCredit([points(400)], 26440), {
       customerId: "c",

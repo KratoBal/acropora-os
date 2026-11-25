@@ -257,8 +257,9 @@ describe("a final invoice from an advance", () => {
   /*
     A MÉRFÖLDKŐ-DÍJBEKÉRŐBŐL KÉSZÜLT ELŐLEG VÉGSZÁMLÁJA (kártya 2650d371, Balázs kérdése): a mérföldkő-díjbekérő a százalékos rész, tehát a
     végszámla az AJÁNLAT teljes elfogadott tételeivel készül, különben a Számlázz.hu a levont előleg után nullát hagy. MI PIROSÍT: ha egy
-    60%-os mérföldkő díjbekérőjének tétele kerül a végszámlára; ha a 100%-os mérföldkő, a kézi (kötés nélküli) díjbekérő vagy a teljes
-    ellenértékű díjbekérő az ajánlat tételeit kapná; ha a kötött, de tétel nélküli ajánlatnál csendben a százalékos sor maradna.
+    60%-os mérföldkő díjbekérőjének tétele kerül a végszámlára; ha a 100%-os mérföldkő végszámlája NEM az ajánlat tételeit kapná (kártya
+    c37ea343, L4); ha a kézi (kötés nélküli) díjbekérő az ajánlat tételeit kapná; ha a kötött, de tétel nélküli ajánlatnál csendben a
+    százalékos sor maradna.
   */
   describe("from the advance of a quote milestone's proforma (card 2650d371)", () => {
     const basis = (
@@ -300,20 +301,25 @@ describe("a final invoice from an advance", () => {
         }
       ).draft.lines.map((l) => [l.description, l.unitNet]);
 
-    it("a 60 percent milestone proforma: the quote's full items, not the proforma's percentage line", async () => {
-      const s = withProforma({
-        "pro-1": basis("60", ["Akvárium", "Szűrő"]),
-      });
-      await s.service.finalFromAdvance(advanceIdFor("pro-1"), USER);
-      assert.deepEqual(linesOf(s), [
-        ["Akvárium", "1000"],
-        ["Szűrő", "1000"],
-      ]);
+    it("a 60 or a 100 percent milestone proforma: the quote's full items, not the proforma's line (L4: the 100 percent one too)", async () => {
+      for (const percent of ["60", "100"]) {
+        const s = withProforma({
+          "pro-1": basis(percent, ["Akvárium", "Szűrő"]),
+        });
+        await s.service.finalFromAdvance(advanceIdFor("pro-1"), USER);
+        assert.deepEqual(
+          linesOf(s),
+          [
+            ["Akvárium", "1000"],
+            ["Szűrő", "1000"],
+          ],
+          percent,
+        );
+      }
     });
 
-    it("a 100 percent milestone proforma, a hand-made proforma with no milestone, and the full-price proforma keep the proforma's items", async () => {
+    it("a hand-made proforma with no milestone keeps the proforma's items", async () => {
       const cases: Record<string, QuoteBasis | null>[] = [
-        { "pro-1": basis("100", ["Akvárium", "Szűrő"]) },
         { "pro-1": null },
         {},
       ];
@@ -347,9 +353,13 @@ describe("a final invoice from an advance", () => {
       );
       assert.equal(detail.finalInvoiceNotice?.code, "MULTIPLE_ADVANCES");
       assert.match(detail.finalInvoiceNotice!.message, /több előleg-mérföldkö/);
+      // L4 (c37ea343): the 100 percent milestone follows the same rule, so beside another proforma milestone it says so too
+      const hundred = await withProforma({
+        "pro-1": basis("100", ["Akvárium"], 1),
+      }).service.finalFromAdvance(advanceIdFor("pro-1"), USER);
+      assert.equal(hundred.finalInvoiceNotice?.code, "MULTIPLE_ADVANCES");
       for (const quoteBasis of [
         { "pro-1": basis("60", ["Akvárium"], 0) },
-        { "pro-1": basis("100", ["Akvárium"], 1) },
         { "pro-1": null },
       ]) {
         const single = withProforma(quoteBasis);

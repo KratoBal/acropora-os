@@ -434,7 +434,8 @@ function creditLinesOf(
       productId: null,
       description,
       quantity: "1",
-      unit: null,
+      // a credit line counts once: "db", said here, since the issue no longer fills an empty unit (L5, c37ea343)
+      unit: "db",
       unitNet: `-${decimalText(amount)}`,
       vatRatePercent: "0",
       discountPercent: null,
@@ -490,7 +491,8 @@ function creditLinesOf(
           productId: null,
           description: discountDescription(credit.points, rate, rates.length),
           quantity: "1",
-          unit: null,
+          // as above: "db", since the issue no longer fills an empty unit (L5, c37ea343)
+          unit: "db",
           unitNet: `-${unitNet}`,
           vatRatePercent: decimalText(rate),
           discountPercent: null,
