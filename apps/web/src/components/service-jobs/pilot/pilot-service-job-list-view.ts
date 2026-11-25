@@ -1,61 +1,27 @@
-import type {
-  ServiceJobListItem,
-  ServiceJobListResponse,
-  ServiceJobStatusValue,
+import {
+  COMMON_SERVICE_STATUSES,
+  type CommonServiceStatus,
+  type ServiceJobListResponse,
 } from "@acropora/types";
 
 /**
- * A PILOT LISTA NÉGY FÜLE -- TISZTA FÜGGVÉNYEK, hogy a fülek viselkedése
- * mérhető legyen az oldal felrajzolása nélkül. Lásd a
- * `pilot-service-job-list-page.tsx` fejlécét, miért NEM ugyanaz a
- * bontás, mint a mai (`service-job-list-view.ts`) listáé: ott a "Nyitott"
- * fül a várakozó jegyeket IS tartalmazza, a Figma-terv "Nyitott hibajegy"
- * füle viszont KIZÁRJA őket -- két különböző csoportosítás, ugyanazon a
- * nyolc állapoton.
- */
-export const TRULY_OPEN: ServiceJobStatusValue[] = [
-  "NEW",
-  "TRIAGED",
-  "SCHEDULED",
-  "IN_PROGRESS",
-];
-export const WAITING: ServiceJobStatusValue[] = [
-  "WAITING_FOR_PARTS",
-  "WAITING_FOR_CUSTOMER",
-];
-export const CLOSED: ServiceJobStatusValue[] = ["COMPLETED", "CANCELLED"];
-
-/**
- * AZ ÁLLAPOT-JELVÉNY SZÍNE HÁROM TÓNUSRA EGYSZERŰSÖDIK.
+ * A HIBAJEGY-LISTA NÉGY FÜLE A KÖZÖS ÖT ÁLLAPOTON (kártya 7f23785c, 3. szelet;
+ * picasso felületi átnézése, 4. pont): Nyitott, Vár valamire, Lezárt, Összes.
  *
- * A valódi rendszer nyolc belső állapotot ismer, a Figma-terv és a
- * repóban létező pilot-tokenek viszont csak hármat adnak
- * (`pilot-aqua`/`pilot-amber`/`pilot-grey` -- lásd `figma-theme.css`
- * fejlécét: "Use ONLY those tokens"). A CÍMKE SZÖVEGE a nyolc valódi név
- * marad (`serviceJobStatusLabel`), csak a szín egyszerűsödik.
+ * A fül a szervertől a KÖZÖS állapotokat kéri (`commonStatuses`), nem a tárolt
+ * nyolcat: a levezetett Elkészült csak a szerveren szűrhető ugyanazzal a
+ * feltétellel, mint a számlálója és a sor felirata (terv 8/c). Az Elkészült a
+ * Nyitottba esik, mert még teendő van vele (aláírás, átadás, lezárás); a
+ * csempe alcíme külön kimondja, hány ilyen van, hogy ne vesszen el.
+ *
+ * A fül-azonosítók (`open`, `waiting`, `closed`, `all`) a régiek: a mentett
+ * hivatkozások (`?tab=waiting`) ugyanarra a fülre visznek.
  */
-export const STATUS_BADGE_VARIANT: Record<
-  ServiceJobStatusValue,
-  "teal" | "amber" | "grey" | "blue"
-> = {
-  /*
-    THE REDESIGN'S FIVE TONES (Figma 423:15 "Service / Status Badge": Blue,
-    Purple, Amber, Green, Neutral) are a visual reference, not new states
-    (brief, point 8). The not-yet-started statuses read blue, the running
-    ones teal, the waiting ones amber, and a finished job (completed or
-    cancelled) neutral, as before. The design's green "Lezárva" is not used:
-    the pilot green has no dark-mode pair, and adding one would change other
-    pages' dark mode. Purple has no pilot token and no status needs it.
-  */
-  NEW: "blue",
-  TRIAGED: "blue",
-  SCHEDULED: "teal",
-  IN_PROGRESS: "teal",
-  WAITING_FOR_PARTS: "amber",
-  WAITING_FOR_CUSTOMER: "amber",
-  COMPLETED: "grey",
-  CANCELLED: "grey",
-};
+export const OPEN_COMMON: CommonServiceStatus[] = [
+  "NEW",
+  "IN_PROGRESS",
+  "DONE",
+];
 
 export type PilotTab = "all" | "open" | "waiting" | "closed";
 
@@ -64,30 +30,20 @@ export interface PilotTabDef {
   label: string;
   /** Amit a szervertől kérünk -- ugyanaz a két érték, mint a mai listán. */
   scope: "open" | "all";
-  /** A betöltött lapon belüli szűrés, vagy `null` a teljes válaszra. */
-  statuses: ServiceJobStatusValue[] | null;
+  /** A közös állapot-szűrő a szervernek, vagy `null` a teljes halmazra. */
+  commonStatuses: CommonServiceStatus[] | null;
 }
 
-/**
- * THE FOUR TABS, IN THE ORDER AND WORDING OF THE SERVICE REDESIGN (Figma
- * 423:20, 2026-10-04): Nyitott, Összes, Várakozik, Lezárt. Only the labels
- * and the order moved; what each tab holds is unchanged.
- */
 export const PILOT_TABS: PilotTabDef[] = [
-  {
-    id: "open",
-    label: "Nyitott",
-    scope: "open",
-    statuses: TRULY_OPEN,
-  },
-  { id: "all", label: "Összes", scope: "all", statuses: null },
+  { id: "open", label: "Nyitott", scope: "open", commonStatuses: OPEN_COMMON },
   {
     id: "waiting",
-    label: "Várakozik",
+    label: "Vár valamire",
     scope: "open",
-    statuses: WAITING,
+    commonStatuses: ["WAITING"],
   },
-  { id: "closed", label: "Lezárt", scope: "all", statuses: CLOSED },
+  { id: "closed", label: "Lezárt", scope: "all", commonStatuses: ["CLOSED"] },
+  { id: "all", label: "Összes", scope: "all", commonStatuses: null },
 ];
 
 /** The noun for the footer's "4 / 7 nyitott hibajegy" count, per tab. */
@@ -116,13 +72,17 @@ export function assigneeNames(
 }
 
 /**
- * THE THREE STAT TILES (Figma 423:20), from the server's `counts` only.
+ * THE THREE STAT TILES (Figma 423:20), from the server's counts only.
  *
- * - Nyitott: the four open statuses, with how many of them are new.
- * - Várakozik: the two waiting statuses, split by what they wait for.
- * - Lezárt: all closed jobs. The design's "ebben a hónapban" and "2 sürgős"
- *   are left out (decisions E1, E2): there is no monthly count and no
- *   priority field, and a tile does not invent one.
+ * - Nyitott: Új, Folyamatban and Elkészült, with how many are new and how many
+ *   are done but not closed yet (picasso, point 4).
+ * - Vár valamire: split by what they wait for. The stored `counts` split it:
+ *   the common Vár valamire is exactly the two stored waiting statuses.
+ * - Lezárt: all closed jobs, with how many of them were cancelled (the same
+ *   identity: Lezárt is exactly the stored COMPLETED and CANCELLED).
+ * The design's "ebben a hónapban" and "2 sürgős" are left out (decisions E1,
+ * E2): there is no monthly count and no priority field, and a tile does not
+ * invent one.
  */
 export interface PilotStatTile {
   key: "open" | "waiting" | "closed";
@@ -132,35 +92,47 @@ export interface PilotStatTile {
   tone: "default" | "amber" | "teal";
 }
 
+type CommonCounts = Record<CommonServiceStatus, number>;
+
+function joined(parts: (string | null)[]): string | null {
+  const present = parts.filter((part): part is string => part !== null);
+  return present.length > 0 ? present.join(" · ") : null;
+}
+
+const countOf = (value: number, noun: string): string | null =>
+  value > 0 ? `${value} ${noun}` : null;
+
 export function pilotStatTiles(
   counts: ServiceJobListResponse["counts"],
+  commonCounts: CommonCounts,
 ): PilotStatTile[] {
-  const tabs = pilotTabCounts(counts);
-  const waitingDetail: string[] = [];
-  if (counts.WAITING_FOR_PARTS > 0)
-    waitingDetail.push(`${counts.WAITING_FOR_PARTS} alkatrészre`);
-  if (counts.WAITING_FOR_CUSTOMER > 0)
-    waitingDetail.push(`${counts.WAITING_FOR_CUSTOMER} ügyfélre`);
+  const tabs = pilotTabCounts(commonCounts);
   return [
     {
       key: "open",
       label: "Nyitott hibajegy",
       value: tabs.open,
-      detail: counts.NEW > 0 ? `${counts.NEW} új` : null,
+      detail: joined([
+        countOf(commonCounts.NEW, "új"),
+        countOf(commonCounts.DONE, "elkészült"),
+      ]),
       tone: "default",
     },
     {
       key: "waiting",
-      label: "Várakozik",
+      label: "Vár valamire",
       value: tabs.waiting,
-      detail: waitingDetail.length > 0 ? waitingDetail.join(" · ") : null,
+      detail: joined([
+        countOf(counts.WAITING_FOR_PARTS, "alkatrészre"),
+        countOf(counts.WAITING_FOR_CUSTOMER, "ügyfélre"),
+      ]),
       tone: "amber",
     },
     {
       key: "closed",
       label: "Lezárt ügy",
       value: tabs.closed,
-      detail: null,
+      detail: countOf(counts.CANCELLED, "meghiúsult"),
       tone: "teal",
     },
   ];
@@ -172,29 +144,21 @@ export function pilotTabDef(tab: PilotTab): PilotTabDef {
   return found;
 }
 
-export function pilotItemsForTab(
-  items: readonly ServiceJobListItem[],
-  tab: PilotTab,
-): ServiceJobListItem[] {
-  const { statuses } = pilotTabDef(tab);
-  if (!statuses) return [...items];
-  return items.filter((item) => statuses.includes(item.status));
-}
-
 /**
- * A NÉGY CSEMPE SZÁMA -- A TELJES LÁTHATÓ HALMAZBÓL (`counts`), NEM A
- * BETÖLTÖTT LAPBÓL. Ugyanaz az érv, mint a mai listán: a `counts` minden
- * állapot darabszámát hozza, a 200-as határtól függetlenül.
+ * A FÜLEK SZÁMA A SZERVER KÖZÖS SZÁMLÁLÓJÁBÓL (`commonCounts`), NEM A BETÖLTÖTT
+ * LAPBÓL: ugyanaz a szűrő számolja, amelyik a fül sorait adja, tehát a fül
+ * száma és a lábléc találatszáma egyezik. A csempék ugyanezt hívják (egy
+ * függvény, két megjelenítés).
  */
 export function pilotTabCounts(
-  counts: ServiceJobListResponse["counts"],
+  commonCounts: CommonCounts,
 ): Record<PilotTab, number> {
-  const sum = (statuses: ServiceJobStatusValue[]) =>
-    statuses.reduce((total, status) => total + counts[status], 0);
+  const sum = (statuses: readonly CommonServiceStatus[]) =>
+    statuses.reduce((total, status) => total + commonCounts[status], 0);
   return {
-    all: sum(TRULY_OPEN) + sum(WAITING) + sum(CLOSED),
-    open: sum(TRULY_OPEN),
-    waiting: sum(WAITING),
-    closed: sum(CLOSED),
+    all: sum(COMMON_SERVICE_STATUSES),
+    open: sum(OPEN_COMMON),
+    waiting: commonCounts.WAITING,
+    closed: commonCounts.CLOSED,
   };
 }

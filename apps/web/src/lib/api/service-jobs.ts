@@ -3,6 +3,7 @@ import {
   DOCUMENT_VARIANT_PARAM,
 } from "@acropora/types";
 import type {
+  CommonServiceStatus,
   ServiceJobDeletePreview,
   ServiceJobDeleteResult,
   ServiceJobDetail,
@@ -34,6 +35,8 @@ export interface ServiceJobListExtra {
   direction?: "asc" | "desc";
   /** Az állapot-szűrő (a fülek): a szerver szűr, hogy a fül száma, az oldalszám és a sorok egyezzenek. */
   statuses?: readonly ServiceJobStatusValue[] | null;
+  /** A közös állapot-szűrő (a hibajegy-lista fülei, kártya 7f23785c): a levezetett Elkészültet csak a szerver tudja szűrni. */
+  commonStatuses?: readonly CommonServiceStatus[] | null;
   customerId?: string;
   departmentId?: string;
 }
@@ -47,6 +50,7 @@ function listQueryParams(
   maintenanceState: "progress" | "done" | undefined,
   created: { from?: string; to?: string } | undefined,
   statuses: readonly string[] | null | undefined,
+  commonStatuses?: readonly string[] | null,
 ): URLSearchParams {
   const query = new URLSearchParams({ scope });
   query.set("kind", kind);
@@ -54,6 +58,8 @@ function listQueryParams(
   if (created?.from) query.set("createdFrom", created.from);
   if (created?.to) query.set("createdTo", created.to);
   if (statuses?.length) query.set("statuses", statuses.join(","));
+  if (commonStatuses?.length)
+    query.set("commonStatuses", commonStatuses.join(","));
   const trimmed = search?.trim();
   if (trimmed) query.set("search", trimmed);
   /**
@@ -96,6 +102,7 @@ export const serviceJobsApi = {
       maintenanceState,
       created,
       extra?.statuses,
+      extra?.commonStatuses,
     );
     if (extra?.page) query.set("page", String(extra.page));
     if (extra?.pageSize) query.set("pageSize", String(extra.pageSize));
@@ -119,6 +126,7 @@ export const serviceJobsApi = {
     includeHidden?: boolean,
     created?: { from?: string; to?: string },
     statuses?: readonly string[],
+    commonStatuses?: readonly CommonServiceStatus[],
   ) {
     const query = listQueryParams(
       scope,
@@ -128,6 +136,7 @@ export const serviceJobsApi = {
       undefined,
       created,
       statuses,
+      commonStatuses,
     );
     return apiRequest<ServiceJobListFacets>(`${base}/facets?${query}`, token, {
       signal,

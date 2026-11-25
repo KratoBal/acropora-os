@@ -6,11 +6,12 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import type {
-  ServiceJobListItem,
-  ServiceJobListResponse,
-  ServiceJobStatusValue,
-  Session,
+import {
+  commonJobStatus,
+  type ServiceJobListItem,
+  type ServiceJobListResponse,
+  type ServiceJobStatusValue,
+  type Session,
 } from "@acropora/types";
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -95,6 +96,9 @@ function item(
     title: `Jegy ${id}`,
     kind: "REPAIR",
     status,
+    // the server's common status for a job without worksheets (the shared rule, not a copy of it)
+    commonStatus: commonJobStatus(status, []).status,
+    commonReason: commonJobStatus(status, []).reason,
     partnerStatus: "IN_PROGRESS",
     partnerStatusLabel: "Feldolgozás alatt",
     customerName,
@@ -123,6 +127,7 @@ const response: ServiceJobListResponse = {
     COMPLETED: 2,
     CANCELLED: 0,
   },
+  commonCounts: { NEW: 1, IN_PROGRESS: 0, WAITING: 0, DONE: 0, CLOSED: 2 },
   truncated: false,
 };
 
@@ -138,14 +143,14 @@ const facets = {
   ],
 };
 
-// the paging, sort and filter arguments of a list call; the open tab asks for the four really open statuses
+// the paging, sort and filter arguments of a list call; the open tab asks for the common Új, Folyamatban and Elkészült
 function extra(overrides: Record<string, unknown> = {}) {
   return {
     page: 1,
     pageSize: 25,
     sort: undefined,
     direction: undefined,
-    statuses: ["NEW", "TRIAGED", "SCHEDULED", "IN_PROGRESS"],
+    commonStatuses: ["NEW", "IN_PROGRESS", "DONE"],
     customerId: undefined,
     departmentId: undefined,
     ...overrides,
@@ -209,7 +214,7 @@ describe("service-job list state in the URL", () => {
         pageSize: 25,
         sort: undefined,
         direction: undefined,
-        statuses: ["COMPLETED", "CANCELLED"],
+        commonStatuses: ["CLOSED"],
         customerId: "cust-beta",
         departmentId: undefined,
       },
@@ -368,7 +373,36 @@ describe("service-job list, redesign columns", () => {
     expect(screen.queryByText(/Feldolgozás alatt/)).toBeNull();
   });
 
-  it("draws the stat tiles from the server's counts", async () => {
+  /*
+    THE BADGE IS THE SERVER'S COMMON STATUS, WITH ITS REASON UNDER IT (card 7f23785c, picasso point 1). The first row's stored status is
+    IN_PROGRESS, and the server says Elkészült (all its sheets wait for a signature): if the cell drew the stored status, it would say
+    Folyamatban and no reason. The second is a cancelled job: Lezárt, "meghiúsult" under it, not "Meghiúsult" as a state.
+  */
+  it("draws the common status from the server's fields, with the reason under the badge", async () => {
+    withRows([
+      {
+        ...item("1", "IN_PROGRESS", "Alfa Kft"),
+        commonStatus: "DONE",
+        commonReason: "AWAITING_SIGNATURE",
+      },
+      item("2", "CANCELLED", "Beta Kft"),
+    ]);
+    renderAt("");
+    const [done, cancelled] = await screen.findAllByTestId("service-job-row");
+    expect(within(done!).getByText("Elkészült")).toBeTruthy();
+    expect(within(done!).getByText("aláírásra vár")).toBeTruthy();
+    expect(within(done!).queryByText("Folyamatban")).toBeNull();
+    expect(within(cancelled!).getByText("Lezárt")).toBeTruthy();
+    expect(within(cancelled!).getByText("meghiúsult")).toBeTruthy();
+    expect(within(cancelled!).queryByText("Meghiúsult")).toBeNull();
+  });
+
+  /*
+    THE TILES COUNT THE COMMON STATES (card 7f23785c): the open tile is Új + Folyamatban + Elkészült, from `commonCounts`, and says how
+    many are done but not closed. The stored `counts` deliberately disagree here (IN_PROGRESS 5 holds the 2 derived Elkészült): if the
+    tile read them, it would say 7 and no "2 elkészült".
+  */
+  it("draws the stat tiles from the server's common counts", async () => {
     api.list.mockResolvedValue({
       ...response,
       counts: {
@@ -380,16 +414,18 @@ describe("service-job list, redesign columns", () => {
         COMPLETED: 20,
         CANCELLED: 8,
       },
+      commonCounts: { NEW: 2, IN_PROGRESS: 3, WAITING: 3, DONE: 2, CLOSED: 28 },
     });
     renderAt("");
     const tiles = await screen.findByLabelText("Összesítés");
     await waitFor(() =>
       expect(tiles.textContent).toContain("Nyitott hibajegy7"),
     );
-    expect(tiles.textContent).toContain("2 új");
-    expect(tiles.textContent).toContain("Várakozik3");
+    expect(tiles.textContent).toContain("2 új · 2 elkészült");
+    expect(tiles.textContent).toContain("Vár valamire3");
     expect(tiles.textContent).toContain("2 alkatrészre · 1 ügyfélre");
     expect(tiles.textContent).toContain("Lezárt ügy28");
+    expect(tiles.textContent).toContain("8 meghiúsult");
     // decisions E1, E2: no priority and no monthly figure
     expect(tiles.textContent).not.toMatch(/sürgős|hónap/);
   });
@@ -540,7 +576,7 @@ describe("service-job list (a): tabs with numbers, quiet rows, states", () => {
   const withRows = (rows: ServiceJobListItem[]) =>
     api.list.mockResolvedValue({ ...response, items: rows });
 
-  it("puts the numbers on the tabs, from the same counts as the tiles, the closed tab counting the failed ones too", async () => {
+  it("puts the numbers on the tabs, from the same common counts as the tiles, the open tab holding the done ones too", async () => {
     api.list.mockResolvedValue({
       ...response,
       counts: {
@@ -553,14 +589,22 @@ describe("service-job list (a): tabs with numbers, quiet rows, states", () => {
         COMPLETED: 20,
         CANCELLED: 8,
       },
+      commonCounts: { NEW: 2, IN_PROGRESS: 3, WAITING: 3, DONE: 1, CLOSED: 28 },
     });
     renderAt("");
     await screen.findByText("Jegy 3");
+    // Elkészült (aláírásra vár) is still open: 2 + 3 + 1
     expect(screen.getByRole("tab", { name: "Nyitott 6" })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Várakozik 3" })).toBeTruthy();
-    // Meghiúsult (CANCELLED) is closed: 20 + 8
+    expect(screen.getByRole("tab", { name: "Vár valamire 3" })).toBeTruthy();
+    // Lezárt holds the cancelled ones: the server counts 20 + 8
     expect(screen.getByRole("tab", { name: "Lezárt 28" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Összes 37" })).toBeTruthy();
+    // picasso, point 4: Nyitott | Vár valamire | Lezárt | Összes
+    expect(
+      screen
+        .getAllByRole("tab")
+        .map((tab) => tab.textContent?.replace(/\d+$/, "")),
+    ).toEqual(["Nyitott", "Vár valamire", "Lezárt", "Összes"]);
     // a csempe ugyanazt a három számot mondja
     const tiles = screen.getByLabelText("Összesítés");
     expect(within(tiles).getByText("6")).toBeTruthy();
@@ -687,7 +731,7 @@ describe("service-job list (b): server paging, sort, status tabs, facets", () =>
         page: 2,
         sort: "createdAt",
         direction: "desc",
-        statuses: ["COMPLETED", "CANCELLED"],
+        commonStatuses: ["CLOSED"],
       }),
     );
     // 3 rows on page 2 of 25: "26–28 / 61"
@@ -734,7 +778,7 @@ describe("service-job list (b): server paging, sort, status tabs, facets", () =>
         page: 1,
         sort: "jobNumber",
         direction: "asc",
-        statuses: null,
+        commonStatuses: null,
       }),
     );
     expect(navigation.replace).toHaveBeenLastCalledWith(
@@ -771,7 +815,8 @@ describe("service-job list (b): server paging, sort, status tabs, facets", () =>
       "",
       false,
       { from: "", to: "" },
-      ["WAITING_FOR_PARTS", "WAITING_FOR_CUSTOMER"],
+      undefined,
+      ["WAITING"],
     );
     const partners = within(screen.getByLabelText("Partner szűrő"));
     expect(
