@@ -244,6 +244,32 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
     expect(purchasingApiMock.create).not.toHaveBeenCalled();
   });
 
+  /*
+    A VISSZALÉPÉS BAL FELÜL, KIS NYÍLLAL (Picasso 3.16): MI PIROSÍT: ha a hivatkozás újra a fejléc jobb oldalán áll gombként, vagy a cél vagy a felirat változik
+    (a NAV-számláról érkezve a NAV számlához, egyébként a listához).
+  */
+  it("the back link stands top left above the title, to the list (or to the NAV invoice when coming from it)", async () => {
+    navigation.params = new URLSearchParams();
+    const first = render(createElement(PurchaseInvoiceEuEditorPage));
+    const back = screen.getByRole("link", { name: "Vissza a listához" });
+    expect(back.getAttribute("href")).toBe("/beszerzes");
+    const title = screen.getByRole("heading", { level: 1 });
+    // it comes BEFORE the title in the page, and is not a button in the header's action area
+    expect(
+      back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Vissza a/ })).toBeNull();
+    first.unmount();
+
+    navigation.params = new URLSearchParams("navInvoiceId=nav-invoice-1");
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    expect(
+      screen
+        .getByRole("link", { name: "Vissza a NAV számlához" })
+        .getAttribute("href"),
+    ).toBe("/beszerzes/nav-szamlak/nav-invoice-1");
+  });
+
   it("a pénznemet fixen HUF-ként jeleníti meg", async () => {
     render(createElement(PurchaseInvoiceEuEditorPage));
 
