@@ -26,6 +26,7 @@ import {
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
 import { purchasingApi } from "@/lib/api/purchasing";
+import { sortFromParams, useUrlSort } from "@/lib/navigation/use-url-sort";
 
 import {
   PilotFilterCard,
@@ -38,6 +39,14 @@ const SOURCE_LABEL: Record<PurchaseInvoiceSummary["source"], string> = {
   HU_NAV: "Belföldi",
   HU_MANUAL: "Belföldi",
 };
+
+/** A lista rendezhető oszlopai: a táblázat oszlop-azonosítója -> a szerver rendezési mezeje (`PURCHASE_INVOICE_SORT_FIELDS`). */
+export const PURCHASE_SORT_COLUMNS = {
+  document: "documentNumber",
+  supplier: "supplierName",
+  invoice: "supplierInvoiceNumber",
+  date: "invoiceDate",
+} as const;
 
 /**
  * AZ OLDAL URL-JÉBŐL A LISTA-KÉRÉS, CSAK AZ ISMERT MEZŐKKEL.
@@ -60,6 +69,15 @@ export function purchaseInvoiceListQuery(
     const value = params.get(name);
     if (value) query.set(name, value);
   }
+  // a rendezés csak ismert mezőre és érvényes irányra kerül a kérésbe (egy régi vagy kézzel írt link ne törje el a listát)
+  const sort = sortFromParams(params, PURCHASE_SORT_COLUMNS);
+  if (sort) {
+    query.set(
+      "sort",
+      PURCHASE_SORT_COLUMNS[sort.id as keyof typeof PURCHASE_SORT_COLUMNS],
+    );
+    query.set("direction", sort.direction);
+  }
   return query;
 }
 
@@ -77,6 +95,7 @@ export function PurchaseInvoiceListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState(searchFromUrl(params));
+  const { sort, onSort } = useUrlSort(PURCHASE_SORT_COLUMNS);
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PURCHASING_VIEW),
   );
@@ -158,6 +177,7 @@ export function PurchaseInvoiceListPage() {
   const columns: PilotTableColumn<PurchaseInvoiceSummary>[] = [
     {
       id: "document",
+      sortable: true,
       header: "Bizonylatszám",
       width: "150px",
       cell: (item) => (
@@ -168,6 +188,7 @@ export function PurchaseInvoiceListPage() {
     },
     {
       id: "supplier",
+      sortable: true,
       header: "Beszállító",
       cell: (item) => (
         <span
@@ -180,6 +201,7 @@ export function PurchaseInvoiceListPage() {
     },
     {
       id: "invoice",
+      sortable: true,
       header: "Számlaszám",
       width: "160px",
       cell: (item) => (
@@ -190,6 +212,7 @@ export function PurchaseInvoiceListPage() {
     },
     {
       id: "date",
+      sortable: true,
       header: "Kelte",
       nowrap: true,
       width: "120px",
@@ -326,6 +349,8 @@ export function PurchaseInvoiceListPage() {
             >
               <PilotDataTable
                 columns={columns}
+                sort={sort}
+                onSort={onSort}
                 rows={data.items}
                 rowKey={(item) => item.id}
                 onRowActivate={openInvoice}

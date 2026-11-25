@@ -27,6 +27,7 @@ import {
   ensureMainWarehouse,
   type WarehouseLookupDatabase,
 } from "../common/warehouse.util.js";
+import { listOrderBy } from "../common/list-sort.js";
 import type { PurchaseInvoiceListQueryDto } from "./dto/purchase-invoice-list-query.dto.js";
 import {
   purchaseInvoiceDetailInclude,
@@ -36,6 +37,7 @@ import {
   type PurchaseInvoiceDetailRow,
   type PurchaseInvoiceSummaryRow,
 } from "./purchase-invoice.types.js";
+import { PURCHASE_INVOICE_SORT } from "./purchase-invoice-sort.js";
 import { nextLocalProductSku } from "../products/local-product-sku.js";
 
 /// True for a P2002 on PurchaseInvoice's own (supplierId,
@@ -922,7 +924,11 @@ export class PurchaseInvoiceRepository extends Repository {
       this.invoiceDatabase.purchaseInvoice.findMany({
         where,
         include: purchaseInvoiceSummaryInclude,
-        orderBy: [{ invoiceDate: "desc" }, { id: "desc" }],
+        orderBy: listOrderBy(
+          PURCHASE_INVOICE_SORT,
+          query.sort,
+          query.direction,
+        ),
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),

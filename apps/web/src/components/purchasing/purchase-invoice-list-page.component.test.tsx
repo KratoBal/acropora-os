@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -221,7 +222,10 @@ describe("PurchaseInvoiceListPage Direction F", () => {
     );
     const right = (element: HTMLElement) =>
       element.className.split(" ").includes("text-right");
-    expect(headers.map((header) => header.textContent)).toEqual([
+    // a rendezhető fejléc a nyilat is kiírja (⇅ ↑ ↓): a felirat a nyíl nélkül ugyanaz
+    expect(
+      headers.map((header) => header.textContent?.replace(/[⇅↑↓]/g, "")),
+    ).toEqual([
       "Bizonylatszám",
       "Beszállító",
       "Számlaszám",
@@ -293,5 +297,99 @@ describe("PurchaseInvoiceListPage query from the URL", () => {
     );
     expect(url.get("search")).toBe("tropic");
     expect(url.has("q")).toBe(false);
+  });
+});
+
+/*
+  A LISTA RENDEZÉSE AZ OSZLOPFEJEN (Balázs kérése, kártya 2f6369a4). MI PIROSÍT: ha egy fejléc nem a saját szerver-mezőjét írja az
+  URL-be; ha a ciklus (növekvő, csökkenő, alap) elakad; ha a rendezés nem nullázza a lapot; ha az URL rendezése nem jut a kérésbe,
+  vagy egy ismeretlen mező (régi vagy kézzel írt link) igen (az API 400-at adna, és az egész lista eltörne); ha az összeg, a fizetve
+  és a forrás oszlop rendezhetőnek látszik.
+*/
+describe("PurchaseInvoiceListPage sorting", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.params = new URLSearchParams("page=3&search=SZ");
+    navigation.replace.mockReset();
+    api.list.mockReset().mockResolvedValue(response(3));
+  });
+
+  const urlOfLastReplace = () =>
+    new URLSearchParams(
+      String(navigation.replace.mock.calls.at(-1)?.[0]).split("?")[1],
+    );
+
+  it("a header writes its own server field, ascending first, and drops the page", async () => {
+    render(<PurchaseInvoiceListPage />);
+    await screen.findByText("BESZ-2026-001");
+    fireEvent.click(screen.getByRole("button", { name: /Beszállító/ }));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
+    const url = urlOfLastReplace();
+    expect(url.get("sort")).toBe("supplierName");
+    expect(url.get("direction")).toBe("asc");
+    expect(url.has("page")).toBe(false);
+    expect(url.get("search")).toBe("SZ");
+  });
+
+  it("each sortable header sends its own field", async () => {
+    render(<PurchaseInvoiceListPage />);
+    await screen.findByText("BESZ-2026-001");
+    for (const [name, field] of [
+      ["Bizonylatszám", "documentNumber"],
+      ["Számlaszám", "supplierInvoiceNumber"],
+      ["Kelte", "invoiceDate"],
+    ] as const) {
+      navigation.replace.mockReset();
+      fireEvent.click(screen.getByRole("button", { name }));
+      await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
+      expect(urlOfLastReplace().get("sort")).toBe(field);
+    }
+  });
+
+  it("the second click is descending, the third clears the sort", async () => {
+    navigation.params = new URLSearchParams("sort=invoiceDate&direction=asc");
+    render(<PurchaseInvoiceListPage />);
+    await screen.findByText("BESZ-2026-001");
+    fireEvent.click(screen.getByRole("button", { name: /Kelte/ }));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
+    expect(urlOfLastReplace().get("direction")).toBe("desc");
+
+    // a mock a címet csak értesítésre olvassa újra: az URL "megváltozott"
+    navigation.params = new URLSearchParams("sort=invoiceDate&direction=desc");
+    act(() => {
+      for (const listener of navigation.listeners) listener();
+    });
+    navigation.replace.mockReset();
+    fireEvent.click(screen.getByRole("button", { name: /Kelte/ }));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
+    expect(urlOfLastReplace().has("sort")).toBe(false);
+    expect(urlOfLastReplace().has("direction")).toBe(false);
+  });
+
+  it("the URL's sort reaches the request, and an unknown one does not", async () => {
+    navigation.params = new URLSearchParams("sort=supplierName&direction=desc");
+    render(<PurchaseInvoiceListPage />);
+    await screen.findByText("BESZ-2026-001");
+    const sent = api.list.mock.calls.at(-1)?.[1] as URLSearchParams;
+    expect(sent.get("sort")).toBe("supplierName");
+    expect(sent.get("direction")).toBe("desc");
+
+    for (const bad of [
+      "sort=totalNet&direction=asc",
+      "sort=supplierName",
+      "sort=supplierName&direction=up",
+      "direction=asc",
+    ]) {
+      const query = purchaseInvoiceListQuery(new URLSearchParams(bad));
+      expect(query.has("sort"), bad).toBe(false);
+      expect(query.has("direction"), bad).toBe(false);
+    }
+  });
+
+  it("the total, the paid state and the source have no sort button", async () => {
+    render(<PurchaseInvoiceListPage />);
+    await screen.findByText("BESZ-2026-001");
+    for (const name of [/Összeg/, /Fizetve/, /Forrás/])
+      expect(screen.queryByRole("button", { name })).toBeNull();
   });
 });
