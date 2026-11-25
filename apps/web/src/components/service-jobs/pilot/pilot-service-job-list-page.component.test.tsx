@@ -19,6 +19,7 @@ import {
   JOB_COLUMNS,
   JOB_TABLE_MIN_WIDTH,
   PilotServiceJobListPage,
+  resolveUrlFilters,
   serviceJobListPageFromUrl,
   serviceJobListQuery,
   serviceJobListStateFromUrl,
@@ -600,7 +601,7 @@ describe("service-job list (a): tabs with numbers, quiet rows, states", () => {
   });
 
   it("offers Szűrők törlése on a filtered-empty list, and it clears the search and the filters", async () => {
-    // the server filters: a partner nobody has gives an empty list, and without the filter the row comes back
+    // the server filters: a partner that is known but has no tickets here gives an empty list, and without the filter the row comes back
     api.list.mockImplementation(
       async (...args: unknown[]) =>
         ({
@@ -610,7 +611,7 @@ describe("service-job list (a): tabs with numbers, quiet rows, states", () => {
             : [item("3", "NEW", "Alfa Kft")],
         }) satisfies ServiceJobListResponse,
     );
-    renderAt("partner=nincs-ilyen");
+    renderAt("partner=cust-beta");
     expect(await screen.findByText("Nincs találat")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Szűrők törlése" }));
     expect(await screen.findByText("Jegy 3")).toBeTruthy();
@@ -785,9 +786,11 @@ describe("service-job list (b): server paging, sort, status tabs, facets", () =>
       { from: "", to: "" },
       extra({ page: 9, departmentId: "dep-2" }),
     );
-    expect(navigation.replace).toHaveBeenLastCalledWith(
-      "/szerviz/hibajegyek?location=dep-2&page=2",
-      { scroll: false },
+    await waitFor(() =>
+      expect(navigation.replace).toHaveBeenLastCalledWith(
+        "/szerviz/hibajegyek?location=dep-2&page=2",
+        { scroll: false },
+      ),
     );
     expect(screen.queryByText("Nincs találat")).toBeNull();
   });
@@ -804,5 +807,107 @@ describe("service-job list (b): server paging, sort, status tabs, facets", () =>
       expect(serviceJobListPageFromUrl(new URLSearchParams(query)), query).toBe(
         page,
       );
+  });
+});
+
+/**
+ * A RÉGI, NEVET HORDOZÓ URL-EK (acrobot 61765, Luca könyvjelzői). MI PIROSÍT: ha egy ismeretlen partner üres listát ad magyarázat nélkül;
+ * ha a lista a szűrő-lehetőségek előtt, a rossz értékkel kér; ha a név nem íródik át azonosítóra; ha a későbbi (keresésre szűkült)
+ * lehetőségek kidobják a felhasználó választotta partnert.
+ */
+describe("service-job list (b): old URLs that carry a name", () => {
+  const lastExtra = () =>
+    api.list.mock.calls.at(-1)![8] as Record<string, unknown>;
+
+  it("rewrites a partner NAME to its id before the first list request, and the URL follows", async () => {
+    renderAt("partner=Beta+Kft");
+    await screen.findByText("Jegy 3");
+    await settle();
+    // never asked with the name
+    for (const call of api.list.mock.calls)
+      expect((call[8] as { customerId?: string }).customerId).toBe("cust-beta");
+    expect(
+      (screen.getByLabelText("Partner szűrő") as HTMLSelectElement).value,
+    ).toBe("cust-beta");
+    expect(screen.queryByText(/A régi szűrő nem érvényes/)).toBeNull();
+    expect(navigation.replace).toHaveBeenLastCalledWith(
+      "/szerviz/hibajegyek?partner=cust-beta",
+      { scroll: false },
+    );
+  });
+
+  it("maps an old location path to the one option it ends in", async () => {
+    renderAt("location=Akv%C3%A1rium+%2F+Nagy+medence");
+    await screen.findByText("Jegy 3");
+    await settle();
+    expect(lastExtra().departmentId).toBe("dep-1");
+    for (const call of api.list.mock.calls)
+      expect((call[8] as { departmentId?: string }).departmentId).toBe("dep-1");
+  });
+
+  it("drops a value nobody can identify, says so, and shows the whole list", async () => {
+    renderAt("partner=Nincs+Ilyen+Kft&location=Valami+%2F+Semmi");
+    expect(
+      await screen.findByText(
+        "A régi szűrő nem érvényes, a teljes lista látszik",
+      ),
+    ).toBeTruthy();
+    await screen.findByText("Jegy 3");
+    await settle();
+    // the list was asked once the options were known, and without the dropped filters
+    for (const call of api.list.mock.calls) {
+      expect((call[8] as { customerId?: string }).customerId).toBeUndefined();
+      expect(
+        (call[8] as { departmentId?: string }).departmentId,
+      ).toBeUndefined();
+    }
+    expect(screen.queryByText("Nincs találat")).toBeNull();
+    expect(navigation.replace).toHaveBeenLastCalledWith("/szerviz/hibajegyek", {
+      scroll: false,
+    });
+  });
+
+  it("keeps the URL's filter when the options cannot be loaded, and still loads the list", async () => {
+    api.facets.mockRejectedValue(new Error("nem elérhető"));
+    renderAt("partner=cust-beta");
+    await screen.findByText("Jegy 3");
+    await settle();
+    expect(lastExtra().customerId).toBe("cust-beta");
+  });
+
+  it("does not drop a chosen partner when a later search narrows the options", async () => {
+    renderAt("partner=cust-alfa");
+    await screen.findByText("Jegy 3");
+    api.facets.mockResolvedValue({ partners: [], locations: [] });
+    fireEvent.change(screen.getByLabelText("Hibajegy keresése"), {
+      target: { value: "szivattyu" },
+    });
+    await settle();
+    expect(api.facets).toHaveBeenCalledTimes(3);
+    expect(screen.queryByText(/A régi szűrő nem érvényes/)).toBeNull();
+    expect(lastExtra().customerId).toBe("cust-alfa");
+  });
+
+  it("resolveUrlFilters: an ambiguous name or leaf is dropped, an id stays", () => {
+    const twins = {
+      partners: [
+        { id: "p1", name: "Ikrek Kft" },
+        { id: "p2", name: "Ikrek Kft" },
+      ],
+      locations: [
+        { id: "l1", label: "A · Medence" },
+        { id: "l2", label: "B · Medence" },
+      ],
+    };
+    expect(resolveUrlFilters(twins, "p2", "l1")).toEqual({
+      partner: "p2",
+      location: "l1",
+      dropped: false,
+    });
+    expect(resolveUrlFilters(twins, "Ikrek Kft", "X / Medence")).toEqual({
+      partner: "Mind",
+      location: "Mind",
+      dropped: true,
+    });
   });
 });

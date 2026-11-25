@@ -20,7 +20,7 @@ import {
 } from "@acropora/types";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
@@ -319,6 +319,48 @@ export const JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
   },
 ];
 
+/**
+ * AZ URL-BŐL JÖVŐ PARTNER ÉS HELYSZÍN ELLENŐRZÉSE az első szűrő-lehetőségek ellen. Ismert azonosító: marad. Régi, NEVET hordozó érték:
+ * a partner neve egyértelműen megadja az azonosítót; a helyszín régi értéke az útvonal volt ("Cápárium / Nagy medence"), ennek az utolsó
+ * tagja egyértelműen egy lehetőség feliratának végére esik ("CAP · Nagy medence"). Ami így sem azonosítható, eldobódik (`dropped`),
+ * és a lap kimondja, mert egy üres lista itt a hibát nyugtatónak mutatná.
+ */
+export function resolveUrlFilters(
+  facets: ServiceJobListFacets,
+  partner: string,
+  location: string,
+): { partner: string; location: string; dropped: boolean } {
+  let dropped = false;
+  let nextPartner = partner;
+  if (
+    partner !== ALL_PARTNERS &&
+    !facets.partners.some((entry) => entry.id === partner)
+  ) {
+    const byName = facets.partners.filter((entry) => entry.name === partner);
+    if (byName.length === 1) nextPartner = byName[0]!.id;
+    else {
+      nextPartner = ALL_PARTNERS;
+      dropped = true;
+    }
+  }
+  let nextLocation = location;
+  if (
+    location !== ALL_LOCATIONS &&
+    !facets.locations.some((entry) => entry.id === location)
+  ) {
+    const leaf = location.split(" / ").pop() ?? location;
+    const byLeaf = facets.locations.filter(
+      (entry) => entry.label === leaf || entry.label.endsWith(` · ${leaf}`),
+    );
+    if (byLeaf.length === 1) nextLocation = byLeaf[0]!.id;
+    else {
+      nextLocation = ALL_LOCATIONS;
+      dropped = true;
+    }
+  }
+  return { partner: nextPartner, location: nextLocation, dropped };
+}
+
 /** A lábléc sor-tartománya: "26–50 / 61" a lapozott válaszra, "7" a lapozatlanra. */
 function pageRange(data: ServiceJobListResponse, page: number): string {
   if (!data.pagination) return String(data.items.length);
@@ -346,6 +388,18 @@ export function PilotServiceJobListPage() {
   const [facets, setFacets] = useState<ServiceJobListFacets | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /*
+    A RÉGI URL-EK (Luca könyvjelzői): a partner és a helyszín régen NEVET hordozott, ma azonosítót. Egy ismeretlen érték üres listát adna,
+    ami itt a hibát nyugtatónak mutatná. Ezért ha az URL-ből jön partner vagy helyszín, a lista kérése megvárja az első szűrő-lehetőségeket
+    (`filtersChecked`), és ott az érték vagy átíródik azonosítóra (a név egyértelműen egy partnert, illetve egy helyszínt jelöl), vagy
+    eldobódik, és a lap kimondja (`staleFilter`). CSAK AZ ELSŐ válaszra fut: később a lehetőségek a kereséssel szűkülnek, és egy
+    gépeléssel nem szabad kidobni a kiválasztott partnert.
+  */
+  const [filtersChecked, setFiltersChecked] = useState(
+    initial.partner === ALL_PARTNERS && initial.location === ALL_LOCATIONS,
+  );
+  const [staleFilter, setStaleFilter] = useState(false);
+  const checkedRef = useRef(filtersChecked);
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_VIEW),
   );
@@ -387,7 +441,7 @@ export function PilotServiceJobListPage() {
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
-      if (!canView) return;
+      if (!canView || !filtersChecked) return;
       setLoading(true);
       setError(null);
       try {
@@ -429,6 +483,7 @@ export function PilotServiceJobListPage() {
       canView,
       createdFrom,
       createdTo,
+      filtersChecked,
       includeHidden,
       location,
       page,
@@ -462,13 +517,26 @@ export function PilotServiceJobListPage() {
         { from: createdFrom, to: createdTo },
         tabStatuses ?? undefined,
       )
-      .then(setFacets)
+      .then((next) => {
+        setFacets(next);
+        if (checkedRef.current) return;
+        checkedRef.current = true;
+        const fixed = resolveUrlFilters(next, partner, location);
+        setPartner(fixed.partner);
+        setLocation(fixed.location);
+        if (fixed.dropped) setStaleFilter(true);
+        setFiltersChecked(true);
+      })
       .catch(() => {
-        // a szűrő-lehetőségek hiánya nem akasztja a listát: a legördülők csak a "Minden"-t kínálják
-        if (!controller.signal.aborted)
-          setFacets({ partners: [], locations: [] });
+        // a szűrő-lehetőségek hiánya nem akasztja a listát: a legördülők csak a "Minden"-t kínálják, az URL szűrője marad
+        if (controller.signal.aborted) return;
+        setFacets({ partners: [], locations: [] });
+        checkedRef.current = true;
+        setFiltersChecked(true);
       });
     return () => controller.abort();
+    // a partner és a helyszín szándékosan nincs a függésben: csak az ELSŐ válasznál számítanak (`checkedRef`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     appliedSearch,
     canView,
@@ -729,6 +797,14 @@ export function PilotServiceJobListPage() {
           ) : null}
         </div>
       </div>
+
+      {staleFilter ? (
+        <Alert
+          variant="info"
+          title="A régi szűrő nem érvényes, a teljes lista látszik"
+          description="A hivatkozásban álló partner vagy helyszín nem azonosítható, ezért nem szűr."
+        />
+      ) : null}
 
       {error ? (
         <Alert
