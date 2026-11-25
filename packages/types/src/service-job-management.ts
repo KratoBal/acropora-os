@@ -1,6 +1,7 @@
 import type {
   CommonServiceStatus,
   CommonServiceStatusReason,
+  PartnerClosedReason,
 } from "./common-service-status.js";
 import type { WorksheetVersionStatus } from "./worksheet-management.js";
 
@@ -85,6 +86,12 @@ export interface ServiceJobListItem {
    */
   commonStatus?: CommonServiceStatus;
   commonReason?: CommonServiceStatusReason | null;
+  /**
+   * A PARTNER LEZÁRT JEGYÉNEK KIMENETELE (kártya 7f23785c, 4. szelet; acrobot 61894): `CANCELLED`, ha a lezárt jegy meghiúsult, minden
+   * más esetben `null`. A partner `Lezárva` szava a teljesült és a meghiúsult jegyre is áll; ez a mező mondja ki a különbséget
+   * („Nem teljesült" második sor), és erre áll a dokumentumcsomag kapuja is. Opcionális, mint a `commonStatus`: a szerver mindig küldi.
+   */
+  partnerClosedReason?: PartnerClosedReason | null;
   customerName: string | null;
   /**
    * A HELYSZIN TELJES UTJA, a partner neve ala.
@@ -451,6 +458,12 @@ export interface ServiceJobDetail {
    */
   commonStatus?: CommonServiceStatus;
   commonReason?: CommonServiceStatusReason | null;
+  /**
+   * A PARTNER LEZÁRT JEGYÉNEK KIMENETELE (kártya 7f23785c, 4. szelet; acrobot 61894): `CANCELLED`, ha a lezárt jegy meghiúsult, minden
+   * más esetben `null`. A partner `Lezárva` szava a teljesült és a meghiúsult jegyre is áll; ez a mező mondja ki a különbséget
+   * („Nem teljesült" második sor), és erre áll a dokumentumcsomag kapuja is. Opcionális, mint a `commonStatus`: a szerver mindig küldi.
+   */
+  partnerClosedReason?: PartnerClosedReason | null;
   customerName: string | null;
   /**
    * A PARTNER AZONOSITOJA, A NEVE MELLE.
@@ -784,6 +797,16 @@ export const PARTNER_STATUS_LABELS: Record<ServiceJobPartnerStatus, string> = {
  * leképezés továbbra is EGY helyen áll. Az `apps/api` innen olvassa, a saját
  * Prisma-típusára szabott burkolókkal, és a séma-tükör őrzője ott is marad --
  * ez a csomag a kliensé is, tehát nem függhet az adatbázis-klienstől.
+ *
+ * === A COMPLETED 2026-11-25 ÓTA LEZÁRVA, NEM ELKÉSZÜLT (kártya 7f23785c) ===
+ *
+ * A közös állapot-listában az Elkészült a kész, de még aláírásra vagy
+ * átadásra váró munka, a lezárt (aláírt és átadott) jegy Lezárva. Ez a tábla
+ * a munkalapok tényei NÉLKÜL képez (napló-esemény, kimutatás, csomag-napló),
+ * tehát pontosan azt adja, amit a közös leképezés tények nélkül
+ * (`partnerStatusFromCommon(commonJobStatus(s, []))`; a teszt soronként
+ * összeveti). Az Elkészült így csak a lista és az adatlap jegyére áll be, ahol
+ * a szerver a lapokat is olvassa.
  */
 const PARTNER_STATUS: Record<ServiceJobStatusValue, ServiceJobPartnerStatus> = {
   NEW: "NEW",
@@ -792,7 +815,7 @@ const PARTNER_STATUS: Record<ServiceJobStatusValue, ServiceJobPartnerStatus> = {
   IN_PROGRESS: "IN_PROGRESS",
   WAITING_FOR_PARTS: "IN_PROGRESS",
   WAITING_FOR_CUSTOMER: "IN_PROGRESS",
-  COMPLETED: "COMPLETED",
+  COMPLETED: "CLOSED",
   CANCELLED: "CLOSED",
 };
 
@@ -911,6 +934,8 @@ export interface ServiceJobPartnerDetail {
   description: string | null;
   partnerStatus: ServiceJobPartnerStatus;
   partnerStatusLabel: string;
+  /** Lásd `ServiceJobDetail.partnerClosedReason`: a „Nem teljesült" sor és a csomag kapuja. */
+  partnerClosedReason?: PartnerClosedReason | null;
   departmentPath: string[] | null;
   createdAt: string;
   timeline: ServiceJobPartnerTimelineEntry[];
@@ -1023,11 +1048,22 @@ export type ServiceJobPartnerTimelineEntry =
  * A belso allapot (`status`) es a szamlalo-kulcsok maradnak: a partner portal
  * a `counts`-ot a belso allapotok szerint osszegzi
  * (`apps/partner/src/lib/ticket-scope-counts.ts`). Szemelyes adat nincs bennuk.
+ *
+ * A KOZOS ALLAPOT ES AZ OKA NEM MEGY KI (kartya 7f23785c, 4. szelet; barracuda
+ * 61910 kerdese): a `commonReason` belso munkaszervezes („alkatreszre",
+ * „atadasra var"), a partner a rovidebb listat kapja a `partnerStatus`-ban es a
+ * `partnerClosedReason`-ben. Ugyanaz az elv, mint a reszletlapon (2026-10-04, 2.
+ * dontes): a partner nem kap uj mezot, amit ma sem lat.
  */
 export function partnerServiceJobListItem(
   item: ServiceJobListItem,
 ): ServiceJobListItem {
-  const { assignees, ...partner } = item;
+  const {
+    assignees,
+    commonStatus: _commonStatus,
+    commonReason: _commonReason,
+    ...partner
+  } = item;
   return {
     ...partner,
     assigneeNames: (assignees ?? []).map((assignee) => assignee.name),
@@ -1061,6 +1097,7 @@ export function partnerServiceJobDetail(
       : {}),
     partnerStatus: detail.partnerStatus,
     partnerStatusLabel: detail.partnerStatusLabel,
+    partnerClosedReason: detail.partnerClosedReason ?? null,
     departmentPath: detail.departmentPath,
     createdAt: detail.createdAt,
     assets: detail.assets,

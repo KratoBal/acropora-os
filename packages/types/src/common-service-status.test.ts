@@ -251,23 +251,24 @@ describe("felirat és szín", () => {
 });
 
 /**
- * A PARTNER RÖVIDÍTÉSE A MAI `partnerVisibleStatus` MELLETT. A szándékos
- * eltérések név szerint állnak; minden más eltérés piros.
+ * A PARTNER RÖVIDÍTÉSE ÉS A TÉNYEK NÉLKÜLI `partnerVisibleStatus`. A 3. szeletig
+ * egy szándékos eltérés állt itt (a COMPLETED: ma Elkészült, a közösből
+ * Lezárva); a 4. szelet a `partnerVisibleStatus` tábláját is erre állította,
+ * mert a napló-esemény, a kimutatás és a csomag-napló ugyanazt a jegyet
+ * nevezi meg, mint a lista. Lap nélkül tehát a kettő soronként azonos; minden
+ * eltérés piros.
  */
 describe("partner-rövidítés a közösből", () => {
-  const SZANDEKOS: Record<string, [string, string]> = {
-    // Lezárt = aláírva és átadva (emlék 890): a partner is Lezárvát lát.
-    COMPLETED: ["COMPLETED", "CLOSED"],
-  };
-
-  it("lap nélkül csak a COMPLETED tér el a mai leképezéstől", () => {
+  it("lap nélkül a közös rövidítés és a partnerVisibleStatus soronként azonos", () => {
     const elteres: Record<string, [string, string]> = {};
     for (const status of ALL_SERVICE_JOB_STATUS_VALUES) {
       const ma = partnerVisibleStatus(status);
       const uj = partnerStatusFromCommon(commonJobStatus(status, [])).status;
       if (ma !== uj) elteres[status] = [ma, uj];
     }
-    assert.deepEqual(elteres, SZANDEKOS);
+    assert.deepEqual(elteres, {});
+    // a lezárt jegy Lezárva, akár teljesült, akár meghiúsult (emlék 890)
+    assert.equal(partnerVisibleStatus("COMPLETED"), "CLOSED");
   });
 
   it("a kész lapú IN_PROGRESS jegy a partnernek Elkészült (ma Feldolgozás alatt)", () => {
