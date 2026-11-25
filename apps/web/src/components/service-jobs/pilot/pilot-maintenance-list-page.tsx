@@ -38,9 +38,10 @@ import {
   PilotCard,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
-import { maintenanceSheetHref } from "../service-job-list-page";
+import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import {
   MAINTENANCE_TABS,
+  maintenanceSheetHref,
   maintenanceTotal,
   type MaintenanceTab,
 } from "../service-job-list-view";
@@ -286,6 +287,11 @@ export function PilotMaintenanceListPage() {
       bleed
       className={`flex min-h-screen flex-col gap-6 bg-pilot-grey-50 ${PAGE_GUTTER_X} py-8`}
     >
+      {/* kapcsolat nélkül a sáv a lap állapotáról szól: betöltött lista mellett a frissítésről, üres képernyőn a hiányról */}
+      <ServiceOfflineNotice
+        state={data ? { kind: "loaded" } : { kind: "empty" }}
+        pilot
+      />
       <PageHeader
         eyebrow="Szerviz / Munkatér"
         title="Karbantartás"

@@ -150,8 +150,8 @@ import {
  *
  * TÉVES FELTEVÉS ÁLLT ITT KORÁBBAN, acrobot javította (msg 23174,
  * 2026-09-24): a `/szerviz/hibajegyek/[id]` útvonal NEM csak hibajegyeket
- * (REPAIR) szolgál ki. A karbantartás-lista (`service-job-list-page.tsx`,
- * `kind="MAINTENANCE"`) MINDEN sorát erre az útvonalra viszi -- a
+ * (REPAIR) szolgál ki. A karbantartás-lista (akkor a régi közös lista,
+ * `kind="MAINTENANCE"`, 2026-11-26 óta törölve) MINDEN sorát erre az útvonalra viszi -- a
  * `/szerviz/karbantartas/` alatt NINCS saját `[id]/page.tsx`, csak
  * `page.tsx` (lista) és `uj/` (felvitel). A mai (nem-pilot)
  * `service-job-detail-page.tsx` ezért `job.kind === "MAINTENANCE"`
