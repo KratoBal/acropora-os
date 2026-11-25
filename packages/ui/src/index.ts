@@ -111,6 +111,7 @@ export {
   PilotMissingSummary,
   PilotFormActions,
   PilotFormLayout,
+  PILOT_FIELD_HINT_CLASS,
 } from "./pilot-form";
 export { CalculatorCard } from "./calculator-card";
 export type {

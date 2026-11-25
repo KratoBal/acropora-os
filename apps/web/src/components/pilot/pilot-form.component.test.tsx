@@ -6,6 +6,7 @@ import {
   PilotFormCard,
   PilotFormLayout,
   PilotMissingSummary,
+  PILOT_FIELD_HINT_CLASS,
 } from "@acropora/ui";
 import { describe, expect, it, vi } from "vitest";
 
@@ -184,5 +185,44 @@ describe("PilotFormLayout és a kártya", () => {
     ).toBeTruthy();
     // the card's title is the question
     expect(screen.getByRole("heading", { name: "Kinek és hol?" })).toBeTruthy();
+  });
+});
+
+describe("a súgó stílusa és a gombsor szélessége (a stage-képről, acrobot 2026-11-25)", () => {
+  it("the field help and the dependent-field sentence share one small grey class", () => {
+    expect(PILOT_FIELD_HINT_CLASS).toBe("text-xs text-pilot-grey-400");
+    render(
+      <PilotField
+        label="Partner"
+        requirement="optional"
+        htmlFor="p"
+        help="Segítő szöveg."
+      >
+        <input id="p" />
+      </PilotField>,
+    );
+    expect(screen.getByText("Segítő szöveg.").className).toBe(
+      PILOT_FIELD_HINT_CLASS,
+    );
+  });
+
+  it("Mégse keeps its own width and the save button takes the rest, so a long label stays on one line on a phone", () => {
+    render(
+      <PilotFormActions
+        missing={[]}
+        busy={false}
+        submitLabel="Karbantartási lap megnyitása"
+        busyLabel="Mentés…"
+        onCancel={vi.fn()}
+        onSubmit={vi.fn()}
+      />,
+    );
+    const cancel = screen.getByRole("button", { name: "Mégse" });
+    const save = screen.getByRole("button", {
+      name: "Karbantartási lap megnyitása",
+    });
+    expect(cancel.className).toContain("flex-none");
+    expect(cancel.className).not.toContain("flex-1");
+    expect(save.className).toContain("flex-1");
   });
 });

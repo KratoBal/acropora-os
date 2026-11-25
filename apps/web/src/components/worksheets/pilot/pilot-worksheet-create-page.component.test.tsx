@@ -127,6 +127,14 @@ describe("PilotWorksheetCreatePage partner picker", () => {
     });
   });
 
+  it("the asset hint under Érintett eszközök is the shared small grey hint, not italic", async () => {
+    worksheets.selectablePartners.mockResolvedValue({ items: [] });
+    render(<PilotWorksheetCreatePage />);
+    const hint = await screen.findByText(/Előbb válassz helyszínt/);
+    expect(hint.className).toBe("text-xs text-pilot-grey-400");
+    expect(hint.className).not.toContain("italic");
+  });
+
   it("offers service partners and leaves the buyers alone", async () => {
     worksheets.selectablePartners.mockResolvedValue({
       items: [

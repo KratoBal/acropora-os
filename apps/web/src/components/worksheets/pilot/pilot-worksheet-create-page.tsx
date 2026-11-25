@@ -10,6 +10,7 @@ import {
   PilotFormActions,
   PilotFormCard,
   PilotFormLayout,
+  PILOT_FIELD_HINT_CLASS,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -697,7 +698,7 @@ export function PilotWorksheetCreatePage() {
                   onChange={setAssetIds}
                 />
               ) : (
-                <p className="text-xs italic text-pilot-grey-400">
+                <p className={PILOT_FIELD_HINT_CLASS}>
                   Előbb válassz helyszínt: az eszközök a helyszín részfájából
                   jönnek.
                 </p>

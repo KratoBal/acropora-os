@@ -11,6 +11,7 @@ import {
   PilotFormLayout,
   PilotInput,
   PilotSelect,
+  PILOT_FIELD_HINT_CLASS,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -608,12 +609,12 @@ export function ServiceJobEditorPage({
                   nezne ki, mintha a partnernek nem lenne helyszine.
                 */}
                 {!customer ? (
-                  <p className="text-sm text-pilot-grey-500">
+                  <p className={PILOT_FIELD_HINT_CLASS}>
                     Előbb válassz partnert. A helyszínek a partner saját fájából
                     jönnek.
                   </p>
                 ) : !departmentsLoaded ? (
-                  <p className="text-sm text-pilot-grey-500">
+                  <p className={PILOT_FIELD_HINT_CLASS}>
                     Helyszínek betöltése...
                   </p>
                 ) : nincsValaszthatoHelyszin ? (
@@ -690,6 +691,7 @@ export function ServiceJobEditorPage({
                 </p>
               ) : (
                 <JobAssetPicker
+                  hintClassName={PILOT_FIELD_HINT_CLASS}
                   departmentId={departmentId}
                   selected={assetIds}
                   onChange={setAssetIds}

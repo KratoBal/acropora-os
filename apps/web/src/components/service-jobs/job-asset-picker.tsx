@@ -54,6 +54,7 @@ export function JobAssetPicker({
   selected,
   onChange,
   maintenance = false,
+  hintClassName,
 }: {
   /** A kivalasztott helyszin. Ures szoveg: meg nincs. */
   departmentId: string;
@@ -62,6 +63,8 @@ export function JobAssetPicker({
   onChange: (assetIds: string[]) => void;
   /** Karbantartási lapon a mondatok a lap szavát mondják, nem a jegyét (Balázs, 2026-11-18 11:31 UTC; acrobot 56118). */
   maintenance?: boolean;
+  /** Az "Előbb válassz helyszínt" mondat osztálya: az űrlap-váz a súgó stílusát adja (PILOT_FIELD_HINT_CLASS); elhagyva a régi. */
+  hintClassName?: string;
 }) {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -257,7 +260,7 @@ export function JobAssetPicker({
 
   if (!departmentId)
     return (
-      <p className="text-sm text-dusk-500">
+      <p className={hintClassName ?? "text-sm text-dusk-500"}>
         Előbb válassz helyszínt. Az eszközök a helyszínhez és az alatta lévő
         egységekhez tartoznak.
       </p>

@@ -133,6 +133,12 @@ describe("az új hibajegy űrlap szerkezete", () => {
     expect(titles).toEqual(["Kinek és hol?", "Mi a munka?", "Ki felel érte?"]);
   });
 
+  it("a függő mező mondata a súgó stílusát viseli (kicsi, szürke), nem nagy és sötét", () => {
+    render(<PilotServiceJobEditorPage />);
+    const hint = screen.getByText(/Előbb válassz partnert/);
+    expect(hint.className).toBe("text-xs text-pilot-grey-400");
+  });
+
   it("a kötelező mezők csillagosak, a többi '(nem kötelező)' (a két jel egy szabály)", () => {
     render(<PilotServiceJobEditorPage />);
     for (const name of ["Partner", "Helyszín", "Mi a baj?"]) {
