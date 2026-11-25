@@ -194,9 +194,14 @@ export function TicketList({ kind = "REPAIR" }: { kind?: TicketKind }) {
       ) : null}
 
       {data?.items.length ? (
-        <div className="flex-1 overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse text-sm">
-            <thead>
+        /*
+          TELEFONON KÁRTYALISTA (picasso képernyő-leltára, 2026-11-25, f0b70dbd): 390 px-en a 720 px-es tábla jobbra kifutott, a
+          helyszín és az állapot nem látszott. Ugyanaz a `<table>`, csak az `md` alatt blokk-elrendezésre vált (mint a közös
+          `PilotDataTable`): a sor egy kártya, a cím alatt a helyszín, az állapot és a dátum. A fejléc a képernyőolvasónak marad.
+        */
+        <div className="flex-1 md:overflow-x-auto">
+          <table className="w-full border-collapse text-sm max-md:block md:min-w-[720px]">
+            <thead className="max-md:sr-only">
               <tr className="border-b border-pilot-grey-100">
                 {[words.column, "Helyszín", "Állapot", "Létrehozva"].map(
                   (col) => (
@@ -210,15 +215,15 @@ export function TicketList({ kind = "REPAIR" }: { kind?: TicketKind }) {
                 )}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="max-md:block">
               {data.items.map((ticket, index) => (
                 <tr
                   key={ticket.id}
-                  className={`border-b border-pilot-grey-100 transition-colors hover:bg-pilot-aqua-50/40 ${
+                  className={`border-b border-pilot-grey-100 transition-colors hover:bg-pilot-aqua-50/40 max-md:block max-md:px-5 max-md:py-3 ${
                     index % 2 === 0 ? "bg-white" : "bg-pilot-grey-50/50"
                   }`}
                 >
-                  <td className="px-5 py-3">
+                  <td className="px-5 py-3 max-md:block max-md:p-0">
                     <Link
                       className="font-medium text-pilot-grey-900 hover:text-pilot-aqua-700"
                       href={ticketHref(kind, ticket.id)}
@@ -234,11 +239,11 @@ export function TicketList({ kind = "REPAIR" }: { kind?: TicketKind }) {
                       </p>
                     ) : null}
                   </td>
-                  <td className="px-5 py-3 text-pilot-grey-500">
+                  <td className="px-5 py-3 text-pilot-grey-500 max-md:block max-md:p-0 max-md:pt-1.5 max-md:text-xs">
                     {ticket.departmentPath?.join(" / ") ??
                       "Helyszín nincs megadva"}
                   </td>
-                  <td className="px-5 py-3">
+                  <td className="px-5 py-3 max-md:inline-block max-md:p-0 max-md:pr-3 max-md:pt-2">
                     {kind === "MAINTENANCE" ? (
                       /* a karbantartásnak nincs állapotgépe: a sor állapota a "kész" jelző (minden munkalap aláírva), nem a hibajegy partneri állapota */
                       <PilotBadge
@@ -256,7 +261,7 @@ export function TicketList({ kind = "REPAIR" }: { kind?: TicketKind }) {
                       </PilotBadge>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-5 py-3 text-pilot-grey-500">
+                  <td className="whitespace-nowrap px-5 py-3 text-pilot-grey-500 max-md:inline-block max-md:p-0 max-md:pt-2 max-md:text-xs">
                     <time dateTime={ticket.createdAt}>
                       {dateFormatter.format(new Date(ticket.createdAt))}
                     </time>
