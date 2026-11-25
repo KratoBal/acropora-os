@@ -244,7 +244,7 @@ export class WebshopOrderInvoiceService {
           loyaltyShape: loyaltyInvoiceShapeOf(),
         });
     if (!draft.ok) throw new UnprocessableEntityException(draft.message);
-    const saved: BillingDocumentDetail = proforma
+    let saved: BillingDocumentDetail = proforma
       ? await this.documents.update(
           proforma.id,
           this.dto({
@@ -255,8 +255,15 @@ export class WebshopOrderInvoiceService {
           }),
         )
       : await this.documents.create(this.dto(draft.draft), user);
-    // the document carries what it is (card 2c5fbfb5): the shop is told an advance only for a proforma made as one
-    await this.repository.markProformaAdvance(saved.id, advance !== undefined);
+    /*
+      the document carries what it is (card 2c5fbfb5): the shop is told an advance only for a proforma made as one. A changed mark
+      is a write, so the draft's `updatedAt` moves: the issue checks it (`billing-document-issue.service`, "A vázlatot időközben
+      mentették"), so the send goes on with the fresh one, not the one the save answered (the #2844 regression, acrobot 61414).
+    */
+    if (
+      await this.repository.markProformaAdvance(saved.id, advance !== undefined)
+    )
+      saved = await this.documents.detail(saved.id);
     return { kind: "draft", saved, order };
   }
 
