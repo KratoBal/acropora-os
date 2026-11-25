@@ -160,6 +160,20 @@ function closeFailure(reason: WorksheetCloseFailure) {
 const PARTNER_NO_TICKET_MESSAGE =
   "Ez a munkalap még nem írható alá: hiányzik hozzá a hibajegy. Szólj nekünk, és pótoljuk.";
 
+/**
+ * A LEZÁRT LAP KIOSZTÁSÁNAK TILTÁSA (acrobot, 2026-11-25, technikai döntés): a felelősök és az eszközök egy aláírt lapon nem módosíthatók (409). Ha
+ * az irodának javítania kell, az a munkalap újranyitásán (új verzió, indoklással) át megy; admin kivétel nincs.
+ */
+const CLOSED_ASSIGNMENT_MESSAGE = (what: string) =>
+  `A lezárt munkalap ${what} nem módosíthatók. Javításhoz nyisd újra a munkalapot új verzióban, indoklással.`;
+
+/** Két azonosító-lista ugyanaz a HALMAZ-e (sorrend és ismétlés nélkül). */
+function sameIds(a: readonly string[], b: readonly string[]): boolean {
+  const left = new Set(a);
+  const right = new Set(b);
+  return left.size === right.size && [...left].every((id) => right.has(id));
+}
+
 @Injectable()
 export class WorksheetsService {
   /**
@@ -738,8 +752,19 @@ export class WorksheetsService {
       actor,
       "A munkalap felelőseinek beállítása",
     );
-    await this.requireWorksheet(id, scope);
+    const worksheet = await this.requireWorksheet(id, scope);
     const userIds = normalizeAssigneeIds(input.userIds);
+    // egy lezárt (aláírt) lap felelősei nem módosíthatók; a VÁLTOZATLAN lista maradhat 200, írás nélkül (acrobot, 2026-11-25)
+    if (this.isClosed(worksheet)) {
+      if (
+        sameIds(
+          worksheet.assignees.map((row) => row.userId),
+          userIds,
+        )
+      )
+        return this.detailAfterWrite(id);
+      throw new ConflictException(CLOSED_ASSIGNMENT_MESSAGE("felelősei"));
+    }
     // a már rajta lévők maradhatnak (egy rájuk kiosztott gépi fiók sem akadályoz), csak az ÚJAK mennek át a szűrőn
     await this.requireAssignableUsers(
       userIds,
@@ -981,6 +1006,17 @@ export class WorksheetsService {
       "A munkalap eszközeinek beállítása",
     );
     const worksheet = await this.requireWorksheet(id, scope);
+    // egy lezárt (aláírt) lap eszközei sem módosíthatók; a VÁLTOZATLAN lista maradhat 200, írás nélkül (acrobot, 2026-11-25)
+    if (this.isClosed(worksheet)) {
+      if (
+        sameIds(
+          worksheet.assets.map((row) => row.assetId),
+          input.assetIds,
+        )
+      )
+        return this.detailAfterWrite(id);
+      throw new ConflictException(CLOSED_ASSIGNMENT_MESSAGE("eszközei"));
+    }
     const assetIds = await this.requireAssetsInDepartment(
       input.assetIds,
       worksheet.departmentId,
@@ -1947,6 +1983,11 @@ export class WorksheetsService {
         "A megadott dátum érvénytelen. Használj éééé-hh-nn alakot.",
       );
     }
+  }
+
+  /** A lap LEZÁRT, ha a jelenlegi verziója aláírt (felirat: "Lezárva"). */
+  private isClosed(worksheet: WorksheetDetailRow): boolean {
+    return worksheet.versions[0]?.status === "SIGNED";
   }
 
   private async requireWorksheet(
