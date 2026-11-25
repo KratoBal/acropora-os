@@ -50,7 +50,7 @@ function sessionAs(role: Session["user"]["role"]): Session {
  * harom helyett -- vagyis a keszlet nem kulonboztetett.
  */
 async function listaSora(nev: string) {
-  const lista = await screen.findByLabelText("Látható alegységek");
+  const lista = await screen.findByLabelText("Látható helyszínek");
   return within(lista).getByText(nev);
 }
 
@@ -74,7 +74,7 @@ describe("UserVisibleUnits", () => {
     jobs.unassignUnit.mockReset().mockResolvedValue({ ok: true });
   });
 
-  it("kilistázza a hozzárendelt alegységeket", async () => {
+  it("kilistázza a hozzárendelt helyszíneket", async () => {
     render(
       <UserVisibleUnits userId="target-1" role="SERVICE" binding="supplier" />,
     );
@@ -90,11 +90,11 @@ describe("UserVisibleUnits", () => {
    * kinalja. Ket allitas: a szabad alegyseg OTT VAN, a mar hozzarendelt NINCS.
    * Az elso nelkul a masodik akkor is zold lenne, ha a legordulo URES.
    */
-  it("csak a még nem hozzárendelt alegységeket kínálja", async () => {
+  it("csak a még nem hozzárendelt helyszíneket kínálja", async () => {
     render(
       <UserVisibleUnits userId="target-1" role="SERVICE" binding="supplier" />,
     );
-    const valaszto = await screen.findByLabelText("Alegység hozzáadása");
+    const valaszto = await screen.findByLabelText("Helyszín hozzáadása");
 
     expect(screen.getByRole("option", { name: "PPU - Pingvin" })).toBeTruthy();
     expect(screen.queryByRole("option", { name: "BIO - Biotóp" })).toBeNull();
@@ -119,14 +119,14 @@ describe("UserVisibleUnits", () => {
     expect(jobs.visibilityAssignments).not.toHaveBeenCalled();
   });
 
-  it("hozzáad egy alegységet, és utána újratölt", async () => {
+  it("hozzáad egy helyszínt, és utána újratölt", async () => {
     render(
       <UserVisibleUnits userId="target-1" role="SERVICE" binding="supplier" />,
     );
     await listaSora("BIO - Biotóp");
     expect(jobs.visibilityAssignments).toHaveBeenCalledTimes(1);
 
-    fireEvent.change(screen.getByLabelText("Alegység hozzáadása"), {
+    fireEvent.change(screen.getByLabelText("Helyszín hozzáadása"), {
       target: { value: "u2" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Hozzáadás" }));
@@ -155,7 +155,7 @@ describe("UserVisibleUnits", () => {
     fireEvent.click(screen.getByRole("button", { name: "Levétel" }));
 
     expect(
-      await screen.findByText("Leveszed ezt az alegységet a fiókról?"),
+      await screen.findByText("Leveszed ezt a helyszínt a fiókról?"),
     ).toBeTruthy();
     expect(jobs.unassignUnit).not.toHaveBeenCalled();
   });
@@ -185,20 +185,20 @@ describe("UserVisibleUnits", () => {
    */
   it("a szerver elutasítását szó szerint mutatja", async () => {
     jobs.assignUnit.mockRejectedValue(
-      new Error("Ez az alegység másik partnerhez tartozik."),
+      new Error("Ez a helyszín másik partnerhez tartozik."),
     );
     render(
       <UserVisibleUnits userId="target-1" role="SERVICE" binding="supplier" />,
     );
     await listaSora("BIO - Biotóp");
 
-    fireEvent.change(screen.getByLabelText("Alegység hozzáadása"), {
+    fireEvent.change(screen.getByLabelText("Helyszín hozzáadása"), {
       target: { value: "u2" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Hozzáadás" }));
 
     expect(
-      await screen.findByText("Ez az alegység másik partnerhez tartozik."),
+      await screen.findByText("Ez a helyszín másik partnerhez tartozik."),
     ).toBeTruthy();
   });
 
@@ -219,7 +219,7 @@ describe("UserVisibleUnits", () => {
     );
 
     expect(await screen.findByText("Nem tölthető be")).toBeTruthy();
-    expect(screen.queryByText("Nincs hozzárendelt alegység")).toBeNull();
+    expect(screen.queryByText("Nincs hozzárendelt helyszín")).toBeNull();
   });
 
   /**
@@ -238,9 +238,9 @@ describe("UserVisibleUnits", () => {
       <UserVisibleUnits userId="target-1" role="SERVICE" binding="supplier" />,
     );
 
-    expect(await screen.findByText("Nincs hozzárendelt alegység")).toBeTruthy();
+    expect(await screen.findByText("Nincs hozzárendelt helyszín")).toBeTruthy();
     expect(
-      screen.getByText(/Alegység akkor jelenik meg itt, ha a fiók szerviz/),
+      screen.getByText(/Helyszín akkor jelenik meg itt, ha a fiók szerviz/),
     ).toBeTruthy();
     expect(screen.queryByText("Nem tölthető be")).toBeNull();
   });
@@ -269,7 +269,7 @@ describe("UserVisibleUnits: az üres választó mondata", () => {
       <UserVisibleUnits userId="target-1" role="SERVICE" binding="customer" />,
     );
 
-    const mondat = await screen.findByText(/nincs választható alegység/);
+    const mondat = await screen.findByText(/nincs választható helyszín/);
     expect(mondat.textContent).toContain("a fiók vevője alatt");
     // MI PIROSIT: a regi, mindenre egyforma szoveg. A "tukor-vevo" egy vevohoz
     // kotott fioknal ertelmetlen szo.
@@ -287,7 +287,7 @@ describe("UserVisibleUnits: az üres választó mondata", () => {
       <UserVisibleUnits userId="target-1" role="SERVICE" binding="supplier" />,
     );
 
-    const mondat = await screen.findByText(/nincs választható alegység/);
+    const mondat = await screen.findByText(/nincs választható helyszín/);
     expect(mondat.textContent).toContain("tükör-vevő");
   });
 

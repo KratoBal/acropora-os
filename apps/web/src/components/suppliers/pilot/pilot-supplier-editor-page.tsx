@@ -52,7 +52,7 @@ import {
  * Forrás: `exchange/figma-partnerek-make-13/src/PartnersScreen.tsx`
  * `PartnerDetailPage` (773-1198. sor). A régi (nem pilot) `SupplierEditorPage`
  * kártya-SORRENDJE már eddig is pontosan a terv szerint állt (Alapadatok →
- * Alegységek → Bankszámla → Cím → Ügyintéző), ezért ez a port ELSŐSORBAN
+ * Helyszínek → Bankszámla → Cím → Ügyintéző), ezért ez a port ELSŐSORBAN
  * stílus-váltás: `@acropora/ui` `Card`/`Button`/`Input`/`Select`/`FormField`
  * helyett a megosztott pilot komponensek, ugyanazzal az adattal, hívással,
  * validációval és jogosultsággal, ami eddig is itt állt.
@@ -152,7 +152,7 @@ export function PilotSupplierEditorPage({
         void suppliersApi
           .units(token, next.id)
           .then((response) => setUnits(response.items))
-          .catch(() => setUnitError("Az alegységek nem tölthetők be."));
+          .catch(() => setUnitError("A helyszínek nem tölthetők be."));
         setIban(next.iban ?? "");
         setSwiftCode(next.swiftCode ?? "");
         setBankAccountNumber(next.bankAccountNumber ?? "");
@@ -381,7 +381,7 @@ export function PilotSupplierEditorPage({
       setUnitError(
         cause instanceof Error
           ? cause.message
-          : "Az alegység módosítása nem sikerült.",
+          : "A helyszín módosítása nem sikerült.",
       );
     } finally {
       setUnitBusy(false);
@@ -416,7 +416,7 @@ export function PilotSupplierEditorPage({
       setUnitError(
         cause instanceof Error
           ? cause.message
-          : "Az alegység felvitele nem sikerült.",
+          : "A helyszín felvitele nem sikerült.",
       );
     }
   };
@@ -706,10 +706,10 @@ export function PilotSupplierEditorPage({
                 gets a worksheet. */}
             {supplier && isService ? (
               <PilotCard>
-                <PilotCardHeader title="Alegységek" />
+                <PilotCardHeader title="Helyszínek" />
                 <div className="px-5 pt-3">
                   <p className="text-xs text-pilot-grey-400">
-                    Az alegység kódja a munkalapszám első tagja (például a BIO a
+                    A helyszín kódja a munkalapszám első tagja (például a BIO a
                     BIO-2026-001 számban). Legfeljebb három betű vagy szám, a
                     kettő keverhető is.
                   </p>
@@ -740,7 +740,7 @@ export function PilotSupplierEditorPage({
                         {editingUnitId === unit.id ? (
                           <>
                             <PilotInput
-                              aria-label="Alegység új neve"
+                              aria-label="Helyszín új neve"
                               value={unitDraftName}
                               onChange={setUnitDraftName}
                             />
@@ -821,7 +821,7 @@ export function PilotSupplierEditorPage({
                   </ul>
                 ) : (
                   <p className="px-5 py-4 text-sm text-pilot-grey-400">
-                    Ehhez a partnerhez még nincs alegység.
+                    Ehhez a partnerhez még nincs helyszín.
                   </p>
                 )}
                 <div className="grid grid-cols-1 gap-4 border-t border-pilot-grey-100 p-5 sm:grid-cols-[12rem_8rem_minmax(0,1fr)_auto]">
@@ -849,7 +849,7 @@ export function PilotSupplierEditorPage({
                   </PilotFormField>
                   <PilotFormField label="Kód">
                     <PilotInput
-                      aria-label="Alegység kódja"
+                      aria-label="Helyszín kódja"
                       value={newUnit.code}
                       onChange={(value) =>
                         setNewUnit((current) => ({
@@ -862,7 +862,7 @@ export function PilotSupplierEditorPage({
                   </PilotFormField>
                   <PilotFormField label="Megnevezés">
                     <PilotInput
-                      aria-label="Alegység neve"
+                      aria-label="Helyszín neve"
                       value={newUnit.name}
                       onChange={(value) =>
                         setNewUnit((current) => ({ ...current, name: value }))
@@ -899,12 +899,12 @@ export function PilotSupplierEditorPage({
               open={pendingArchive !== null}
               title={
                 pendingArchive
-                  ? `Archiválod ezt az alegységet: ${pendingArchive.name}?`
-                  : "Archiválod ezt az alegységet?"
+                  ? `Archiválod ezt a helyszínt: ${pendingArchive.name}?`
+                  : "Archiválod ezt a helyszínt?"
               }
               consequence="Új munkalapot nem lehet rá nyitni, és a választókban nem jelenik meg. A már meglévő munkalapokon ott marad, ahol eddig is volt."
               recovery="Ugyanitt visszaállítható: az archivált sor a listában marad, Visszaállítás gombbal."
-              confirmLabel="Alegység archiválása"
+              confirmLabel="Helyszín archiválása"
               busy={unitBusy}
               onConfirm={() => {
                 const unit = pendingArchive;

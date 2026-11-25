@@ -14,7 +14,7 @@ import { PilotAssetListPage } from "./pilot-asset-list-page";
   A LISTA RENDEZÉSE AZ OSZLOPFEJEN (Balázs kérése, kártya 2f6369a4). MI PIROSÍT: ha az Eszköz, a Partner vagy a Státusz fejléce nem a
   saját szerver-mezőjét írja az URL-be (név, elhelyezés, állapot); ha a ciklus (növekvő, csökkenő, alap) elakad; ha a rendezés nem
   nullázza a lapot, vagy elveszíti a szűrőt; ha az URL rendezése nem jut a kérésbe, vagy egy ismeretlen mező igen; ha egy másik oszlop
-  (kategória, alegység, hierarchia, gyártó) rendezhetőnek látszik.
+  (kategória, helyszín, hierarchia, gyártó) rendezhetőnek látszik.
 */
 const state = vi.hoisted(() => ({
   session: null as Session | null,

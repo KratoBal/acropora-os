@@ -292,8 +292,8 @@ export function TemplateAssetListEditor({
                   {locationAssets.length >= LOCATION_PAGE ? (
                     <p className="text-xs text-amber-700">
                       A lista az első {LOCATION_PAGE} eszközt mutatja; a
-                      helyszínen több lehet. Válaszd a helyszín egy alegységét,
-                      vagy keress szám szerint lent.
+                      helyszínen több lehet. Válaszd a helyszín egy részét, vagy
+                      keress szám szerint lent.
                     </p>
                   ) : null}
                   <div className="flex flex-wrap gap-2">

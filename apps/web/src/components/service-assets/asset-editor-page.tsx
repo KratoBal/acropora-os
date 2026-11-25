@@ -402,7 +402,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
           setError(
             cause instanceof Error
               ? cause.message
-              : "A partner alegységei nem tölthetők be.",
+              : "A partner helyszínei nem tölthetők be.",
           );
       });
     return () => controller.abort();
@@ -512,7 +512,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
      * ez csak a gyorsabb visszajelzés.
      */
     if (owner.type === "SUPPLIER" && !departmentId) {
-      setError("Szerviz partner eszközéhez alegység megadása kötelező.");
+      setError("Szerviz partner eszközéhez helyszín megadása kötelező.");
       return;
     }
     const interval = serviceIntervalDays
@@ -787,13 +787,13 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
               <PilotFormField
                 label={
                   owner?.type === "SUPPLIER"
-                    ? "Alegység (kötelező)"
-                    : "Alegység"
+                    ? "Helyszín (kötelező)"
+                    : "Helyszín"
                 }
-                help="A partner alegysége, ahol az eszköz áll. Ugyanaz a lista, amit a partner adatlapján Alegységek néven szerkesztesz. Szerviz partner tulajdonosnál kötelező."
+                help="A partner helyszíne, ahol az eszköz áll. Ugyanaz a lista, amit a partner adatlapján Helyszínek néven szerkesztesz. Szerviz partner tulajdonosnál kötelező."
               >
                 <PilotSelect
-                  aria-label="Alegység"
+                  aria-label="Helyszín"
                   value={departmentId}
                   // Tulajdonos nelkul nincs mit felajanlani: az eszkoznek
                   // PONTOSAN egy tulajdonosa van (adatbazis-megkotes), es az
@@ -826,7 +826,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
               </PilotFormField>
               <PilotFormField
                 label="Szülőeszköz"
-                help="A partner aktív eszközei, az alegység szerint szűkítve. Keress név, kód vagy matrica szerint. Az eszköz maga és a beépített eszközei nem választhatók."
+                help="A partner aktív eszközei, a helyszín szerint szűkítve. Keress név, kód vagy matrica szerint. Az eszköz maga és a beépített eszközei nem választhatók."
               >
                 <div className="space-y-2">
                   <PilotInput

@@ -76,7 +76,7 @@ import {
  *
  * === A BAL OLDALI HELYSZÍN-FA VÁLTOZATLAN MARAD ("varrat") ===
  *
- * A Figma-terv NEM mutat helyszín-fát, csak egy sima "Alegység"
+ * A Figma-terv NEM mutat helyszín-fát, csak egy sima "Helyszín"
  * legördülőt. A mai fa TÖBBET tud (több csomópont egyszerre
  * kiválasztható, Balázs kérése), ez a képesség nem tűnhet el csendben --
  * ugyanaz az elv, mint a hibajegyes/akváriumos köröknél az összetett,
@@ -85,9 +85,9 @@ import {
  *
  * === AMI A TERVBEN VAN, DE A MAI ADATBAN NINCS -- NEM TALÁLTUK KI ===
  *
- * A Figma tábla oszlopai (Eszköz, Partner, Alegység, Kategória, Gyártó és
+ * A Figma tábla oszlopai (Eszköz, Partner, Helyszín, Kategória, Gyártó és
  * modell, Hierarchia, Státusz) a valós `AssetListItem` mezőkből épülnek.
- * A "Partner" és "Alegység" a mai listán EGY "Elhelyezés" oszlopba van
+ * A "Partner" és "Helyszín" a mai listán EGY "Elhelyezés" oszlopba van
  * összevonva (tulajdonos + hely) -- ezt a Figma két oszlopra bontja, és
  * mivel mindkét adat MEGVAN, ez a bontás átvehető adatvesztés nélkül.
  */
@@ -137,7 +137,7 @@ export const ASSET_COLUMNS: PilotTableColumn<AssetRow>[] = [
   },
   {
     id: "unit",
-    header: "Alegység",
+    header: "Helyszín",
     width: "200px",
     cell: (asset) => (
       <span className="text-xs text-pilot-grey-500">

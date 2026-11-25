@@ -1,7 +1,7 @@
 /**
  * AZ ALEGYSÉG-SZŰRŐ A CÍMSORBAN, HALMAZKÉNT.
  *
- * A szerver 2026-08-31 óta több alegységet is elfogad (`departmentIds`), és a
+ * A szerver 2026-08-31 óta több helyszínt is elfogad (`departmentIds`), és a
  * részfáik unióját adja vissza. A választó ezért HALMAZ, nem egy érték: Balázs
  * kimondta, hogy egy emberhez több csomópont is rendelhető, és egy egy-értékű
  * választót később nem bővíteni kell, hanem újraírni.

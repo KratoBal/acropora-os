@@ -11,7 +11,7 @@ export const DEFAULT_PAGE_SIZE = String(PAGE_SIZES[0]);
 /**
  * A LISTA RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4): a táblázat oszlop-azonosítója -> a szerver rendezési mezeje
  * (`ASSET_LIST_SORTS`: név, állapot, elhelyezés). A "Hierarchia" és a "Gyártó és modell" nem egy adat, hanem több összerakva, a
- * "Kategória" és az "Alegység" pedig nem szerepel a szerver fehér listáján: azok rendezése külön döntés. Az állapot a SÉMA
+ * "Kategória" és a "Helyszín" pedig nem szerepel a szerver fehér listáján: azok rendezése külön döntés. Az állapot a SÉMA
  * sorrendjében rendez (üzemel, tartalék, javítás alatt, üzemen kívül, kivezetve), nem a felirat betűrendjében.
  */
 export const ASSET_SORT_COLUMNS = {
