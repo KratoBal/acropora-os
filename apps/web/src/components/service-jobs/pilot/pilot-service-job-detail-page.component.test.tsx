@@ -896,14 +896,43 @@ describe("PilotServiceJobDetailPage -- a régi lapról áthozott őrök", () => 
       (await screen.findAllByRole("button", { name: /Felelős kiosztása/ }))[0]!,
     );
     fireEvent.click(await screen.findByRole("button", { name: /Éva/ }));
-    // Sanyi is not in the assignable list (a service account would not be either): his chip says his NAME, not the raw id (card b2e74712)
-    expect(screen.getByRole("button", { name: /Sanyi\s*×/ })).toBeTruthy();
-    expect(document.body.textContent).not.toContain("user-sanyi");
     fireEvent.click(screen.getByRole("button", { name: "Felelős mentése" }));
 
     await waitFor(() =>
       expect(api.setAssignees).toHaveBeenCalledWith("token-1", "job-1", {
         userIds: ["user-sanyi", "user-eva"],
+      }),
+    );
+  });
+
+  /*
+    A GÉPI FIÓK, AMELY MÁR A JEGYEN ÁLL, DE A LISTÁN NEM SZEREPEL (card b2e74712). MI PIROSÍT: ha a címkéje a nyers azonosítót írja; ha a mentés
+    elhagyja (a lista nem kínálja, de a rá kiosztott sor marad, és a szerver is megtartja).
+  */
+  it("a listán nem szereplő, már kiosztott gépi fiók a nevét mutatja a címkén, és a mentés megtartja", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        assignees: [
+          {
+            userId: "user-bot",
+            name: "Acro Bot",
+            assignedAt: "2026-09-13T08:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    api.setAssignees.mockResolvedValue(detail());
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: /Felelős kiosztása/ }))[0]!,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /Éva/ }));
+    expect(screen.getByRole("button", { name: /Acro Bot\s*×/ })).toBeTruthy();
+    expect(document.body.textContent).not.toContain("user-bot");
+    fireEvent.click(screen.getByRole("button", { name: "Felelős mentése" }));
+    await waitFor(() =>
+      expect(api.setAssignees).toHaveBeenCalledWith("token-1", "job-1", {
+        userIds: ["user-bot", "user-eva"],
       }),
     );
   });
