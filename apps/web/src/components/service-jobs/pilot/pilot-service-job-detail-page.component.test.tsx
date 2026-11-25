@@ -599,6 +599,11 @@ describe("PilotServiceJobDetailPage -- redesign", () => {
       (button) => button.textContent,
     );
     expect(buttons).toEqual(["Tovább → Ütemezve", "Tovább → Meghiúsult"]);
+    // f0b70dbd: one primary button, the main step; the others stay, as secondary
+    const primary = Array.from(panel.querySelectorAll("button")).map((button) =>
+      button.className.includes("bg-pilot-aqua-600"),
+    );
+    expect(primary).toEqual([true, false]);
   });
 
   it("says there is no further step when the server allows none", async () => {

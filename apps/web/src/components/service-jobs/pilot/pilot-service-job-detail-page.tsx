@@ -962,7 +962,7 @@ export function PilotServiceJobDetailPage({
                   <Link
                     href={`/szerviz/munkalapok/uj?hibajegy=${encodeURIComponent(jobId)}`}
                   >
-                    <PilotButton variant="primary">Új munkalap</PilotButton>
+                    <PilotButton variant="secondary">Új munkalap</PilotButton>
                   </Link>
                 ) : undefined
               }
@@ -1296,10 +1296,15 @@ export function PilotServiceJobDetailPage({
                       </p>
                     </div>
                     <div className="flex flex-col gap-2">
-                      {job.allowedSteps.map((to) => (
+                      {/*
+                        EGY ELSŐDLEGES GOMB (picasso képernyő-leltára, 2026-11-25, f0b70dbd): az első megengedett lépés a
+                        menet fő iránya (`service-job-transitions.ts`: előre áll elöl, a várakozás és a meghiúsulás utána),
+                        a többi lépés ugyanúgy megmarad, másodlagos gombként.
+                      */}
+                      {job.allowedSteps.map((to, index) => (
                         <PilotButton
                           key={to}
-                          variant="primary"
+                          variant={index === 0 ? "primary" : "secondary"}
                           size="regular"
                           fullWidth
                           disabled={stepping}
