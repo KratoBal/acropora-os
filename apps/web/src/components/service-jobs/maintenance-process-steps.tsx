@@ -146,6 +146,16 @@ export function maintenanceProcessSteps(input: StepInputs): ProcessStep[] {
       state: "Még nincs számla-piszkozat",
       tone: "open",
     });
+  } else if (invoice.status === "ISSUED" && invoice.cancelled) {
+    // a sztornózott számla nem "kész": a lap számlázása újra nyitott (kártya 2cd1ed80), és ez az első teendő
+    steps.push({
+      key: "invoice",
+      title: "Számla",
+      state: invoice.invoiceNumber
+        ? `Sztornózva: ${invoice.invoiceNumber}`
+        : "Sztornózva",
+      tone: "open",
+    });
   } else if (invoice.status === "ISSUED") {
     steps.push({
       key: "invoice",

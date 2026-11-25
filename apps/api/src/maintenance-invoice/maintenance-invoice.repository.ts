@@ -30,6 +30,31 @@ export class MaintenanceInvoiceRepository {
   }
 
   /**
+   * A KIÁLLÍTOTT SZÁMLÁT SZTORNÓZTÁK-E (kártya 2cd1ed80): UGYANAZ A KÉT JEL, amit a számlázás lista a saját számlán használ (`billing-document-list`): egy kiállított
+   * sztornó sor az OS-ben (`correctionInvoices`, STORNO és ISSUED), vagy a Számlázz.hu felületén sztornózott iker (`ExternalBillingDocument.cancelled`, a számlaszám
+   * szerint). Csak kiállított számlára kérdezzük: piszkozat nem sztornózható.
+   */
+  async isCancelled(invoice: {
+    id: string;
+    invoiceNumber: string | null;
+  }): Promise<boolean> {
+    const storno = await this.database.invoice.count({
+      where: {
+        id: invoice.id,
+        correctionInvoices: {
+          some: { documentType: "STORNO", status: "ISSUED" },
+        },
+      },
+    });
+    if (storno > 0) return true;
+    if (!invoice.invoiceNumber) return false;
+    const twin = await this.database.externalBillingDocument.count({
+      where: { documentNumber: invoice.invoiceNumber, cancelled: true },
+    });
+    return twin > 0;
+  }
+
+  /**
    * A PARTNEREK OLDALON BEÁLLÍTOTT FIZETÉSI NAPOK (nem törölt partnerek): a TIG vevő-sora üres napjainál erre esik vissza a
    * határidő, mint a számla-szerkesztő (`BillingDocumentsRepository.customerPaymentDueDays`).
    */
