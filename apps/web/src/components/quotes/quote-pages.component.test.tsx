@@ -2680,3 +2680,23 @@ describe("Ajánlat szerkesztő: mentés-jelző és Kiküldés a fejlécben (b229
     ).toBeTruthy();
   });
 });
+
+/**
+ * A MORZSA AZ ÉRTÉKESÍTÉS ALATT (picasso R8, acrobot 61804): a menü az Árajánlatokat az Értékesítés alá költöztette (Balázs 2026-10-26),
+ * a lapok morzsája még "Pénzügy / Árajánlatok" volt. MI PIROSÍT: ha az ajánlat-lapok bármelyike a régi morzsát írja.
+ */
+describe("Az Árajánlatok lapok morzsája (R8)", () => {
+  it("a lista, az adatlap és a szerkesztő is az Értékesítés alá teszi magát", async () => {
+    api.list.mockResolvedValue(LIST);
+    const list = render(<QuoteListPage />);
+    expect(await screen.findByText("Értékesítés / Árajánlatok")).toBeTruthy();
+    list.unmount();
+    api.detail.mockResolvedValue(quote([version()], { status: "DRAFT" }));
+    const detail = render(<QuoteDetailPage quoteId="q1" />);
+    expect(await screen.findByText("Értékesítés / Árajánlatok")).toBeTruthy();
+    detail.unmount();
+    render(<QuoteEditorPage quoteId="q1" />);
+    expect(await screen.findByText("Értékesítés / Árajánlatok")).toBeTruthy();
+    expect(screen.queryByText(/Pénzügy \/ Árajánlatok/)).toBeNull();
+  });
+});

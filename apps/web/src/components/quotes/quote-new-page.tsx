@@ -113,7 +113,7 @@ export function QuoteNewPage() {
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
       <PilotPageHeader
-        eyebrow="Pénzügy / Árajánlatok"
+        eyebrow="Értékesítés / Árajánlatok"
         title="Új árajánlat"
         description="Az alapadatok és a kiinduló sablon megadása után nyílik meg az ajánlatszerkesztő."
         actions={
