@@ -55,7 +55,10 @@ function serviceWith(behaviour: {
     | "documentRemovals"
     | "worksheetSignatureStates"
     | "kindOf"
+    | "commonWorksheetFacts"
   > = {
+    // the detail of an IN_PROGRESS job reads the worksheet facts for the shared status (card 7f23785c)
+    commonWorksheetFacts: async () => new Map(),
     statusOf: async () => behaviour.status,
     kindOf: async () => behaviour.kind ?? "REPAIR",
     /*
