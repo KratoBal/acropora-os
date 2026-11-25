@@ -196,6 +196,12 @@ export class WebshopOrderEditsService {
    * A „ki” a bejelentkezett felhasználó hivatalos neve, innen töltődik, SOHA nem a kérésből (barracuda, commerce #904): a kérés törzséből
    * csak a rövid megjegyzés vehető át. Ismételt megnyomás az elsőt adja vissza (a webshop idempotens), és nem ír második naplósort.
    * Csak olyan rendelésre, amin tényleg van rendezetlen kézi visszatérítés (409 különben, a jelzés szavával).
+   *
+   * A KÉSEI PÓTLÁS (kártya 4b381c76; barracuda, OS #2834 review): ha az első megnyomásnál a webshop-hívás SIKERÜLT, de az OS naplósora
+   * elbukott (a kérés 500-zal végzett), az újrapróba a már rendezett ágra jut, és ott eddig semmi nem írt naplósort: az OS-ben nyoma sem
+   * lett annak, hogy valaki rendezett, a webshop jelzésén viszont ott áll. Most a rendezett ág megnézi, van-e az OS-ben ilyen sor, és ha
+   * nincs, PÓTOLJA: a sor a most próbálkozó felhasználóé (ő rögzíti utólag), a metaadat pedig kimondja, hogy KÉSEI pótlás, és hogy a
+   * webshop jelzése KIT és MIKORRA ír (a két név eltérhet: nem az újrapróbálót tesszük meg rendezőnek). Ahol van sor, ott nem ír semmit.
    */
   async settleManualRefund(
     id: string,
@@ -209,8 +215,22 @@ export class WebshopOrderEditsService {
       throw new ConflictException(
         "Ennél a rendelésnél nincs kézi visszatérítés, amit rendezni kellene.",
       );
-    // már rendezve: az elsőt mutatjuk, nincs második írás és nincs második naplósor
-    if (refund.settled) return detail;
+    // már rendezve: az elsőt mutatjuk, nincs második webshop-írás; naplósort csak akkor írunk, ha az OS-ben még nincs (a késői pótlás)
+    if (refund.settled) {
+      if (!(await this.repository.hasOrderEdit(id, "manual-refund-settled")))
+        await this.repository.recordOrderEdit({
+          userId: user.id,
+          orderId: id,
+          action: "manual-refund-settled",
+          before: refund,
+          extra: {
+            lateRecord: true,
+            markerSettledBy: refund.settled.by,
+            markerSettledAt: refund.settled.at,
+          },
+        });
+      return detail;
+    }
     const client = await this.orders.adminClient();
     try {
       await client.settleManualRefund(id, {

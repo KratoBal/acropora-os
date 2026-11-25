@@ -9,6 +9,7 @@ import {
   PilotDataTable,
   PilotPageHeader,
   type PilotTableColumn,
+  type PilotTableSort,
 } from "@acropora/ui";
 
 import {
@@ -37,6 +38,8 @@ export function MissingInvoicesMonthList({
   company,
   actions,
   notice,
+  sort,
+  onSort,
 }: {
   /** `null`: töltés. */
   months: MonthRow[] | null;
@@ -49,6 +52,9 @@ export function MissingInvoicesMonthList({
   actions?: ReactNode;
   /** A fejléc alatti sáv (a feltöltés eredménye). */
   notice?: ReactNode;
+  /** A rendezés állapota és a fejlécre kattintás: a hívó rendezi a sorokat; nélkülük a fejlécek nem rendezhetők. */
+  sort?: PilotTableSort | null;
+  onSort?: (columnId: string) => void;
 }) {
   const unknown = (row: MonthRow) => row.state === "STATEMENT_MISSING";
   const count = (row: MonthRow, key: keyof MonthRow["counts"], tone: string) =>
@@ -60,6 +66,7 @@ export function MissingInvoicesMonthList({
   const columns: PilotTableColumn<MonthRow>[] = [
     {
       id: "month",
+      sortable: true,
       header: "Hónap",
       // A leghosszabb hónapnév ("2026. szeptember") egy sorban elfér; a többi oszlop ehhez szűkült.
       width: "172px",
@@ -72,18 +79,21 @@ export function MissingInvoicesMonthList({
     },
     {
       id: "charges",
+      sortable: true,
       header: "Terhelések",
       width: "100px",
       cell: (row) => count(row, "charges", "text-pilot-grey-600"),
     },
     {
       id: "found",
+      sortable: true,
       header: "Megvan",
       width: "80px",
       cell: (row) => count(row, "found", "font-semibold text-pilot-green-700"),
     },
     {
       id: "unmatched",
+      sortable: true,
       header: "Nem párosodott",
       width: "100px",
       cell: (row) =>
@@ -91,6 +101,7 @@ export function MissingInvoicesMonthList({
     },
     {
       id: "noInvoice",
+      sortable: true,
       header: "Nincs számla",
       width: "80px",
       cell: (row) =>
@@ -99,6 +110,7 @@ export function MissingInvoicesMonthList({
     {
       // A FIGMÁBAN NINCS (acrobot 25328): csak NAV-adat, eredeti nincs.
       id: "originalMissing",
+      sortable: true,
       header: "Eredeti hiányzik",
       width: "88px",
       cell: (row) =>
@@ -106,6 +118,7 @@ export function MissingInvoicesMonthList({
     },
     {
       id: "missingAmount",
+      sortable: true,
       header: "Hiányzó összeg",
       width: "132px",
       nowrap: true,
@@ -175,6 +188,8 @@ export function MissingInvoicesMonthList({
           <>
             <PilotDataTable
               columns={columns}
+              sort={sort}
+              onSort={onSort}
               rows={months}
               rowKey={(row) => row.month}
               onRowActivate={(row) => onOpen(row.month)}

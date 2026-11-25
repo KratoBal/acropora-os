@@ -7,15 +7,21 @@ import {
 } from "@acropora/types";
 import { PilotButton } from "@acropora/ui";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { MISSING_INVOICES_PATH } from "@/components/navigation";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { missingInvoicesApi } from "@/lib/api/missing-invoices";
+import { sortRows } from "@/lib/navigation/sort-rows";
+import { useUrlSort } from "@/lib/navigation/use-url-sort";
 
 import { MissingInvoicesImportResult } from "./missing-invoices-import-result";
-import type { MonthRow } from "./missing-invoices-model";
+import {
+  MONTH_SORT_COLUMNS,
+  MONTH_SORT_GETTERS,
+  type MonthRow,
+} from "./missing-invoices-model";
 import { MissingInvoicesMonthList } from "./missing-invoices-month-list";
 import {
   toMonthRow,
@@ -46,6 +52,12 @@ export function MissingInvoicesPage() {
   );
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  // a lista minden hónapot betölt, ezért a böngészőben rendezünk; a hónapok alapból a szerver sorrendjében (legújabb elöl) állnak
+  const { sort, onSort } = useUrlSort(MONTH_SORT_COLUMNS);
+  const sortedMonths = useMemo(
+    () => (months ? sortRows(months, sort, MONTH_SORT_GETTERS) : months),
+    [months, sort],
+  );
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -109,7 +121,9 @@ export function MissingInvoicesPage() {
   return (
     <PilotThemeRoot className="space-y-6">
       <MissingInvoicesMonthList
-        months={months}
+        months={sortedMonths}
+        sort={sort}
+        onSort={onSort}
         error={error}
         onRetry={() => void load()}
         onOpen={(month) => router.push(`${MISSING_INVOICES_PATH}/${month}`)}

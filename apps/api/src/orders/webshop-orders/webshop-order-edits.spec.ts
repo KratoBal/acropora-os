@@ -230,6 +230,8 @@ describe("WebshopOrderEditsService", () => {
 function settleSetup(
   manualRefund: WebshopOrderDetail["manualRefund"],
   fail?: MedusaAdminHttpError,
+  /** Van-e mar az OS-ben a rendezes naplosora (alapbol igen: a rendezett agon nincs mit potolni). */
+  hasAuditRow = true,
 ) {
   const calls: unknown[] = [];
   const audited: unknown[] = [];
@@ -252,6 +254,7 @@ function settleSetup(
   } as unknown as WebshopOrdersService;
   const repository = {
     recordOrderEdit: async (input: unknown) => void audited.push(input),
+    hasOrderEdit: async () => hasAuditRow,
   } as unknown as WebshopOrdersRepository;
   return {
     calls,
@@ -335,6 +338,52 @@ describe("settling the hand refund", () => {
     const detail = await service.settleManualRefund("order_1", {}, NAMED_USER);
     assert.deepEqual(detail.manualRefund, settled);
     assert.deepEqual([calls, audited], [[], []]);
+  });
+
+  /*
+    A KÉSEI PÓTLÁS (kártya 4b381c76; barracuda, OS #2834 review). MI PIROSÍT: ha a rendezett ágra jutó újrapróba, amikor az OS-ben nincs
+    naplósor (az első próba a webshop-hívás után a naplóíráson bukott), nem ír pótló sort; ha a pótló sor a webshop jelzésének nevét
+    teszi a felhasználó helyére (a sor a most próbálkozóé, a jelzés neve a metaadatban áll); ha a pótló sor nincs késeinek megjelölve,
+    vagy elveszíti a rendezés előtti állapotot (`before`); ha ahol VAN sor, ott a rendezett ág mégis újat ír; ha a pótlás a webshopot
+    is hívja.
+  */
+  it("a settled order whose OS audit row is missing gets it written late, as the retrying user's, marked late, naming the marker's settler", async () => {
+    const settled = {
+      ...OPEN_REFUND,
+      settled: { by: "Első", at: "2026-11-25T09:00:00.000Z", note: null },
+    };
+    const { calls, audited, service } = settleSetup(settled, undefined, false);
+    const detail = await service.settleManualRefund("order_1", {}, NAMED_USER);
+    assert.deepEqual(detail.manualRefund, settled);
+    assert.deepEqual(calls, []);
+    assert.deepEqual(audited, [
+      {
+        userId: "user_7",
+        orderId: "order_1",
+        action: "manual-refund-settled",
+        before: settled,
+        extra: {
+          lateRecord: true,
+          markerSettledBy: "Első",
+          markerSettledAt: "2026-11-25T09:00:00.000Z",
+        },
+      },
+    ]);
+  });
+
+  it("a settled order that already has its audit row writes nothing, and an open one is audited once, not as late", async () => {
+    const settled = {
+      ...OPEN_REFUND,
+      settled: { by: "Első", at: "2026-11-25T09:00:00.000Z", note: null },
+    };
+    const has = settleSetup(settled, undefined, true);
+    await has.service.settleManualRefund("order_1", {}, NAMED_USER);
+    assert.deepEqual(has.audited, []);
+    // a nyitott rendezés a mostani úton megy: egy sor, nem késői
+    const open = settleSetup(OPEN_REFUND, undefined, false);
+    await open.service.settleManualRefund("order_1", {}, NAMED_USER);
+    assert.equal(open.audited.length, 1);
+    assert.equal((open.audited[0] as { extra?: unknown }).extra, undefined);
   });
 
   it("the webshop's refusal comes through with its sentence (409 stays 409, another 4xx is 422), and nothing is audited", async () => {

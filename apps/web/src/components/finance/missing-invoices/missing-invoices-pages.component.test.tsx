@@ -1229,3 +1229,180 @@ describe("MissingInvoicesMonthPage", () => {
     expect(within(dialog).queryByLabelText("Számla PDF")).toBeNull();
   });
 });
+
+/*
+  A HÓNAP-LISTA RENDEZÉSE AZ OSZLOPFEJEN (Balázs kérése, kártya 2f6369a4). A lista minden hónapot betölt, ezért a böngészőben rendez.
+  MI PIROSÍT: ha a hiányzó összeg szövegként rendeződne (a "10.25" a "10.5" elé kerülne a tizedesek miatt: pénzösszeg csak Number()-rel
+  mehet be); ha a kivonat nélküli hónap (a számai ismeretlenek, a cella "—") 0-ként elöl állna, vagy bármelyik irányban nem a végén; ha a
+  ciklus (növekvő, csökkenő, alap) elakad; ha az alap sorrend nem a szerveré; ha az "Állapot" oszlop rendezhetőnek látszik.
+*/
+describe("MissingInvoicesPage: a hónapok rendezése", () => {
+  beforeEach(() => {
+    urlNavigation.reset("/penzugy/hianyzo-szamlak");
+    api.months.mockResolvedValue({
+      company: COMPANY,
+      months: [
+        {
+          month: "2026-08",
+          debitCount: 67,
+          found: 5,
+          notMatched: 15,
+          noInvoice: 25,
+          originalMissing: 1,
+          noInvoiceNeeded: 24,
+          missingAmountHuf: "693967",
+          status: "INCOMPLETE",
+          missingStatementAccounts: [],
+        },
+        {
+          month: "2026-09",
+          debitCount: 9,
+          found: 27,
+          notMatched: 40,
+          noInvoice: 5,
+          originalMissing: 0,
+          noInvoiceNeeded: 0,
+          missingAmountHuf: "10.5",
+          status: "INCOMPLETE",
+          missingStatementAccounts: [],
+        },
+        {
+          month: "2026-10",
+          debitCount: 30,
+          found: 20,
+          notMatched: 2,
+          noInvoice: 2,
+          originalMissing: 2,
+          noInvoiceNeeded: 0,
+          missingAmountHuf: "10.25",
+          status: "INCOMPLETE",
+          missingStatementAccounts: [],
+        },
+        {
+          month: "2026-07",
+          debitCount: 0,
+          found: 0,
+          notMatched: 0,
+          noInvoice: 0,
+          originalMissing: 0,
+          noInvoiceNeeded: 0,
+          missingAmountHuf: "0",
+          status: "STATEMENT_MISSING",
+          missingStatementAccounts: ["Fő számla"],
+        },
+      ],
+    });
+  });
+
+  const order = () =>
+    screen
+      .getAllByRole("row")
+      .map((row) => row.getAttribute("aria-label"))
+      .filter(Boolean)
+      .map((label) => label!.replace(" megnyitása", ""));
+  const header = async (name: string) =>
+    within(await screen.findByRole("table")).getByRole("button", { name });
+  const SERVER = [
+    "2026. augusztus",
+    "2026. szeptember",
+    "2026. október",
+    "2026. július",
+  ];
+
+  it("a hiányzó összeg számként rendez, a kivonat nélküli hónap mindkét irányban a végén", async () => {
+    render(<MissingInvoicesPage />);
+    await screen.findAllByRole("row", { name: /megnyitása/ });
+    expect(order()).toEqual(SERVER);
+
+    fireEvent.click(await header("Hiányzó összeg"));
+    await waitFor(() =>
+      expect(order()).toEqual([
+        "2026. október", // 10.25
+        "2026. szeptember", // 10.5
+        "2026. augusztus", // 693967
+        "2026. július", // ismeretlen: a végén
+      ]),
+    );
+    fireEvent.click(await header("Hiányzó összeg"));
+    await waitFor(() =>
+      expect(order()).toEqual([
+        "2026. augusztus",
+        "2026. szeptember",
+        "2026. október",
+        "2026. július",
+      ]),
+    );
+    fireEvent.click(await header("Hiányzó összeg"));
+    await waitFor(() => expect(order()).toEqual(SERVER));
+  });
+
+  it("a terhelések száma szerint rendez, és a hónap oszlopa az évhónap szerint", async () => {
+    render(<MissingInvoicesPage />);
+    await screen.findAllByRole("row", { name: /megnyitása/ });
+    fireEvent.click(await header("Terhelések"));
+    await waitFor(() =>
+      expect(order()).toEqual([
+        "2026. szeptember", // 9
+        "2026. október", // 30
+        "2026. augusztus", // 67
+        "2026. július", // ismeretlen: a végén
+      ]),
+    );
+    fireEvent.click(await header("Hónap"));
+    await waitFor(() =>
+      expect(order()).toEqual([
+        "2026. július",
+        "2026. augusztus",
+        "2026. szeptember",
+        "2026. október",
+      ]),
+    );
+  });
+
+  it("mindegyik számoszlop a SAJÁT mezője szerint rendez (öt különböző sorrend), a kivonat nélküli hónap a végén", async () => {
+    const cases: [string, string[]][] = [
+      ["Terhelések", ["2026. szeptember", "2026. október", "2026. augusztus"]],
+      ["Megvan", ["2026. augusztus", "2026. október", "2026. szeptember"]],
+      [
+        "Nem párosodott",
+        ["2026. október", "2026. augusztus", "2026. szeptember"],
+      ],
+      [
+        "Nincs számla",
+        ["2026. október", "2026. szeptember", "2026. augusztus"],
+      ],
+      [
+        "Eredeti hiányzik",
+        ["2026. szeptember", "2026. augusztus", "2026. október"],
+      ],
+    ];
+    for (const [name, expected] of cases) {
+      urlNavigation.reset("/penzugy/hianyzo-szamlak");
+      const { unmount } = render(<MissingInvoicesPage />);
+      await screen.findAllByRole("row", { name: /megnyitása/ });
+      fireEvent.click(await header(name));
+      await waitFor(() =>
+        expect(order(), name).toEqual([...expected, "2026. július"]),
+      );
+      unmount();
+    }
+  });
+
+  it("csak a hónap és a számoszlopoknak van rendezés-gombja, az állapotnak nincs", async () => {
+    render(<MissingInvoicesPage />);
+    const table = await screen.findByRole("table");
+    const sortable = within(table)
+      .getAllByRole("columnheader")
+      .filter((cell) => within(cell).queryByRole("button"))
+      .map((cell) => cell.textContent?.replace(/[⇅↑↓]/g, ""));
+    expect(sortable).toEqual([
+      "Hónap",
+      "Terhelések",
+      "Megvan",
+      "Nem párosodott",
+      "Nincs számla",
+      "Eredeti hiányzik",
+      "Hiányzó összeg",
+    ]);
+  });
+});
