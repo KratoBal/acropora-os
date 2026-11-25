@@ -37,6 +37,7 @@ import {
   proformaPaidOf,
   webshopOverbillingProblem,
   webshopTransferInvoiceProblem,
+  webshopOrderOf,
   billingIssueSummary,
   buildIssueInput,
   finalInvoiceIssueProblem,
@@ -184,42 +185,34 @@ export class BillingDocumentIssueService {
     row: BillingDocumentRow,
   ): Promise<string | null> {
     const proformaId = row.proformaInvoice?.id;
+    const order = webshopOrderOf(row);
     if (
       (row.documentType !== "INVOICE" &&
         row.documentType !== "ADVANCE_INVOICE") ||
-      row.sourceType !== "WEBSHOP_ORDER" ||
-      !row.sourceId ||
+      !order ||
       !proformaId
     )
       return null;
-    const facts = await this.documents.webshopTransferFacts(
-      row.sourceId,
-      proformaId,
-    );
+    const facts = await this.documents.webshopTransferFacts(order, proformaId);
     if (!facts) return null;
     return webshopTransferInvoiceProblem(
       row,
       facts,
       facts.advance
         ? []
-        : await this.documents.webshopForeignFeedInvoices(
-            row.sourceId,
-            proformaId,
-          ),
+        : await this.documents.webshopForeignFeedInvoices(order, proformaId),
     );
   }
 
   /** The webshop order's other invoices against this one (`webshopOverbillingProblem`); other sources pass. */
-  private async webshopOverbilling(row: {
-    id: string;
-    documentType: string;
-    sourceType: string | null;
-    sourceId: string | null;
-  }): Promise<string | null> {
-    if (row.sourceType !== "WEBSHOP_ORDER" || !row.sourceId) return null;
+  private async webshopOverbilling(
+    row: BillingDocumentRow,
+  ): Promise<string | null> {
+    const order = webshopOrderOf(row);
+    if (!order) return null;
     return webshopOverbillingProblem(
       row.documentType,
-      await this.documents.webshopOrderInvoices(row.sourceId, row.id),
+      await this.documents.webshopOrderInvoices(order, row.id),
     );
   }
 

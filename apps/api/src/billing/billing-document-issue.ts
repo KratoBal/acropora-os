@@ -395,6 +395,27 @@ const sameFiller = (gross: string, amount: Prisma.Decimal) =>
   new Prisma.Decimal(gross).toDecimalPlaces(2).eq(amount.toDecimalPlaces(2));
 
 /**
+ * THE WEBSHOP ORDER A DOCUMENT BELONGS TO (barracuda on #2884, the S2 follow-up). Its own source, OR the source of the proforma it
+ * settles. The billing editor saves a draft's type and source (`headerData`) but not its proforma link, and an issued proforma
+ * cannot be edited: a webshop invoice draft relabelled as MANUAL still names the order's proforma, so every webshop guard
+ * (over-invoicing, the transfer, the Autokassza feed, "paid") reads the order from there and the relabelling escapes none.
+ */
+export function webshopOrderOf(row: {
+  sourceType: string | null;
+  sourceId: string | null;
+  proformaInvoice?: {
+    sourceType?: string | null;
+    sourceId?: string | null;
+  } | null;
+}): string | null {
+  if (row.sourceType === "WEBSHOP_ORDER" && row.sourceId) return row.sourceId;
+  const proforma = row.proformaInvoice;
+  return proforma?.sourceType === "WEBSHOP_ORDER" && proforma.sourceId
+    ? proforma.sourceId
+    : null;
+}
+
+/**
  * Which transfer settles which document of a webshop order: the whole-order invoice a whole transfer (S1), the advance
  * invoice an advance one (S2). Any other document is settled by no transfer.
  */
@@ -485,14 +506,14 @@ export async function proformaPaidOf(
 ): Promise<boolean> {
   const proforma = row.proformaInvoice;
   if (!proforma?.invoiceNumber) return false;
+  const order = webshopOrderOf(row);
   // a webshop order's advance invoice: the OS receipt says "paid" (the Autokassza is off, the feed is silent), else the feed
   if (
     row.documentType === "ADVANCE_INVOICE" &&
-    row.sourceType === "WEBSHOP_ORDER" &&
-    row.sourceId &&
+    order &&
     invoicePaidByTransfer(
       row,
-      await documents.webshopTransferFacts(row.sourceId, proforma.id),
+      await documents.webshopTransferFacts(order, proforma.id),
     )
   )
     return true;
@@ -501,14 +522,10 @@ export async function proformaPaidOf(
       row,
       await documents.proformaPaymentFacts(proforma.invoiceNumber),
     );
-  if (
-    row.documentType === "INVOICE" &&
-    row.sourceType === "WEBSHOP_ORDER" &&
-    row.sourceId
-  )
+  if (row.documentType === "INVOICE" && order)
     return invoicePaidByTransfer(
       row,
-      await documents.webshopTransferFacts(row.sourceId, proforma.id),
+      await documents.webshopTransferFacts(order, proforma.id),
     );
   return false;
 }

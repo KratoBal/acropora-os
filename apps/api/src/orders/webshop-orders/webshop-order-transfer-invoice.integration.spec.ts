@@ -30,6 +30,10 @@ async function removeLeftovers() {
   await prisma.invoice.deleteMany({
     where: { documentType: "STORNO", reference: { startsWith: FEED } },
   });
+  // the relabelled (MANUAL, no source) documents of the S2 follow-up carry the prefix in their reference
+  await prisma.invoice.deleteMany({
+    where: { sourceId: null, reference: { startsWith: FEED } },
+  });
   await prisma.invoice.deleteMany({
     where: { sourceId: { startsWith: ORDER } },
   });
@@ -476,6 +480,34 @@ describe(
         invoiceNumber: "E-ITTRINV-11",
       });
       assert.equal(await orders.setDraftDays(issued.id, "2026-11-22"), false);
+    });
+
+    it("a document relabelled as MANUAL but settling the order's proforma counts as the order's (S2 follow-up)", async () => {
+      const proforma = await invoice(12, {
+        documentType: "PROFORMA",
+        status: "ISSUED",
+        invoiceNumber: "D-ITTRINV-12",
+      });
+      await prisma.invoice.create({
+        data: {
+          direction: "OUTBOUND",
+          source: "MANUAL",
+          partnerName: "Kitalalt Vevo",
+          documentType: "INVOICE",
+          status: "ISSUED",
+          invoiceNumber: "E-ITTRINV-12-MANUAL",
+          sourceType: "MANUAL",
+          sourceId: null,
+          reference: `${FEED}relabelled`,
+          proformaInvoiceId: proforma.id,
+          currency: "HUF",
+        },
+      });
+      const others = await billing.webshopOrderInvoices(`${ORDER}12`, "nincs");
+      assert.deepEqual(
+        others.map((row) => row.number),
+        ["E-ITTRINV-12-MANUAL"],
+      );
     });
 
     after(async () => {

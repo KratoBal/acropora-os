@@ -10,6 +10,7 @@ import {
   invoicePaidByTransfer,
   proformaPaidOf,
   vatRateText,
+  webshopOrderOf,
   webshopOverbillingProblem,
   webshopTransferInvoiceProblem,
   type WebshopOrderInvoiceFact,
@@ -848,6 +849,43 @@ describe("the transfer-paid invoice on the shared issue", () => {
     assert.match(
       webshopTransferInvoiceProblem(advance, advanceFacts, ["E-ACR-78"]) ?? "",
       /E-ACR-78/,
+    );
+  });
+});
+
+/*
+  A RENDELÉS A DÍJBEKÉRŐBŐL IS (S2 követés, barracuda a #2884-en). MI PIROSÍT: egy MANUAL-ra átírt vázlat, ami a rendelés díjbekérőjére
+  hivatkozik, nem a rendeléshez tartozik; vagy egy nem webshop díjbekérőre hivatkozó bizonylat webshop-rendelést kap.
+*/
+describe("the webshop order of a document", () => {
+  it("its own source, or the source of the proforma it settles", () => {
+    assert.equal(
+      webshopOrderOf({ sourceType: "WEBSHOP_ORDER", sourceId: "order_38" }),
+      "order_38",
+    );
+    assert.equal(
+      webshopOrderOf({
+        sourceType: "MANUAL",
+        sourceId: null,
+        proformaInvoice: { sourceType: "WEBSHOP_ORDER", sourceId: "order_38" },
+      }),
+      "order_38",
+    );
+    assert.equal(
+      webshopOrderOf({
+        sourceType: "MANUAL",
+        sourceId: null,
+        proformaInvoice: { sourceType: "CONTRACT", sourceId: "c-1" },
+      }),
+      null,
+    );
+    assert.equal(
+      webshopOrderOf({
+        sourceType: "MANUAL",
+        sourceId: null,
+        proformaInvoice: null,
+      }),
+      null,
     );
   });
 });

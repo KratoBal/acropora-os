@@ -71,8 +71,11 @@ const DETAIL_INCLUDE = {
       },
     },
   },
-  // díjbekérőből készült előlegnél a díjbekérő száma a kiállításhoz (brief, 2.)
-  proformaInvoice: { select: { id: true, invoiceNumber: true } },
+  // díjbekérőből készült előlegnél a díjbekérő száma a kiállításhoz (brief, 2.); a forrása a webshop-őrzőknek: a kiállított
+  // díjbekérő nem szerkeszthető, tehát a rendelése akkor is megmarad, ha a vázlat forrását átírták (barracuda a #2884-en)
+  proformaInvoice: {
+    select: { id: true, invoiceNumber: true, sourceType: true, sourceId: true },
+  },
   // a díjbekérőn: a belőle készült előleg (legfeljebb egy, `advanceIdFor`)
   invoicesFromProforma: {
     where: { documentType: "ADVANCE_INVOICE" },
@@ -401,8 +404,15 @@ export class BillingDocumentsRepository {
   ): Promise<WebshopOrderInvoiceFact[]> {
     const rows = await this.database.invoice.findMany({
       where: {
-        sourceType: "WEBSHOP_ORDER",
-        sourceId: orderId,
+        // the order's documents by their own source, OR by the proforma they settle (a draft relabelled in the editor)
+        OR: [
+          { sourceType: "WEBSHOP_ORDER", sourceId: orderId },
+          {
+            proformaInvoice: {
+              is: { sourceType: "WEBSHOP_ORDER", sourceId: orderId },
+            },
+          },
+        ],
         id: { not: excludeId },
         documentType: { in: ["INVOICE", "ADVANCE_INVOICE", "FINAL_INVOICE"] },
         status: { in: ["ISSUED", "ISSUING"] },
