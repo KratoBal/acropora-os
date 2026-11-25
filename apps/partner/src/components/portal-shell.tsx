@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   Icon,
   type IconName,
@@ -135,6 +135,23 @@ export function PortalShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     setMenuOpen(false);
   }, [pathname]);
+  /*
+    BILLENTYŰZETTEL IS (barracuda a #2859-en, kártya a6663ab3): nyitáskor a fókusz a menü első pontjára kerül, az Escape
+    bezárja, és a fókusz visszakerül a Menü gombra, ahonnan indult.
+  */
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    menuRef.current?.querySelector<HTMLElement>("a, button")?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMenuOpen(false);
+      menuButtonRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [menuOpen]);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -306,6 +323,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
           Acropora
         </Link>
         <button
+          ref={menuButtonRef}
           type="button"
           aria-expanded={menuOpen}
           aria-controls="partner-menu"
@@ -324,6 +342,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
         />
       ) : null}
       <aside
+        ref={menuRef}
         id="partner-menu"
         data-theme={effectiveTheme}
         className={`fixed inset-y-0 left-0 w-52 flex-col border-r border-pilot-grey-200 bg-white lg:z-30 lg:flex lg:shadow-none ${

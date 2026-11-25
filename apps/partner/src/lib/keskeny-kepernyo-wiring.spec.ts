@@ -46,8 +46,29 @@ describe("keskeny képernyő: menü és hibajegy-kártyák", () => {
       HEJ,
       /aria-expanded=\{menuOpen\}\s*aria-controls="partner-menu"/,
     );
-    assert.match(HEJ, /<aside\s+id="partner-menu"/);
+    assert.match(HEJ, /<aside\b[^>]*\bid="partner-menu"/);
     assert.match(HEJ, /menuOpen \? "z-50 flex shadow-2xl" : "z-30 hidden"/);
+  });
+
+  // a6663ab3 (barracuda a #2859-en): az Escape zár és a fókuszt a Menü gombra adja vissza; nyitáskor a fókusz a menübe kerül
+  it("a menü billentyűzettel: nyitáskor fókusz a menübe, Escape zár, a fókusz visszajön", () => {
+    assert.match(
+      HEJ,
+      /menuRef\.current\?\.querySelector<HTMLElement>\("a, button"\)\?\.focus\(\)/,
+    );
+    assert.match(
+      HEJ,
+      /event\.key !== "Escape"\) return;\s*setMenuOpen\(false\);\s*menuButtonRef\.current\?\.focus\(\);/,
+    );
+    assert.match(HEJ, /<button\s+ref=\{menuButtonRef\}/);
+    assert.match(HEJ, /<aside\s+ref=\{menuRef\}/);
+  });
+
+  it("a hibajegy-lista fejléce telefonon oszlop: a gomb a cím alá kerül", () => {
+    assert.match(
+      HIBAJEGYEK,
+      /className="flex flex-col gap-3 [^"]*\bsm:flex-row\b[^"]*"/,
+    );
   });
 
   it("a hibajegy-tábla md alatt kártyalista, a fejléce csak a képernyőolvasóé", () => {
