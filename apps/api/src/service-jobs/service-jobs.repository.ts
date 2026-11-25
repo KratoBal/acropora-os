@@ -13,7 +13,12 @@ import type {
 
 import { NOT_HIDDEN } from "../common/hidden-rows.js";
 import { listOrderBy, type SortDirection } from "../common/list-sort.js";
-import { SERVICE_JOB_LIST_SORT } from "./service-job-list-sort.js";
+import {
+  SERVICE_JOB_LIST_SORT,
+  STATUS_SORT_WITHIN,
+  statusSortOrder,
+  statusSortSlices,
+} from "./service-job-list-sort.js";
 import { assignedUnitIdsFor } from "./assigned-units.query.js";
 import { assetsOutsideDepartment } from "../common/assets-in-department.js";
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
@@ -1096,17 +1101,17 @@ export class ServiceJobsRepository {
      * megkulonbozteti a levagott listatol -- egy sima `length === LIMIT`
      * osszehasonlitas a ket esetet EGYFORMAN vagottnak mondana.
      */
-    const [rows, totalItems] = await Promise.all([
+    const window = paged
+      ? { skip: ((options.page ?? 1) - 1) * pageSize, take: pageSize }
+      : { take: LIST_LIMIT + 1 };
+    const findRows = (
+      args: Pick<
+        Prisma.ServiceJobFindManyArgs,
+        "where" | "orderBy" | "skip" | "take"
+      >,
+    ) =>
       this.database.serviceJob.findMany({
-        where,
-        orderBy: listOrderBy(
-          SERVICE_JOB_LIST_SORT,
-          options.sort,
-          options.direction,
-        ),
-        ...(paged
-          ? { skip: ((options.page ?? 1) - 1) * pageSize, take: pageSize }
-          : { take: LIST_LIMIT + 1 }),
+        ...args,
         select: {
           id: true,
           jobNumber: true,
@@ -1126,7 +1131,20 @@ export class ServiceJobsRepository {
           // hány munka áll mögötte. Egy külön lekérdezés soronként N+1 lenne.
           _count: { select: { worksheets: true } },
         },
-      }),
+      });
+    const sort = options.sort;
+    const [rows, totalItems] = await Promise.all([
+      sort === "status"
+        ? this.rowsByCommonStatus(where, options.direction, window, findRows)
+        : findRows({
+            where,
+            orderBy: listOrderBy(
+              SERVICE_JOB_LIST_SORT,
+              sort,
+              options.direction,
+            ),
+            ...window,
+          }),
       // a lapozott kérésnél a szűrt halmaz összes találata (az oldalszámhoz); a régi alaknál nincs rá szükség
       paged
         ? this.database.serviceJob.count({ where })
@@ -1466,6 +1484,47 @@ export class ServiceJobsRepository {
     ) as Record<ServiceJobStatus, number>;
     for (const row of rows) counts[row.status] = row._count._all;
     return counts;
+  }
+
+  /**
+   * A LISTA ÁLLAPOT SZERINT, LAPOZVA (picasso lista-terv 9. pont, D1). Az öt közös állapot felosztja a jegyeket (minden jegy pontosan
+   * egybe esik), tehát az állapot szerint rendezett lista az állapotok egymás után, a folyamat sorrendjében (`desc`-nél fordítva). A lap
+   * az állapotonkénti darabszámokból vágódik ki (`statusSortSlices`), és szeletenként EGY lekérdezés megy, ugyanazzal a feltétellel,
+   * mint a felirat, a számláló és a fül (`commonStatusWhere`). Nyers SQL és új nézet nem kell; egy állapoton belül a legújabb elöl.
+   */
+  private async rowsByCommonStatus<Row>(
+    where: Prisma.ServiceJobWhereInput,
+    direction: SortDirection | undefined,
+    window: { skip?: number; take: number },
+    findRows: (
+      args: Pick<
+        Prisma.ServiceJobFindManyArgs,
+        "where" | "orderBy" | "skip" | "take"
+      >,
+    ) => Promise<Row[]>,
+  ): Promise<Row[]> {
+    const buckets = statusSortOrder(direction).map(
+      (status): Prisma.ServiceJobWhereInput => ({
+        AND: [where, commonStatusWhere(status)],
+      }),
+    );
+    const counts = await Promise.all(
+      buckets.map((bucket) =>
+        this.database.serviceJob.count({ where: bucket }),
+      ),
+    );
+    const slices = statusSortSlices(counts, window.skip ?? 0, window.take);
+    const parts = await Promise.all(
+      slices.map((slice) =>
+        findRows({
+          where: buckets[slice.bucket],
+          orderBy: STATUS_SORT_WITHIN,
+          skip: slice.skip,
+          take: slice.take,
+        }),
+      ),
+    );
+    return parts.flat();
   }
 
   /**

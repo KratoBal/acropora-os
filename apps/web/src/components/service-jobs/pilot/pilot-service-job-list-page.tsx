@@ -171,12 +171,13 @@ type JobRow = ServiceJobListResponse["items"][number];
 
 /**
  * A LISTA OLDALMÉRETE ÉS RENDEZHETŐ OSZLOPAI (f0b70dbd, (b) kör). A lista szerveroldali lapozású: egy oldal 25 sor, a rendezés a szerveren
- * megy (az oszlop-azonosító -> `SERVICE_JOB_LIST_SORT_FIELDS`). Két oszlop rendezhető: a hibajegy (a kódja szerint) és a Létrehozva.
- * AZ ÁLLAPOT NEM, amíg Balázs a közös állapot-listáról nem dönt (D1): akkor a sorrend a folyamat sorrendje lesz, nem a felirat betűrendje.
+ * megy (az oszlop-azonosító -> `SERVICE_JOB_LIST_SORT_FIELDS`). Három oszlop rendezhető: a hibajegy (a kódja szerint), az Állapot és a
+ * Létrehozva. Az Állapot sorrendje a közös öt állapot folyamat-sorrendje (Balázs D1), és a SZERVER rendez: a kliens csak a kulcsot küldi.
  */
 export const JOB_PAGE_SIZE = 25;
 export const JOB_SORT_COLUMNS = {
   job: "jobNumber",
+  status: "status",
   createdAt: "createdAt",
 } as const;
 
@@ -274,6 +275,7 @@ export const JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
   {
     id: "status",
     header: "Állapot",
+    sortable: true,
     width: "190px",
     cell: (item) => {
       const state = commonStateOf(item);

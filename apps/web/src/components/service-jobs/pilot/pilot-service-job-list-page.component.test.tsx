@@ -745,6 +745,34 @@ describe("service-job list (b): server paging, sort, status tabs, facets", () =>
     );
   });
 
+  it("the state sort in the URL goes to the server as its key: the client does not reorder the rows", async () => {
+    api.list.mockResolvedValue(paged(1, 3));
+    renderAt("sort=status&direction=desc");
+    await screen.findByText("Jegy 3");
+    await settle();
+    expect(api.list).toHaveBeenLastCalledWith(
+      "token-1",
+      "open",
+      expect.anything(),
+      "",
+      false,
+      "REPAIR",
+      undefined,
+      { from: "", to: "" },
+      extra({ sort: "status", direction: "desc" }),
+    );
+    // the rows stay in the server's order
+    const served = (await api.list.mock.results.at(-1)!.value).items.map(
+      (item: { title: string }) => item.title,
+    );
+    expect(
+      screen
+        .getAllByText(/^Jegy \d+$/)
+        .map((node) => node.textContent)
+        .filter((text, index, all) => all.indexOf(text) === index),
+    ).toEqual(served);
+  });
+
   it("shows no pager when everything fits one page", async () => {
     api.list.mockResolvedValue(paged(1, 3));
     renderAt("");
@@ -787,7 +815,7 @@ describe("service-job list (b): server paging, sort, status tabs, facets", () =>
     );
   });
 
-  it("clicking a sortable header writes the sort key and drops the page; the state column is not sortable", async () => {
+  it("clicking a sortable header writes the sort key and drops the page; the state column sorts on the server by its key", async () => {
     api.list.mockResolvedValue(paged(2, 61));
     renderAt("page=2");
     await screen.findByText("Jegy 3");
@@ -796,12 +824,16 @@ describe("service-job list (b): server paging, sort, status tabs, facets", () =>
       "/szerviz/hibajegyek?sort=jobNumber&direction=asc",
       { scroll: false },
     );
-    expect(screen.queryByRole("button", { name: /^Állapot/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Állapot/ }));
+    expect(navigation.replace).toHaveBeenLastCalledWith(
+      "/szerviz/hibajegyek?sort=status&direction=asc",
+      { scroll: false },
+    );
     expect(
       JOB_COLUMNS.filter((column) => column.sortable).map(
         (column) => column.id,
       ),
-    ).toEqual(["job", "createdAt"]);
+    ).toEqual(["job", "status", "createdAt"]);
   });
 
   it("builds the partner and location options from the server's facets, and asks for them with the tab's statuses", async () => {

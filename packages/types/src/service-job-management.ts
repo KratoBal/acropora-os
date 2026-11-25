@@ -171,11 +171,15 @@ export type ServiceJobStatusCounts = Record<ServiceJobStatusValue, number>;
 
 /**
  * A HIBAJEGY-LISTA RENDEZHETŐ OSZLOPAI (picasso, f0b70dbd, 9. pont; acrobot 61735). A lista szerveroldali lapozású, ezért a rendezés a
- * szerveren történik. Két oszlop rendezhető: a hibajegy kódja és a létrehozás ideje. AZ ÁLLAPOT NEM, amíg Balázs a közös állapot-listáról
- * nem dönt (D1): ha az lesz, a sorrend a folyamat sorrendje (az enum deklarációs sorrendje), nem a felirat betűrendje. Az alap sorrend a
- * létrehozás ideje, a legújabb elöl.
+ * szerveren történik. Három oszlop rendezhető: a hibajegy kódja, a létrehozás ideje és az állapot. Az ÁLLAPOT sorrendje a közös öt állapot
+ * folyamat-sorrendje (`COMMON_SERVICE_STATUSES`: Új, Folyamatban, Vár valamire, Elkészült, Lezárt; Balázs D1, 2026-11-25), nem a felirat
+ * betűrendje és nem a tárolt enum: a levezetett Elkészült a tárolt IN_PROGRESS része. Az alap sorrend a létrehozás ideje, a legújabb elöl.
  */
-export const SERVICE_JOB_LIST_SORT_FIELDS = ["jobNumber", "createdAt"] as const;
+export const SERVICE_JOB_LIST_SORT_FIELDS = [
+  "jobNumber",
+  "createdAt",
+  "status",
+] as const;
 export type ServiceJobListSortField =
   (typeof SERVICE_JOB_LIST_SORT_FIELDS)[number];
 

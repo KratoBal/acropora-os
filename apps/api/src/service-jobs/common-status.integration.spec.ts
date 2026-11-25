@@ -381,6 +381,56 @@ describe(
       }
     });
 
+    /*
+      A RENDEZÉS AZ ÁLLAPOT SZERINT (picasso lista-terv 9. pont, D1) UGYANAZON AZ ADATON: a lapok egymás után a teljes halmazt adják,
+      minden jegyet egyszer, az állapotok a folyamat sorrendjében (csökkenőben fordítva), és egy állapot futása pontosan a számláló
+      darabszáma. Ha a rendezés a tárolt enumot követné, az Elkészült (a tárolt IN_PROGRESS része) a Vár valamire ELÉ kerülne.
+    */
+    it("az állapot szerinti rendezés lapokon át a folyamat sorrendjét adja, a számlálóval egyezően", async () => {
+      const sorrend: CommonServiceStatus[] = [
+        "NEW",
+        "IN_PROGRESS",
+        "WAITING",
+        "DONE",
+        "CLOSED",
+      ];
+      const szamlalo = (await lista()).commonCounts!;
+      for (const direction of ["asc", "desc"] as const) {
+        const sorok: { id: string; commonStatus?: CommonServiceStatus }[] = [];
+        for (let page = 1; page <= 3; page += 1) {
+          const valasz = await service.list(
+            {
+              scope: "all",
+              search: KERESES,
+              kind: "ALL",
+              page,
+              pageSize: 10,
+              sort: "status",
+              direction,
+            },
+            belsos,
+          );
+          assert.equal(valasz.pagination?.totalItems, ESETEK.length, direction);
+          sorok.push(...valasz.items);
+        }
+        assert.deepEqual(
+          sorok.map((sor) => sor.id).sort(),
+          [...jegyek.keys()].sort(),
+          `${direction}: minden jegy pontosan egyszer`,
+        );
+        const varhato = (
+          direction === "asc" ? sorrend : [...sorrend].reverse()
+        ).flatMap((allapot) =>
+          Array.from({ length: szamlalo[allapot] }, () => allapot),
+        );
+        assert.deepEqual(
+          sorok.map((sor) => sor.commonStatus),
+          varhato,
+          direction,
+        );
+      }
+    });
+
     it("a takarítás tényleg lefut: nem marad sor a teszt előtaggal", async () => {
       await removeLeftovers();
       assert.equal(
