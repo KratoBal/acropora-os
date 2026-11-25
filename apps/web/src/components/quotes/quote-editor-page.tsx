@@ -303,7 +303,7 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
   const header = (
     <>
       <PilotPageHeader
-        eyebrow="Pénzügy / Árajánlatok"
+        eyebrow="Értékesítés / Árajánlatok"
         title={`${quote.quoteNumber} · ${quote.title}`}
         description="Szerkeszd az ügyfélnek látható ajánlati dokumentumot blokkokból, miközben a belső kalkuláció külön marad."
         actions={

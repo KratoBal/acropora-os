@@ -246,7 +246,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
       <PilotPageHeader
-        eyebrow="Pénzügy / Árajánlatok"
+        eyebrow="Értékesítés / Árajánlatok"
         title={`${quote.quoteNumber} · ${quote.customerName ?? quote.title}`}
         description={quote.title}
         meta={
