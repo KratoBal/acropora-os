@@ -136,6 +136,13 @@ export function jevClassLabel(jevClass: string | null): string {
 }
 
 /**
+ * EGY "... EZT ÍRTA:" SOR CSAK AKKOR IDÉZÉS-FEJLÉC, HA LEVÉL-FEJLÉCNEK LÁTSZIK (barracuda, #2915): a bejelentő a saját szövegében is írhat ilyet ("A szerelő
+ * ezt írta:"), és az utána jövő SAJÁT sorai nem kerülhetnek az összecsukott részbe (a kezelő átsiklana a hiba leírásán). A levélprogramok fejléce mindig hordoz
+ * évszámot vagy e-mail-címet ("2026. nov. 25., Sze, 10:12 időpontban Név <a@b.hu> ezt írta:", "On Tue, 25 Nov 2026, Bob <b@x.hu> wrote:").
+ */
+const QUOTE_HEADER_EVIDENCE = /\b(?:19|20)\d\d\b|<[^<>\s]+@[^<>\s]+>|\S+@\S+/;
+
+/**
  * AZ IDÉZETT VÁLASZ-LEVÉL ÖSSZECSUKVA (Picasso 3.17, acrobot 61999): a levél szövege az ÚJ rész és a "... ezt írta:" fejlécű idézett lánc együtt jött, és
  * a kártyán az egész látszott. A fejléc az első sor, ami "ezt írta" (vagy "wrote") szóval ér véget, vagy egy "Eredeti üzenet" elválasztó; előtte az új
  * szöveg áll, utána az idézett rész. Ha a fejléc előtt nincs szöveg, nem bontunk (az egész levél idézet, és egy üres kártya rosszabb, mint egy hosszú).
@@ -148,7 +155,8 @@ export function splitQuotedReply(text: string): {
   const lines = text.split("\n");
   const header = lines.findIndex(
     (line) =>
-      /(?:\bezt írta|\bwrote)\s*:?\s*$/i.test(line) ||
+      (/(?:\bezt írta|\bwrote)\s*:?\s*$/i.test(line) &&
+        QUOTE_HEADER_EVIDENCE.test(line)) ||
       /^-{2,}\s*(?:Eredeti üzenet|Original Message)\s*-{2,}\s*$/i.test(line),
   );
   if (header <= 0) return { own: text, quoted: null };
