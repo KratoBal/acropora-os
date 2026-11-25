@@ -11,6 +11,9 @@ import {
   PilotButton,
   PilotCard,
   PilotCardHeader,
+  PilotInput,
+  Pagination,
+  Icon,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -47,6 +50,44 @@ export function isPendingLine(
   line: CountLine,
 ): boolean {
   return status !== "DRAFT" && line.countedQty === null;
+}
+
+/*
+  A TÉTELEK LAPOZVA (picasso képernyő-leltára, 2026-11-25, kártya 8e09b177): egy 1922 tételes leltár egy lapon, soronként egy
+  beviteli mezővel 139 000 px magas volt, és a böngészőt is lassította. A lista már teljesen megvan (a mentés soronként megy,
+  a vázlat a `lineDrafts`-ban él, tehát egy lapról kikerülő sor semmit nem veszít), ezért a lapozás, a keresés és a "csak a
+  meg nem számoltak" szűrő itt, a kliensen történik.
+*/
+export const COUNT_LINE_PAGE_SIZE = 50;
+
+export function countLinesView(
+  status: InventoryCountStatus,
+  lines: readonly CountLine[],
+  view: { search: string; pendingOnly: boolean; page: number },
+): { shown: number; totalPages: number; page: number; rows: CountLine[] } {
+  const needle = view.search.trim().toLowerCase();
+  const matching = lines.filter(
+    (line) =>
+      (!view.pendingOnly || isPendingLine(status, line)) &&
+      (needle === "" ||
+        line.sku.toLowerCase().includes(needle) ||
+        line.productName.toLowerCase().includes(needle)),
+  );
+  const totalPages = Math.max(
+    1,
+    Math.ceil(matching.length / COUNT_LINE_PAGE_SIZE),
+  );
+  // a saved line can leave the "pending only" list, and the last page with it: stay on the last one there is
+  const page = Math.min(Math.max(1, view.page), totalPages);
+  return {
+    shown: matching.length,
+    totalPages,
+    page,
+    rows: matching.slice(
+      (page - 1) * COUNT_LINE_PAGE_SIZE,
+      page * COUNT_LINE_PAGE_SIZE,
+    ),
+  };
 }
 
 /**
@@ -242,6 +283,9 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [lineDrafts, setLineDrafts] = useState<Record<string, string>>({});
   const [savingLineId, setSavingLineId] = useState<string | null>(null);
+  const [lineSearch, setLineSearch] = useState("");
+  const [pendingOnly, setPendingOnly] = useState(false);
+  const [linePage, setLinePage] = useState(1);
 
   const load = useCallback(() => {
     if (!canView) return;
@@ -374,6 +418,16 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
       )
       .finally(() => setApplying(false));
   };
+
+  const lineView = countLinesView(
+    detail?.status ?? "DRAFT",
+    detail?.lines ?? [],
+    {
+      search: lineSearch,
+      pendingOnly,
+      page: linePage,
+    },
+  );
 
   return (
     <div className="space-y-6">
@@ -513,10 +567,47 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
               title="Tételek"
               action={
                 <span className="text-xs text-dusk-500">
-                  {detail.lines.length.toLocaleString("hu-HU")} tétel
+                  {lineView.shown === detail.lines.length
+                    ? `${detail.lines.length.toLocaleString("hu-HU")} tétel`
+                    : `${lineView.shown.toLocaleString("hu-HU")} / ${detail.lines.length.toLocaleString("hu-HU")} tétel`}
                 </span>
               }
             />
+            <div className="flex flex-col gap-3 border-b border-pilot-grey-200 px-5 py-3 sm:flex-row sm:items-center">
+              <div className="min-w-0 flex-1">
+                <PilotInput
+                  aria-label="Keresés a tételek között"
+                  value={lineSearch}
+                  onChange={(value) => {
+                    setLineSearch(value);
+                    setLinePage(1);
+                  }}
+                  leadingIcon={<Icon name="search" size={17} />}
+                  placeholder="Cikkszám vagy terméknév…"
+                  className="h-10"
+                />
+              </div>
+              {detail.status !== "DRAFT" ? (
+                <label className="flex items-center gap-2 text-sm text-pilot-grey-700">
+                  <input
+                    type="checkbox"
+                    checked={pendingOnly}
+                    onChange={(event) => {
+                      setPendingOnly(event.target.checked);
+                      setLinePage(1);
+                    }}
+                  />
+                  Csak a meg nem számoltak
+                </label>
+              ) : null}
+              <Pagination
+                variant="directionF"
+                position="top"
+                page={lineView.page}
+                totalPages={lineView.totalPages}
+                onPageChange={setLinePage}
+              />
+            </div>
             <PilotDataTable
               columns={countLineColumns({
                 status: detail.status,
@@ -530,7 +621,7 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
                   })),
                 saveLineCount,
               })}
-              rows={detail.lines}
+              rows={lineView.rows}
               rowKey={(line) => line.id}
               rowTestId="count-line-row"
               rowClassName={(line) =>
@@ -538,6 +629,22 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
               }
               minWidth={COUNT_LINE_TABLE_MIN_WIDTH}
             />
+            {lineView.shown === 0 ? (
+              <p className="px-5 py-8 text-center text-sm text-pilot-grey-500">
+                {pendingOnly && lineSearch.trim() === ""
+                  ? "Minden tétel meg van számolva."
+                  : "Nincs a keresésnek megfelelő tétel."}
+              </p>
+            ) : null}
+            <div className="flex justify-end border-t border-pilot-grey-200 px-5 py-3">
+              <Pagination
+                variant="directionF"
+                position="bottom"
+                page={lineView.page}
+                totalPages={lineView.totalPages}
+                onPageChange={setLinePage}
+              />
+            </div>
           </PilotCard>
         </>
       ) : null}
