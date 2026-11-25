@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type {
   SimplePayReportDetail,
   SimplePayReportListResponse,
@@ -8,6 +14,7 @@ import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { pickMonth } from "@/test/month-field";
+import { urlNavigation } from "@/test/url-navigation";
 
 import { SimplePaySettlementsPage } from "./simplepay-settlements-page";
 
@@ -26,6 +33,10 @@ const auth = vi.hoisted(() => ({
   session: null as Session | null,
 }));
 
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/url-navigation")).nextNavigationModule,
+);
 // a lap a Figma 45 · OS / Settlements óta `PilotThemeRoot` alatt áll (Inter, `next/font/local`)
 vi.mock("next/font/local", () => ({
   default: () => ({ className: "pilot-inter-stub" }),
@@ -124,6 +135,7 @@ const detail: SimplePayReportDetail = {
 };
 
 beforeEach(() => {
+  urlNavigation.reset("/penzugy/elszamolasok/simplepay");
   auth.session = session("OWNER");
   api.list.mockReset().mockResolvedValue(reports);
   api.detail.mockReset().mockResolvedValue(detail);
@@ -291,5 +303,94 @@ describe("SimplePaySettlementsPage", () => {
     // the window's oldest report (2026-08-05) is before September's start
     pickMonth("A havi fájl hónapja", "2026-09");
     expect(screen.getByText(/^0 heti kimutatás/)).toBeInTheDocument();
+  });
+  // a lap két listát kér: a táblázatét (20 soros lapok) és a havi kártya ablakát (100 sor, "a legutóbbiak"); a rendezés CSAK az elsőé
+  const queriesOf = (pageSize: number) =>
+    api.list.mock.calls
+      .map((call) => call[1] as Record<string, unknown>)
+      .filter((query) => query.pageSize === pageSize);
+  const tableQueries = () => queriesOf(20);
+
+  it("sorts the table by a header, as server queries, and never the monthly window", async () => {
+    render(createElement(SimplePaySettlementsPage));
+    await screen.findAllByTestId("simplepay-kimutatas");
+    expect(tableQueries().at(-1)).not.toHaveProperty("sort");
+
+    fireEvent.click(screen.getByRole("button", { name: /Jutalék/ }));
+    await waitFor(() =>
+      expect(tableQueries().at(-1)).toMatchObject({
+        sort: "commissionTotal",
+        direction: "asc",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Jutalék/ }));
+    await waitFor(() =>
+      expect(tableQueries().at(-1)).toMatchObject({
+        sort: "commissionTotal",
+        direction: "desc",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Jutalék/ }));
+    await waitFor(() =>
+      expect(tableQueries().at(-1)).not.toHaveProperty("sort"),
+    );
+    // a havi kártya ablaka a legutóbbi kimutatásokat kéri, a tábla sorrendjétől függetlenül
+    expect(queriesOf(100).length).toBeGreaterThan(0);
+    for (const query of queriesOf(100))
+      expect(query).not.toHaveProperty("sort");
+  });
+
+  it("sends the right server field for each sortable header", async () => {
+    render(createElement(SimplePaySettlementsPage));
+    await screen.findAllByTestId("simplepay-kimutatas");
+    for (const [name, field] of [
+      ["Időszak", "reportDate"],
+      ["Összesen", "amountTotal"],
+      ["Utalt", "netTotal"],
+    ] as const) {
+      fireEvent.click(screen.getByRole("button", { name }));
+      await waitFor(() =>
+        expect(tableQueries().at(-1)).toMatchObject({
+          sort: field,
+          direction: "asc",
+        }),
+      );
+      fireEvent.click(screen.getByRole("button", { name }));
+      fireEvent.click(screen.getByRole("button", { name }));
+      await waitFor(() =>
+        expect(tableQueries().at(-1)).not.toHaveProperty("sort"),
+      );
+    }
+  });
+
+  it("a new sort goes back to the first page", async () => {
+    api.list.mockResolvedValue({
+      ...reports,
+      pagination: { page: 1, pageSize: 20, totalItems: 120, totalPages: 6 },
+    });
+    render(createElement(SimplePaySettlementsPage));
+    await screen.findAllByTestId("simplepay-kimutatas");
+    fireEvent.click(
+      within(
+        screen.getByRole("navigation", { name: "Lapozás, alul" }),
+      ).getByRole("button", { name: "Következő" }),
+    );
+    await waitFor(() =>
+      expect(tableQueries().at(-1)).toMatchObject({ page: 2 }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Utalt/ }));
+    await waitFor(() =>
+      expect(tableQueries().at(-1)).toMatchObject({
+        page: 1,
+        sort: "netTotal",
+      }),
+    );
+  });
+
+  it("the pairing and the state have no sort button", async () => {
+    render(createElement(SimplePaySettlementsPage));
+    await screen.findAllByTestId("simplepay-kimutatas");
+    expect(screen.queryByRole("button", { name: /Párosítva/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Állapot/ })).toBeNull();
   });
 });

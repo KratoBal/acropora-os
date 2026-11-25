@@ -2,6 +2,7 @@ import type {
   SimplePayManualApprovalInput,
   SimplePayReportDetail,
   SimplePayReportListResponse,
+  SimplePayReportSortField,
   SimplePayReportUploadResult,
   SimplePaySyncRunSummary,
   SimplePaySyncStatus,
@@ -21,11 +22,23 @@ export const simplePaySettlementsApi = {
       { method: "POST", body: form },
     );
   },
-  list(token: string, query: { page?: number; pageSize?: number } = {}) {
+  list(
+    token: string,
+    query: {
+      page?: number;
+      pageSize?: number;
+      sort?: SimplePayReportSortField;
+      direction?: "asc" | "desc";
+    } = {},
+  ) {
     const params = new URLSearchParams({
       page: String(query.page ?? 1),
       pageSize: String(query.pageSize ?? 50),
     });
+    if (query.sort && query.direction) {
+      params.set("sort", query.sort);
+      params.set("direction", query.direction);
+    }
     return apiRequest<SimplePayReportListResponse>(
       `/integrations/simplepay/reports?${params.toString()}`,
       token,

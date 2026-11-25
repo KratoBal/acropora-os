@@ -15,6 +15,7 @@ import {
   type SimplePayLineError,
   type SimplePayReportDetail,
   type SimplePayReportListResponse,
+  type SimplePayReportSortField,
   type SimplePayReportStatus,
   type SimplePayReportSummary,
   type SimplePaySyncState,
@@ -30,6 +31,7 @@ import {
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
 import { simplePaySettlementsApi } from "@/lib/api/simplepay-settlements";
+import { useUrlSort } from "@/lib/navigation/use-url-sort";
 
 import {
   SettlementApproveField,
@@ -114,6 +116,14 @@ const SYNC_OFF: Record<Exclude<SimplePaySyncState, "ENABLED">, string> = {
  * kézi táblájának helyébe lép: kimutatásonként a számlák, az összesen, a
  * jutalék és az utalt összeg.
  */
+/** A kimutatás-lista rendezhető oszlopai: a táblázat oszlop-azonosítója -> a szerver rendezési mezeje (`SIMPLEPAY_REPORT_SORT_FIELDS`). A "Párosítva" és az "Állapot" nem rendezhető. */
+const REPORT_SORT_COLUMNS = {
+  period: "reportDate",
+  total: "amountTotal",
+  commission: "commissionTotal",
+  net: "netTotal",
+} as const;
+
 export function SimplePaySettlementsPage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -144,6 +154,12 @@ export function SimplePaySettlementsPage() {
   );
   const [downloading, setDownloading] = useState(false);
   const [listPage, setListPage] = useState(1);
+  const { sort, onSort, apiSort } = useUrlSort(REPORT_SORT_COLUMNS);
+  // a lap száma itt állapot, nem URL: egy új sorrend az 1. oldalról indul (a 3. oldalon állva az új sorrend 3. oldala nem az, amit várnak)
+  const sortBy = (columnId: string) => {
+    setListPage(1);
+    onSort(columnId);
+  };
 
   const load = useCallback(async () => {
     if (!canView) return;
@@ -154,8 +170,14 @@ export function SimplePaySettlementsPage() {
         simplePaySettlementsApi.list(token, {
           page: listPage,
           pageSize: SETTLEMENT_PAGE_SIZE,
+          ...(apiSort
+            ? {
+                sort: apiSort.sort as SimplePayReportSortField,
+                direction: apiSort.direction,
+              }
+            : {}),
         }),
-        // the monthly summary's window: the latest ones, newest first
+        // the monthly summary's window: the latest ones, newest first, and NEVER in the table's sort (the month card reads "the latest")
         simplePaySettlementsApi.list(token, {
           page: 1,
           pageSize: SETTLEMENT_RECENT_SIZE,
@@ -174,7 +196,7 @@ export function SimplePaySettlementsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canView, token, listPage]);
+  }, [canView, token, listPage, apiSort]);
 
   useEffect(() => {
     void load();
@@ -506,12 +528,14 @@ export function SimplePaySettlementsPage() {
   const listColumns: PilotTableColumn<SimplePayReportSummary>[] = [
     {
       id: "period",
+      sortable: true,
       header: "Időszak",
       width: "20%",
       cell: (item) => reportPeriod(item),
     },
     {
       id: "total",
+      sortable: true,
       header: "Összesen",
       width: "16%",
       cell: (item) =>
@@ -519,6 +543,7 @@ export function SimplePaySettlementsPage() {
     },
     {
       id: "commission",
+      sortable: true,
       header: "Jutalék",
       width: "14%",
       cell: (item) => (
@@ -529,6 +554,7 @@ export function SimplePaySettlementsPage() {
     },
     {
       id: "net",
+      sortable: true,
       header: "Utalt",
       width: "16%",
       cell: (item) => (
@@ -681,6 +707,8 @@ export function SimplePaySettlementsPage() {
         >
           <PilotDataTable
             columns={listColumns}
+            sort={sort}
+            onSort={sortBy}
             rows={data.items}
             rowKey={(item) => item.id}
             rowTestId="simplepay-kimutatas"

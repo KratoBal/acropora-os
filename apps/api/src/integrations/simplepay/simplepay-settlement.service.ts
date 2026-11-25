@@ -5,9 +5,11 @@ import type {
   SimplePayManualApprovalInput,
   SimplePayReportDetail,
   SimplePayReportListResponse,
+  SimplePayReportSortField,
   SimplePayReportUploadResult,
 } from "@acropora/types";
 
+import type { SortDirection } from "../../common/list-sort.js";
 import {
   readSimplePayMailSummary,
   readSimplePayReport,
@@ -270,6 +272,8 @@ export class SimplePaySettlementService {
     status?: "COMPLETED" | "NEEDS_REVIEW";
     page: number;
     pageSize: number;
+    sort?: SimplePayReportSortField;
+    direction?: SortDirection;
   }): Promise<SimplePayReportListResponse> {
     return this.repository.listReports(query);
   }
