@@ -606,6 +606,11 @@ describe("BillingDocumentListPage", () => {
     // a gyakori szűrők a sorban: típus, állapot, fizetés
     for (const name of ["Dokumentumtípus", "Állapot", "Fizetés"])
       expect(within(bar).getByRole("combobox", { name })).toBeInTheDocument();
+    // the first option must fit the 180 px select (the stage image cut "Minden dokumentumtípus" to "Minden dokumentur")
+    const typeSelect = within(bar).getByRole("combobox", {
+      name: "Dokumentumtípus",
+    }) as HTMLSelectElement;
+    expect(typeSelect.options[0]!.textContent).toBe("Minden típus");
     // a ritkák a gomb mögött: zárt panelnél nincsenek a DOM-ban
     for (const name of ["Időszak", "Formátum", "Forrás", "Fizetési mód"])
       expect(within(bar).queryByRole("combobox", { name })).toBeNull();

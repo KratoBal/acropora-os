@@ -348,7 +348,7 @@ function OutgoingList({
               onChange={(value) => setFilter("documentType", value)}
               className={`${BILLING_SELECT_CLASS} [&_select]:h-10`}
             >
-              <option value="">Minden dokumentumtípus</option>
+              <option value="">Minden típus</option>
               {BILLING_DOCUMENT_TYPES.map((type) => (
                 <option key={type} value={type}>
                   {getDocumentCapabilities(type).label}
