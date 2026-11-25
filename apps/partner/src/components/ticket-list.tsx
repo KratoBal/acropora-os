@@ -104,7 +104,8 @@ export function TicketList({ kind = "REPAIR" }: { kind?: TicketKind }) {
 
   return (
     <PilotThemeRoot className="flex min-h-screen flex-col bg-pilot-grey-50">
-      <div className="flex items-center justify-between border-b border-pilot-grey-100 bg-white px-8 py-5">
+      {/* 390 px-en a "Új hibajegy nyitása" gomb három sorra tört a cím mellett (acrobot mérése, 2026-11-25): telefonon a cím alá kerül */}
+      <div className="flex flex-col gap-3 border-b border-pilot-grey-100 bg-white px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
         <div>
           <h1 className="text-xl font-semibold text-pilot-grey-900">
             {words.listTitle}
@@ -112,7 +113,7 @@ export function TicketList({ kind = "REPAIR" }: { kind?: TicketKind }) {
           <p className="mt-0.5 text-sm text-pilot-grey-400">{words.listLead}</p>
         </div>
         {kind === "REPAIR" ? (
-          <Link href="/hibajegyek/uj">
+          <Link href="/hibajegyek/uj" className="self-start sm:self-auto">
             <PilotButton variant="primary">
               <Icon name="plus" size={14} />
               Új hibajegy nyitása
