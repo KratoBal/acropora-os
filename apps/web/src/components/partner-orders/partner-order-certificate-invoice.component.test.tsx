@@ -13,6 +13,7 @@ const invoices = vi.hoisted(() => ({
   issueSummary: vi.fn(),
   issue: vi.fn(),
   downloadPdf: vi.fn(),
+  deleteDraft: vi.fn(),
 }));
 vi.mock("@/lib/api/maintenance-invoice", () => ({
   maintenanceInvoiceApi: invoices,
@@ -215,5 +216,51 @@ describe("PartnerOrderCertificateInvoice", () => {
     expect(screen.getByTestId("invoice-mail").textContent).toBe(
       "A számla elment: szamla@kitalalt.example.",
     );
+  });
+});
+
+describe("PartnerOrderCertificateInvoice -- a piszkozat törlése (Luca kérése)", () => {
+  const open = () =>
+    render(
+      <PartnerOrderCertificateInvoice
+        certificateId="cert-1"
+        certificateNumber="TI-2026-008"
+        signed
+      />,
+    );
+
+  it("a törlés kérdez, a megerősítés törli a piszkozatot, és újra lehet számlázni", async () => {
+    invoices.byCertificate.mockResolvedValue(draftSummary);
+    invoices.deleteDraft.mockReset().mockResolvedValue({ deleted: true });
+    open();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Piszkozat törlése" }),
+    );
+    expect(invoices.deleteDraft).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "Törlöm" }));
+    await waitFor(() =>
+      expect(invoices.deleteDraft).toHaveBeenCalledWith("token-1", "inv-1"),
+    );
+    expect(
+      await screen.findByRole("button", { name: "Számlázás" }),
+    ).toBeInTheDocument();
+  });
+
+  it("a szerver elutasítása megjelenik, és a piszkozat marad", async () => {
+    invoices.byCertificate.mockResolvedValue(draftSummary);
+    invoices.deleteDraft
+      .mockReset()
+      .mockRejectedValue(new Error("Kiállított bizonylat nem törölhető."));
+    open();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Piszkozat törlése" }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Törlöm" }));
+    expect(
+      await screen.findByText(/Kiállított bizonylat nem törölhető/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Kiállítás" }),
+    ).toBeInTheDocument();
   });
 });

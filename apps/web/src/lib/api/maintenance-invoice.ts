@@ -53,6 +53,17 @@ export const maintenanceInvoiceApi = {
         : { method: "POST" },
     );
   },
+  /**
+   * A piszkozat törlése (Luca kérése, acrobot 61225): csak sorszám nélküli piszkozat; a szerver 409 mondata az okkal (kiállítás
+   * indult, közben megváltozott) az `apiRequest` hibájában érkezik.
+   */
+  deleteDraft(token: string, invoiceId: string) {
+    return apiRequest<{ deleted: true }>(
+      `${base}/${encodeURIComponent(invoiceId)}`,
+      token,
+      { method: "DELETE" },
+    );
+  },
   /** A VALÓDI kiállítás (146ccc61): a szerver csak bekapcsolt kapcsolóval engedi. */
   /** The confirmation window's values (card 7ba97e0d, S3), from the issue's own mapping. */
   issueSummary(token: string, invoiceId: string) {
