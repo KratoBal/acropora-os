@@ -80,6 +80,8 @@ export class AquariumsService {
         ownershipType: query.ownershipType,
         waterBodyType: query.waterBodyType,
         customerId: query.customerId,
+        sort: query.sort,
+        direction: query.direction,
       },
       visibility,
     );

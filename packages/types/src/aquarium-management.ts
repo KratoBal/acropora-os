@@ -142,6 +142,21 @@ export interface AquariumMeasurementTarget {
   max?: number;
 }
 
+/**
+ * AZ AKVÁRIUMOK LISTÁJÁNAK RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4). A lista lapozott, ezért a rendezés a szerveren
+ * történik. Három oszlop rendezhető: a név, az ügyfél neve (az ügyfél táblából) és a rendszer literben mért térfogata. A térfogat
+ * üres is lehet: a kiválasztott rendezésben az üres érték MINDKÉT irányban a végén áll. AZ ÜGYFÉL NEVE ALÓL EGY SZŰK KIVÉTEL: az
+ * ügyfél nélküli akvárium (a saját) a kapcsolaton át nem kap üres-érték szabályt, tehát az adatbázis alapját követi: növekvőben a
+ * végén, csökkenőben az elején. Nem rendezhető: a tulajdon, a típus és a víz (a kijelzett felirat nem az enum sorrendje), a
+ * berendezések és a karbantartók (több érték) és az utolsó vízmérés (a mérésekből számolt). Az alap sorrend a létrehozás ideje.
+ */
+export const AQUARIUM_LIST_SORT_FIELDS = [
+  "name",
+  "customerName",
+  "systemVolumeLiters",
+] as const;
+export type AquariumListSortField = (typeof AQUARIUM_LIST_SORT_FIELDS)[number];
+
 export interface AquariumListResponse {
   items: AquariumSummary[];
   pagination: {

@@ -4,16 +4,19 @@ import type {
   AquariumDetail,
   AquariumEquipment,
   AquariumListResponse,
+  AquariumListSortField,
   AquariumMeasurementParameterCode,
   AquariumMeasurementTarget,
   AquariumSelectableCustomerListResponse,
   AquariumSummary,
 } from "@acropora/types";
 
+import { listOrderBy, type SortDirection } from "../common/list-sort.js";
 import { withUniqueCode } from "../common/unique-code.util.js";
 import { customerSearchPattern } from "../customers/customers.repository.js";
 import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
+import { AQUARIUM_LIST_SORT } from "./aquarium-list-sort.js";
 import { resolveAquariumVolume } from "./aquarium-volume.js";
 import type {
   CreateAquariumDto,
@@ -229,6 +232,8 @@ export class AquariumsRepository {
       ownershipType?: "OWN" | "CUSTOMER";
       waterBodyType?: "AKVARIUM" | "TO";
       customerId?: string;
+      sort?: AquariumListSortField;
+      direction?: SortDirection;
     },
     visibility: Prisma.AquariumWhereInput = INTERNAL_ROWS,
   ): Promise<AquariumListResponse> {
@@ -261,7 +266,7 @@ export class AquariumsRepository {
       prisma.aquarium.findMany({
         where,
         include: listInclude,
-        orderBy: { createdAt: "desc" },
+        orderBy: listOrderBy(AQUARIUM_LIST_SORT, query.sort, query.direction),
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),

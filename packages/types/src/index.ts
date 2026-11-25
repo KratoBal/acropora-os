@@ -701,6 +701,7 @@ export type {
   AquariumEquipment,
   AquariumEquipmentKind,
   AquariumListResponse,
+  AquariumListSortField,
   AquariumMaintainer,
   AquariumMeasurementListResponse,
   AquariumMeasurementOccasion,
@@ -720,6 +721,7 @@ export type {
   WaterType,
 } from "./aquarium-management.js";
 export {
+  AQUARIUM_LIST_SORT_FIELDS,
   AQUARIUM_MEASUREMENT_PARAMETER_COLOR,
   AQUARIUM_MEASUREMENT_PARAMETERS,
   AQUARIUM_MEASUREMENT_TARGET_RANGE,
