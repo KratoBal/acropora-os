@@ -1,6 +1,16 @@
 "use client";
 
-import { Alert, Icon, PageHeader, PAGE_GUTTER_X } from "@acropora/ui";
+import {
+  Alert,
+  Icon,
+  PageHeader,
+  PAGE_GUTTER_X,
+  PilotField,
+  PilotFieldPair,
+  PilotFormActions,
+  PilotFormCard,
+  PilotFormLayout,
+} from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -35,9 +45,6 @@ import {
 } from "../worksheet-line-editor";
 import {
   PilotButton,
-  PilotCard,
-  PilotCardHeader,
-  PilotFormField,
   PilotInput,
   PilotSelect,
   PilotThemeRoot,
@@ -177,6 +184,8 @@ export function PilotWorksheetCreatePage() {
   const assigneesTouched = useRef(false);
   const assigneesPrefilled = useRef(false);
   const [assetIds, setAssetIds] = useState<string[]>([]);
+  // a mező-hibák az első mentési kísérlet UTÁN látszanak (előtte az összesítő és a halvány gomb jelez)
+  const [showErrors, setShowErrors] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ticketCustomerId, setTicketCustomerId] = useState<string | null>(null);
@@ -402,11 +411,37 @@ export function PilotWorksheetCreatePage() {
     ticketCustomerId === null ||
     partners.some((partner) => partner.customerId === ticketCustomerId);
 
-  const missing: string[] = [];
-  if (!customerId) missing.push("Partner");
-  if (!departmentId) missing.push("Alegység");
-  if (!header.subject.trim()) missing.push("Tárgy");
+  // a hiányzó kötelező mezők (a szabály a régi: partner, helyszín, tárgy), a megjelenő név és a doboz azonosítója (ide görget a mentés gomb)
+  const missingFields: { label: string; fieldId: string }[] = [];
+  if (!customerId)
+    missingFields.push({ label: "Partner", fieldId: "munkalap-partner-mezo" });
+  if (!departmentId)
+    missingFields.push({
+      label: "Helyszín",
+      fieldId: "munkalap-helyszin-mezo",
+    });
+  if (!header.subject.trim())
+    missingFields.push({ label: "Tárgy", fieldId: "munkalap-targy-mezo" });
+  const missing = missingFields.map((field) => field.label);
   const canSubmit = missing.length === 0;
+  const errorOf = (label: string, sentence: string) =>
+    showErrors && missing.includes(label) ? sentence : null;
+  // a halvány mentés gomb kattintható: hiányzó mezőnél megmutatja a hibákat és az első hibás mezőhöz görget (nem ment)
+  const onSubmitClick = () => {
+    if (canSubmit) {
+      void submit();
+      return;
+    }
+    setShowErrors(true);
+    const first = missingFields[0];
+    if (first) {
+      const box = document.getElementById(first.fieldId);
+      box?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+      box
+        ?.querySelector<HTMLElement>("input, select, textarea, button")
+        ?.focus({ preventScroll: true });
+    }
+  };
 
   return (
     <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
@@ -421,149 +456,168 @@ export function PilotWorksheetCreatePage() {
         <PageHeader title="Új munkalap" />
       </div>
 
-      <div className={`flex max-w-3xl flex-col gap-5 ${PAGE_GUTTER_X} py-6`}>
-        <ServiceOfflineNotice state={{ kind: "form" }} pilot />
-        {error ? (
-          <Alert variant="danger" title="Hiba" description={error} />
-        ) : null}
-        {ticketError ? (
-          <Alert
-            variant="danger"
-            title={
-              maintenance ? "A karbantartási lapról" : "A hibajegy oldaláról"
-            }
-            description={ticketError}
-          />
-        ) : null}
-        {/*
-          A (C) HIÁNY 1/2: A HIBAJEGY SORA. Csak akkor jelenik meg, ha a lap
-          egy jegyből nyílt ÉS a jegy száma megjött -- a Figma feltétel nélkül
-          rajzolja (`linkedHibajegy &&`), itt a valódi betöltés dönti el.
-        */}
-        {ticketId && ticketJobNumber ? (
-          <div className="rounded-lg bg-pilot-grey-50 px-4 py-3 text-sm text-pilot-grey-600 ring-1 ring-pilot-grey-200">
-            {maintenance ? "Karbantartási lap:" : "Hibajegy:"}{" "}
-            <Link
-              href={parentHref}
-              className="font-mono font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
-            >
-              {ticketJobNumber}
-            </Link>
-          </div>
-        ) : null}
-
-        <PilotCard>
-          <PilotCardHeader title="Hozzárendelés" />
-          <div className="grid grid-cols-1 gap-x-6 gap-y-5 p-5 sm:grid-cols-2">
-            <PilotFormField
-              label="Partner"
-              required
-              help={
-                noSelectablePartners
-                  ? "Csak az a partner választható, akinél be van pipálva a Szerviz, és van munkalap-rövidítése. A rövidítést a partner adatlapján lehet felvinni."
-                  : undefined
-              }
-            >
-              <PilotSelect
-                aria-label="Partner"
-                value={customerId}
-                disabled={ticketCustomerId !== null}
-                onChange={(value) => {
-                  setCustomerId(value);
-                  setDepartmentId("");
-                }}
-              >
-                <option value="">
-                  {noSelectablePartners
-                    ? "Nincs választható szerviz partner"
-                    : "Válassz partnert…"}
-                </option>
-                {partnerOptions.map((partner) => (
-                  <option key={partner.id} value={partner.id}>
-                    {partner.displayName}
-                  </option>
-                ))}
-              </PilotSelect>
-            </PilotFormField>
-            <PilotFormField
-              label="Alegység"
-              required
-              help={
-                ticketUnitArchived
-                  ? `A ${maintenance ? "karbantartási lap" : "hibajegy"} helyszíne (${ticketDepartmentName ?? "ismeretlen"}) archivált, ezért nem tölthető elő. Válassz aktív alegységet.`
-                  : noSelectableUnits
-                    ? ticketPartnerIsMirror
-                      ? "Ehhez a partnerhez még nincs alegység. Vegyél fel egyet lent."
-                      : maintenance
-                        ? "Ehhez a karbantartási laphoz nem tartozhat alegység: a partnere nem szerviz partnerként van felvéve. A lap partnerét kell rendbe tenni."
-                        : "Ehhez a hibajegyhez nem tartozhat alegység: a partnere nem szerviz partnerként van felvéve. A jegy partnerét kell rendbe tenni."
-                    : "A munkalapszám első tagja is ebből lesz."
-              }
-            >
-              <PilotSelect
-                aria-label="Alegység"
-                value={departmentId}
-                disabled={!customerId}
-                onChange={setDepartmentId}
-              >
-                <option value="">Válasszon alegységet…</option>
-                {departmentOptions.map((department) => (
-                  <option key={department.id} value={department.id}>
-                    {department.label}
-                  </option>
-                ))}
-              </PilotSelect>
-              <button
-                type="button"
-                onClick={() => setNewDepartmentOpen((open) => !open)}
-                disabled={!customerId}
-                className="mt-1.5 cursor-pointer text-xs text-pilot-aqua-600 transition hover:text-pilot-aqua-800 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {newDepartmentOpen ? "− Mégsem" : "+ Új alegység hozzáadása"}
-              </button>
-            </PilotFormField>
-            {newDepartmentOpen && customerId ? (
-              <>
-                <PilotFormField label="Szülő helyszín">
-                  <PilotSelect
-                    aria-label="Szülő helyszín"
-                    value={newDepartment.parentId}
-                    onChange={(value) =>
-                      setNewDepartment((current) => ({
-                        ...current,
-                        parentId: value,
-                      }))
-                    }
-                  >
-                    <option value="">Legfelső szint</option>
-                    {departmentOptions.map((department) => (
-                      <option key={department.id} value={department.id}>
-                        {department.label}
-                      </option>
-                    ))}
-                  </PilotSelect>
-                </PilotFormField>
-                <PilotFormField label="Új alegység kódja">
-                  <PilotInput
-                    aria-label="Új alegység kódja"
-                    value={newDepartment.code}
-                    placeholder="pl. CAP-UJ"
-                    onChange={(value) =>
-                      setNewDepartment((current) => ({
-                        ...current,
-                        code: value,
-                      }))
-                    }
-                  />
-                </PilotFormField>
-                <PilotFormField
-                  label="Új alegység neve"
-                  required
-                  className="sm:col-span-2"
+      <div className={`${PAGE_GUTTER_X} py-6`}>
+        <PilotFormLayout
+          top={
+            <>
+              <ServiceOfflineNotice state={{ kind: "form" }} pilot />
+              {error ? (
+                <Alert variant="danger" title="Hiba" description={error} />
+              ) : null}
+              {ticketError ? (
+                <Alert
+                  variant="danger"
+                  title={
+                    maintenance
+                      ? "A karbantartási lapról"
+                      : "A hibajegy oldaláról"
+                  }
+                  description={ticketError}
+                />
+              ) : null}
+            </>
+          }
+          afterText="Mentés után megnyílik az új munkalap adatlapja, ahol a tételeket és a felelőst is szerkesztheted, és ahol a munkalapot kiállíthatod és lezárhatod. A felelősnek kiosztott kollégák értesítést kapnak."
+          actions={
+            <PilotFormActions
+              missing={missing}
+              busy={saving}
+              submitLabel="Mentés"
+              busyLabel="Mentés…"
+              onCancel={() => router.push(backToList.href)}
+              onSubmit={onSubmitClick}
+            />
+          }
+        >
+          <PilotFormCard title="Kinek és hol?">
+            {/*
+              A HIBAJEGY SORA. Csak akkor jelenik meg, ha a lap egy jegyből nyílt ÉS a jegy száma megjött -- a Figma feltétel nélkül
+              rajzolja (`linkedHibajegy &&`), itt a valódi betöltés dönti el.
+            */}
+            {ticketId && ticketJobNumber ? (
+              <div className="rounded-lg bg-pilot-grey-50 px-4 py-3 text-sm text-pilot-grey-600 ring-1 ring-pilot-grey-200">
+                {maintenance ? "Karbantartási lap:" : "Hibajegy:"}{" "}
+                <Link
+                  href={parentHref}
+                  className="font-mono font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
                 >
-                  <div className="flex gap-2">
+                  {ticketJobNumber}
+                </Link>
+              </div>
+            ) : null}
+            <PilotFieldPair>
+              <PilotField
+                id="munkalap-partner-mezo"
+                label="Partner"
+                requirement="required"
+                error={errorOf("Partner", "Válassz partnert.")}
+                help={
+                  noSelectablePartners
+                    ? "Csak az a partner választható, akinél be van pipálva a Szerviz, és van munkalap-rövidítése. A rövidítést a partner adatlapján lehet felvinni."
+                    : undefined
+                }
+              >
+                <PilotSelect
+                  aria-label="Partner"
+                  value={customerId}
+                  disabled={ticketCustomerId !== null}
+                  onChange={(value) => {
+                    setCustomerId(value);
+                    setDepartmentId("");
+                  }}
+                >
+                  <option value="">
+                    {noSelectablePartners
+                      ? "Nincs választható szerviz partner"
+                      : "Válassz partnert…"}
+                  </option>
+                  {partnerOptions.map((partner) => (
+                    <option key={partner.id} value={partner.id}>
+                      {partner.displayName}
+                    </option>
+                  ))}
+                </PilotSelect>
+              </PilotField>
+              <PilotField
+                id="munkalap-helyszin-mezo"
+                label="Helyszín"
+                requirement="required"
+                error={errorOf("Helyszín", "Válassz helyszínt.")}
+                help={
+                  ticketUnitArchived
+                    ? `A ${maintenance ? "karbantartási lap" : "hibajegy"} helyszíne (${ticketDepartmentName ?? "ismeretlen"}) archivált, ezért nem tölthető elő. Válassz aktív helyszínt.`
+                    : noSelectableUnits
+                      ? ticketPartnerIsMirror
+                        ? "Ehhez a partnerhez még nincs helyszín. Vegyél fel egyet lent."
+                        : maintenance
+                          ? "Ehhez a karbantartási laphoz nem tartozhat helyszín: a partnere nem szerviz partnerként van felvéve. A lap partnerét kell rendbe tenni."
+                          : "Ehhez a hibajegyhez nem tartozhat helyszín: a partnere nem szerviz partnerként van felvéve. A jegy partnerét kell rendbe tenni."
+                      : "A munkalapszám első tagja is ebből lesz."
+                }
+              >
+                <PilotSelect
+                  aria-label="Helyszín"
+                  value={departmentId}
+                  disabled={!customerId}
+                  onChange={setDepartmentId}
+                >
+                  <option value="">Válassz helyszínt…</option>
+                  {departmentOptions.map((department) => (
+                    <option key={department.id} value={department.id}>
+                      {department.label}
+                    </option>
+                  ))}
+                </PilotSelect>
+                <button
+                  type="button"
+                  onClick={() => setNewDepartmentOpen((open) => !open)}
+                  disabled={!customerId}
+                  className="mt-1.5 cursor-pointer self-start text-xs text-pilot-aqua-600 transition hover:text-pilot-aqua-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {newDepartmentOpen ? "− Mégsem" : "+ Új helyszín hozzáadása"}
+                </button>
+              </PilotField>
+            </PilotFieldPair>
+            {newDepartmentOpen && customerId ? (
+              <div className="flex flex-col gap-5 rounded-lg bg-pilot-grey-50 p-4 ring-1 ring-pilot-grey-200">
+                <PilotFieldPair>
+                  <PilotField label="Szülő helyszín" requirement="optional">
+                    <PilotSelect
+                      aria-label="Szülő helyszín"
+                      value={newDepartment.parentId}
+                      onChange={(value) =>
+                        setNewDepartment((current) => ({
+                          ...current,
+                          parentId: value,
+                        }))
+                      }
+                    >
+                      <option value="">Legfelső szint</option>
+                      {departmentOptions.map((department) => (
+                        <option key={department.id} value={department.id}>
+                          {department.label}
+                        </option>
+                      ))}
+                    </PilotSelect>
+                  </PilotField>
+                  <PilotField label="Új helyszín kódja" requirement="required">
                     <PilotInput
-                      aria-label="Új alegység neve"
+                      aria-label="Új helyszín kódja"
+                      value={newDepartment.code}
+                      placeholder="pl. CAP-UJ"
+                      onChange={(value) =>
+                        setNewDepartment((current) => ({
+                          ...current,
+                          code: value,
+                        }))
+                      }
+                    />
+                  </PilotField>
+                </PilotFieldPair>
+                <PilotField label="Új helyszín neve" requirement="required">
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <PilotInput
+                      aria-label="Új helyszín neve"
                       value={newDepartment.name}
                       placeholder="pl. Hátsó medence"
                       onChange={(value) =>
@@ -580,19 +634,21 @@ export function PilotWorksheetCreatePage() {
                       }
                       onClick={() => void addDepartment()}
                     >
-                      Alegység felvitele
+                      Helyszín felvitele
                     </PilotButton>
                   </div>
-                </PilotFormField>
-              </>
+                </PilotField>
+              </div>
             ) : null}
-          </div>
-        </PilotCard>
+          </PilotFormCard>
 
-        <PilotCard>
-          <PilotCardHeader title="Munkalap adatai" />
-          <div className="grid grid-cols-1 gap-x-6 gap-y-5 p-5 sm:grid-cols-2">
-            <PilotFormField label="Tárgy" required className="sm:col-span-2">
+          <PilotFormCard title="Mi a munka?">
+            <PilotField
+              id="munkalap-targy-mezo"
+              label="Tárgy"
+              requirement="required"
+              error={errorOf("Tárgy", "Add meg a munkalap tárgyát.")}
+            >
               <PilotInput
                 aria-label="Tárgy"
                 value={header.subject}
@@ -601,44 +657,99 @@ export function PilotWorksheetCreatePage() {
                   setHeader((current) => ({ ...current, subject: value }))
                 }
               />
-            </PilotFormField>
-            <PilotFormField label="Keltezés">
-              <PilotInput
-                aria-label="Keltezés"
-                type="date"
-                value={header.issueDate}
-                onChange={(value) =>
-                  setHeader((current) => ({ ...current, issueDate: value }))
-                }
-              />
-            </PilotFormField>
-            <PilotFormField label="Határidő">
-              <PilotInput
-                aria-label="Határidő"
-                type="date"
-                value={header.dueDate}
-                onChange={(value) =>
-                  setHeader((current) => ({ ...current, dueDate: value }))
-                }
-              />
-            </PilotFormField>
-            <PilotFormField label="Teljesítés">
-              <PilotInput
-                aria-label="Teljesítés"
-                type="date"
-                value={header.fulfillmentDate}
-                onChange={(value) =>
+            </PilotField>
+            <PilotField label="Megjegyzés" requirement="optional">
+              <textarea
+                aria-label="Megjegyzés"
+                rows={3}
+                value={header.description}
+                onChange={(event) =>
                   setHeader((current) => ({
                     ...current,
-                    fulfillmentDate: value,
+                    description: event.target.value,
                   }))
                 }
+                className="w-full resize-none rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
               />
-            </PilotFormField>
-            <PilotFormField
+            </PilotField>
+            <WorksheetLineEditor
+              pilot
+              bare
+              lines={lines}
+              onChange={setLines}
+              disabled={saving}
+            />
+            <PilotField
+              label="Érintett eszközök"
+              requirement="optional"
+              help={
+                departmentId
+                  ? maintenance
+                    ? "A karbantartási lapból nyitott munkalap a lap eszközeivel indul; itt levehetők és továbbiak felvehetők."
+                    : "A hibajegyből nyitott lap a jegy eszközeivel indul; itt levehetők és továbbiak felvehetők."
+                  : undefined
+              }
+            >
+              {departmentId ? (
+                <JobAssetPicker
+                  departmentId={departmentId}
+                  selected={assetIds}
+                  onChange={setAssetIds}
+                />
+              ) : (
+                <p className="text-xs italic text-pilot-grey-400">
+                  Előbb válassz helyszínt: az eszközök a helyszín részfájából
+                  jönnek.
+                </p>
+              )}
+            </PilotField>
+          </PilotFormCard>
+
+          <PilotFormCard title="Mikor?">
+            <PilotFieldPair>
+              <PilotField label="Keltezés" requirement="optional">
+                <PilotInput
+                  aria-label="Keltezés"
+                  type="date"
+                  value={header.issueDate}
+                  onChange={(value) =>
+                    setHeader((current) => ({ ...current, issueDate: value }))
+                  }
+                />
+              </PilotField>
+              <PilotField label="Határidő" requirement="optional">
+                <PilotInput
+                  aria-label="Határidő"
+                  type="date"
+                  value={header.dueDate}
+                  onChange={(value) =>
+                    setHeader((current) => ({ ...current, dueDate: value }))
+                  }
+                />
+              </PilotField>
+            </PilotFieldPair>
+            <PilotFieldPair>
+              <PilotField label="Teljesítés" requirement="optional">
+                <PilotInput
+                  aria-label="Teljesítés"
+                  type="date"
+                  value={header.fulfillmentDate}
+                  onChange={(value) =>
+                    setHeader((current) => ({
+                      ...current,
+                      fulfillmentDate: value,
+                    }))
+                  }
+                />
+              </PilotField>
+            </PilotFieldPair>
+          </PilotFormCard>
+
+          <PilotFormCard title="Ki felel érte?">
+            <PilotField
               label="Felelős"
-              className="sm:col-span-2"
-              help="Elhagyható: a kiosztás a lap adatlapján később is elvégezhető."
+              requirement="optional"
+              help="A kiosztás a lap adatlapján később is elvégezhető."
             >
               <div className="space-y-1">
                 <WorksheetAssigneePicker
@@ -677,79 +788,9 @@ export function PilotWorksheetCreatePage() {
                   </p>
                 ) : null}
               </div>
-            </PilotFormField>
-            <PilotFormField label="Megjegyzés" className="sm:col-span-2">
-              <textarea
-                aria-label="Megjegyzés"
-                rows={3}
-                value={header.description}
-                onChange={(event) =>
-                  setHeader((current) => ({
-                    ...current,
-                    description: event.target.value,
-                  }))
-                }
-                className="w-full resize-none rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
-              />
-            </PilotFormField>
-          </div>
-        </PilotCard>
-
-        <WorksheetLineEditor
-          pilot
-          lines={lines}
-          onChange={setLines}
-          disabled={saving}
-        />
-
-        <PilotCard>
-          <PilotCardHeader title="Érintett eszközök" />
-          <div className="p-5">
-            {departmentId ? (
-              <>
-                <p className="mb-3 text-xs text-pilot-grey-400">
-                  {maintenance
-                    ? "Elhagyható. A karbantartási lapból nyitott munkalap a lap eszközeivel indul; itt levehetők és továbbiak felvehetők."
-                    : "Elhagyható. A hibajegyből nyitott lap a jegy eszközeivel indul; itt levehetők és továbbiak felvehetők."}
-                </p>
-                <JobAssetPicker
-                  departmentId={departmentId}
-                  selected={assetIds}
-                  onChange={setAssetIds}
-                />
-              </>
-            ) : (
-              <p className="text-xs italic text-pilot-grey-400">
-                Előbb válassz alegységet: az eszközök a helyszín részfájából
-                jönnek.
-              </p>
-            )}
-          </div>
-        </PilotCard>
-
-        {/*
-          A (C) HIÁNY 2/2: "KÖTELEZŐ: X, Y" A MENTÉS GOMB ALATT, csak amíg a
-          gomb inaktív -- a minta a pilot-asset-create-page.tsx-ből jön.
-        */}
-        <div className="flex items-center gap-4 pb-8">
-          <Link href={backToList.href}>
-            <PilotButton variant="secondary" disabled={saving}>
-              Mégse
-            </PilotButton>
-          </Link>
-          <PilotButton
-            variant="primary"
-            disabled={!canSubmit || saving}
-            onClick={() => void submit()}
-          >
-            {saving ? "Mentés…" : "Mentés"}
-          </PilotButton>
-          {missing.length > 0 ? (
-            <p className="text-xs text-pilot-grey-400">
-              Kötelező: {missing.join(", ")}
-            </p>
-          ) : null}
-        </div>
+            </PilotField>
+          </PilotFormCard>
+        </PilotFormLayout>
       </div>
     </PilotThemeRoot>
   );

@@ -133,7 +133,7 @@ describe("PilotWorksheetEditorPage", () => {
     await screen.findByText("Fankó Kft.");
 
     expect(screen.queryByLabelText("Partner")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Alegység")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Helyszín")).not.toBeInTheDocument();
     expect(
       screen.queryByLabelText("Új alegység kódja"),
     ).not.toBeInTheDocument();

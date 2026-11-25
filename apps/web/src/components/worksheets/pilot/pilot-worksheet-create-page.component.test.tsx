@@ -1,4 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Session } from "@acropora/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,7 +27,7 @@ import { PilotWorksheetCreatePage } from "./pilot-worksheet-create-page";
  *
  * MINDEN ÁLLÍTÁS AZ EREDETI VISELKEDÉST MÉRI, a mai (pilot) jelölőkhöz
  * igazítva -- lásd a fájl alján a KÉT VALÓDI ELTÉRÉST: a "Mégsem" felirat ma
- * "Mégse", és az új alegység mezői ma egy "+ Új alegység hozzáadása"
+ * "Mégse", és az új alegység mezői ma egy "+ Új helyszín hozzáadása"
  * hivatkozás mögött állnak, nem mindig látszanak.
  */
 
@@ -90,7 +96,7 @@ async function nyisdKiAzUjAlegysegett(
   user: ReturnType<typeof userEvent.setup>,
 ) {
   await user.click(
-    await screen.findByRole("button", { name: "+ Új alegység hozzáadása" }),
+    await screen.findByRole("button", { name: "+ Új helyszín hozzáadása" }),
   );
 }
 
@@ -236,7 +242,7 @@ describe("PilotWorksheetCreatePage assignees", () => {
       "customer-42",
     );
     await user.selectOptions(
-      await listedSelect("Alegység", "department-1"),
+      await listedSelect("Helyszín", "department-1"),
       "department-1",
     );
     await user.type(screen.getByLabelText("Tárgy"), "Havi karbantartás");
@@ -273,7 +279,7 @@ describe("PilotWorksheetCreatePage assignees", () => {
     await waitFor(() => expect(jobs.detail).toHaveBeenCalledTimes(1));
     expect(jobs.detail.mock.calls[0]?.[1]).toBe("job-1");
 
-    const alegyseg = await screen.findByLabelText("Alegység");
+    const alegyseg = await screen.findByLabelText("Helyszín");
     await waitFor(() =>
       expect(
         within(alegyseg).getByRole("option", { name: /Biotóp/ }),
@@ -314,7 +320,7 @@ describe("PilotWorksheetCreatePage assignees", () => {
       "customer-42",
     );
     await user.selectOptions(
-      await listedSelect("Alegység", "department-1"),
+      await listedSelect("Helyszín", "department-1"),
       "department-1",
     );
     await user.type(screen.getByLabelText("Tárgy"), "Havi karbantartás");
@@ -338,7 +344,7 @@ describe("PilotWorksheetCreatePage assignees", () => {
     render(<PilotWorksheetCreatePage />);
 
     expect(
-      await screen.findByText(/Ehhez a partnerhez még nincs alegység/),
+      await screen.findByText(/Ehhez a partnerhez még nincs helyszín/),
     ).toBeTruthy();
   });
 
@@ -609,7 +615,7 @@ describe("PilotWorksheetCreatePage assignees", () => {
     render(<PilotWorksheetCreatePage />);
 
     const alegyseg = (await screen.findByLabelText(
-      "Alegység",
+      "Helyszín",
     )) as HTMLSelectElement;
     await waitFor(() => expect(alegyseg.value).toBe("department-1"));
   });
@@ -619,7 +625,7 @@ describe("PilotWorksheetCreatePage assignees", () => {
     render(<PilotWorksheetCreatePage />);
 
     const alegyseg = (await screen.findByLabelText(
-      "Alegység",
+      "Helyszín",
     )) as HTMLSelectElement;
     await waitFor(() =>
       expect(
@@ -635,7 +641,7 @@ describe("PilotWorksheetCreatePage assignees", () => {
     render(<PilotWorksheetCreatePage />);
 
     const alegyseg = (await screen.findByLabelText(
-      "Alegység",
+      "Helyszín",
     )) as HTMLSelectElement;
     await waitFor(() => expect(alegyseg.value).toBe("department-1"));
     expect(alegyseg.disabled).toBe(false);
@@ -665,11 +671,15 @@ describe("PilotWorksheetCreatePage assignees", () => {
       name: "Mentés",
     }) as HTMLButtonElement;
     await user.type(screen.getByLabelText("Tárgy"), "Szivattyú csere");
-    await waitFor(() => expect(mentes.disabled).toBe(true));
+    await waitFor(() =>
+      expect(mentes.getAttribute("aria-disabled")).toBe("true"),
+    );
     expect(worksheets.create).not.toHaveBeenCalled();
 
-    await user.selectOptions(screen.getByLabelText("Alegység"), "department-1");
-    await waitFor(() => expect(mentes.disabled).toBe(false));
+    await user.selectOptions(screen.getByLabelText("Helyszín"), "department-1");
+    await waitFor(() =>
+      expect(mentes.getAttribute("aria-disabled")).toBe("false"),
+    );
   });
 
   it("a jegy eszközei előtöltve állnak, és a felvitel viszi őket", async () => {
@@ -730,7 +740,7 @@ describe("PilotWorksheetCreatePage assignees", () => {
     render(<PilotWorksheetCreatePage />);
 
     expect(
-      await screen.findByText(/Ehhez a partnerhez még nincs alegység/),
+      await screen.findByText(/Ehhez a partnerhez még nincs helyszín/),
     ).toBeTruthy();
     expect(screen.queryByText(/archivált/)).toBeNull();
   });
@@ -763,7 +773,7 @@ describe("PilotWorksheetCreatePage assignees", () => {
     expect(
       await screen.findByText("A munkalapszám első tagja is ebből lesz."),
     ).toBeTruthy();
-    expect(screen.queryByText(/még nincs alegység/)).toBeNull();
+    expect(screen.queryByText(/még nincs helyszín/)).toBeNull();
   });
 
   it("creates an unassigned sheet without complaining", async () => {
@@ -775,7 +785,7 @@ describe("PilotWorksheetCreatePage assignees", () => {
       "customer-42",
     );
     await user.selectOptions(
-      await listedSelect("Alegység", "department-1"),
+      await listedSelect("Helyszín", "department-1"),
       "department-1",
     );
     await user.type(screen.getByLabelText("Tárgy"), "Havi karbantartás");
@@ -868,7 +878,7 @@ describe("PilotWorksheetCreatePage site tree", () => {
     // the units come with the chosen partner's answer, after the field
     await answered(worksheets.departments);
 
-    const picker = within(await screen.findByLabelText("Alegység"));
+    const picker = within(await screen.findByLabelText("Helyszín"));
     expect(
       picker.getByRole("option", { name: "Fankó telephely / Biodóm (BIO)" }),
     ).toBeTruthy();
@@ -894,13 +904,13 @@ describe("PilotWorksheetCreatePage site tree", () => {
       await listedSelect("Szülő helyszín", "bio-fank"),
       "bio-fank",
     );
-    await user.type(screen.getByLabelText("Új alegység kódja"), "fnm");
+    await user.type(screen.getByLabelText("Új helyszín kódja"), "fnm");
     await user.type(
-      screen.getByLabelText("Új alegység neve"),
+      screen.getByLabelText("Új helyszín neve"),
       "Nagy főkamedence",
     );
     await user.click(
-      screen.getByRole("button", { name: "Alegység felvitele" }),
+      screen.getByRole("button", { name: "Helyszín felvitele" }),
     );
 
     expect(worksheets.createDepartment).toHaveBeenCalledTimes(1);
@@ -966,7 +976,7 @@ describe("PilotWorksheetCreatePage: archived units in the two pickers", () => {
     );
     await answered(worksheets.departments);
 
-    const offered = await optionsOf("Alegység");
+    const offered = await optionsOf("Helyszín");
     expect(offered.some((text) => text.includes("Biodóm"))).toBe(true);
     expect(offered.some((text) => text.includes("Régi szárny"))).toBe(false);
   });
@@ -1009,8 +1019,9 @@ describe("PilotWorksheetCreatePage kiút", () => {
   it("új munkalapnál a mentés melletti kiút a listához visz", async () => {
     render(<PilotWorksheetCreatePage />);
 
-    const megse = await screen.findByRole("link", { name: "Mégse" });
-    expect(megse.getAttribute("href")).toBe("/szerviz/munkalapok");
+    // a gombsor Mégse-je gomb (a közös űrlap-váz), nem hivatkozás: a céllal a visszalépés (`useReturnTo`) szolgál
+    fireEvent.click(await screen.findByRole("button", { name: "Mégse" }));
+    expect(navigation.push).toHaveBeenCalledWith("/szerviz/munkalapok");
   });
 });
 
@@ -1161,5 +1172,124 @@ describe("PilotWorksheetCreatePage: a karbantartási lap felelősei (kártya d91
     expect((await checked("Cili")).checked).toBe(true);
     expect((await checked("Anna")).checked).toBe(false);
     expect((await checked("Béla")).checked).toBe(false);
+  });
+});
+
+/**
+ * AZ ÚJ MUNKALAP ŰRLAP A KÖZÖS VÁZON (picasso leltár 3.7, acrobot 2026-11-25): ugyanazok a csoport-címek ugyanabban a sorrendben, mint az új hibajegyen,
+ * egy kötelező-jelölés, a "Hiányzik: ..." összesítő a gombsorban, a "Helyszín" egy szó (acrobot: egy fogalom, egy szó). MI PIROSÍT: ha a csoportok
+ * sorrendje vagy a címük eltér a hibajegy űrlapétól; ha a kötelező mező csillag nélkül, a nem kötelező "(nem kötelező)" nélkül marad; ha az összesítő más
+ * alakú; ha a halvány mentésre kattintva nem a mező hibái jelennek meg (vagy mégis mentene); ha a Tételek külön kártyává válik a csoporton belül.
+ * A kötelezőségi szabály és a mentés hívása ehhez nem változik (a fenti tesztek).
+ */
+describe("PilotWorksheetCreatePage: a közös űrlap-váz", () => {
+  beforeEach(() => {
+    auth.session = session;
+    query.params = new URLSearchParams();
+    worksheets.departments.mockReset().mockResolvedValue({ items: [] });
+    worksheets.selectablePartners.mockReset().mockResolvedValue({ items: [] });
+    worksheets.assignableUsers.mockReset().mockResolvedValue({ items: [] });
+    worksheets.create.mockReset().mockResolvedValue({ id: "worksheet-1" });
+    assets.list.mockReset().mockResolvedValue({
+      items: [],
+      pagination: { page: 1, pageSize: 25, totalItems: 0, totalPages: 1 },
+    });
+  });
+
+  it("a csoportok kérdés-című kártyák ugyanabban a sorrendben, mint az új hibajegyen (plusz a Mikor)", async () => {
+    render(<PilotWorksheetCreatePage />);
+    await screen.findByLabelText("Partner");
+    const titles = screen
+      .getAllByRole("heading", { level: 2 })
+      .map((heading) => heading.textContent)
+      .filter((text) => text !== "Mi történik ezután");
+    expect(titles).toEqual([
+      "Kinek és hol?",
+      "Mi a munka?",
+      "Mikor?",
+      "Ki felel érte?",
+    ]);
+  });
+
+  it("a kötelező mezők csillagosak, a többi '(nem kötelező)'", async () => {
+    render(<PilotWorksheetCreatePage />);
+    await screen.findByLabelText("Partner");
+    for (const name of ["Partner", "Helyszín", "Tárgy"]) {
+      const label = screen.getByText(name, { selector: "label" });
+      expect(label.textContent, name).toContain("*");
+      expect(label.textContent, name).not.toContain("(nem kötelező)");
+    }
+    for (const name of [
+      "Megjegyzés",
+      "Érintett eszközök",
+      "Keltezés",
+      "Határidő",
+      "Teljesítés",
+      "Felelős",
+    ]) {
+      const label = screen.getByText(name, { selector: "label" });
+      expect(label.textContent, name).toContain("(nem kötelező)");
+      expect(label.textContent, name).not.toContain("*");
+    }
+  });
+
+  it("az összesítő a gombsorban egy alakban, a mentés halvány; a halvány mentésre a hibák a mezőknél jelennek meg, és nem ment", async () => {
+    render(<PilotWorksheetCreatePage />);
+    await screen.findByLabelText("Partner");
+    expect(screen.getByRole("status").textContent).toBe(
+      "Hiányzik: Partner, Helyszín, Tárgy",
+    );
+    const save = screen.getByRole("button", { name: "Mentés" });
+    expect(save.getAttribute("aria-disabled")).toBe("true");
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(save);
+    expect(
+      screen.getAllByRole("alert").map((alert) => alert.textContent),
+    ).toEqual([
+      "Válassz partnert.",
+      "Válassz helyszínt.",
+      "Add meg a munkalap tárgyát.",
+    ]);
+    expect(worksheets.create).not.toHaveBeenCalled();
+  });
+
+  it("a Tételek a 'Mi a munka?' kártya része (al-cím, nem külön kártya), és az '+ Új tétel' a lista alatt áll", async () => {
+    render(<PilotWorksheetCreatePage />);
+    await screen.findByLabelText("Partner");
+    const items = screen.getByRole("heading", { name: "Tételek" });
+    expect(items.tagName).toBe("H3");
+    const card = items.closest("section")!;
+    expect(
+      within(card).getByRole("heading", { level: 2, name: "Mi a munka?" }),
+    ).toBeTruthy();
+    const add = within(card).getByRole("button", { name: "+ Új tétel" });
+    const firstLine = within(card).getByLabelText("1. tétel megnevezése");
+    expect(
+      firstLine.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("az új helyszín mini-űrlapja a kötelező jelölést viszi: a kód és a név csillagos, a szülő nem kötelező", async () => {
+    worksheets.selectablePartners.mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<PilotWorksheetCreatePage />);
+    await user.selectOptions(
+      await listedSelect("Partner", "customer-42"),
+      "customer-42",
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "+ Új helyszín hozzáadása" }),
+    );
+    for (const name of ["Új helyszín kódja", "Új helyszín neve"])
+      expect(
+        screen.getByText(name, { selector: "label" }).textContent,
+      ).toContain("*");
+    expect(
+      screen.getByText("Szülő helyszín", { selector: "label" }).textContent,
+    ).toContain("(nem kötelező)");
   });
 });
