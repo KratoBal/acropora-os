@@ -861,9 +861,10 @@ describe("PilotServiceJobDetailPage -- a régi lapról áthozott őrök", () => 
     expect(screen.queryByRole("button", { name: "Törlés" })).toBeNull();
     expect(screen.queryByText("+ fotó")).toBeNull();
     expect(
-      screen.queryByRole("button", { name: /Kollégák delegálása/ }),
+      screen.queryByRole("button", { name: /Felelős kiosztása/ }),
     ).toBeNull();
-    expect(screen.getByText("Delegált kollégák")).toBeTruthy();
+    // the card is still there (its title is the one "Felelős" label, the data row beside it is the other)
+    expect(screen.getAllByText("Felelős").length).toBeGreaterThanOrEqual(2);
   });
 
   it("a delegálás a TELJES névsort küldi: a meglévő delegált is megy az új mellett", async () => {
@@ -892,16 +893,46 @@ describe("PilotServiceJobDetailPage -- a régi lapról áthozott őrök", () => 
     );
     render(<PilotServiceJobDetailPage jobId="job-1" />);
     fireEvent.click(
-      (
-        await screen.findAllByRole("button", { name: /Kollégák delegálása/ })
-      )[0]!,
+      (await screen.findAllByRole("button", { name: /Felelős kiosztása/ }))[0]!,
     );
     fireEvent.click(await screen.findByRole("button", { name: /Éva/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Delegálás mentése" }));
+    fireEvent.click(screen.getByRole("button", { name: "Felelős mentése" }));
 
     await waitFor(() =>
       expect(api.setAssignees).toHaveBeenCalledWith("token-1", "job-1", {
         userIds: ["user-sanyi", "user-eva"],
+      }),
+    );
+  });
+
+  /*
+    A GÉPI FIÓK, AMELY MÁR A JEGYEN ÁLL, DE A LISTÁN NEM SZEREPEL (card b2e74712). MI PIROSÍT: ha a címkéje a nyers azonosítót írja; ha a mentés
+    elhagyja (a lista nem kínálja, de a rá kiosztott sor marad, és a szerver is megtartja).
+  */
+  it("a listán nem szereplő, már kiosztott gépi fiók a nevét mutatja a címkén, és a mentés megtartja", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        assignees: [
+          {
+            userId: "user-bot",
+            name: "Acro Bot",
+            assignedAt: "2026-09-13T08:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    api.setAssignees.mockResolvedValue(detail());
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: /Felelős kiosztása/ }))[0]!,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /Éva/ }));
+    expect(screen.getByRole("button", { name: /Acro Bot\s*×/ })).toBeTruthy();
+    expect(document.body.textContent).not.toContain("user-bot");
+    fireEvent.click(screen.getByRole("button", { name: "Felelős mentése" }));
+    await waitFor(() =>
+      expect(api.setAssignees).toHaveBeenCalledWith("token-1", "job-1", {
+        userIds: ["user-bot", "user-eva"],
       }),
     );
   });

@@ -459,7 +459,7 @@ export function PilotServiceJobEditorPage() {
           */}
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium text-pilot-grey-700">
-              Delegált kollégák
+              Felelős
             </label>
             <WorksheetAssigneePicker
               candidates={candidates}
@@ -474,7 +474,7 @@ export function PilotServiceJobEditorPage() {
               </p>
             ) : null}
             <p className="pt-1 text-xs text-pilot-grey-400">
-              Elhagyható. A delegált kollégák értesítést kapnak a jegyről.
+              Elhagyható. A kiosztott kollégák értesítést kapnak a jegyről.
             </p>
           </div>
 

@@ -81,7 +81,7 @@ export function WorksheetAssigneeEditor({
 
   return (
     <PilotCard>
-      <PilotCardHeader title="Felelősök" />
+      <PilotCardHeader title="Felelős" />
       <div className="space-y-3 p-4">
         {assignees.length ? (
           <ul className="text-sm text-dusk-700">
@@ -101,6 +101,9 @@ export function WorksheetAssigneeEditor({
               candidates={candidates}
               selected={selected}
               onToggle={toggle}
+              knownNames={Object.fromEntries(
+                assignees.map((assignee) => [assignee.userId, assignee.name]),
+              )}
             />
             {(error ?? candidatesError) ? (
               <p className="text-xs font-medium text-rose-600">
@@ -113,7 +116,7 @@ export function WorksheetAssigneeEditor({
               disabled={!changed || saving}
               onClick={() => void save()}
             >
-              {saving ? "Mentés..." : "Felelősök mentése"}
+              {saving ? "Mentés..." : "Felelős mentése"}
             </PilotButton>
           </>
         ) : null}

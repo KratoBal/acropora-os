@@ -63,7 +63,7 @@ export function PilotDelegatedColleaguesCard({
     <>
       <PilotCard>
         <PilotCardHeader
-          title="Delegált kollégák"
+          title="Felelős"
           action={
             canManage ? (
               <button
@@ -82,7 +82,7 @@ export function PilotDelegatedColleaguesCard({
                 >
                   <path d="M8 3v10M3 8h10" />
                 </svg>
-                Kollégák delegálása
+                Felelős kiosztása
               </button>
             ) : undefined
           }
@@ -90,14 +90,14 @@ export function PilotDelegatedColleaguesCard({
         {assignees.length === 0 ? (
           <div className="flex flex-col items-center gap-3 px-5 py-8 text-center">
             <p className="text-sm text-pilot-grey-400">
-              Még nincs delegált kolléga.
+              Még nincs kiosztva senki.
             </p>
             {canManage ? (
               <PilotButton
                 variant="secondary"
                 onClick={() => setPickerOpen(true)}
               >
-                Kollégák delegálása
+                Felelős kiosztása
               </PilotButton>
             ) : null}
           </div>
@@ -134,6 +134,10 @@ export function PilotDelegatedColleaguesCard({
           jobId={jobId}
           token={token}
           initial={assignees.map((assignee) => assignee.userId)}
+          // a gépi fiók már nem választható, de a rá kiosztott sor marad: a címkéje a nevét mondja, nem a nyers azonosítót
+          knownNames={Object.fromEntries(
+            assignees.map((assignee) => [assignee.userId, assignee.name]),
+          )}
           onClose={() => setPickerOpen(false)}
           onSaved={(detail) => {
             setPickerOpen(false);
@@ -149,12 +153,14 @@ function PilotDelegationPicker({
   jobId,
   token,
   initial,
+  knownNames,
   onClose,
   onSaved,
 }: {
   jobId: string;
   token: string;
   initial: string[];
+  knownNames: Readonly<Record<string, string>>;
   onClose: () => void;
   onSaved: (detail: ServiceJobDetail) => void;
 }) {
@@ -207,7 +213,7 @@ function PilotDelegationPicker({
     <PilotDialog open onClose={onClose}>
       <div className="flex items-center justify-between border-b border-pilot-grey-100 px-5 py-4">
         <h3 className="text-sm font-semibold text-pilot-grey-900">
-          Kollégák delegálása
+          Felelős kiosztása
         </h3>
         <button
           type="button"
@@ -257,7 +263,7 @@ function PilotDelegationPicker({
           <div className="mt-3 flex flex-wrap gap-1.5">
             {selected.map((userId) => {
               const candidate = candidates.find((item) => item.id === userId);
-              const name = candidate?.name ?? userId;
+              const name = candidate?.name ?? knownNames[userId] ?? "Gépi fiók";
               return (
                 <button
                   key={userId}
@@ -361,7 +367,7 @@ function PilotDelegationPicker({
             onClick={() => void save()}
             disabled={saving}
           >
-            {saving ? "Mentés…" : "Delegálás mentése"}
+            {saving ? "Mentés…" : "Felelős mentése"}
           </PilotButton>
         </div>
       </div>

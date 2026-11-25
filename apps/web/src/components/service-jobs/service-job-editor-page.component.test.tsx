@@ -413,7 +413,7 @@ describe("ServiceJobEditorPage", () => {
     /*
       AZ UTOLSO KET ELEM NEM MEZO-FELIRAT, HANEM A DELEGALAS SORAI. A
       jelolonegyzeteket a `WorksheetAssigneePicker` rajzolja, es mindegyik a
-      SAJAT feliratat viszi -- a csoport felirata ("Delegált kollégák") `span`,
+      SAJAT feliratat viszi -- a csoport felirata ("Felelős") `span`,
       ugyanugy, mint az "Érintett eszközök"-e.
 
       ES EPP EZERT MER EZ TOBBET: a ket nev jelenlete a lista VEGEN azt
