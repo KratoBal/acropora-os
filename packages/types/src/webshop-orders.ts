@@ -520,6 +520,15 @@ export interface WebshopOrderDetail {
     number: string | null;
   } | null;
   /**
+   * THE ADVANCE INVOICE (card d31a66a3, S2): made from the advance proforma once the advance transfer is in, issued by the OS.
+   * `null` until it is made. Like `invoice`, the draft, the issuing and the refused one show too.
+   */
+  advanceInvoice: {
+    id: string;
+    status: "DRAFT" | "ISSUING" | "ISSUED" | "ISSUE_FAILED";
+    number: string | null;
+  } | null;
+  /**
    * A rendelés szállítólevele (kártya 0a14f739 C/1): a kiállított számla
    * tételeiből, a Számlázz.hu-n át. Amíg nem készült, `null`.
    */

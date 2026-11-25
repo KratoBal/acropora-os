@@ -422,11 +422,23 @@ describe("the Számlázz.hu invoice of a prepaid order on the list", () => {
     externalsNow.map = new Map<string, unknown>([
       [
         "order_1",
-        { id: "ext_1", number: "E-77", link: "ORDER_NUMBER", paid: true },
+        {
+          id: "ext_1",
+          number: "E-77",
+          link: "ORDER_NUMBER",
+          paid: true,
+          kindCode: "SZ",
+        },
       ],
       [
         "order_3",
-        { id: "ext_3", number: "E-78", link: "BUYER_AMOUNT", paid: false },
+        {
+          id: "ext_3",
+          number: "E-78",
+          link: "BUYER_AMOUNT",
+          paid: false,
+          kindCode: "SZ",
+        },
       ],
     ]);
     try {

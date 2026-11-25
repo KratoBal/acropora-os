@@ -501,6 +501,34 @@ describe("BillingDocumentIssueService", () => {
     assert.deepEqual([calls.claim, calls.generate], [0, 0]);
   });
 
+  it("WEBSHOP-EDITOR-ADVANCE-INVOICE (S2): the advance invoice of an advance transfer is checked the same way, and goes out paid", async () => {
+    const advanceRow = { ...linkedWebshop, documentType: "ADVANCE_INVOICE" };
+    const off = setup({
+      over: advanceRow,
+      transfer: { amount: "1300", advance: true },
+    });
+    await assert.rejects(
+      issue(off.service),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        /nem egyezik a rendelés beérkezett utalásával/.test(error.message),
+    );
+    assert.deepEqual([off.calls.claim, off.calls.generate], [0, 0]);
+    const whole = setup({ over: advanceRow, transfer: { amount: "1270" } });
+    await assert.rejects(
+      issue(whole.service),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        /teljes összegét/.test(error.message),
+    );
+    const ok = setup({
+      over: advanceRow,
+      transfer: { amount: "1270", advance: true },
+    });
+    assert.equal((await issue(ok.service)).status, "ISSUED");
+    assert.match(ok.calls.xml[0] ?? "", /<fizetve>true<\/fizetve>/);
+  });
+
   it("WEBSHOP-UNPAID: without a transfer for the proforma it goes out as before, unpaid; a contract invoice never asks", async () => {
     const { service, calls } = setup({ over: linkedWebshop, transfer: null });
     assert.equal((await issue(service)).status, "ISSUED");

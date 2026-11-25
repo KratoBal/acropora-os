@@ -383,6 +383,33 @@ export const webshopOrdersApi = {
     );
   },
   /**
+   * AZ ELŐLEGSZÁMLA (kártya d31a66a3, S2): az előleg-díjbekérő rögzített beérkezésére, ugyanazzal a megerősítő ablakkal, mint a
+   * számla. A válasz a friss adatlap; a kiállított előlegszámlára a második hívás nem állít ki újat.
+   */
+  issueAdvanceInvoice(
+    token: string,
+    id: string,
+    confirmation: WebshopInvoiceConfirmation,
+  ) {
+    return apiRequest<WebshopInvoiceIssueResult<WebshopOrderDetail>>(
+      `/webshop-orders/${encodeURIComponent(id)}/advance-invoice`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(confirmation),
+      },
+    );
+  },
+  /** Az előlegszámla megerősítő ablakának adatai: a vázlat, ahogy a kiállítás építené (elmentve), és az összesítője. */
+  advanceInvoiceSummary(token: string, id: string) {
+    return apiRequest<WebshopInvoiceSummary>(
+      `/webshop-orders/${encodeURIComponent(id)}/advance-invoice/summary`,
+      token,
+      { method: "POST" },
+    );
+  },
+  /**
    * A rendelés szállítólevele a kiállított számla tételeiből (kártya 0a14f739
    * C/1). A válasz a friss adatlap; a kiállított szállítólevélre a második
    * hívás nem állít ki újat.

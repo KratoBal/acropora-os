@@ -111,6 +111,8 @@ function setup(
     foreign?: string[];
     /** The saved draft's gross (alapból 18900.00). */
     gross?: string;
+    /** The order's advance invoice row (d31a66a3, S2); absent: none. */
+    advanceInvoice?: WebshopOrderInvoiceRow;
   } = {},
 ) {
   const calls: string[] = [];
@@ -145,8 +147,10 @@ function setup(
     },
   } as unknown as WebshopOrdersService;
   const repository = {
-    invoices: async (ids: string[]) =>
-      new Map(over.invoice ? [[ids[0]!, over.invoice]] : []),
+    invoices: async (ids: string[], type?: string) =>
+      type === "ADVANCE_INVOICE"
+        ? new Map(over.advanceInvoice ? [[ids[0]!, over.advanceInvoice]] : [])
+        : new Map(over.invoice ? [[ids[0]!, over.invoice]] : []),
     customerByKey: async (key: string) => {
       calls.push(`customerByKey ${key}`);
       return over.linked ?? null;
@@ -205,6 +209,10 @@ function setup(
       calls.push(`link proforma ${proformaId} to ${invoiceId}`);
       return true;
     },
+    setDraftDays: async (invoiceId: string, day: string) => {
+      calls.push(`days ${invoiceId} ${day}`);
+      return true;
+    },
   } as unknown as WebshopOrdersRepository;
   const customers = {
     create: async (input: { displayName: string }) => {
@@ -226,6 +234,10 @@ function setup(
     }) as BillingDocumentDetail;
   const drafts: { fulfillmentDate: string; dueDate: string }[] = [];
   const documents = {
+    advanceFromProforma: async (proformaId: string) => {
+      calls.push(`advance from ${proformaId}`);
+      return { ...doc("advance-proforma_38"), status: "DRAFT" };
+    },
     create: async (input: {
       id: string;
       customerId: string;
@@ -480,6 +492,84 @@ describe("WebshopOrderInvoiceService", () => {
       "issue webshop-order_38 2026-10-05T12:00:01.000Z",
       "detail order_38",
     ]);
+  });
+
+  /*
+    AZ ELŐLEGSZÁMLA AZ ELŐLEG BEÉRKEZÉSEKOR (d31a66a3, S2). MI PIROSÍT: beérkezés nélkül, egy TELJES utalásra vagy egy idegen
+    Számlázz.hu-számla mellett előlegszámla készül; az előlegszámla nem az előleg-díjbekérőből, nem a beérkezés napjával, vagy más
+    összeggel megy ki; a visszaigazolatlan rendelés előlege nem számlázható; egy kiállított előlegszámla mellé új készül.
+  */
+  it("an advance invoice needs the advance in, and no partner is made before", async () => {
+    const none = setup({ provider: TRANSFER });
+    await assert.rejects(none.service.issueAdvance("order_38", USER, NOW), {
+      status: 409,
+      message: /előleg beérkezése után/,
+    });
+    assert.deepEqual(none.calls, ["source", "transferReceipts"]);
+    const whole = setup({
+      provider: TRANSFER,
+      receipt: { amount: "18900.0000" },
+    });
+    await assert.rejects(whole.service.issueAdvance("order_38", USER, NOW), {
+      status: 409,
+      message: /teljes összeg érkezett/,
+    });
+  });
+
+  it("the advance is invoiced from its proforma, on its day, also before the order is confirmed", async () => {
+    const { calls, service } = setup({
+      provider: TRANSFER,
+      status: "pending_processing",
+      receipt: {
+        amount: "18900.0000",
+        advance: true,
+        receivedOn: "2026-10-03",
+      },
+    });
+    await service.issueAdvance("order_38", USER, NOW);
+    assert.deepEqual(calls.slice(-5), [
+      "foreignFeedInvoices order_38 D-ACR-2026-12",
+      "advance from proforma_38",
+      "days advance-proforma_38 2026-10-03",
+      "issue advance-proforma_38 2026-10-05T12:00:01.000Z",
+      "detail order_38",
+    ]);
+  });
+
+  it("an advance invoice whose gross is not the advance, or beside a foreign one, is not issued", async () => {
+    const off = setup({
+      provider: TRANSFER,
+      receipt: { amount: "5670.0000", advance: true },
+    });
+    await assert.rejects(off.service.issueAdvance("order_38", USER, NOW), {
+      status: 409,
+      message: /Az előlegszámla bruttója .* nem egyezik/,
+    });
+    assert.ok(!off.calls.some((call) => call.startsWith("issue ")));
+    const foreign = setup({
+      provider: TRANSFER,
+      receipt: { amount: "18900.0000", advance: true },
+      foreign: ["E-ACR-2026-78"],
+    });
+    await assert.rejects(foreign.service.issueAdvance("order_38", USER, NOW), {
+      status: 409,
+      message: /E-ACR-2026-78/,
+    });
+    assert.ok(!foreign.calls.some((call) => call.startsWith("advance from")));
+  });
+
+  it("an issued advance invoice is answered, not issued again", async () => {
+    const { calls, service } = setup({
+      provider: TRANSFER,
+      receipt: { amount: "18900.0000", advance: true },
+      advanceInvoice: {
+        id: "advance-proforma_38",
+        status: "ISSUED",
+        number: "E-ACR-2026-80",
+      },
+    });
+    await service.issueAdvance("order_38", USER, NOW);
+    assert.deepEqual(calls, ["detail order_38"]);
   });
 
   it("a draft whose gross is not the transfer is not issued", async () => {

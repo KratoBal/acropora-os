@@ -215,6 +215,18 @@ export const NO_FACTS: WebshopOrderFacts = {
   stockShortage: null,
 };
 
+/**
+ * THE SZÁMLÁZZ.HU DOCUMENT THAT INVOICES THE ORDER (card d31a66a3, S2): its number, when it is an invoice (SZ) or a final invoice
+ * (VS). An advance invoice (ES) settles part of the order: the invoice step is not done, and the parcel is not released by it.
+ */
+export function externalSettlingNumber(
+  external: { number: string; kindCode: string } | null | undefined,
+): string | null {
+  return external && external.kindCode.toUpperCase() !== "ES"
+    ? external.number
+    : null;
+}
+
 /** A tények a rendelés számlájából és aktív csomagjából. */
 export function factsOf(
   invoice: WebshopOrderDetail["invoice"] | undefined,

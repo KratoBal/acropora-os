@@ -395,7 +395,22 @@ const sameFiller = (gross: string, amount: Prisma.Decimal) =>
   new Prisma.Decimal(gross).toDecimalPlaces(2).eq(amount.toDecimalPlaces(2));
 
 /**
- * IS THIS WEBSHOP INVOICE THE MONEY THAT CAME IN (card d31a66a3, S1). A prepaid webshop order's invoice is made from its
+ * Which transfer settles which document of a webshop order: the whole-order invoice a whole transfer (S1), the advance
+ * invoice an advance one (S2). Any other document is settled by no transfer.
+ */
+function transferMatchesType(
+  documentType: string,
+  facts: WebshopTransferFacts,
+): boolean {
+  return documentType === "INVOICE"
+    ? !facts.advance
+    : documentType === "ADVANCE_INVOICE"
+      ? facts.advance
+      : false;
+}
+
+/**
+ * IS THIS WEBSHOP INVOICE THE MONEY THAT CAME IN (card d31a66a3, S1; the advance invoice of an advance transfer, S2). A prepaid webshop order's invoice is made from its
  * proforma once the transfer is recorded in the OS: Számlázz.hu does not know about that payment (its Autokassza is off), so
  * the feed cannot say "paid" here, the OS receipt does. Paid only when the receipt paid THIS invoice's proforma, it was not
  * an advance, and it IS this invoice's own gross, to the fillér, in the same currency (barracuda on #2884: "covers" let an
@@ -405,7 +420,8 @@ export function invoicePaidByTransfer(
   row: BillingDocumentRow,
   facts: WebshopTransferFacts | null,
 ): boolean {
-  if (row.documentType !== "INVOICE" || facts === null || facts.advance)
+  // the whole-order invoice settles a whole transfer, the advance invoice an advance one (S2): never crosswise
+  if (facts === null || !transferMatchesType(row.documentType, facts))
     return false;
   if (facts.currency.trim().toUpperCase() !== row.currency.trim().toUpperCase())
     return false;
@@ -428,9 +444,16 @@ export function webshopTransferInvoiceProblem(
   facts: WebshopTransferFacts | null,
   foreignFeedInvoices: readonly string[],
 ): string | null {
-  if (row.documentType !== "INVOICE" || facts === null) return null;
-  if (facts.advance)
-    return "Ennek a rendelésnek előleg-díjbekérőjét fizették: arra előlegszámla és végszámla jár, nem ez a számla.";
+  if (
+    (row.documentType !== "INVOICE" &&
+      row.documentType !== "ADVANCE_INVOICE") ||
+    facts === null
+  )
+    return null;
+  if (!transferMatchesType(row.documentType, facts))
+    return row.documentType === "INVOICE"
+      ? "Ennek a rendelésnek előleg-díjbekérőjét fizették: arra előlegszámla és végszámla jár, nem ez a számla."
+      : "Ennek a rendelésnek a teljes összegét utalták: arra a rendelés számlája jár, nem előlegszámla.";
   const input = buildIssueInput(row);
   if (!input.ok) return null;
   if (
@@ -445,7 +468,8 @@ export function webshopTransferInvoiceProblem(
 
 /**
  * THE ONE READING OF "THE PROFORMA THIS DOCUMENT SETTLES IS PAID", for the window, the preview and the issue alike: an advance
- * invoice by the Számlázz.hu feed (card 00926d89), a webshop order's invoice by the OS transfer receipt (card d31a66a3, S1).
+ * invoice by the Számlázz.hu feed (card 00926d89), a webshop order's invoice and advance invoice by the OS transfer receipt
+ * (card d31a66a3, S1 and S2).
  */
 export async function proformaPaidOf(
   row: BillingDocumentRow,
@@ -461,6 +485,17 @@ export async function proformaPaidOf(
 ): Promise<boolean> {
   const proforma = row.proformaInvoice;
   if (!proforma?.invoiceNumber) return false;
+  // a webshop order's advance invoice: the OS receipt says "paid" (the Autokassza is off, the feed is silent), else the feed
+  if (
+    row.documentType === "ADVANCE_INVOICE" &&
+    row.sourceType === "WEBSHOP_ORDER" &&
+    row.sourceId &&
+    invoicePaidByTransfer(
+      row,
+      await documents.webshopTransferFacts(row.sourceId, proforma.id),
+    )
+  )
+    return true;
   if (row.documentType === "ADVANCE_INVOICE")
     return advancePaidByProforma(
       row,
