@@ -196,6 +196,8 @@ export type WebshopOrderPaymentState =
   | "AWAITING"
   | "AUTHORIZED"
   | "CAPTURED"
+  /** An advance arrived by transfer, the balance not yet (card d31a66a3, 2b): part of the order is paid. */
+  | "PARTIALLY_CAPTURED"
   | "PARTIALLY_REFUNDED"
   | "REFUNDED"
   | "CANCELED"
@@ -208,6 +210,7 @@ export const WEBSHOP_ORDER_PAYMENT_STATE_LABELS: Record<
   AWAITING: "Fizetésre vár",
   AUTHORIZED: "Zárolva",
   CAPTURED: "Levonva",
+  PARTIALLY_CAPTURED: "Előleg fizetve",
   PARTIALLY_REFUNDED: "Részben visszatérítve",
   REFUNDED: "Visszatérítve",
   CANCELED: "Megszakítva",

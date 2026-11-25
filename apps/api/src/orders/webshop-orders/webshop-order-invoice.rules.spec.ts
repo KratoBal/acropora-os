@@ -12,6 +12,7 @@ import type { MedusaOrderDetailRow } from "../../integrations/medusa/medusa-admi
 import {
   advanceProformaDraftOf,
   buyerMismatch,
+  isAdvanceProformaLines,
   customerKeyOf,
   invoiceDraftOf,
   invoiceRefusal,
@@ -814,6 +815,31 @@ describe("the advance proforma", () => {
         ["27", 7766],
         ["5", 2235],
       ],
+    );
+  });
+
+  it("an advance proforma reads back from its lines: every line is an advance line; a full proforma or no line is not", () => {
+    const result = advanceProformaDraftOf(mixed(), {
+      customerId: "c",
+      now: NOW,
+      advance: { percent: "30" },
+    });
+    assert.ok(result.ok);
+    assert.equal(
+      isAdvanceProformaLines(result.draft.lines.map((l) => l.description)),
+      true,
+    );
+    const full = proformaDraftOf(order(), { customerId: "c", now: NOW });
+    assert.ok(full.ok);
+    assert.equal(
+      isAdvanceProformaLines(full.draft.lines.map((l) => l.description)),
+      false,
+    );
+    assert.equal(isAdvanceProformaLines([]), false);
+    // one advance line beside an ordinary one is no advance proforma
+    assert.equal(
+      isAdvanceProformaLines(["Előleg: webshop rendelés #38", "Szállítás"]),
+      false,
     );
   });
 

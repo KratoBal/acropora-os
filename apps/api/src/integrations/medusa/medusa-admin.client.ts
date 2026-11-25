@@ -1226,7 +1226,13 @@ export interface MedusaAdminClient {
   /** Megjött az előre utalás: a webshop levont fizetéssé teszi (commerce #509). */
   recordTransferReceipt(
     orderId: string,
-    receipt: { reference: string; received_at: string; amount: number },
+    receipt: {
+      reference: string;
+      received_at: string;
+      amount: number;
+      /** An advance proforma's transfer (commerce #908): only then may it be below the order. */
+      advance?: boolean;
+    },
   ): Promise<{ recorded: boolean; payment_id: string }>;
   releaseHold(
     orderId: string,
@@ -2492,7 +2498,13 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
    */
   async recordTransferReceipt(
     orderId: string,
-    receipt: { reference: string; received_at: string; amount: number },
+    receipt: {
+      reference: string;
+      received_at: string;
+      amount: number;
+      /** An advance proforma's transfer (commerce #908): only then may it be below the order. */
+      advance?: boolean;
+    },
   ): Promise<{ recorded: boolean; payment_id: string }> {
     return this.request(
       `/admin/order-payment/${encodeURIComponent(orderId)}/transfer-receipt`,
