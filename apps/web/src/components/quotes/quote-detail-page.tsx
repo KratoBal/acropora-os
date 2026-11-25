@@ -42,7 +42,11 @@ import {
 import { QuoteHandoffCard, QuoteHandoffDrawer } from "./quote-handoff";
 import { QuoteMilestonesCard } from "./quote-proforma";
 import { QuoteAcceptanceLinkCard } from "./quote-link";
-import { QuoteDeliveryLog, QuoteSendDrawer } from "./quote-send";
+import {
+  QuoteDeliveryLog,
+  quoteMailState,
+  QuoteSendDrawer,
+} from "./quote-send";
 import { QuotePartnerEditor } from "./quote-partner-editor";
 import { canEditQuoteTitle, QuoteTitleEditor } from "./quote-title-editor";
 
@@ -134,11 +138,11 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const editable = ["DRAFT", "SENT", "POSTPONED"].includes(quote.status);
   const hasPublished = quote.versions.some((v) => v.status === "PUBLISHED");
   // P3: the version the customer gets is the one PUBLISHED now
-  const sendable = quote.versions.find((v) => v.status === "PUBLISHED") ?? null;
-  const canMail =
-    canSend &&
-    sendable !== null &&
-    ["DRAFT", "SENT", "POSTPONED", "ACCEPTED"].includes(quote.status);
+  const {
+    sendable,
+    canMail,
+    label: mailLabel,
+  } = quoteMailState(quote, canSend);
 
   const newVersion = async () => {
     setBusy(true);
@@ -270,12 +274,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
                   variant="secondary"
                   onClick={() => setSending(true)}
                 >
-                  {quote.deliveries.some(
-                    (d) =>
-                      d.versionId === sendable?.id && d.outcome !== "FAILED",
-                  )
-                    ? "Újraküldés"
-                    : "Kiküldés"}
+                  {mailLabel}
                 </PilotButton>
               ) : null}
               {editable && canManage ? (

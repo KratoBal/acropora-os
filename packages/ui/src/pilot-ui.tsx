@@ -283,6 +283,7 @@ export function PilotButton({
   "aria-pressed": ariaPressed,
   "aria-expanded": ariaExpanded,
   "aria-controls": ariaControls,
+  "aria-describedby": ariaDescribedBy,
   title,
 }: {
   children: ReactNode;
@@ -313,6 +314,8 @@ export function PilotButton({
   /** ADDITÍV: a lenyitó gombhoz (pl. „Továbbiak”), és hogy mit nyit. Elhagyva a gomb attribútum nélkül marad. */
   "aria-expanded"?: boolean;
   "aria-controls"?: string;
+  /** ADDITÍV: az azonosító, amelyik elmondja, mi ez a gomb vagy miért szürke (egy látható szöveg, nem a `title`). Elhagyva nincs attribútum. */
+  "aria-describedby"?: string;
 }) {
   const base = `inline-flex items-center justify-center gap-1.5 rounded-md transition-all duration-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${fullWidth ? "w-full" : ""}`;
   /*
@@ -365,6 +368,7 @@ export function PilotButton({
       aria-pressed={ariaPressed}
       aria-expanded={ariaExpanded}
       aria-controls={ariaControls}
+      aria-describedby={ariaDescribedBy}
       title={title}
     >
       {children}

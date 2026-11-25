@@ -55,6 +55,31 @@ function when(iso: string): string {
 }
 
 /**
+ * A KIKÜLDÉS FELTÉTELEI EGY HELYEN (adatlap és szerkesztő fejléce ugyanazt a szabályt használja, hogy a két gomb ne csússzon szét): a
+ * kiküldhető verzió AZ, AMELYIK MOST PUBLIKÁLT (az ügyfél azt kapja, nem a szerkesztett piszkozatot), a jog `quotes.send`, és az ajánlat
+ * állapota megengedi. A felirat "Újraküldés", ha ez a verzió már kiment (a nem sikertelen kísérlet); az újraküldés külön végpont, így egy
+ * eltévedt kattintás nem küld kétszer.
+ */
+export function quoteMailState(
+  quote: QuoteDetailDto,
+  canSend: boolean,
+): {
+  sendable: QuoteInternalVersion | null;
+  canMail: boolean;
+  label: "Kiküldés" | "Újraküldés";
+} {
+  const sendable = quote.versions.find((v) => v.status === "PUBLISHED") ?? null;
+  const canMail =
+    canSend &&
+    sendable !== null &&
+    ["DRAFT", "SENT", "POSTPONED", "ACCEPTED"].includes(quote.status);
+  const sentBefore = quote.deliveries.some(
+    (d) => d.versionId === sendable?.id && d.outcome !== "FAILED",
+  );
+  return { sendable, canMail, label: sentBefore ? "Újraküldés" : "Kiküldés" };
+}
+
+/**
  * A KIKÜLDÉSEK NAPLÓJA (#1582 P3): minden kísérlet egy sor, a legújabb elöl.
  * Elfogadás nélküli, még ki nem küldött ajánlatnál nincs mit mutatni.
  */

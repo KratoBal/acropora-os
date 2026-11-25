@@ -2018,7 +2018,11 @@ describe("Mentetlen blokkszöveg", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Ajánlat adatlapja" }));
     expect(navigation.push).not.toHaveBeenCalled();
-    expect(screen.getByText(/1 mentetlen rész/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        /1 mentetlen rész \(blokk vagy fizetési ütemezés\) elvész/,
+      ),
+    ).toBeTruthy();
     fireEvent.click(
       screen.getByRole("button", { name: "Elmegyek mentés nélkül" }),
     );
@@ -2073,7 +2077,11 @@ describe("Mentetlen állapot: barracuda négy pontja", () => {
     fireEvent.click(await screen.findByRole("button", { name: "+ Mérföldkő" }));
     fireEvent.click(screen.getByRole("button", { name: "Ajánlat adatlapja" }));
     expect(navigation.push).not.toHaveBeenCalled();
-    expect(screen.getByText(/1 mentetlen rész/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        /1 mentetlen rész \(blokk vagy fizetési ütemezés\) elvész/,
+      ),
+    ).toBeTruthy();
     // the way back names the schedule's own save button too
     expect(screen.getByText(/„Ütemezés mentése” gombbal/)).toBeTruthy();
   });
@@ -2090,7 +2098,8 @@ describe("Mentetlen állapot: barracuda négy pontja", () => {
       target: { value: "Átírt cím" },
     });
     fireEvent.click(screen.getByRole("link", { name: "Összesítő" }));
-    expect(screen.queryByText(/mentetlen rész/)).toBeNull();
+    // no confirmation dialog (the header badge reads "N mentetlen rész" too, so look for the dialog's own sentence)
+    expect(screen.queryByText(/elvész, ha most elmész/)).toBeNull();
   });
 
   it("egy alkalmazáson belüli link (menü) is kérdez, és megerősítés után oda visz", async () => {
@@ -2105,7 +2114,11 @@ describe("Mentetlen állapot: barracuda négy pontja", () => {
       target: { value: "Átírt cím" },
     });
     fireEvent.click(screen.getByRole("link", { name: "Beszerzés" }));
-    expect(screen.getByText(/1 mentetlen rész/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        /1 mentetlen rész \(blokk vagy fizetési ütemezés\) elvész/,
+      ),
+    ).toBeTruthy();
     fireEvent.click(
       screen.getByRole("button", { name: "Elmegyek mentés nélkül" }),
     );
@@ -2497,5 +2510,173 @@ describe("Az ajánlat partnere: a piszkozaton cserélhető", () => {
     fireEvent.click(screen.getByRole("button", { name: "Mégse" }));
     expect(screen.queryByLabelText("Partner keresése")).toBeNull();
     expect(api.updateHeader).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * AZ AJÁNLAT-SZERKESZTŐ FEJLÉCE (Balázs 2026-11-25, card b22949e8, emlék 2961): egy "Minden mentve / N mentetlen rész" jelző és a "Kiküldés"
+ * gomb. MI PIROSÍT: ha a jelző nem a blokkok és az ütemezés mentetlen állapotából jön (ugyanaz a szám, mint az elhagyáskori kérdésben);
+ * ha mentetlen rész mellett a gomb küld, vagy nem mondja meg, miért szürke; ha a gomb a PISZKOZATOT mondja kiküldendőnek (a publikált verzió
+ * megy ki); ha sosem publikált ajánlatnál, quotes.send nélkül vagy lezárt ajánlatnál megjelenik; ha más úton küld, mint az adatlap.
+ */
+describe("Ajánlat szerkesztő: mentés-jelző és Kiküldés a fejlécben (b22949e8)", () => {
+  const publishedV1 = () =>
+    version({
+      id: "v1",
+      versionNumber: 1,
+      status: "PUBLISHED",
+      publishedAt: "2026-10-07T10:42:00Z",
+    });
+  const editing = (over: Partial<QuoteDetailDto> = {}) =>
+    quote([publishedV1(), version({ id: "v2", versionNumber: 2 })], {
+      status: "SENT",
+      ...over,
+    });
+  const MAIL = {
+    source: "default" as const,
+    to: ["info@blue.test"],
+    subject: "Acropora árajánlat: AJ-2026-0042",
+    body: "Tisztelt Blue Office Kft.!",
+    fileName: "AJ-2026-0042-v1.pdf",
+    alreadySent: false,
+  };
+
+  it("a jelző Minden mentve, amíg nincs mentetlen rész, és számolja a mentetleneket", async () => {
+    api.detail.mockResolvedValue(editing());
+    render(<QuoteEditorPage quoteId="q1" />);
+    const status = await screen.findByText("Minden mentve");
+    expect(status.closest('[role="status"]')).toBeTruthy();
+    fireEvent.change(await screen.findByLabelText("Fejezet címe"), {
+      target: { value: "Átírt cím" },
+    });
+    expect(await screen.findByText("1 mentetlen rész")).toBeTruthy();
+    expect(screen.queryByText("Minden mentve")).toBeNull();
+    // back to the saved text: saved again, no stale count
+    fireEvent.change(screen.getByLabelText("Fejezet címe"), {
+      target: { value: "Akvárium és bútor" },
+    });
+    expect(await screen.findByText("Minden mentve")).toBeTruthy();
+  });
+
+  it("mentetlen rész mellett a Kiküldés szürke és kimondja, miért; mentve már a publikált verziót nevezi meg", async () => {
+    api.detail.mockResolvedValue(editing());
+    render(<QuoteEditorPage quoteId="q1" />);
+    const send = await screen.findByRole("button", { name: "Kiküldés" });
+    expect(send).not.toBeDisabled();
+    expect(
+      screen.getByText("A publikált v1 megy ki, nem a szerkesztett piszkozat."),
+    ).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Fejezet címe"), {
+      target: { value: "Átírt cím" },
+    });
+    expect(screen.getByRole("button", { name: "Kiküldés" })).toBeDisabled();
+    expect(screen.getByText("Előbb mentsd a mentetlen részeket.")).toBeTruthy();
+    expect(send.getAttribute("aria-describedby")).toBe("quote-send-note");
+    fireEvent.click(screen.getByRole("button", { name: "Kiküldés" }));
+    expect(api.sendDraft).not.toHaveBeenCalled();
+  });
+
+  it("ugyanazt a fiókot és küldési utat használja, mint az adatlap: a publikált verziót küldi, egy kérés-azonosítóval", async () => {
+    api.detail.mockResolvedValue(editing());
+    api.sendDraft.mockResolvedValue(MAIL);
+    api.send.mockResolvedValue(
+      editing({
+        status: "SENT",
+        deliveries: [
+          {
+            id: "d1",
+            versionId: "v1",
+            versionNumber: 1,
+            to: ["info@blue.test"],
+            cc: [],
+            bcc: [],
+            subject: MAIL.subject,
+            outcome: "SENT",
+            error: null,
+            isResend: false,
+            redirectedTo: null,
+            initiatedByName: "Balázs",
+            createdAt: "2026-10-08T07:12:00Z",
+          },
+        ],
+      }),
+    );
+    render(<QuoteEditorPage quoteId="q1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Kiküldés" }));
+    // the draft of the mail is the PUBLISHED version's, not the edited draft's
+    await waitFor(() =>
+      expect(api.sendDraft).toHaveBeenCalledWith("token-1", "q1", "v1"),
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("Tárgy")).toHaveValue(MAIL.subject),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Elküldöm" }));
+    await waitFor(() => expect(api.send).toHaveBeenCalledTimes(1));
+    expect(api.send).toHaveBeenCalledWith("token-1", "q1", "v1", {
+      requestId: expect.any(String),
+      to: ["info@blue.test"],
+      cc: [],
+      subject: MAIL.subject,
+      body: MAIL.body,
+    });
+    // sent: the button turns into the resend one, the drawer is gone
+    expect(
+      await screen.findByRole("button", { name: "Újraküldés" }),
+    ).toBeTruthy();
+    expect(screen.queryByLabelText("Tárgy")).toBeNull();
+  });
+
+  it("sosem publikált ajánlatnál nincs Kiküldés (nincs mit küldeni), quotes.send nélkül sincs, lezárt ajánlatnál sincs", async () => {
+    api.detail.mockResolvedValue(
+      quote([version({ id: "v1", versionNumber: 1 })], { status: "DRAFT" }),
+    );
+    const first = render(<QuoteEditorPage quoteId="q1" />);
+    await screen.findByText("Minden mentve");
+    expect(screen.queryByRole("button", { name: "Kiküldés" })).toBeNull();
+    first.unmount();
+
+    api.detail.mockResolvedValue(editing());
+    auth.permissions = ["quotes.view", "quotes.manage"] as Permission[];
+    try {
+      const second = render(<QuoteEditorPage quoteId="q1" />);
+      await screen.findByText("Minden mentve");
+      expect(screen.queryByRole("button", { name: "Kiküldés" })).toBeNull();
+      second.unmount();
+    } finally {
+      auth.permissions = undefined;
+    }
+
+    api.detail.mockResolvedValue(editing({ status: "REJECTED" }));
+    render(<QuoteEditorPage quoteId="q1" />);
+    await screen.findByText("Minden mentve");
+    expect(screen.queryByRole("button", { name: "Kiküldés" })).toBeNull();
+  });
+
+  it("a már kiment publikált verziónál a fejlécben is Újraküldés áll", async () => {
+    api.detail.mockResolvedValue(
+      editing({
+        deliveries: [
+          {
+            id: "d1",
+            versionId: "v1",
+            versionNumber: 1,
+            to: ["info@blue.test"],
+            cc: [],
+            bcc: [],
+            subject: MAIL.subject,
+            outcome: "SENT",
+            error: null,
+            isResend: false,
+            redirectedTo: null,
+            initiatedByName: "Balázs",
+            createdAt: "2026-10-08T07:12:00Z",
+          },
+        ],
+      }),
+    );
+    render(<QuoteEditorPage quoteId="q1" />);
+    expect(
+      await screen.findByRole("button", { name: "Újraküldés" }),
+    ).toBeTruthy();
   });
 });
