@@ -1,10 +1,17 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { FoxpostSettlementListResponse, Session } from "@acropora/types";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { answered } from "@/test/answered";
 import { expectMonth, pickMonth } from "@/test/month-field";
+import { urlNavigation } from "@/test/url-navigation";
 
 import { FoxpostSettlementsPage } from "./foxpost-settlements-page";
 
@@ -23,6 +30,10 @@ const auth = vi.hoisted(() => ({
   session: null as Session | null,
 }));
 
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/url-navigation")).nextNavigationModule,
+);
 // a lap a Figma 45 · OS / Settlements óta `PilotThemeRoot` alatt áll (Inter, `next/font/local`)
 vi.mock("next/font/local", () => ({
   default: () => ({ className: "pilot-inter-stub" }),
@@ -81,6 +92,7 @@ const settlements: FoxpostSettlementListResponse = {
 };
 
 beforeEach(() => {
+  urlNavigation.reset("/penzugy/elszamolasok/foxpost");
   auth.session = ownerSession;
   api.list.mockReset().mockResolvedValue(settlements);
   api.reports.mockReset().mockResolvedValue([]);
@@ -495,5 +507,86 @@ describe("FoxpostSettlementsPage", () => {
     expect(
       screen.getAllByText(/Ilyen kimenő számla nálunk nincs/),
     ).toHaveLength(1);
+  });
+  const listQueries = () =>
+    api.list.mock.calls.map((call) => call[1] as Record<string, unknown>);
+
+  it("sorts by a header, as server queries: ascending, descending, back to the default", async () => {
+    render(createElement(FoxpostSettlementsPage));
+    await screen.findAllByTestId("foxpost-utalas");
+    expect(listQueries().at(-1)).not.toHaveProperty("sort");
+
+    fireEvent.click(screen.getByRole("button", { name: /Beszedett/ }));
+    await waitFor(() =>
+      expect(listQueries().at(-1)).toMatchObject({
+        sort: "collectedAmount",
+        direction: "asc",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Beszedett/ }));
+    await waitFor(() =>
+      expect(listQueries().at(-1)).toMatchObject({
+        sort: "collectedAmount",
+        direction: "desc",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Beszedett/ }));
+    await waitFor(() =>
+      expect(listQueries().at(-1)).not.toHaveProperty("sort"),
+    );
+  });
+
+  it("sends the right server field for each sortable header", async () => {
+    render(createElement(FoxpostSettlementsPage));
+    await screen.findAllByTestId("foxpost-utalas");
+    for (const [name, field] of [
+      ["Kelte", "invoiceIssueDate"],
+      ["Elszámolás", "settlementCode"],
+      ["Utalt", "transferredAmount"],
+    ] as const) {
+      fireEvent.click(screen.getByRole("button", { name }));
+      await waitFor(() =>
+        expect(listQueries().at(-1)).toMatchObject({
+          sort: field,
+          direction: "asc",
+        }),
+      );
+      fireEvent.click(screen.getByRole("button", { name }));
+      fireEvent.click(screen.getByRole("button", { name }));
+      await waitFor(() =>
+        expect(listQueries().at(-1)).not.toHaveProperty("sort"),
+      );
+    }
+  });
+
+  it("a new sort goes back to the first page", async () => {
+    api.list.mockResolvedValue({
+      ...settlements,
+      pagination: { page: 1, pageSize: 20, totalItems: 120, totalPages: 6 },
+    });
+    render(createElement(FoxpostSettlementsPage));
+    await screen.findAllByTestId("foxpost-utalas");
+    fireEvent.click(
+      within(
+        screen.getByRole("navigation", { name: "Lapozás, alul" }),
+      ).getByRole("button", { name: "Következő" }),
+    );
+    await waitFor(() =>
+      expect(listQueries().at(-1)).toMatchObject({ page: 2 }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Utalt/ }));
+    await waitFor(() =>
+      expect(listQueries().at(-1)).toMatchObject({
+        page: 1,
+        sort: "transferredAmount",
+      }),
+    );
+  });
+
+  it("the pairing and the state have no sort button", async () => {
+    render(createElement(FoxpostSettlementsPage));
+    await screen.findAllByTestId("foxpost-utalas");
+    expect(screen.queryByRole("button", { name: /Párosítva/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Állapot/ })).toBeNull();
   });
 });

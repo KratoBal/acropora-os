@@ -18,7 +18,9 @@ import type {
   FoxpostSyncSummary,
 } from "@acropora/types";
 
+import { listOrderBy } from "../../common/list-sort.js";
 import type { FoxpostSettlementListQueryDto } from "./dto/foxpost-settlement-list-query.dto.js";
+import { SETTLEMENT_SORT } from "./foxpost-settlement-sort.js";
 import type { BuiltFoxpostMonthlyReport } from "./foxpost-monthly-report.xlsx.js";
 import type {
   ParsedFoxpostInvoicePdf,
@@ -593,10 +595,7 @@ export class FoxpostSettlementRepository extends Repository {
       prisma.foxpostSettlement.findMany({
         where,
         select: settlementSummarySelect,
-        orderBy: [
-          { invoiceIssueDate: { sort: "desc", nulls: "last" } },
-          { createdAt: "desc" },
-        ],
+        orderBy: listOrderBy(SETTLEMENT_SORT, query.sort, query.direction),
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),

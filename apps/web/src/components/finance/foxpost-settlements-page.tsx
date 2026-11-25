@@ -17,6 +17,7 @@ import {
   type FoxpostSettlementLine,
   type FoxpostSettlementListResponse,
   type FoxpostSettlementStatus,
+  type FoxpostSettlementSortField,
   type FoxpostSettlementSummary,
   type FoxpostSyncState,
   type FoxpostSyncStatus,
@@ -30,6 +31,7 @@ import {
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
 import { foxpostSettlementsApi } from "@/lib/api/foxpost-settlements";
+import { useUrlSort } from "@/lib/navigation/use-url-sort";
 
 import {
   SettlementApproveField,
@@ -131,6 +133,14 @@ function latestReportMonth(reports: FoxpostMonthlyReportSummary[]): string {
   return keys.at(-1) ?? new Date().toISOString().slice(0, 7);
 }
 
+/** Az elszámolás-lista rendezhető oszlopai: a táblázat oszlop-azonosítója -> a szerver rendezési mezeje (`FOXPOST_SETTLEMENT_SORT_FIELDS`). A "Párosítva" és az "Állapot" nem rendezhető. */
+const SETTLEMENT_SORT_COLUMNS = {
+  date: "invoiceIssueDate",
+  code: "settlementCode",
+  collected: "collectedAmount",
+  transferred: "transferredAmount",
+} as const;
+
 export function FoxpostSettlementsPage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -156,6 +166,12 @@ export function FoxpostSettlementsPage() {
   );
   const [reportMonth, setReportMonth] = useState("");
   const [listPage, setListPage] = useState(1);
+  const { sort, onSort, apiSort } = useUrlSort(SETTLEMENT_SORT_COLUMNS);
+  // a lap száma itt állapot, nem URL: egy új sorrend az 1. oldalról indul (a 3. oldalon állva az új sorrend 3. oldala nem az, amit várnak)
+  const sortBy = (columnId: string) => {
+    setListPage(1);
+    onSort(columnId);
+  };
 
   const load = useCallback(async () => {
     if (!canView) return;
@@ -166,6 +182,12 @@ export function FoxpostSettlementsPage() {
         foxpostSettlementsApi.list(token, {
           page: listPage,
           pageSize: SETTLEMENT_PAGE_SIZE,
+          ...(apiSort
+            ? {
+                sort: apiSort.sort as FoxpostSettlementSortField,
+                direction: apiSort.direction,
+              }
+            : {}),
         }),
         foxpostSettlementsApi.reports(token),
         foxpostSettlementsApi.syncStatus(token),
@@ -186,7 +208,7 @@ export function FoxpostSettlementsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canView, token, listPage]);
+  }, [canView, token, listPage, apiSort]);
 
   useEffect(() => {
     void load();
@@ -539,6 +561,7 @@ export function FoxpostSettlementsPage() {
   const listColumns: PilotTableColumn<FoxpostSettlementSummary>[] = [
     {
       id: "date",
+      sortable: true,
       header: "Kelte",
       nowrap: true,
       width: "16%",
@@ -549,6 +572,7 @@ export function FoxpostSettlementsPage() {
     },
     {
       id: "code",
+      sortable: true,
       header: "Elszámolás",
       width: "18%",
       cell: (item) =>
@@ -567,6 +591,7 @@ export function FoxpostSettlementsPage() {
     },
     {
       id: "collected",
+      sortable: true,
       header: "Beszedett",
       width: "17%",
       cell: (item) => (
@@ -577,6 +602,7 @@ export function FoxpostSettlementsPage() {
     },
     {
       id: "transferred",
+      sortable: true,
       header: "Utalt",
       width: "17%",
       cell: (item) => (
@@ -723,6 +749,8 @@ export function FoxpostSettlementsPage() {
         >
           <PilotDataTable
             columns={listColumns}
+            sort={sort}
+            onSort={sortBy}
             rows={data.items}
             rowKey={(item) => item.id}
             rowTestId="foxpost-utalas"
