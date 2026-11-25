@@ -831,17 +831,25 @@ export function advanceProformaDraftOf(
   return { ok: true, difference: 0, draft: { ...full.draft, lines } };
 }
 
-/** Every line of an advance proforma starts so (`advanceProformaDraftOf`); `isAdvanceProformaLines` reads it back. */
+/** Every line of an advance proforma starts so (`advanceProformaDraftOf`). */
 export const ADVANCE_LINE_PREFIX = "Előleg: webshop rendelés #";
 
 /**
- * AN ADVANCE PROFORMA, FROM ITS OWN LINES (2b; barracuda on commerce #908): the shop takes a transfer below the order as an advance
- * only when the OS says so, and the OS says so only for a proforma it issued as one. Not from the amounts: a full proforma is
- * also below the order's total when the order was edited after it.
+ * AN ADVANCE PROFORMA, STORED ON THE DOCUMENT (card 2c5fbfb5; barracuda on #2839): the shop takes a transfer below the order as an
+ * advance only when the OS says so, and the OS says so only for a proforma it made as one. The mark is the document's own tag,
+ * written when the proforma's draft is saved: not the lines' text, which the billing editor may change, and not the amounts, since a
+ * full proforma is also below the order's total when the order was edited after it. Nothing else reads or writes `Invoice.tags`.
  */
-export const isAdvanceProformaLines = (descriptions: readonly string[]) =>
-  descriptions.length > 0 &&
-  descriptions.every((text) => text.startsWith(ADVANCE_LINE_PREFIX));
+export const WEBSHOP_ADVANCE_TAG = "WEBSHOP_ADVANCE";
+
+/** The document's tags with the advance mark set or cleared, the others kept. */
+export const tagsWithAdvance = (
+  tags: readonly string[],
+  advance: boolean,
+): string[] => {
+  const others = tags.filter((tag) => tag !== WEBSHOP_ADVANCE_TAG);
+  return advance ? [...others, WEBSHOP_ADVANCE_TAG] : others;
+};
 
 /** The advance in whole forints, or why it cannot be one. */
 export function advanceAmountOf(

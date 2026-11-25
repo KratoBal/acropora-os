@@ -255,6 +255,8 @@ export class WebshopOrderInvoiceService {
           }),
         )
       : await this.documents.create(this.dto(draft.draft), user);
+    // the document carries what it is (card 2c5fbfb5): the shop is told an advance only for a proforma made as one
+    await this.repository.markProformaAdvance(saved.id, advance !== undefined);
     return { kind: "draft", saved, order };
   }
 

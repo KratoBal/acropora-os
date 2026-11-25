@@ -135,6 +135,7 @@ function setup(over: {
   const sentSubjects: string[] = [];
   const confirmations: unknown[] = [];
   const sendTos: unknown[] = [];
+  const marks: string[] = [];
   const service = new WebshopOrderInvoiceService(
     {
       source: async () => ({
@@ -166,6 +167,8 @@ function setup(over: {
         );
       },
       customerByKey: async () => "cust_1",
+      markProformaAdvance: async (id: string, advance: boolean) =>
+        void marks.push(`${id} ${advance}`),
       customerBuyer: async () => ({
         name: "Teszt Elek",
         taxNumber: null,
@@ -267,6 +270,7 @@ function setup(over: {
     sentSubjects,
     confirmations,
     sendTos,
+    marks,
   };
 }
 
@@ -710,6 +714,14 @@ describe("the advance proforma", () => {
   });
 
   // barracuda on #2837: the check ran only with an advance, so a window opened for one and a send without it issued the whole order
+  // card 2c5fbfb5: the document carries what it is, so the shop is told an advance only for a proforma made as one
+  it("the saved draft is marked an advance for an advance window, and unmarked when the window is for the whole order", async () => {
+    const { service, marks } = setup({});
+    await service.proformaSummary("order_55", USER, NOW, { amount: "2000" });
+    await service.proformaSummary("order_55", USER, NOW);
+    assert.deepEqual(marks, ["doc_1 true", "doc_1 false"]);
+  });
+
   it("a window opened for an advance and a send that comes without it issues nothing; a first send without the amount neither", async () => {
     const stale = setup({});
     await stale.service.proformaSummary("order_55", USER, NOW, {
