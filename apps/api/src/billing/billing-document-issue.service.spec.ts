@@ -529,6 +529,56 @@ describe("BillingDocumentIssueService", () => {
     assert.match(ok.calls.xml[0] ?? "", /<fizetve>true<\/fizetve>/);
   });
 
+  /*
+    A SZERKESZTŐBEN MANUAL-RA ÁTÍRT WEBSHOP-VÁZLAT (S2 követés). A szerkesztő a forrást és a típust menti, a díjbekérő-kötést nem;
+    a kiállított díjbekérő forrása megmarad. MI PIROSÍT: az átírt vázlat kikerül az összeg-, az előleg-, az Autokassza- vagy a
+    túlszámlázás-őrzőből, vagy nem a díjbekérő rendelését kérdezi.
+  */
+  const relabelled = {
+    sourceType: "MANUAL",
+    sourceId: null,
+    proformaInvoice: {
+      id: "p-38",
+      invoiceNumber: "D-ACR-12",
+      sourceType: "WEBSHOP_ORDER",
+      sourceId: "order_38",
+    },
+  };
+
+  it("WEBSHOP-RELABELLED: a MANUAL draft naming the order's proforma keeps every webshop guard", async () => {
+    const amount = setup({ over: relabelled, transfer: { amount: "1300" } });
+    await assert.rejects(
+      issue(amount.service),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        /nem egyezik a rendelés beérkezett utalásával/.test(error.message),
+    );
+    assert.ok(amount.calls.webshopAsked.includes("transfer order_38 p-38"));
+    const foreign = setup({
+      over: relabelled,
+      transfer: { amount: "1270" },
+      foreign: ["E-ACR-77"],
+    });
+    await assert.rejects(issue(foreign.service), /E-ACR-77/);
+    const twice = setup({
+      over: relabelled,
+      webshopInvoices: () => [
+        {
+          documentType: "INVOICE",
+          status: "ISSUED",
+          number: "E-ACR-1",
+          cancelled: false,
+        },
+      ],
+    });
+    await assert.rejects(issue(twice.service), /E-ACR-1/);
+    assert.ok(
+      twice.calls.webshopAsked.includes("invoices order_38 without doc-1"),
+    );
+    for (const run of [amount, foreign, twice])
+      assert.deepEqual([run.calls.claim, run.calls.generate], [0, 0]);
+  });
+
   it("WEBSHOP-UNPAID: without a transfer for the proforma it goes out as before, unpaid; a contract invoice never asks", async () => {
     const { service, calls } = setup({ over: linkedWebshop, transfer: null });
     assert.equal((await issue(service)).status, "ISSUED");
