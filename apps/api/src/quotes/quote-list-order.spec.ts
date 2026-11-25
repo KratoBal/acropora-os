@@ -27,10 +27,10 @@ describe("quoteListOrderBy", () => {
     );
   });
 
-  it("every whitelisted field produces a sort on that field", () => {
+  it("every whitelisted field produces a sort on that field, ascending when no direction is given (as the first click does)", () => {
     for (const field of QUOTE_SORT_FIELDS)
       assert.deepEqual(quoteListOrderBy({ sort: field })[0], {
-        [field]: "desc",
+        [field]: "asc",
       });
   });
 });

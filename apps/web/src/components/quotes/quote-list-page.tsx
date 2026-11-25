@@ -39,9 +39,15 @@ import {
   QUOTE_CLOSE_REASON,
   QUOTE_STATUS,
 } from "./quote-format";
-import { nextSortParams, QUOTE_SORT_COLUMNS, sortOf } from "./quote-list-sort";
+import { useUrlSort } from "@/lib/navigation/use-url-sort";
 
 export const QUOTES_PATH = "/ajanlatok";
+/** The sortable columns: the table's column id -> the server's sort field (`QUOTE_SORT_FIELDS`). */
+const QUOTE_SORT_COLUMNS = {
+  quote: "quoteNumber",
+  status: "status",
+  created: "createdAt",
+} as const;
 const PAGE_SIZE = 25;
 
 /**
@@ -72,7 +78,8 @@ export function QuoteListPage() {
   // Luca (card 7e5d3658): the creation day, from and to; the sort lives in the URL too (Balázs, card 2f6369a4)
   const createdFrom = params.get("createdFrom") ?? "";
   const createdTo = params.get("createdTo") ?? "";
-  const sort = sortOf(params);
+  // the sort lives in the URL through the shared hook (card 2f6369a4): ascending, descending, back to the default
+  const { sort, onSort, apiSort } = useUrlSort(QUOTE_SORT_COLUMNS);
   const [search, setSearch] = useState(appliedSearch);
   const [data, setData] = useState<QuoteListResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -100,9 +107,9 @@ export function QuoteListPage() {
     if (reasonFilter) value.set("closeReason", reasonFilter);
     if (createdFrom) value.set("createdFrom", createdFrom);
     if (createdTo) value.set("createdTo", createdTo);
-    if (sort) {
-      value.set("sort", QUOTE_SORT_COLUMNS[sort.id]!);
-      value.set("direction", sort.direction);
+    if (apiSort) {
+      value.set("sort", apiSort.sort);
+      value.set("direction", apiSort.direction);
     }
     return value;
   }, [
@@ -113,7 +120,7 @@ export function QuoteListPage() {
     reasonFilter,
     createdFrom,
     createdTo,
-    sort,
+    apiSort,
   ]);
 
   const load = useCallback(
@@ -351,9 +358,7 @@ export function QuoteListPage() {
             rowLabel={(row) => `${row.quoteNumber} · ${row.title}`}
             onRowActivate={(row) => router.push(`${QUOTES_PATH}/${row.id}`)}
             sort={sort}
-            onSort={(columnId) =>
-              update({ ...nextSortParams(sort, columnId), page: null })
-            }
+            onSort={onSort}
           />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-pilot-grey-600">
