@@ -140,13 +140,15 @@ describe("BillingDocumentListPage", () => {
     expect(invoice!.getByText("E-számla")).toBeInTheDocument();
     expect(invoice!.getByText("Kiállítva")).toBeInTheDocument();
     expect(invoice!.getByText("Elküldve")).toBeInTheDocument();
-    // a díjbekérőnek nincs formátuma, és a kiküldés hibája NEM a bizonylat állapota
-    // két üres cella: a formátum és a kifizetés (a saját bizonylatnál nincs forrása)
-    expect(proforma!.getAllByText("—")).toHaveLength(2);
+    // a díjbekérőnek nincs formátuma (nincs "E-számla" és nincs üres jel helyette), és a kiküldés hibája NEM a bizonylat állapota
+    // egy üres cella marad: a kifizetés (a saját bizonylatnál nincs forrása)
+    expect(proforma!.getAllByText("—")).toHaveLength(1);
     expect(proforma!.getByText("Kiállítva")).toBeInTheDocument();
     expect(proforma!.getByText("Sikertelen kiküldés")).toBeInTheDocument();
-    // a vázlatnak nincs száma és kiállítási napja
-    expect(draft!.getAllByText("Piszkozat")).toHaveLength(2);
+    // a vázlatnak nincs száma: a szám helyén halvány "nincs még szám" áll, az állapotot az Állapot oszlop mondja ki (egyszer)
+    expect(draft!.getByText("nincs még szám")).toBeInTheDocument();
+    expect(draft!.getAllByText("Piszkozat")).toHaveLength(1);
+    expect(invoice!.queryByText("nincs még szám")).toBeNull();
     expect(screen.getByText("86 bizonylat")).toBeInTheDocument();
   });
 
@@ -167,7 +169,7 @@ describe("BillingDocumentListPage", () => {
       direction: "desc",
     });
     expect(
-      await screen.findByRole("columnheader", { name: /Összegek/ }),
+      await screen.findByRole("columnheader", { name: /Összeg/ }),
     ).toHaveAttribute("aria-sort", "descending");
 
     // egy másik oszlop (Kiállítás) növekvőben indul, és az oldal az elsőre áll
@@ -203,18 +205,23 @@ describe("BillingDocumentListPage", () => {
   it("csak a három közös, szám- vagy nap-értékű oszlop rendezhető: a vevő, a bizonylatszám és a fizetés nem", async () => {
     render(<BillingDocumentListPage />);
     await waitFor(() => expect(api.list).toHaveBeenCalled());
-    for (const name of [/Kiállítás/, /Határidő/, /Összegek/])
+    for (const name of [/Kiállítás/, /Határidő/, /Összeg/])
       expect(
         within(await screen.findByRole("columnheader", { name })).getAllByRole(
           "button",
         ),
       ).toHaveLength(1);
-    for (const name of [/Bizonylatszám/, /Vevő/, /Fizetés/, /Dokumentum/])
+    for (const name of [/Bizonylat/, /Vevő/, /Fizetés/])
       expect(
         within(await screen.findByRole("columnheader", { name })).queryByRole(
           "button",
         ),
       ).toBeNull();
+    // a Dokumentum és a Deviza oszlop megszűnt (Picasso 3.12): a típus a szám alatt áll, a pénznem az összeg mellett
+    expect(
+      screen.queryByRole("columnheader", { name: /Dokumentum/ }),
+    ).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: /Deviza/ })).toBeNull();
   });
 
   it("a whole row opens: a draft into the editor, everything else into the details, by keyboard too", async () => {
@@ -438,7 +445,7 @@ describe("BillingDocumentListPage", () => {
     három összeg nem a bejövő lista sorrendjében és formázásával áll; ha egy nem számolható (vázlat) összeg 0-nak
     látszik a „—” helyett; ha a fizetési mód nem a kifizetés jelzése fölött áll.
   */
-  it("shows the net, the VAT and the gross together, as the incoming list does, and the payment method above the payment mark", async () => {
+  it("shows the gross in one line with the currency, the net and the VAT in the tooltip, and the payment method above the payment mark", async () => {
     api.list.mockResolvedValue(
       response([
         item({ paymentMethod: "Bankkártya" }),
@@ -464,13 +471,25 @@ describe("BillingDocumentListPage", () => {
     );
     render(<BillingDocumentListPage />);
     const rows = await screen.findAllByRole("row", { name: /megnyitása$/ });
-    const text = (row: HTMLElement) => row.textContent?.replace(/\s/g, " ");
-    expect(text(rows[0]!)).toMatch(/Nettó 382 000ÁFA 103 140Bruttó 485 140/);
+    // az összeg EGY sor: a bruttó a pénznem-jellel; a nettó és az ÁFA a megjegyzésben (title) és a felolvasónak áll
+    const shown = (row: HTMLElement, title: RegExp) => {
+      const cell = within(row).getByTitle(title);
+      return Array.from(cell.childNodes)
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent)
+        .join("")
+        .replace(/\s/g, " ");
+    };
+    expect(
+      shown(rows[0]!, /Nettó 382 000, ÁFA 103 140, bruttó 485 140 Ft/),
+    ).toBe("485 140 Ft");
     expect(within(rows[0]!).getByText("Bankkártya")).toBeInTheDocument();
-    // a nem számolható nettó és ÁFA „—”, nem 0
-    expect(text(rows[1]!)).toMatch(/Nettó —ÁFA —Bruttó 0/);
-    // pénznem-jel nincs az összegben, a Deviza oszlop adja; a nem forint két tizedessel
-    expect(text(rows[2]!)).toMatch(/Nettó 100,00ÁFA 0,00Bruttó 100,00/);
+    // a nem számolható nettó és ÁFA „—”, nem 0; a bruttó marad
+    expect(shown(rows[1]!, /Nettó —, ÁFA —, bruttó 0 Ft/)).toBe("0 Ft");
+    // a nem forint két tizedessel, a pénznem neve az összeg mellett
+    expect(shown(rows[2]!, /Nettó 100,00, ÁFA 0,00, bruttó 100,00 EUR/)).toBe(
+      "100,00 EUR",
+    );
   });
 
   it("sends the period (the month's first and last day) and the payment method, with the choices from the answer", async () => {
@@ -579,22 +598,125 @@ describe("BillingDocumentListPage", () => {
     ha a rács nem kitöltő oszlopokból áll (az `auto-fit` az üres sávokat összeomlasztja, és a magában maradt elem kitölti a
     sort); ha nincs alap sávja telefonon. A böngészőben látott szélességeket a stage-képek mutatják.
   */
-  it("the filter row is a fixed-column fill grid, not a stretching flex row", async () => {
+  it("the filter bar: the search and three frequent filters in one row, the rare ones behind További szűrők, no stretching", async () => {
     render(<BillingDocumentListPage />);
     const search = await screen.findByLabelText("Bizonylat keresése");
-    const grid = search.closest("div[class*='grid']") as HTMLElement;
-    expect(grid.className).toContain("grid-cols-1");
-    expect(grid.className).toContain(
-      "sm:grid-cols-[repeat(auto-fill,minmax(190px,1fr))]",
-    );
-    expect(grid.className).not.toMatch(/flex|auto-fit/);
-    // minden szűrő egy cella: egyiknek sincs nyújtó vagy minimum-szélesség osztálya
-    for (const child of grid.children)
-      expect((child as HTMLElement).className).not.toMatch(
-        /flex-\[|min-w-\[|flex-grow|\bgrow\b/,
+    const bar = search.closest("section[aria-label='Szűrők']") as HTMLElement;
+    expect(bar).not.toBeNull();
+    // a gyakori szűrők a sorban: típus, állapot, fizetés
+    for (const name of ["Dokumentumtípus", "Állapot", "Fizetés"])
+      expect(within(bar).getByRole("combobox", { name })).toBeInTheDocument();
+    // a ritkák a gomb mögött: zárt panelnél nincsenek a DOM-ban
+    for (const name of ["Időszak", "Formátum", "Forrás", "Fizetési mód"])
+      expect(within(bar).queryByRole("combobox", { name })).toBeNull();
+    const more = within(bar).getByRole("button", { name: /További szűrők/ });
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(more);
+    expect(more.getAttribute("aria-expanded")).toBe("true");
+    for (const name of ["Időszak", "Formátum", "Forrás", "Fizetési mód"])
+      expect(within(bar).getByRole("combobox", { name })).toBeInTheDocument();
+    // a választók fix szélességűek és nem nyúlnak (Balázs, 2026-11-04: egy magára maradt szűrő ne töltse ki a sort)
+    for (const select of bar.querySelectorAll("select")) {
+      const cls = (select.parentElement as HTMLElement).className;
+      expect(cls).toContain("sm:w-[180px]");
+      expect(cls).toContain("shrink-0");
+      expect(cls).not.toMatch(/flex-\[|flex-grow|\bgrow\b|flex-1/);
+    }
+    expect(search.closest("div[class*='sm:max-w']")).not.toBeNull();
+    // nyolc vezérlő van összesen: négy ritka és három gyakori szűrő, a kereső
+    expect(bar.querySelectorAll("select")).toHaveLength(7);
+  });
+
+  it("an active rare filter is counted on the button and opens the panel from the start (the filtered list must not look unfiltered)", async () => {
+    urlNavigation.reset("/penzugy/szamlazas", "formatum=x&origin=EXTERNAL");
+    render(<BillingDocumentListPage />);
+    const more = await screen.findByRole("button", {
+      name: /További szűrők · 1/,
+    });
+    expect(more.getAttribute("aria-expanded")).toBe("true");
+    expect(
+      screen.getByRole("combobox", { name: "Forrás" }),
+    ).toBeInTheDocument();
+  });
+
+  it("on a phone only the search and the button stay in the row: the frequent filters move into the panel and count on the button", async () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: true,
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    try {
+      urlNavigation.reset("/penzugy/szamlazas", "status=DRAFT");
+      render(<BillingDocumentListPage />);
+      const more = await screen.findByRole("button", {
+        name: /További szűrők · 1/,
+      });
+      // an active frequent filter opens the panel from the start on a phone, and the filter sits INSIDE it
+      expect(more.getAttribute("aria-expanded")).toBe("true");
+      const panel = document.getElementById(
+        more.getAttribute("aria-controls") ?? "",
+      )!;
+      expect(
+        within(panel).getByRole("combobox", { name: "Állapot" }),
+      ).toBeInTheDocument();
+      expect(
+        within(panel).getByRole("combobox", { name: "Dokumentumtípus" }),
+      ).toBeInTheDocument();
+      // ... and ONLY there: the row itself holds nothing but the search and the button
+      expect(screen.getAllByRole("combobox", { name: "Állapot" })).toHaveLength(
+        1,
       );
-    // nyolc vezérlő a keresővel együtt: kereső, négy régi szűrő, időszak, fizetés, fizetési mód
-    expect(grid.querySelectorAll("select").length).toBe(7);
+      expect(screen.getAllByRole("combobox")).toHaveLength(
+        panel.querySelectorAll("select").length,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("the three views are tabs, not big cards: one line each, the page text names the view", async () => {
+    render(<BillingDocumentListPage />);
+    const tabs = await screen.findAllByRole("tab");
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      "Kimenő számlák",
+      "Bejövő számlák",
+      "Nyugták",
+    ]);
+    expect(screen.queryByText(/Saját és külső rendszerben/)).toBeNull();
+    for (const tab of tabs) expect(tab.className).toContain("border-b-2");
+  });
+
+  it("one pager, at the bottom: the top only carries the count", async () => {
+    api.list.mockResolvedValue(
+      response([item({})], { totalPages: 3, totalItems: 60 }),
+    );
+    render(<BillingDocumentListPage />);
+    await screen.findByText("60 bizonylat");
+    expect(
+      screen.queryByRole("navigation", { name: "Lapozás, felül" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("navigation", { name: "Lapozás, alul" }),
+    ).toBeInTheDocument();
+  });
+
+  it("each row says where it leads: Szerkesztő for a draft, Adatlap for the rest", async () => {
+    api.list.mockResolvedValue(
+      response([
+        item({ id: "a" }),
+        item({
+          id: "b",
+          status: "DRAFT",
+          documentNumber: null,
+          opens: "EDITOR",
+        }),
+      ]),
+    );
+    render(<BillingDocumentListPage />);
+    const rows = await screen.findAllByRole("row", { name: /megnyitása$/ });
+    expect(within(rows[0]!).getByText("Adatlap")).toBeInTheDocument();
+    expect(within(rows[1]!).getByText("Szerkesztő")).toBeInTheDocument();
   });
 
   it("the source filter goes to the request, and back from the URL", async () => {

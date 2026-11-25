@@ -37,10 +37,7 @@ import {
 } from "@/lib/navigation/use-url-query";
 import { useUrlSort } from "@/lib/navigation/use-url-sort";
 import { listAmount } from "./billing-amount-format";
-import {
-  BillingFilterGrid,
-  FILTER_GRID_SEARCH_CLASS,
-} from "./billing-filter-grid";
+import { BILLING_SELECT_CLASS, BillingFilterBar } from "./billing-filter-bar";
 import { formatDay } from "./billing-document-table";
 import { incomingReviewHref } from "./billing-incoming-review-page";
 import { PAYMENT_STATE_TONE, PaymentBadge } from "./billing-payment";
@@ -159,6 +156,7 @@ export const INCOMING_COLUMNS: readonly PilotTableColumn<IncomingDocumentListIte
       id: "payment",
       header: "Fizetés",
       width: "130px",
+      phone: "hide",
       cell: (item) => (
         <span className="flex flex-col gap-0.5">
           <span className="text-pilot-grey-900">
@@ -199,6 +197,7 @@ export const INCOMING_COLUMNS: readonly PilotTableColumn<IncomingDocumentListIte
       id: "currency",
       header: "Deviza",
       width: "80px",
+      phone: "hide",
       cell: (item) => (
         <span className="flex flex-col gap-0.5">
           <span className="font-semibold text-pilot-grey-900">
@@ -431,8 +430,8 @@ export function BillingIncomingList({ token }: { token: string }) {
 
   return (
     <>
-      <BillingFilterGrid>
-        <div className={FILTER_GRID_SEARCH_CLASS}>
+      <BillingFilterBar
+        search={
           <PilotInput
             aria-label="Szállító keresése"
             value={search}
@@ -441,113 +440,123 @@ export function BillingIncomingList({ token }: { token: string }) {
             placeholder="Szállító neve vagy adószáma…"
             className="h-10"
           />
-        </div>
-        <PilotSelect
-          chevron
-          aria-label="Időszak"
-          value={period}
-          onChange={(value) => setFilter("idoszak", value)}
-          className="[&_select]:h-10"
-        >
-          <option value="">Időszak: mind</option>
-          {months.map((month) => (
-            <option key={month.value} value={month.value}>
-              Időszak: {month.label}
-            </option>
-          ))}
-        </PilotSelect>
-        <PilotSelect
-          chevron
-          aria-label="Dátum alapja"
-          value={dateBasis}
-          onChange={(value) =>
-            setFilter("datum", value === "kelt" ? "" : value)
-          }
-          className="[&_select]:h-10"
-        >
-          <option value="kelt">Dátum: kelt</option>
-          <option value="teljesites">Dátum: teljesítés</option>
-        </PilotSelect>
-        <PilotSelect
-          chevron
-          aria-label="Fizetés"
-          value={paymentState}
-          onChange={(value) => setFilter("fizetes", value)}
-          className="[&_select]:h-10"
-        >
-          <option value="">Fizetés: mind</option>
-          {INCOMING_PAYMENT_STATES.map((state) => (
-            <option key={state} value={state}>
-              {INCOMING_PAYMENT_STATE_LABELS[state]}
-            </option>
-          ))}
-        </PilotSelect>
-        <PilotSelect
-          chevron
-          aria-label="Típus"
-          value={kindCode}
-          onChange={(value) => setFilter("tipus", value)}
-          className="[&_select]:h-10"
-        >
-          <option value="">Minden típus</option>
-          {(data?.facets.kindCodes ?? []).map((kind) => (
-            <option key={kind.code} value={kind.code}>
-              {kind.label}
-            </option>
-          ))}
-        </PilotSelect>
-        <PilotSelect
-          chevron
-          aria-label="Pénznem"
-          value={currency}
-          onChange={(value) => setFilter("penznem", value)}
-          className="[&_select]:h-10"
-        >
-          <option value="">Minden pénznem</option>
-          {(data?.facets.currencies ?? []).map((code) => (
-            <option key={code} value={code}>
-              {code}
-            </option>
-          ))}
-        </PilotSelect>
-        <PilotSelect
-          chevron
-          aria-label="Banki párosítás"
-          value={bankMatch}
-          onChange={(value) => setFilter("bank", value)}
-          className="[&_select]:h-10"
-        >
-          <option value="">Bankkal párosodott / nem</option>
-          {INCOMING_BANK_MATCH_STATES.map((state) => (
-            <option key={state} value={state}>
-              {INCOMING_BANK_MATCH_LABELS[state]}
-            </option>
-          ))}
-        </PilotSelect>
-        <PilotSelect
-          chevron
-          aria-label="Ellenőrzés"
-          value={review}
-          onChange={(value) => setFilter("ellenorzes", value)}
-          className="[&_select]:h-10"
-        >
-          <option value="">Ellenőrzés: mind</option>
-          {INCOMING_REVIEW_STATES.map((state) => (
-            <option key={state} value={state}>
-              {INCOMING_REVIEW_LABELS[state]}
-            </option>
-          ))}
-        </PilotSelect>
-        {hasFilters ? (
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="cursor-pointer justify-self-start whitespace-nowrap text-xs text-pilot-accent-warm-text hover:underline"
-          >
-            Szűrők törlése
-          </button>
-        ) : null}
-      </BillingFilterGrid>
+        }
+        primary={
+          <>
+            <PilotSelect
+              chevron
+              aria-label="Időszak"
+              value={period}
+              onChange={(value) => setFilter("idoszak", value)}
+              className={`${BILLING_SELECT_CLASS} [&_select]:h-10`}
+            >
+              <option value="">Időszak: mind</option>
+              {months.map((month) => (
+                <option key={month.value} value={month.value}>
+                  Időszak: {month.label}
+                </option>
+              ))}
+            </PilotSelect>
+            <PilotSelect
+              chevron
+              aria-label="Fizetés"
+              value={paymentState}
+              onChange={(value) => setFilter("fizetes", value)}
+              className={`${BILLING_SELECT_CLASS} [&_select]:h-10`}
+            >
+              <option value="">Fizetés: mind</option>
+              {INCOMING_PAYMENT_STATES.map((state) => (
+                <option key={state} value={state}>
+                  {INCOMING_PAYMENT_STATE_LABELS[state]}
+                </option>
+              ))}
+            </PilotSelect>
+            <PilotSelect
+              chevron
+              aria-label="Banki párosítás"
+              value={bankMatch}
+              onChange={(value) => setFilter("bank", value)}
+              className={`${BILLING_SELECT_CLASS} [&_select]:h-10`}
+            >
+              <option value="">Bankkal párosodott / nem</option>
+              {INCOMING_BANK_MATCH_STATES.map((state) => (
+                <option key={state} value={state}>
+                  {INCOMING_BANK_MATCH_LABELS[state]}
+                </option>
+              ))}
+            </PilotSelect>
+          </>
+        }
+        more={
+          <>
+            <PilotSelect
+              chevron
+              aria-label="Dátum alapja"
+              value={dateBasis}
+              onChange={(value) =>
+                setFilter("datum", value === "kelt" ? "" : value)
+              }
+              className={`${BILLING_SELECT_CLASS} [&_select]:h-10`}
+            >
+              <option value="kelt">Dátum: kelt</option>
+              <option value="teljesites">Dátum: teljesítés</option>
+            </PilotSelect>
+            <PilotSelect
+              chevron
+              aria-label="Típus"
+              value={kindCode}
+              onChange={(value) => setFilter("tipus", value)}
+              className={`${BILLING_SELECT_CLASS} [&_select]:h-10`}
+            >
+              <option value="">Minden típus</option>
+              {(data?.facets.kindCodes ?? []).map((kind) => (
+                <option key={kind.code} value={kind.code}>
+                  {kind.label}
+                </option>
+              ))}
+            </PilotSelect>
+            <PilotSelect
+              chevron
+              aria-label="Pénznem"
+              value={currency}
+              onChange={(value) => setFilter("penznem", value)}
+              className={`${BILLING_SELECT_CLASS} [&_select]:h-10`}
+            >
+              <option value="">Minden pénznem</option>
+              {(data?.facets.currencies ?? []).map((code) => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
+            </PilotSelect>
+            <PilotSelect
+              chevron
+              aria-label="Ellenőrzés"
+              value={review}
+              onChange={(value) => setFilter("ellenorzes", value)}
+              className={`${BILLING_SELECT_CLASS} [&_select]:h-10`}
+            >
+              <option value="">Ellenőrzés: mind</option>
+              {INCOMING_REVIEW_STATES.map((state) => (
+                <option key={state} value={state}>
+                  {INCOMING_REVIEW_LABELS[state]}
+                </option>
+              ))}
+            </PilotSelect>
+          </>
+        }
+        primaryCount={
+          (period ? 1 : 0) + (paymentState ? 1 : 0) + (bankMatch ? 1 : 0)
+        }
+        moreCount={
+          (dateBasis !== "kelt" ? 1 : 0) +
+          (kindCode ? 1 : 0) +
+          (currency ? 1 : 0) +
+          (review ? 1 : 0)
+        }
+        hasFilters={hasFilters}
+        onClear={clearFilters}
+      />
 
       {error ? (
         <Alert
@@ -575,18 +584,12 @@ export function BillingIncomingList({ token }: { token: string }) {
               aria-hidden="true"
               className="absolute inset-x-4 top-0 h-0.5 bg-pilot-accent-warm"
             />
-            <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            {/* EGY LAPOZÓ, ALUL (Picasso 3.12, acrobot 61971): felül csak a darabszám áll */}
+            <div className="px-5 py-4">
               <p className="text-sm text-pilot-accent-warm-text">
                 {data.pagination.totalItems.toLocaleString("hu-HU")} bejövő
                 számla
               </p>
-              <Pagination
-                variant="directionF"
-                position="top"
-                page={data.pagination.page}
-                totalPages={data.pagination.totalPages}
-                onPageChange={goToPage}
-              />
             </div>
             <PilotDataTable
               columns={INCOMING_COLUMNS}

@@ -45,43 +45,61 @@ export function formatDay(value: string | null | undefined): string {
 }
 
 /** The table's minimum width, and the least the flexible customer column may get of it. */
-export const BILLING_TABLE_MIN_WIDTH = 1330;
-export const BILLING_CUSTOMER_MIN_WIDTH = 150;
+export const BILLING_TABLE_MIN_WIDTH = 1120;
+export const BILLING_CUSTOMER_MIN_WIDTH = 130;
+
+/**
+ * A SOR CÉLJA RÖVID FELIRATTAL (acrobot 61971): a sor végi nyíl mellett áll, hogy a sor megmondja, HOVA visz. A vázlat a szerkesztőbe
+ * nyílik, minden más (a TIG-piszkozat a karbantartási lapra, hibajegyre vagy megrendelésre, a kiállított és a külső bizonylat az
+ * adatlapra) az adatlapnak számít. Az útvonalat a közös szabály adja (`billingDocumentHref`), a felirat abból következik.
+ */
+export function billingDocumentTargetLabel(
+  item: Parameters<typeof billingDocumentHref>[0],
+): "Szerkesztő" | "Adatlap" {
+  return billingDocumentHref(item).endsWith("/szerkesztes")
+    ? "Szerkesztő"
+    : "Adatlap";
+}
 
 /**
  * AZ OSZLOP-DEFINÍCIÓ EGY HELYEN (brief 6. pont): a fejléc és a sorok UGYANEBBŐL
  * rajzolnak (`PilotDataTable`), ugyanúgy, mint a Termékeknél és a
  * Beszerzésnél. A vevő oszlopa vág, nem tol: egy hosszú név nem csúsztatja el
  * az összeget az állapotba.
+ *
+ * PICASSO 3.12 (acrobot 61971), AMI ITT VÁLTOZOTT: a Dokumentum és a Bizonylatszám egy oszlop (a típus és a formátum a szám alatt),
+ * a Deviza oszlop megszűnt (a pénznem az összeg mellett áll), az Összegek három sora egy sor (bruttó; a nettó és az ÁFA a
+ * megjegyzésben), a vázlat "Piszkozat" szava helyett a szám helyén halvány "nincs még szám" áll (az állapot az Állapot oszlopban
+ * van). Így a tábla 1440 px-en elfér, és az Állapot oszlop látszik. Telefonon a kártya a számot, a vevőt, a kiállítást, az összeget és
+ * az állapotot mutatja.
  */
 export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocumentListItem>[] =
   [
     {
-      id: "document",
-      header: "Dokumentum",
-      width: "120px",
+      id: "number",
+      header: "Bizonylat",
+      width: "200px",
+      phone: "title",
       cell: (item) => (
-        <span className="flex flex-col">
-          <span className="font-semibold text-pilot-grey-900">
+        <span className="flex flex-col items-start gap-0.5">
+          {item.documentNumber ? (
+            <span className="font-semibold text-pilot-grey-900">
+              {item.documentNumber}
+            </span>
+          ) : (
+            <span className="text-pilot-grey-400">nincs még szám</span>
+          )}
+          <span className="text-xs text-pilot-grey-600">
             {item.externalKindLabel ??
               getDocumentCapabilities(item.documentType).label}
-          </span>
-          <span className="text-xs text-pilot-aqua-700">
-            {item.invoiceFormat
-              ? INVOICE_FORMAT_LABELS[item.invoiceFormat]
-              : "—"}
-          </span>
-        </span>
-      ),
-    },
-    {
-      id: "number",
-      header: "Bizonylatszám",
-      width: "150px",
-      cell: (item) => (
-        <span className="flex flex-col items-start gap-1">
-          <span className="font-semibold text-pilot-grey-900">
-            {item.documentNumber ?? "Piszkozat"}
+            {item.invoiceFormat ? (
+              <>
+                <span aria-hidden="true"> · </span>
+                <span className="text-pilot-aqua-700">
+                  {INVOICE_FORMAT_LABELS[item.invoiceFormat]}
+                </span>
+              </>
+            ) : null}
           </span>
           {item.origin === "EXTERNAL" ? (
             <ExternalBadge source={item.externalSource} />
@@ -96,7 +114,7 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
         </span>
       ),
     },
-    // The customer column takes what the fixed ones leave (at least ~150 px at the table's
+    // The customer column takes what the fixed ones leave (at least ~130 px at the table's
     // minimum width): with their old widths summing to more than the card, it collapsed to
     // nothing and its header ran into "Kiállítás" (stage photo, 2026-11-03).
     {
@@ -119,7 +137,7 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
       header: "Kiállítás",
       sortable: true,
       nowrap: true,
-      width: "120px",
+      width: "105px",
       cell: (item) => formatDay(item.issueDate),
     },
     {
@@ -127,46 +145,39 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
       header: "Határidő",
       sortable: true,
       nowrap: true,
-      width: "120px",
+      width: "105px",
+      phone: "hide",
       cell: (item) => formatDay(item.dueDate),
     },
     {
-      // a bejövő lista oszlopa és számformátuma (Luca, 2026-11-04): a pénznem-jelet a Deviza oszlop adja
-      id: "currency",
-      header: "Deviza",
-      width: "80px",
-      cell: (item) => (
-        <span className="font-semibold text-pilot-grey-900">
-          {currencyLabel(item.currency)}
-        </span>
-      ),
-    },
-    {
-      // együtt látszik a nettó, az ÁFA és a bruttó, ugyanabban a sorrendben és formában, mint a bejövőn
+      // egy sorban a bruttó, a pénznem-jellel; a nettó és az ÁFA a megjegyzésben és a felolvasónak (acrobot 61971)
       id: "totals",
-      header: "Összegek",
+      header: "Összeg",
       sortable: true,
-      width: "170px",
+      width: "130px",
       align: "right",
-      cell: (item) => (
-        <span className="flex flex-col items-end gap-0.5 whitespace-nowrap tabular-nums">
-          <span className="text-xs text-pilot-grey-600">
-            Nettó {listAmount(item.netAmount, item.currency)}
+      nowrap: true,
+      cell: (item) => {
+        const breakdown = `Nettó ${listAmount(item.netAmount, item.currency)}, ÁFA ${listAmount(item.vatAmount, item.currency)}, bruttó ${listAmount(item.grossAmount, item.currency)} ${currencyLabel(item.currency)}`;
+        return (
+          <span
+            title={breakdown}
+            className="whitespace-nowrap font-semibold tabular-nums text-pilot-grey-900"
+          >
+            {item.grossAmount === null
+              ? "—"
+              : `${listAmount(item.grossAmount, item.currency)} ${currencyLabel(item.currency)}`}
+            <span className="sr-only">. {breakdown}</span>
           </span>
-          <span className="text-xs text-pilot-grey-600">
-            ÁFA {listAmount(item.vatAmount, item.currency)}
-          </span>
-          <span className="font-semibold text-pilot-grey-900">
-            Bruttó {listAmount(item.grossAmount, item.currency)}
-          </span>
-        </span>
-      ),
+        );
+      },
     },
     {
       // a fizetési mód és alatta a kifizetés jelzése, ahogy a bejövő listán
       id: "payment",
       header: "Fizetés",
       width: "130px",
+      phone: "hide",
       cell: (item) => (
         <span className="flex flex-col gap-0.5">
           <span className="text-pilot-grey-900">
@@ -183,16 +194,17 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
       ),
     },
     {
-      // megvan-e a PDF, és ha nincs, miért (Balázs, 2026-10-21); ugyanaz, amit a havi csomag lát
+      // megvan-e a PDF, és ha nincs, miért (Balázs, 2026-10-21); ugyanaz, amit a havi csomag llát
       id: "pdf",
       header: "PDF",
-      width: "110px",
+      width: "90px",
+      phone: "hide",
       cell: (item) => <PdfStateBadge item={item} />,
     },
     {
       id: "status",
       header: "Állapot",
-      width: "130px",
+      width: "120px",
       cell: (item) => (
         <BillingDocumentStatus
           status={item.status}
@@ -203,11 +215,16 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
     {
       id: "open",
       header: <span className="sr-only">Megnyitás</span>,
-      width: "48px",
+      width: "110px",
       align: "right",
-      // CSAK VIZUÁLIS JEL: a sor maga nyílik (brief 7. pont).
-      cell: () => (
-        <span aria-hidden="true" className="text-pilot-aqua-700">
+      phone: "hide",
+      // CSAK VIZUÁLIS JEL: a sor maga nyílik (brief 7. pont); a felirat megmondja, hova (Szerkesztő vagy Adatlap).
+      cell: (item) => (
+        <span
+          aria-hidden="true"
+          className="inline-flex items-center gap-1 text-xs font-medium text-pilot-aqua-700"
+        >
+          {billingDocumentTargetLabel(item)}
           <Icon name="chevron-left" size={14} className="rotate-180" />
         </span>
       ),
