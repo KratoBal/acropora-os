@@ -593,21 +593,30 @@ export class WebshopOrdersRepository {
 
   /**
    * The proforma draft's advance mark (card 2c5fbfb5): set when the window was opened for an advance, cleared when for the whole
-   * order. Only on a draft: an issued proforma keeps what it was issued as.
+   * order. Only on a draft: an issued proforma keeps what it was issued as. Answers whether it wrote: a write moves the draft's
+   * `updatedAt`, and the caller then reads the fresh one (the issue checks it).
    */
   async markProformaAdvance(
     proformaId: string,
     advance: boolean,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const row = await prisma.invoice.findUnique({
       where: { id: proformaId },
       select: { tags: true, status: true },
     });
-    if (!row || row.status !== "DRAFT") return;
+    if (!row || row.status !== "DRAFT") return false;
+    const tags = tagsWithAdvance(row.tags, advance);
+    // no write when the mark is already so: a write moves the draft's `updatedAt`, which the issue checks
+    if (
+      tags.length === row.tags.length &&
+      tags.every((tag) => row.tags.includes(tag))
+    )
+      return false;
     await prisma.invoice.update({
       where: { id: proformaId },
-      data: { tags: tagsWithAdvance(row.tags, advance) },
+      data: { tags },
     });
+    return true;
   }
 
   async proformaAmount(
