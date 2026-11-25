@@ -1092,3 +1092,52 @@ describe("service-job list (c): the filter row and the button behind it", () => 
     }
   });
 });
+
+/**
+ * A TELEFONOS FEJLÉC (picasso terv 5. pont: az első hibajegy az első 600 px-en belül; a stage-en mérve 600 px volt, a leírás nélküli,
+ * egy soros fülekkel és keresősorral emulált változaton 440). A pixelek jsdomban nem mérhetők: az osztályokat és a telefonos leírás-
+ * elhagyást rögzítjük, a valódi mérés a stage-kiadás után. MI PIROSÍT: ha telefonon a leírás megmarad; ha asztalon eltűnik; ha a fülek
+ * telefonon nem szűkülnek (két sorba törnek); ha a kereső telefonon nem oszlik meg a gombbal egy sorban.
+ */
+describe("service-job list (d): the phone header", () => {
+  const DESCRIPTION = /Minden bejelentésnek legyen következő lépése/;
+
+  it("keeps the description on the desktop", async () => {
+    renderAt("");
+    await screen.findByText("Jegy 3");
+    expect(screen.getByText(DESCRIPTION)).toBeTruthy();
+  });
+
+  it("drops the description on the phone", async () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query === "(max-width: 639px)",
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    try {
+      renderAt("");
+      await screen.findByText("Jegy 3");
+      expect(screen.queryByText(DESCRIPTION)).toBeNull();
+      // the title stays
+      expect(screen.getByRole("heading", { name: "Hibajegyek" })).toBeTruthy();
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
+  it("narrows the tabs on the phone and lets the search share its row with the button", async () => {
+    renderAt("");
+    await screen.findByText("Jegy 3");
+    for (const tab of screen.getAllByRole("tab")) {
+      expect(tab.className).toMatch(/\bpx-2\.5\b/);
+      expect(tab.className).toMatch(/\bsm:px-4\b/);
+    }
+    const search = screen.getByLabelText("Hibajegy keresése");
+    // a flexible basis (not w-full) below sm, the old fixed width from sm up
+    expect(search.className).toMatch(/flex-\[1_1_10rem\]/);
+    expect(search.className).toMatch(/\bsm:flex-none\b/);
+    expect(search.className).not.toMatch(/(^|\s)w-full(\s|$)/);
+  });
+});

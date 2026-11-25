@@ -2652,6 +2652,16 @@ describe("Ajánlat szerkesztő: mentés-jelző és Kiküldés a fejlécben (b229
     expect(screen.queryByRole("button", { name: "Kiküldés" })).toBeNull();
   });
 
+  it("piszkozat nélkül (csak publikált verzió) a megjegyzés nem emlegeti a szerkesztett piszkozatot", async () => {
+    api.detail.mockResolvedValue(
+      quote([publishedV1()], { status: "ACCEPTED" }),
+    );
+    render(<QuoteEditorPage quoteId="q1" />);
+    expect(await screen.findByText("A publikált v1 megy ki.")).toBeTruthy();
+    expect(screen.queryByText(/nem a szerkesztett piszkozat/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Kiküldés" })).toBeTruthy();
+  });
+
   it("a már kiment publikált verziónál a fejlécben is Újraküldés áll", async () => {
     api.detail.mockResolvedValue(
       editing({
