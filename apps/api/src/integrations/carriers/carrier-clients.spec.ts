@@ -729,3 +729,58 @@ describe("shipmentReference", () => {
     );
   });
 });
+
+/*
+  THE READ-ONLY LIVE MODE (card 6ae05968; acrobot 61316: the live mode would open REAL shipments from the Csomag button). MI
+  PIROSÍT: "live-read" creates or cancels a parcel on the live system; it reaches the test host or the stub for the tracking; the
+  refusal calls the carrier before it says no; an unknown spelling of it is anything but the stub.
+*/
+describe("the read-only live mode", () => {
+  const LIVE_READ = {
+    FOXPOST_API_MODE: "live-read",
+    FOXPOST_API_USER: "u",
+    FOXPOST_API_PASSWORD: "p",
+    FOXPOST_API_KEY: "k",
+  };
+
+  it("tracks on the LIVE host", async () => {
+    const fetch = fakeFetch(
+      json({ clFox: "CLFOX000000000000009", traces: [] }),
+    );
+    const client = carrierClientFor("foxpost", LIVE_READ, fetch.impl);
+    await client.tracking({ parcelNumber: "CLFOX000000000000009" });
+    assert.equal(
+      fetch.calls[0]!.url,
+      `${FOXPOST_API_URL.live}/api/tracking/CLFOX000000000000009`,
+    );
+  });
+
+  it("refuses to create or cancel a parcel, with READ_ONLY, before any call", async () => {
+    const fetch = fakeFetch();
+    const client = carrierClientFor("foxpost", LIVE_READ, fetch.impl);
+    const created = await carrierError(
+      client.createParcel({
+        reference: "1",
+        recipient: RECIPIENT,
+        destination: POINT,
+      }),
+    );
+    assert.equal(created.code, "READ_ONLY");
+    assert.match(created.userMessage, /csak olvasó módban/);
+    const cancelled = await carrierError(
+      client.cancelParcel({ parcelNumber: "CLFOX000000000000009" }),
+    );
+    assert.equal(cancelled.code, "READ_ONLY");
+    assert.equal(fetch.calls.length, 0);
+  });
+
+  it("is live for the host, read-only for the shipments; another spelling is the stub", () => {
+    assert.equal(carrierMode("live-read"), "live");
+    for (const value of ["LIVE-READ", "live_read", "readonly"])
+      assert.equal(carrierMode(value), "stub");
+    assert.ok(
+      carrierClientFor("gls", { GLS_API_MODE: "live_read" }) instanceof
+        StubCarrierClient,
+    );
+  });
+});

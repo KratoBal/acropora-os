@@ -65,6 +65,7 @@ const HTTP_OF: Record<CarrierErrorCode, number> = {
   DUPLICATE: 409,
   UNCONFIRMED: 409,
   NO_PARCEL: 404,
+  READ_ONLY: 409,
 };
 
 /**

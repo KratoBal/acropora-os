@@ -16,6 +16,7 @@ import {
   RESERVATION_RELEASE_AFTER_MS,
   WebshopParcelService,
 } from "./webshop-parcel.service.js";
+import { ReadOnlyCarrierClient } from "./read-only-carrier.client.js";
 
 /**
  * Egy memoriabeli tar, ami az adatbazis reszleges egyedi indexet utanozza:
@@ -198,6 +199,18 @@ describe("WebshopParcelService", () => {
     assert.equal(store.rows.length, 0);
 
     carrier.failWith = null;
+    assert.ok((await service.createParcel(ORDER)).parcelNumber);
+  });
+
+  // card 6ae05968: the read-only live mode refuses before any call, so it is certain and the order stays free
+  it("the read-only mode's refusal frees the order too: nothing is left as unconfirmed", async () => {
+    const { store, service } = setup();
+    const readOnly = new WebshopParcelService(
+      store.asRepository(),
+      () => new ReadOnlyCarrierClient(new FakeCarrier()),
+    );
+    assert.equal(await codeOf(readOnly.createParcel(ORDER)), "READ_ONLY");
+    assert.equal(store.rows.length, 0);
     assert.ok((await service.createParcel(ORDER)).parcelNumber);
   });
 
