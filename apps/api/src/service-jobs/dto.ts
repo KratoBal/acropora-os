@@ -17,7 +17,9 @@ import {
 import { Transform, Type } from "class-transformer";
 import {
   ALL_SERVICE_JOB_STATUS_VALUES,
+  COMMON_SERVICE_STATUSES,
   SERVICE_JOB_LIST_SORT_FIELDS,
+  type CommonServiceStatus,
   type ServiceJobListSortField,
   type ServiceJobStatusValue,
 } from "@acropora/types";
@@ -440,6 +442,24 @@ export class ServiceJobListQueryDto {
   @ArrayMaxSize(ALL_SERVICE_JOB_STATUS_VALUES.length)
   @IsIn(ALL_SERVICE_JOB_STATUS_VALUES, { each: true })
   statuses?: ServiceJobStatusValue[];
+
+  /**
+   * A KÖZÖS ÁLLAPOT-SZŰRŐ, VESSZŐVEL ELVÁLASZTVA (`NEW,DONE`; kártya 7f23785c): a közös öt állapot füleié. A levezetett Elkészült a
+   * szerveren szűrődik, ugyanazzal a feltétellel, mint a számlálója (`common-status-where.ts`). Üres vagy hiányzó: nincs szűkítés.
+   */
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === "string"
+      ? value
+          .split(",")
+          .map((part) => part.trim())
+          .filter(Boolean)
+      : value,
+  )
+  @IsArray()
+  @ArrayMaxSize(COMMON_SERVICE_STATUSES.length)
+  @IsIn(COMMON_SERVICE_STATUSES, { each: true })
+  commonStatuses?: CommonServiceStatus[];
 
   /** A partner és a helyszín szűrője (a hibajegy partnere, illetve pontosan az a helyszín): eddig a lap szűrt a betöltött sorokon. */
   @IsString() @IsOptional() customerId?: string;

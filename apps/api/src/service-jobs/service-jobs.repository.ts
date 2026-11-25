@@ -5,7 +5,11 @@ import {
   type ServiceJobListSortField,
 } from "@acropora/types";
 import { Injectable } from "@nestjs/common";
-import type { NamedPerson } from "@acropora/types";
+import type {
+  CommonJobWorksheetFacts,
+  CommonServiceStatus,
+  NamedPerson,
+} from "@acropora/types";
 
 import { NOT_HIDDEN } from "../common/hidden-rows.js";
 import { listOrderBy, type SortDirection } from "../common/list-sort.js";
@@ -21,6 +25,10 @@ import {
   type ServiceJobListScope,
 } from "./service-job-list-scope.js";
 import { ALL_SERVICE_JOB_STATUSES } from "./service-job-status.js";
+import {
+  COMMON_DONE_WHERE,
+  commonStatusesWhere,
+} from "./common-status-where.js";
 import {
   MAINTENANCE_DONE,
   maintenanceStateWhere,
@@ -48,6 +56,8 @@ export const LIST_PAGE_SIZE = 25;
 /** A lista lapozása, rendezése és új szűrői; a `page` megadása kapcsolja be a lapozást (lásd a repository `list`-jét). */
 export interface ServiceJobListOptions {
   statuses?: ServiceJobStatus[];
+  /** A közös állapot szerinti fül (`common-status-where.ts`); a `statuses`-szal együtt mindkettő érvényes. */
+  commonStatuses?: CommonServiceStatus[];
   customerId?: string;
   departmentId?: string;
   page?: number;
@@ -1258,7 +1268,7 @@ export class ServiceJobsRepository {
     maintenanceState: MaintenanceListState | undefined,
     filters: Pick<
       ServiceJobListOptions,
-      "statuses" | "customerId" | "departmentId"
+      "statuses" | "commonStatuses" | "customerId" | "departmentId"
     >,
   ): Prisma.ServiceJobWhereInput {
     const where: Prisma.ServiceJobWhereInput = {
@@ -1272,6 +1282,9 @@ export class ServiceJobsRepository {
         serviceJobSearchWhere(search),
         ...(filters.statuses && filters.statuses.length > 0
           ? [{ status: { in: filters.statuses } }]
+          : []),
+        ...(filters.commonStatuses && filters.commonStatuses.length > 0
+          ? [commonStatusesWhere(filters.commonStatuses)]
           : []),
         ...(filters.customerId ? [{ customerId: filters.customerId }] : []),
         ...(filters.departmentId
@@ -1300,6 +1313,7 @@ export class ServiceJobsRepository {
     viewerUserId: string,
     maintenanceState: MaintenanceListState | undefined,
     statuses: ServiceJobStatus[] | undefined,
+    commonStatuses?: CommonServiceStatus[],
   ): Promise<ServiceJobListFacets> {
     const where = this.listWhere(
       scope,
@@ -1308,7 +1322,7 @@ export class ServiceJobsRepository {
       kind,
       viewerUserId,
       maintenanceState,
-      { statuses },
+      { statuses, commonStatuses },
     );
     const [byCustomer, byDepartment] = await Promise.all([
       this.database.serviceJob.groupBy({
@@ -1450,6 +1464,58 @@ export class ServiceJobsRepository {
     ) as Record<ServiceJobStatus, number>;
     for (const row of rows) counts[row.status] = row._count._all;
     return counts;
+  }
+
+  /**
+   * AZ ELKÉSZÜLT DARABSZÁMA a csempékhez és a fülekhez: ugyanaz a láthatóság, fajta és keresés, mint a `countsByStatus`-nál, és ugyanaz a
+   * feltétel, mint a fül szűrőjén (`COMMON_DONE_WHERE`). A másik négy közös szám a `countsByStatus`-ból jön (`commonCountsFrom`).
+   */
+  async countCommonDone(
+    visibility: Prisma.ServiceJobWhereInput,
+    search?: string,
+    kind: "REPAIR" | "MAINTENANCE" | "ALL" = "REPAIR",
+  ): Promise<number> {
+    return this.database.serviceJob.count({
+      where: {
+        AND: [
+          visibility,
+          kind === "ALL" ? {} : { kind },
+          serviceJobSearchWhere(search),
+          COMMON_DONE_WHERE,
+        ],
+      },
+    });
+  }
+
+  /**
+   * A JEGYEK MUNKALAP-TÉNYEI A KÖZÖS ÁLLAPOTHOZ, EGY KÖTEGBEN (a lista egy lapjára vagy egy adatlapra).
+   *
+   * UGYANAZ A TÉNY, MINT A SZŰRŐÉ: a legutolsó verzió a `WorksheetLatestVersion` nézetből, a rejtett lap is (ahogy a lezárás kapujánál,
+   * `worksheetSignatureStates`). A hívó csak az IN_PROGRESS jegyek azonosítóit adja: a levezetés a többire nem fut.
+   */
+  async commonWorksheetFacts(
+    serviceJobIds: readonly string[],
+  ): Promise<Map<string, CommonJobWorksheetFacts[]>> {
+    const facts = new Map<string, CommonJobWorksheetFacts[]>();
+    if (serviceJobIds.length === 0) return facts;
+    const rows = await this.database.worksheet.findMany({
+      where: { serviceJobId: { in: [...serviceJobIds] } },
+      select: {
+        serviceJobId: true,
+        handedOverAt: true,
+        latestVersion: { select: { status: true } },
+      },
+    });
+    for (const row of rows) {
+      if (row.serviceJobId === null) continue;
+      const list = facts.get(row.serviceJobId) ?? [];
+      list.push({
+        currentVersionStatus: row.latestVersion?.status ?? null,
+        handedOver: row.handedOverAt !== null,
+      });
+      facts.set(row.serviceJobId, list);
+    }
+    return facts;
   }
 
   /** Az idei legnagyobb sorszám (élő ÉS törölt/felszabadított szám), a következő szám kiosztásához. */

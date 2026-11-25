@@ -24,7 +24,11 @@ function serviceWith(kapott: {
 }) {
   const repository: Pick<
     ServiceJobsRepository,
-    "list" | "assignedUnitIds" | "countsByStatus"
+    | "list"
+    | "assignedUnitIds"
+    | "countsByStatus"
+    | "countCommonDone"
+    | "commonWorksheetFacts"
   > = {
     assignedUnitIds: async () => ["u1"],
     list: async (_scope, visibility, search) => {
@@ -37,6 +41,8 @@ function serviceWith(kapott: {
      * a kerdesre, es a masodik bekotese kulon tud elromlani -- akkor a partner
      * a sajat listaja folott a HAZ osszesitojet latna.
      */
+    countCommonDone: async () => 0,
+    commonWorksheetFacts: async () => new Map(),
     countsByStatus: async (visibility, search) => {
       kapott.szamlaloWhere = visibility;
       kapott.szamlaloKereses = search;

@@ -1,3 +1,7 @@
+import type {
+  CommonServiceStatus,
+  CommonServiceStatusReason,
+} from "./common-service-status.js";
 import type { WorksheetVersionStatus } from "./worksheet-management.js";
 
 /**
@@ -72,6 +76,15 @@ export interface ServiceJobListItem {
   status: ServiceJobStatusValue;
   partnerStatus: ServiceJobPartnerStatus;
   partnerStatusLabel: string;
+  /**
+   * A KÖZÖS ÁLLAPOT ÉS AZ OKA (kártya 7f23785c, `common-service-status.ts`): a
+   * tárolt állapotból és a munkalapok tényeiből levezetve, a szerveren. A
+   * szerver 2026-11-25 óta mindig küldi; a típusban azért opcionális, mert a
+   * kliensek fixtúrái és a régi mobil buildek nélküle épülnek. A partner
+   * rövidebb listája a 4. szeletben ebből készül.
+   */
+  commonStatus?: CommonServiceStatus;
+  commonReason?: CommonServiceStatusReason | null;
   customerName: string | null;
   /**
    * A HELYSZIN TELJES UTJA, a partner neve ala.
@@ -171,6 +184,12 @@ export interface ServiceJobListFacets {
 export interface ServiceJobListResponse {
   items: ServiceJobListItem[];
   counts: ServiceJobStatusCounts;
+  /**
+   * A KÖZÖS ÖT ÁLLAPOT DARABSZÁMA (csempék, fülek), ugyanazzal a láthatósággal és kereséssel, mint a `counts`. Az Elkészült ugyanabból a
+   * szűrőből számolódik, mint a fül szűrője és a sor felirata (terv 8/c). A régi nyolckulcsos `counts` marad: a régi mobil és a partner
+   * számlálója azt olvassa.
+   */
+  commonCounts?: Record<CommonServiceStatus, number>;
   /**
    * A KARBANTARTÁS FÜLEINEK SZÁMA (`kind=MAINTENANCE` kérésnél): a még nem kész és a kész lapok, a jelvény szabálya szerint (minden
    * munkalap legutolsó verziója aláírt = kész). A hibajegy-listán hiányzik.
@@ -423,6 +442,15 @@ export interface ServiceJobDetail {
   status: ServiceJobStatusValue;
   partnerStatus: ServiceJobPartnerStatus;
   partnerStatusLabel: string;
+  /**
+   * A KÖZÖS ÁLLAPOT ÉS AZ OKA (kártya 7f23785c, `common-service-status.ts`): a
+   * tárolt állapotból és a munkalapok tényeiből levezetve, a szerveren. A
+   * szerver 2026-11-25 óta mindig küldi; a típusban azért opcionális, mert a
+   * kliensek fixtúrái és a régi mobil buildek nélküle épülnek. A partner
+   * rövidebb listája a 4. szeletben ebből készül.
+   */
+  commonStatus?: CommonServiceStatus;
+  commonReason?: CommonServiceStatusReason | null;
   customerName: string | null;
   /**
    * A PARTNER AZONOSITOJA, A NEVE MELLE.

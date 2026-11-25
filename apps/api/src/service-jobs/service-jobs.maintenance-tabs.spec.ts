@@ -145,12 +145,18 @@ describe("a szolgáltatás a fület továbbadja, és a számlálót csak a karba
     const kapott: unknown[] = [];
     const repository: Pick<
       ServiceJobsRepository,
-      "list" | "countsByStatus" | "maintenanceStateCounts"
+      | "list"
+      | "countsByStatus"
+      | "countCommonDone"
+      | "commonWorksheetFacts"
+      | "maintenanceStateCounts"
     > = {
       list: async (_scope, _visibility, _search, _kind, _viewer, state) => {
         kapott.push(state);
         return { rows: [], truncated: false };
       },
+      countCommonDone: async () => 0,
+      commonWorksheetFacts: async () => new Map(),
       countsByStatus: async () => STATUSES,
       maintenanceStateCounts: async () => ({ progress: 3, done: 4 }),
     };
