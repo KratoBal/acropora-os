@@ -30,6 +30,7 @@ import {
   type ViesVatLookupResult,
   viesFill,
 } from "@acropora/types";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
@@ -1257,26 +1258,24 @@ export function PurchaseInvoiceEuEditorPage() {
 
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
-      <PilotPageHeader
-        title={pageTitle}
-        description={pageDescription}
-        actions={
-          <PilotButton
-            size="regular"
-            variant="secondary"
-            onClick={() =>
-              router.push(
-                navInvoiceId
-                  ? `/beszerzes/nav-szamlak/${navInvoiceId}`
-                  : "/beszerzes",
-              )
-            }
-          >
-            <span aria-hidden="true">←</span>
-            {navInvoiceId ? "Vissza a NAV számlához" : "Vissza a listához"}
-          </PilotButton>
-        }
-      />
+      {/*
+        A VISSZALÉPÉS BAL FELÜL, KIS NYÍLLAL (Picasso 3.16): a többi oldalon (új munkalap, adatlapok) így áll; eddig jobb felül, másodlagos gombként állt.
+        Ugyanaz a cél és ugyanaz a két felirat; a gomb helyett hivatkozás (a "Vissza a listához" egy útvonal, nem művelet).
+      */}
+      <div>
+        <Link
+          href={
+            navInvoiceId
+              ? `/beszerzes/nav-szamlak/${navInvoiceId}`
+              : "/beszerzes"
+          }
+          className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
+        >
+          <Icon name="chevron-left" size={12} />
+          {navInvoiceId ? "Vissza a NAV számlához" : "Vissza a listához"}
+        </Link>
+        <PilotPageHeader title={pageTitle} description={pageDescription} />
+      </div>
 
       {/*
         A FORRÁS VÁLASZTÓJA (Direction F, a Beszerzés-brief 7. pontja): nem
