@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { PARTNER_TODO_ITEMS, partnerTodosOf } from "./partner-overview.js";
+import {
+  PARTNER_NEWS_FIRST_VISIT_DAYS,
+  PARTNER_TODO_ITEMS,
+  partnerNewsOf,
+  partnerNewsSince,
+  partnerTodosOf,
+} from "./partner-overview.js";
 
 /*
   A PARTNER TEENDŐI (kártya 28f31715). MI PIROSÍT: egy ki nem küldött munkalap teendőnek számít (a partner nem tudná aláírni); az
@@ -158,5 +164,74 @@ describe("a partner teendői", () => {
     });
     assert.equal(overview.todos[0]!.count, 7);
     assert.equal(overview.todos[0]!.items.length, PARTNER_TODO_ITEMS);
+  });
+});
+
+/*
+  AZ ÚJDONSÁGOK (kártya 28f31715, PR 2). MI PIROSÍT: a látogatás előtti (vagy épp akkori) sor újnak számít; a sorrend nem a
+  legfrissebb elöl; első látogatásnál minden régi sor új, vagy semmi sem; a karbantartás a hibajegy-adatlapra linkel.
+*/
+describe("az újdonságok", () => {
+  const NOW = new Date("2026-11-25T12:00:00.000Z");
+
+  it("első látogatásnál az utolsó hét, utána a legutóbbi látogatás óta", () => {
+    assert.equal(
+      partnerNewsSince(null, NOW),
+      new Date(
+        NOW.getTime() - PARTNER_NEWS_FIRST_VISIT_DAYS * 86_400_000,
+      ).toISOString(),
+    );
+    assert.equal(
+      partnerNewsSince("2026-11-24T08:00:00.000Z", NOW),
+      "2026-11-24T08:00:00.000Z",
+    );
+  });
+
+  it("csak a látogatás UTÁN keletkezett sorok, a legfrissebb elöl, a karbantartás a saját lapjára", () => {
+    const news = partnerNewsOf({
+      tickets: [
+        {
+          id: "sj_old",
+          jobNumber: "HJ-1",
+          title: "Régi",
+          createdAt: "2026-11-24T07:00:00.000Z",
+        },
+        {
+          id: "sj_at",
+          jobNumber: "HJ-2",
+          title: "Pont akkor",
+          createdAt: "2026-11-24T08:00:00.000Z",
+        },
+        {
+          id: "sj_new",
+          jobNumber: "HJ-3",
+          title: "Új",
+          createdAt: "2026-11-24T09:00:00.000Z",
+        },
+        {
+          id: "kb_new",
+          jobNumber: "KB-4",
+          title: "Karb",
+          createdAt: "2026-11-25T09:00:00.000Z",
+          kind: "MAINTENANCE",
+        },
+      ],
+      worksheets: [
+        {
+          id: "ws_1",
+          number: "M-1",
+          subject: "Lap",
+          createdAt: "2026-11-20T09:00:00.000Z",
+        },
+      ],
+      since: {
+        TICKETS: "2026-11-24T08:00:00.000Z",
+        WORKSHEETS: "2026-11-21T00:00:00.000Z",
+      },
+    });
+    assert.deepEqual(
+      news.map((g) => [g.area, g.count, g.items.map((i) => i.href)]),
+      [["TICKETS", 2, ["/karbantartas/kb_new", "/hibajegyek/sj_new"]]],
+    );
   });
 });

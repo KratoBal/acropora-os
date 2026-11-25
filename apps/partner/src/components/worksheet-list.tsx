@@ -100,6 +100,11 @@ export function WorksheetList() {
     load();
   }, [load]);
 
+  // a lista megnyitása (kártya 28f31715, PR 2): az áttekintés Újdonságai ettől számolnak
+  useEffect(() => {
+    partnerApi.markSeen("WORKSHEETS").catch(() => undefined);
+  }, []);
+
   const selectStatus = (key: string) => {
     setStatus(key === status ? "ALL" : key);
     setPage(1);
