@@ -31,6 +31,7 @@ import {
   WebshopOrderAddressDto,
   WebshopOrderNoteDto,
   WebshopLoyaltyAdjustmentDto,
+  WebshopOrderManualRefundSettleDto,
   WebshopOrderNotesDto,
   WebshopOrderMethodDto,
   WebshopOrderPointDto,
@@ -179,6 +180,18 @@ export class WebshopOrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.edits.saveNotes(id, body, user);
+  }
+
+  /** A kézi kártya-visszatérítés rendezése („Visszatérítve”, kártya abf3f8f4): a „ki” a bejelentkezett felhasználó. */
+  @Post(":id/manual-refund-settled")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  settleManualRefund(
+    @Param("id") id: string,
+    @Body() body: WebshopOrderManualRefundSettleDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.edits.settleManualRefund(id, body, user);
   }
 
   /** A rendelés vevőjének hűségpontjai: egyenleg és a legújabb sorok (commerce #808). Vendég rendelésnél `available: false`. */

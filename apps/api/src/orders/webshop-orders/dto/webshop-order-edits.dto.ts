@@ -1,6 +1,8 @@
 import {
   WEBSHOP_CARRIER_NOTE_MAX,
   WEBSHOP_CUSTOMER_NOTE_MAX,
+  WEBSHOP_MANUAL_REFUND_NOTE_MAX,
+  type WebshopOrderManualRefundSettleInput,
   type WebshopOrderAddressInput,
   type WebshopOrderMethodInput,
   type WebshopOrderNotesInput,
@@ -60,6 +62,17 @@ export class WebshopOrderNotesDto implements WebshopOrderNotesInput {
   @IsString()
   @MaxLength(WEBSHOP_CARRIER_NOTE_MAX)
   carrierNote?: string;
+}
+
+/**
+ * A kézi kártya-visszatérítés rendezése (kártya abf3f8f4). CSAK a megjegyzés jön a kérésből: a „ki” a bejelentkezett felhasználó, a
+ * szolgáltatás tölti (barracuda, commerce #904: nem a böngészőből jövő törzsből).
+ */
+export class WebshopOrderManualRefundSettleDto implements WebshopOrderManualRefundSettleInput {
+  @IsOptional()
+  @IsString()
+  @MaxLength(WEBSHOP_MANUAL_REFUND_NOTE_MAX)
+  note?: string;
 }
 
 /** Egy kijelölt tétel a bontáshoz. */

@@ -576,6 +576,12 @@ export interface WebshopOrderDetail {
     amount: number;
     creditLines: number;
     at: string | null;
+    /**
+     * RENDEZVE (kártya abf3f8f4): a visszatérítést valaki a Stripe irányítópultján elvégezte, és a „Visszatérítve” gombbal rögzítette
+     * (a webshop nem látja a Stripe-ban indított visszatérítést). A jelzés helyén ilyenkor ki és mikor áll; a lezárás nyoma megmarad.
+     * `null` vagy hiányzó: még nincs rendezve.
+     */
+    settled?: { by: string; at: string; note: string | null } | null;
   } | null;
   /** A rendelés aktív csomagja az OS-ben (Rendelések, 5. PR), ha van. */
   parcel: WebshopOrderParcel | null;
@@ -888,6 +894,12 @@ export interface WebshopOrderMethodResult {
     /** Drágulásnál a különbözet linkje kiment-e a vevőnek; különben `null`. */
     link: WebshopStatusMailOutcome | null;
   };
+}
+
+/** A kézi kártya-visszatérítés rendezése (kártya abf3f8f4): csak egy rövid megjegyzés; a „ki” a bejelentkezett felhasználóból jön, SOHA a kérésből. */
+export const WEBSHOP_MANUAL_REFUND_NOTE_MAX = 300;
+export interface WebshopOrderManualRefundSettleInput {
+  note?: string;
 }
 
 export interface WebshopOrderNotesInput {

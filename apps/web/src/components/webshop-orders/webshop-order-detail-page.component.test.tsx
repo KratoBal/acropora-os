@@ -29,6 +29,7 @@ const api = vi.hoisted(() => ({
   resendStatusMail: vi.fn(),
   editLine: vi.fn(),
   releaseHold: vi.fn(),
+  settleManualRefund: vi.fn(),
   sendPaymentLink: vi.fn(),
   updateAddress: vi.fn(),
   saveInternalNote: vi.fn(),
@@ -319,6 +320,7 @@ beforeEach(() => {
   api.resendStatusMail.mockReset();
   api.editLine.mockReset();
   api.releaseHold.mockReset();
+  api.settleManualRefund.mockReset();
   api.sendPaymentLink.mockReset();
   api.updateAddress.mockReset();
   api.saveInternalNote.mockReset();
@@ -1816,6 +1818,124 @@ describe("WebshopOrderDetailPage", () => {
     expect(notice.textContent).toMatch(/Kézi visszatérítés kell/);
     expect(notice.textContent).toMatch(/40\s?700/);
     expect(notice.textContent).toMatch(/nem térítette vissza/);
+  });
+
+  const OPEN_REFUND = {
+    amount: 40700,
+    creditLines: 1,
+    at: "2026-11-24T20:11:59.000Z",
+    settled: null,
+  };
+
+  it("the Visszatérítve button asks first, sends the optional note, and the notice turns into who and when (card abf3f8f4)", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      cardPayment: null,
+      manualRefund: OPEN_REFUND,
+    });
+    api.settleManualRefund.mockResolvedValue({
+      ...detail,
+      cardPayment: null,
+      manualRefund: {
+        ...OPEN_REFUND,
+        settled: {
+          by: "Kiss Anna",
+          at: "2026-11-25T09:50:00.000Z",
+          note: "Stripe irányítópult, re_123",
+        },
+      },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    await screen.findByTestId("manual-refund-notice");
+    fireEvent.click(screen.getByRole("button", { name: "Visszatérítve" }));
+    // asked first: nothing is sent yet
+    expect(api.settleManualRefund).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/Biztosan elvégezted a kártyás visszatérítést/),
+    ).toBeTruthy();
+    fireEvent.change(screen.getByTestId("manual-refund-note"), {
+      target: { value: "Stripe irányítópult, re_123" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Rögzítem" }));
+    const settled = await screen.findByTestId("manual-refund-settled");
+    expect(api.settleManualRefund).toHaveBeenCalledTimes(1);
+    // only the note travels: the WHO is the server's
+    expect(api.settleManualRefund.mock.calls[0]!.slice(2)).toEqual([
+      "Stripe irányítópult, re_123",
+    ]);
+    expect(settled.textContent).toMatch(/Kézi visszatérítés rendezve/);
+    expect(settled.textContent).toMatch(/Kiss Anna/);
+    expect(settled.textContent).toMatch(/Stripe irányítópult, re_123/);
+    expect(settled.textContent).toMatch(/nyoma megmarad/);
+    expect(screen.queryByTestId("manual-refund-notice")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Visszatérítve" })).toBeNull();
+  });
+
+  it("Mégse closes the question and sends nothing", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      cardPayment: null,
+      manualRefund: OPEN_REFUND,
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    await screen.findByTestId("manual-refund-notice");
+    fireEvent.click(screen.getByRole("button", { name: "Visszatérítve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mégse" }));
+    expect(screen.queryByRole("button", { name: "Rögzítem" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Visszatérítve" })).toBeTruthy();
+    expect(api.settleManualRefund).not.toHaveBeenCalled();
+  });
+
+  it("a refused settlement shows the shop's sentence and the notice stays", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      cardPayment: null,
+      manualRefund: OPEN_REFUND,
+    });
+    api.settleManualRefund.mockRejectedValue(
+      new Error("A webshop szerint a rögzített összeg már vissza van térítve."),
+    );
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    await screen.findByTestId("manual-refund-notice");
+    fireEvent.click(screen.getByRole("button", { name: "Visszatérítve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Rögzítem" }));
+    const failure = await screen.findByTestId("manual-refund-failure");
+    expect(failure.textContent).toMatch(/már vissza van térítve/);
+    expect(screen.getByTestId("manual-refund-notice")).toBeTruthy();
+    expect(screen.queryByTestId("manual-refund-settled")).toBeNull();
+  });
+
+  it("without the right to manage orders the notice shows but there is no button", async () => {
+    auth.session = session("OWNER");
+    auth.session = {
+      ...auth.session,
+      user: { ...auth.session.user, role: "WAREHOUSE" },
+    } as never;
+    api.detail.mockResolvedValue({
+      ...detail,
+      cardPayment: null,
+      manualRefund: OPEN_REFUND,
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    await screen.findByTestId("manual-refund-notice");
+    expect(screen.queryByRole("button", { name: "Visszatérítve" })).toBeNull();
+  });
+
+  it("an already settled order shows who and when, and no button", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      cardPayment: null,
+      manualRefund: {
+        ...OPEN_REFUND,
+        settled: { by: "Első", at: "2026-11-25T09:00:00.000Z", note: null },
+      },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const settled = await screen.findByTestId("manual-refund-settled");
+    expect(settled.textContent).toMatch(/Első/);
+    expect(settled.textContent).not.toMatch(/\(\)/);
+    expect(screen.queryByRole("button", { name: "Visszatérítve" })).toBeNull();
+    expect(screen.queryByTestId("manual-refund-notice")).toBeNull();
   });
 
   it("an order with nothing to refund by hand shows no such notice", async () => {

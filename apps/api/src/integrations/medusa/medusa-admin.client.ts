@@ -755,6 +755,14 @@ export interface MedusaLoyaltyAdjustment {
   entry: MedusaLoyaltyEntry;
 }
 
+/** `POST /admin/order-manual-refund/:id/settle` (commerce #904): ki és mikor rendezte; ismételt hívás az ELSŐ rendezést adja vissza. */
+export interface MedusaManualRefundSettled {
+  settled_at: string;
+  settled_by: string;
+  settled_note: string | null;
+  already: boolean;
+}
+
 /** `POST /admin/order-notes/:id` (commerce #493): a mentés utáni állapot. */
 export interface MedusaOrderNotes {
   customer_note: string | null;
@@ -1269,6 +1277,14 @@ export interface MedusaAdminClient {
     reason: string;
     reference?: string;
   }): Promise<{ created: boolean; adjustment: MedusaLoyaltyAdjustment }>;
+  /**
+   * A kézi kártya-visszatérítés rendezése (commerce #904, kártya abf3f8f4): a rendelés markerére ki és mikor kerül. A `settled_by` az OS
+   * bejelentkezett felhasználója, a hívó tölti, soha nem a böngésző.
+   */
+  settleManualRefund(
+    orderId: string,
+    input: { settled_by: string; note?: string | null },
+  ): Promise<MedusaManualRefundSettled>;
   /** A vevő és a szállító megjegyzése (commerce #493); a hiányzó kulcs nem változik. */
   updateOrderNotes(
     orderId: string,
@@ -2579,6 +2595,16 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
         { method: "POST", body: JSON.stringify(input) },
       );
     return { created: status === 201, adjustment: body };
+  }
+
+  async settleManualRefund(
+    orderId: string,
+    input: { settled_by: string; note?: string | null },
+  ): Promise<MedusaManualRefundSettled> {
+    return this.request<MedusaManualRefundSettled>(
+      `/admin/order-manual-refund/${encodeURIComponent(orderId)}/settle`,
+      { method: "POST", body: JSON.stringify(input) },
+    );
   }
 
   async updateOrderNotes(

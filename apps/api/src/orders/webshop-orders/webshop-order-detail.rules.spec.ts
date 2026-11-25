@@ -611,6 +611,7 @@ describe("the manual refund notice", () => {
       amount: 40700,
       creditLines: 1,
       at: "2026-11-24T20:11:59.000Z",
+      settled: null,
     });
     const result = toDetail({
       order: order({
@@ -636,6 +637,7 @@ describe("the manual refund notice", () => {
       amount: 40700,
       creditLines: 1,
       at: "2026-11-24T20:11:59.000Z",
+      settled: null,
     });
   });
 
@@ -661,7 +663,7 @@ describe("the manual refund notice", () => {
       manualRefundOf({
         unsuccessful_close_credits_given_back: { captured_unrefunded: 1200 },
       }),
-      { amount: 1200, creditLines: 0, at: null },
+      { amount: 1200, creditLines: 0, at: null, settled: null },
     );
   });
 
@@ -720,5 +722,42 @@ describe("the manual refund notice", () => {
     assert.equal(run(null)?.amount, 40700);
     assert.equal(run(40700), null);
     assert.equal(run(700)?.amount, 40000);
+  });
+
+  it("a SETTLED mark shows who and when and stays (the trace of the close), whatever the shop's outstanding amount is (card abf3f8f4)", () => {
+    const settled = mark({
+      settled_at: "2026-11-25T09:50:00.000Z",
+      settled_by: "Kiss Anna",
+      settled_note: "Stripe irányítópult, re_123",
+    });
+    const expected = {
+      amount: 40700,
+      creditLines: 1,
+      at: "2026-11-24T20:11:59.000Z",
+      settled: {
+        by: "Kiss Anna",
+        at: "2026-11-25T09:50:00.000Z",
+        note: "Stripe irányítópult, re_123",
+      },
+    };
+    assert.deepEqual(manualRefundOf(settled, 40700), expected);
+    // the shop shows it refunded as well (or the figures are not readable): the settlement stays visible
+    assert.deepEqual(manualRefundOf(settled, 0), expected);
+    assert.deepEqual(manualRefundOf(settled), expected);
+    // no note: null
+    const bare = manualRefundOf(
+      mark({ settled_at: "2026-11-25T09:50:00.000Z", settled_by: "Kiss Anna" }),
+    );
+    assert.equal(bare?.settled?.note, null);
+    // a settled mark with a zero amount still shows nothing
+    assert.equal(
+      manualRefundOf(
+        mark({
+          captured_unrefunded: 0,
+          settled_at: "2026-11-25T09:50:00.000Z",
+        }),
+      ),
+      null,
+    );
   });
 });
