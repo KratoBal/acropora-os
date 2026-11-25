@@ -122,6 +122,19 @@ export function orderPaymentProviderId(
   return live?.provider_id ?? null;
 }
 
+/**
+ * A RENDELÉS FIZETÉSI GYŰJTŐJE: az első, ami nincs lemondva. Egy előre utalásra átállított rendelés (kártya d31a66a3) megtartja
+ * az első, lemondott kártyás vagy utánvétes gyűjtőjét, és az új, átutalásos utána jön; az első gyűjtő olvasása a régi módot
+ * mutatná, és a díjbekérő gomb meg sem jelenne. Ha minden gyűjtő le van mondva (egy feloldott kártya-zárolás a link előtt), az
+ * első, ahogy eddig. A webshop ugyanígy olvassa (commerce `orderPaymentRoleOf`, `order-query-projection`).
+ */
+export function primaryPaymentCollection<
+  T extends { status?: string | null } | null | undefined,
+>(collections: readonly T[] | null | undefined): T | undefined {
+  const list = collections ?? [];
+  return list.find((c) => c?.status !== "canceled") ?? list[0];
+}
+
 /** A fizetés állapota a fizetési gyűjtő összegeiből és állapotából. */
 export function paymentStateOf(
   payment: MedusaOrderOverviewRow["payment"],

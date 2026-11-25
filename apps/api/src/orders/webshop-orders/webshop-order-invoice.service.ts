@@ -45,6 +45,7 @@ import { loyaltyInvoiceShapeOf } from "./webshop-order-credits.rules.js";
 import {
   BANK_TRANSFER_PROVIDER_ID,
   orderPaymentProviderId,
+  primaryPaymentCollection,
 } from "./webshop-orders.rules.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
@@ -157,8 +158,9 @@ export class WebshopOrderInvoiceService {
     this.requireIssuing();
     const { order, status } = await this.orders.source(orderId);
     if (
-      orderPaymentProviderId(order.payment_collections?.[0]) !==
-      BANK_TRANSFER_PROVIDER_ID
+      orderPaymentProviderId(
+        primaryPaymentCollection(order.payment_collections),
+      ) !== BANK_TRANSFER_PROVIDER_ID
     )
       throw new ConflictException(
         "Díjbekérő csak előre utalásos rendeléshez küldhető.",
@@ -471,8 +473,9 @@ export class WebshopOrderInvoiceService {
       kiállított valódi számla kettős számlázás lenne.
     */
     if (
-      orderPaymentProviderId(order.payment_collections?.[0]) ===
-      BANK_TRANSFER_PROVIDER_ID
+      orderPaymentProviderId(
+        primaryPaymentCollection(order.payment_collections),
+      ) === BANK_TRANSFER_PROVIDER_ID
     )
       throw new ConflictException(
         "Előre utalásnál a számlát a Számlázz.hu állítja ki a díjbekérő kifizetésekor, és a rendelésen magától megjelenik. Az OS nem állít ki mellé másikat.",

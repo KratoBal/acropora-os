@@ -20,6 +20,7 @@ import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import {
   BANK_TRANSFER_PROVIDER_ID,
   orderPaymentProviderId,
+  primaryPaymentCollection,
 } from "./webshop-orders.rules.js";
 import {
   WebshopOrdersService,
@@ -74,8 +75,9 @@ export class WebshopOrderTransferService {
 
     const { order } = await this.orders.source(orderId);
     if (
-      orderPaymentProviderId(order.payment_collections?.[0]) !==
-      BANK_TRANSFER_PROVIDER_ID
+      orderPaymentProviderId(
+        primaryPaymentCollection(order.payment_collections),
+      ) !== BANK_TRANSFER_PROVIDER_ID
     )
       throw new ConflictException(
         "Utalás beérkezése csak előre utalásos rendelésre rögzíthető.",

@@ -15,6 +15,7 @@ import { shippingOf } from "./webshop-order-detail.rules.js";
 import {
   COD_PROVIDER_ID,
   orderPaymentProviderId,
+  primaryPaymentCollection,
 } from "./webshop-orders.rules.js";
 
 /**
@@ -132,7 +133,9 @@ export function parcelInputOf(order: MedusaOrderDetailRow): ParcelInput {
   // az utánvétnek csak munkamenete van: rekordra várva a csomag utánvét nélkül
   // ment volna fel, és a futár nem szedte volna be a pénzt (stage, 2026-10-06)
   const cod =
-    orderPaymentProviderId(order.payment_collections?.[0]) === COD_PROVIDER_ID;
+    orderPaymentProviderId(
+      primaryPaymentCollection(order.payment_collections),
+    ) === COD_PROVIDER_ID;
   return {
     ok: true,
     carrier: shipping.carrier === "FOXPOST" ? "foxpost" : "gls",

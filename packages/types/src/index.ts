@@ -1748,6 +1748,7 @@ export type {
   WebshopStaleUnit,
   WebshopVariantOption,
   WebshopOrderStatusChangeResult,
+  WebshopOrderTransferSwitchResult,
   WebshopStatusMailOutcome,
   WebshopParcelSize,
   WebshopShippingNoticeOutcome,
