@@ -18,6 +18,7 @@ import {
   hasPermission,
   PERMISSIONS,
   type InventoryCountListResponse,
+  type InventoryCountSortField,
   type InventoryCountStatus,
 } from "@acropora/types";
 import { useRouter } from "next/navigation";
@@ -30,6 +31,7 @@ import {
   useUrlQuery,
 } from "@/lib/navigation/use-url-query";
 import { inventoryApi } from "@/lib/api/inventory";
+import { useUrlSort } from "@/lib/navigation/use-url-sort";
 
 const STATUS_LABEL: Record<InventoryCountStatus, string> = {
   DRAFT: "Piszkozat",
@@ -67,6 +69,14 @@ type CountRow = InventoryCountListResponse["items"][number];
 
 export const INVENTORY_TABLE_MIN_WIDTH = 950;
 
+/** A lista rendezhető oszlopai: a táblázat oszlop-azonosítója -> a szerver rendezési mezeje (`INVENTORY_COUNT_SORT_FIELDS`). */
+export const COUNT_SORT_COLUMNS = {
+  number: "countNumber",
+  warehouse: "warehouseName",
+  createdAt: "createdAt",
+  lines: "lineCount",
+} as const;
+
 /*
   A LELTÁRLISTA OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a tábla
   kártyalistává alakul: a leltárszám a kártya címe, a többi oszlop a felirata mellett; a sor végi
@@ -77,6 +87,7 @@ export const countColumns = (
 ): PilotTableColumn<CountRow>[] => [
   {
     id: "number",
+    sortable: true,
     header: "Leltárszám",
     width: "150px",
     cell: (count) => (
@@ -87,6 +98,7 @@ export const countColumns = (
   },
   {
     id: "warehouse",
+    sortable: true,
     header: "Raktár",
     width: "150px",
     cell: (count) => (
@@ -103,6 +115,7 @@ export const countColumns = (
   },
   {
     id: "createdAt",
+    sortable: true,
     header: "Létrehozva",
     width: "170px",
     nowrap: true,
@@ -114,6 +127,7 @@ export const countColumns = (
   },
   {
     id: "lines",
+    sortable: true,
     header: "Tételek",
     width: "90px",
     cell: (count) => (
@@ -176,6 +190,7 @@ export function InventoryCountListPage() {
     "all",
   );
   const page = urlPage(params);
+  const { sort, onSort, apiSort } = useUrlSort(COUNT_SORT_COLUMNS);
   const setPage = (next: number) =>
     update({ page: next === 1 ? null : String(next) });
   const [data, setData] = useState<InventoryCountListResponse | null>(null);
@@ -194,6 +209,12 @@ export function InventoryCountListPage() {
         page,
         pageSize: 20,
         status: status === "all" ? undefined : status,
+        ...(apiSort
+          ? {
+              sort: apiSort.sort as InventoryCountSortField,
+              direction: apiSort.direction,
+            }
+          : {}),
       })
       .then((response) => {
         if (active) setData(response);
@@ -212,7 +233,7 @@ export function InventoryCountListPage() {
     return () => {
       active = false;
     };
-  }, [canView, page, requestVersion, status, token]);
+  }, [apiSort, canView, page, requestVersion, status, token]);
 
   const startNewCount = () => {
     // Matches the button's own `canManage ? ... : undefined` rendering guard.
@@ -310,6 +331,8 @@ export function InventoryCountListPage() {
           </div>
           <PilotDataTable
             columns={countColumns(router.push)}
+            sort={sort}
+            onSort={onSort}
             rows={data.items}
             rowKey={(count) => count.id}
             rowTestId="inventory-count-row"
