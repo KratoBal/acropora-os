@@ -83,17 +83,18 @@ export function WorksheetAssigneeEditor({
     <PilotCard>
       <PilotCardHeader title="Felelős" />
       <div className="space-y-3 p-4">
-        {assignees.length ? (
+        {/* szerkesztéskor a kiválasztottak címkéi (a választóban) ugyanezt mondják: a külön felsorolás csak olvasáskor kell */}
+        {assignees.length && !canManage ? (
           <ul className="text-sm text-dusk-700">
             {assignees.map((assignee) => (
               <li key={assignee.userId}>{assignee.name}</li>
             ))}
           </ul>
-        ) : (
+        ) : assignees.length === 0 ? (
           <p className="text-sm text-dusk-500">
             Erre a munkalapra még nincs kiosztva senki.
           </p>
-        )}
+        ) : null}
 
         {canManage ? (
           <>

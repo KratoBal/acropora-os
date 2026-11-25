@@ -59,6 +59,12 @@ export interface WorksheetAssigneePickerProps {
   knownNames?: Readonly<Record<string, string>>;
 }
 
+/**
+ * A TARTALÉK FELIRAT egy kiválasztott azonosítóra, ami nincs a jelöltek között és a `knownNames`-ben sem. NEM "gépi fiók": a #2891 óta ide egy
+ * inaktivált vagy jogát vesztett EMBER is kerülhet (a már rajta lévők maradnak), és a gépi szó csak akkor igaz, ha a hívó tudja (barracuda a #2892-n).
+ */
+export const NOT_SELECTABLE_NAME = "Nem választható fiók";
+
 /** Ékezet- és kisbetű-független összehasonlítás a kereséshez ("szabo" megtalálja a "Szabó"-t). */
 function searchKey(text: string): string {
   return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
@@ -95,7 +101,7 @@ export function WorksheetAssigneePicker({
   const nameOf = (userId: string) =>
     candidates.find((candidate) => candidate.id === userId)?.name ??
     knownNames?.[userId] ??
-    "Gépi fiók";
+    NOT_SELECTABLE_NAME;
   const needle = searchKey(search.trim());
   const shown = candidates.filter((candidate) =>
     searchKey(candidate.name).includes(needle),
@@ -131,6 +137,10 @@ export function WorksheetAssigneePicker({
         placeholder="Kolléga keresése…"
         value={search}
         onChange={(event) => setSearch(event.target.value)}
+        // az Enter a keresőben nem küldhet be semmit, ha a választót egyszer űrlapba teszik (ahogy a job-asset-picker is megelőzi)
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.preventDefault();
+        }}
         className="w-full rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-400 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
       />
       <div

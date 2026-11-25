@@ -117,4 +117,54 @@ describe("WorksheetAssigneeEditor", () => {
     );
     expect(api.assignableUsers).not.toHaveBeenCalled();
   });
+
+  /*
+    A FELSOROLÁS ÉS A CÍMKÉK NEM DUPLÁZNAK (picasso a stage-képen: ugyanaz a név háromszor, a felsorolásban, a címkén és a jelölőnégyzetnél).
+    MI PIROSÍT: ha szerkesztéskor a külön felsorolás is megmarad a választó címkéi mellett; ha olvasáskor (nincs szerkesztési jog) eltűnik;
+    ha a "még nincs kiosztva senki" mondat egy üres lapon elmarad.
+  */
+  it("while editing the names stand once as chips; a reader gets the plain list; an empty sheet says so", async () => {
+    const view = render(
+      <WorksheetAssigneeEditor
+        worksheetId="worksheet-1"
+        token="token-1"
+        assignees={assignees}
+        canManage
+        onSaved={vi.fn()}
+      />,
+    );
+    await screen.findByLabelText("Kiss Péter");
+    // the chip row names the assigned person once; no plain <ul> list of the saved names beside it
+    expect(
+      screen.getByRole("list", { name: "Kiválasztott felelősök" }),
+    ).toBeTruthy();
+    expect(screen.getAllByRole("list")).toHaveLength(1);
+    view.unmount();
+
+    const reader = render(
+      <WorksheetAssigneeEditor
+        worksheetId="worksheet-1"
+        token="token-1"
+        assignees={assignees}
+        canManage={false}
+        onSaved={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByRole("listitem").length).toBe(assignees.length);
+    expect(screen.queryByLabelText("Felelős keresése")).toBeNull();
+    reader.unmount();
+
+    render(
+      <WorksheetAssigneeEditor
+        worksheetId="worksheet-1"
+        token="token-1"
+        assignees={[]}
+        canManage
+        onSaved={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByText("Erre a munkalapra még nincs kiosztva senki."),
+    ).toBeTruthy();
+  });
 });
