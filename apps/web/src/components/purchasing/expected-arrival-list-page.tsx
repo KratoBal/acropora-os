@@ -27,7 +27,9 @@ import {
   PilotSelect,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
+import { sortRows, type RowGetters } from "@/lib/navigation/sort-rows";
 import { urlChoice, useUrlQuery } from "@/lib/navigation/use-url-query";
+import { useUrlSort } from "@/lib/navigation/use-url-sort";
 import { expectedArrivalsApi } from "@/lib/api/expected-arrivals";
 
 import {
@@ -257,6 +259,27 @@ export function ExpectedArrivalListPage() {
  * szűrő, a „Nem kell”, a levél-behúzás és a kivett tételek megmaradnak, a
  * terv stílusában.
  */
+/**
+ * A RENDEZHETŐ OSZLOPOK (Balázs kérése, kártya 2f6369a4): a lista minden sort betölt (a lapozás is a böngészőben van), ezért a rendezés a
+ * szűrt, teljes listán fut, a lapozás előtt (`sortRows`), az URL-ben álló `sort` és `direction` szerint. Az Állapot (felirat) és a
+ * műveleti oszlop nem rendezhető. Az üres érték (nincs érkezés, nincs összeg, nincs tétel-szám) mindkét irányban a végén áll.
+ */
+const ARRIVAL_SORT_COLUMNS = {
+  reference: "reference",
+  supplier: "supplier",
+  arrived: "arrived",
+  amount: "amount",
+  lines: "lines",
+} as const;
+const ARRIVAL_GETTERS: RowGetters<ExpectedArrivalListItem> = {
+  reference: (item) =>
+    [item.orderReference, item.invoiceNumber].filter(Boolean).join(" ") || null,
+  supplier: (item) => item.supplierName,
+  arrived: (item) => item.arrivedAt,
+  amount: (item) => item.netTotal,
+  lines: (item) => item.lineCount,
+};
+
 function ExpectedArrivalView(props: {
   items: ExpectedArrivalListItem[] | null;
   dismissed: ExpectedArrivalListItem[];
@@ -292,15 +315,28 @@ function ExpectedArrivalView(props: {
       ),
     [items, props.source, props.stage, props.search],
   );
-  const totalPages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  // a rendezés a szűrt, TELJES listán fut, a lapozás ELŐTT (a lista minden sort betölt, a lapozás is a böngészőben van)
+  const { sort, onSort } = useUrlSort(ARRIVAL_SORT_COLUMNS);
+  // a rendezés váltása az 1. oldalra áll (a lapozás itt helyi állapot, nem az URL kulcsa)
+  const sortKey = sort ? `${sort.id}:${sort.direction}` : "";
+  const { setPage } = props;
+  useEffect(() => {
+    setPage(1);
+  }, [sortKey, setPage]);
+  const sorted = useMemo(
+    () => sortRows(shown, sort, ARRIVAL_GETTERS),
+    [shown, sort],
+  );
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const page = Math.min(props.page, totalPages);
-  const pageItems = shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageItems = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const hasFilters = Boolean(props.source || props.stage || props.search);
 
   const columns: PilotTableColumn<ExpectedArrivalListItem>[] = [
     {
       id: "reference",
       header: "Rendelés / számla",
+      sortable: true,
       width: "19%",
       cell: (item) => (
         <div className="min-w-0">
@@ -321,6 +357,7 @@ function ExpectedArrivalView(props: {
     {
       id: "supplier",
       header: "Beszállító",
+      sortable: true,
       width: "22%",
       cell: (item) => (
         <span className="font-semibold text-pilot-grey-900">
@@ -331,6 +368,7 @@ function ExpectedArrivalView(props: {
     {
       id: "arrived",
       header: "Érkezett",
+      sortable: true,
       nowrap: true,
       width: "12%",
       cell: (item) => (
@@ -342,6 +380,7 @@ function ExpectedArrivalView(props: {
     {
       id: "amount",
       header: "Nettó összeg",
+      sortable: true,
       align: "right",
       width: "14%",
       cell: (item) => (
@@ -363,6 +402,7 @@ function ExpectedArrivalView(props: {
     {
       id: "lines",
       header: "Tételek",
+      sortable: true,
       align: "right",
       width: "13%",
       cell: (item) => (
@@ -524,6 +564,8 @@ function ExpectedArrivalView(props: {
             <PilotDataTable
               columns={columns}
               rows={pageItems}
+              sort={sort}
+              onSort={onSort}
               rowKey={(item) => `${item.source}-${item.id}`}
               rowTestId="varhato-sor"
               onRowActivate={props.onOpen}

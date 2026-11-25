@@ -158,6 +158,113 @@ describe("ExpectedArrivalListPage", () => {
   });
 
   // a corrected invoice after the booking: it is shown, and it opens nothing
+  /* A rendezés (Balázs kérése, kártya 2f6369a4): a lista minden sort betölt, a rendezés a böngészőben, a lapozás előtt, az URL-ben. */
+  it("a fejlécre kattintva a teljes lista rendeződik (asc, desc, alap), az üres összeg a végén, a szám számként", async () => {
+    api.list.mockResolvedValue({
+      items: [
+        item({
+          id: "a",
+          source: "MAIL",
+          supplierName: "Béla Kft.",
+          netTotal: 1000,
+          orderReference: "N-10",
+          currency: "HUF",
+        }),
+        item({
+          id: "b",
+          source: "MAIL",
+          supplierName: "Ábel Kft.",
+          netTotal: null,
+          orderReference: "N-2",
+          currency: "HUF",
+        }),
+        item({
+          id: "c",
+          source: "MAIL",
+          supplierName: "Zita Kft.",
+          netTotal: 250,
+          orderReference: "N-1",
+          currency: "HUF",
+        }),
+      ],
+      mailSync: status,
+      skippedReminders: 0,
+    } as never);
+    render(<ExpectedArrivalListPage />);
+    await screen.findByText("Béla Kft.");
+    const order = () =>
+      screen
+        .getAllByTestId("varhato-sor")
+        .map((row) => /(Béla|Ábel|Zita) Kft\./.exec(row.textContent ?? "")?.[1])
+        .join(",");
+    expect(order()).toBe("Béla,Ábel,Zita");
+    const header = (name: RegExp) =>
+      within(screen.getByRole("columnheader", { name })).getByRole("button");
+    fireEvent.click(header(/Nettó összeg/));
+    await waitFor(() => expect(order()).toBe("Zita,Béla,Ábel"));
+    fireEvent.click(header(/Nettó összeg/));
+    await waitFor(() => expect(order()).toBe("Béla,Zita,Ábel"));
+    fireEvent.click(header(/Nettó összeg/));
+    await waitFor(() => expect(order()).toBe("Béla,Ábel,Zita"));
+    fireEvent.click(header(/Beszállító/));
+    await waitFor(() => expect(order()).toBe("Ábel,Béla,Zita"));
+    fireEvent.click(header(/Rendelés \/ számla/));
+    await waitFor(() => expect(order()).toBe("Zita,Ábel,Béla"));
+  });
+
+  it("a rendezés a lapozás ELŐTT fut: az első oldal az ÖSSZES sor legkisebb összegeivel kezdődik, nem csak az első oldaléval", async () => {
+    // a szerver sorrendje csökkenő (30..1): ha a rendezés csak a már levágott oldalra futna, az első sor a 6-os lenne
+    api.list.mockResolvedValue({
+      items: Array.from({ length: 30 }, (_, index) => {
+        const n = 30 - index;
+        return item({
+          id: `n${n}`,
+          source: "MAIL",
+          supplierName: `S${String(n).padStart(2, "0")} Kft.`,
+          netTotal: n * 100,
+          currency: "HUF",
+        });
+      }),
+      mailSync: status,
+      skippedReminders: 0,
+    } as never);
+    render(<ExpectedArrivalListPage />);
+    await screen.findByText("S30 Kft.");
+    fireEvent.click(
+      within(
+        screen.getByRole("columnheader", { name: /Nettó összeg/ }),
+      ).getByRole("button"),
+    );
+    await waitFor(() =>
+      expect(screen.getAllByTestId("varhato-sor")[0]).toHaveTextContent(
+        "S01 Kft.",
+      ),
+    );
+    expect(screen.getAllByTestId("varhato-sor")).toHaveLength(25);
+  });
+
+  it("csak az adat-oszlopok rendezhetők: az Állapot nem", async () => {
+    render(<ExpectedArrivalListPage />);
+    await screen.findAllByTestId("varhato-sor");
+    for (const name of [
+      /Rendelés \/ számla/,
+      /Beszállító/,
+      /Érkezett/,
+      /Nettó összeg/,
+      /Tételek/,
+    ])
+      expect(
+        within(screen.getByRole("columnheader", { name })).getAllByRole(
+          "button",
+        ),
+      ).toHaveLength(1);
+    expect(
+      within(screen.getByRole("columnheader", { name: /Állapot/ })).queryByRole(
+        "button",
+      ),
+    ).toBeNull();
+  });
+
   it("flags a correction that arrived after the booking, without opening the editor", async () => {
     api.list.mockResolvedValue({
       items: [
