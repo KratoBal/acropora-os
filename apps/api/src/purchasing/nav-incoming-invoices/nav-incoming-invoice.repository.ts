@@ -9,8 +9,10 @@ import type {
   NavInvoiceSyncRun,
 } from "@acropora/types";
 
+import { listOrderBy } from "../../common/list-sort.js";
 import type { NavInvoiceDigestItem } from "../../integrations/nav/nav-online-invoice.client.js";
 import type { NavIncomingInvoiceListQueryDto } from "./dto/nav-incoming-invoice-list-query.dto.js";
+import { NAV_INCOMING_INVOICE_SORT } from "./nav-incoming-invoice-sort.js";
 import {
   hungarianTaxBase,
   toNavIncomingInvoiceSummary,
@@ -288,7 +290,11 @@ export class NavIncomingInvoiceRepository extends Repository {
     const [rows, totalItems] = await Promise.all([
       prisma.navIncomingInvoice.findMany({
         where,
-        orderBy: [{ insDate: "desc" }, { id: "desc" }],
+        orderBy: listOrderBy(
+          NAV_INCOMING_INVOICE_SORT,
+          query.sort,
+          query.direction,
+        ),
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),

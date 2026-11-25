@@ -27,12 +27,39 @@ import {
   type PilotBadgeVariant,
 } from "@/components/pilot/pilot-ui";
 import { navIncomingInvoicesApi } from "@/lib/api/nav-incoming-invoices";
+import { sortFromParams, useUrlSort } from "@/lib/navigation/use-url-sort";
 
 import {
   PilotFilterCard,
   PilotListCard,
   PurchasingTabs,
 } from "./purchasing-pilot-shell";
+
+/** A lista rendezhető oszlopai: a táblázat oszlop-azonosítója -> a szerver rendezési mezeje (`NAV_INCOMING_INVOICE_SORT_FIELDS`). */
+export const NAV_SORT_COLUMNS = {
+  number: "navInvoiceNumber",
+  supplier: "supplierName",
+  issued: "invoiceIssueDate",
+  delivered: "invoiceDeliveryDate",
+} as const;
+
+/**
+ * A kérés az oldal URL-jéből. Az oldal az URL paramétereit továbbadja az API-nak, ezért a rendezés CSAK akkor marad benne, ha ismert
+ * mezőre és érvényes irányra szól: egy régi vagy kézzel írt link ne törje el a listát 400-zal.
+ */
+export function navInvoiceListQuery(params: URLSearchParams): URLSearchParams {
+  const q = new URLSearchParams(params.toString());
+  q.delete("sort");
+  q.delete("direction");
+  const sort = sortFromParams(params, NAV_SORT_COLUMNS);
+  if (sort) {
+    q.set("sort", NAV_SORT_COLUMNS[sort.id as keyof typeof NAV_SORT_COLUMNS]);
+    q.set("direction", sort.direction);
+  }
+  if (!q.has("page")) q.set("page", "1");
+  if (!q.has("pageSize")) q.set("pageSize", "25");
+  return q;
+}
 
 /** A bruttó a nettó és az ÁFA összege; ÁFA nélkül nincs bruttó. */
 export function navGross(
@@ -86,12 +113,8 @@ export function NavIncomingInvoiceListPage() {
     session && hasPermission(session.user, PERMISSIONS.PURCHASING_MANAGE),
   );
   const token = session?.token ?? "";
-  const query = useMemo(() => {
-    const q = new URLSearchParams(params.toString());
-    if (!q.has("page")) q.set("page", "1");
-    if (!q.has("pageSize")) q.set("pageSize", "25");
-    return q;
-  }, [params]);
+  const { sort, onSort } = useUrlSort(NAV_SORT_COLUMNS);
+  const query = useMemo(() => navInvoiceListQuery(params), [params]);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -172,6 +195,7 @@ export function NavIncomingInvoiceListPage() {
   const columns: PilotTableColumn<NavIncomingInvoiceSummary>[] = [
     {
       id: "number",
+      sortable: true,
       header: "Számlaszám",
       width: "17%",
       cell: (item) => (
@@ -189,6 +213,7 @@ export function NavIncomingInvoiceListPage() {
     },
     {
       id: "supplier",
+      sortable: true,
       header: "Szállító",
       width: "23%",
       cell: (item) => (
@@ -199,6 +224,7 @@ export function NavIncomingInvoiceListPage() {
     },
     {
       id: "issued",
+      sortable: true,
       header: "Kelte",
       nowrap: true,
       width: "12%",
@@ -210,6 +236,7 @@ export function NavIncomingInvoiceListPage() {
     },
     {
       id: "delivered",
+      sortable: true,
       header: "Teljesítés",
       nowrap: true,
       width: "12%",
@@ -318,6 +345,8 @@ export function NavIncomingInvoiceListPage() {
           >
             <PilotDataTable
               columns={columns}
+              sort={sort}
+              onSort={onSort}
               rows={data.items}
               rowKey={(item) => item.id}
               onRowActivate={(item) =>
