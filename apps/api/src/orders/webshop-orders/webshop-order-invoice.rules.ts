@@ -5,6 +5,8 @@ import {
 import {
   WEBSHOP_INVOICE_DUE_DAYS,
   WEBSHOP_PROFORMA_DUE_DAYS,
+  szamlazzDocumentTotals,
+  szamlazzLineAmounts,
   szamlazzUnitNetFromGross,
   webshopProformaExpired,
   type BillingDocumentDetail,
@@ -13,6 +15,7 @@ import {
   type BillingDocumentDraftInput,
   type BillingDocumentLineInput,
   type WebshopOrderStatus,
+  type WebshopProformaAdvance,
 } from "@acropora/types";
 
 import {
@@ -709,6 +712,144 @@ export function proformaDraftOf(
       paymentMethod: "Átutalás",
     },
   };
+}
+
+/**
+ * AZ ELŐLEG-DÍJBEKÉRŐ (kártya d31a66a3, 2a; Balázs, 2026-11-25 10:19 UTC): nagy értékű terméknél a rendelést előre utalásra állítjuk,
+ * és a díjbekérő nem a teljes összeget kéri, hanem előleget. A kezelő a végösszeg százalékát VAGY egy forintösszeget ír be.
+ *
+ * A SOROK: ÁFA-kulcsonként egy „Előleg” sor, a teljes díjbekérő kulcsonkénti bruttója szerint arányosan (mint az árajánlat
+ * mérföldkövénél, #1634, csak bruttóból: a vevő forintban kapja meg, mennyi az előleg). A forint-maradék a legnagyobb kulcsra megy,
+ * tehát a díjbekérő végösszege (a Számlázz.hu szabályával, tételenként forintra kerekítve) PONTOSAN a beírt előleg: a banki
+ * párosítás erre az összegre vár.
+ *
+ * Amit elutasít: nem forintos rendelés; üres, nem szám, 0 vagy kisebb, a végösszeg vagy nagyobb (az már nem előleg: arra a teljes
+ * díjbekérő való); egy sor, amelynek bruttója nem jön ki pontosan.
+ */
+export function advanceProformaDraftOf(
+  order: MedusaOrderDetailRow,
+  input: {
+    customerId: string;
+    now: Date;
+    loyaltyShape?: LoyaltyInvoiceShape;
+    advance: WebshopProformaAdvance;
+  },
+): InvoiceDraftResult {
+  const full = proformaDraftOf(order, input);
+  if (!full.ok) return full;
+  const currency = full.draft.currency;
+  if (currency !== "HUF")
+    return {
+      ok: false,
+      message: "Előleg-díjbekérő csak forintos rendelésre készíthető.",
+    };
+  const total = amountOf(order.total);
+  if (total === null)
+    return {
+      ok: false,
+      message:
+        "A webshop nem adta meg a rendelés végösszegét, ezért az előleg nem számolható.",
+    };
+  const advance = advanceAmountOf(input.advance, total);
+  if (typeof advance === "string") return { ok: false, message: advance };
+
+  // the full proforma's gross per VAT rate, its credits included (the order's total is what they add up to)
+  const byRate = new Map<string, number>();
+  for (const line of full.draft.lines) {
+    const amounts = szamlazzLineAmounts({
+      quantity: line.quantity,
+      unitNet: line.unitNet,
+      vatRatePercent: line.vatRatePercent,
+      currency,
+    });
+    if (!amounts.ok)
+      return {
+        ok: false,
+        message: `A díjbekérő egy tételének összege nem számolható: „${line.description}”.`,
+      };
+    const key = String(line.vatRatePercent);
+    byRate.set(
+      key,
+      Math.round(((byRate.get(key) ?? 0) + Number(amounts.grossAmount)) * 100) /
+        100,
+    );
+  }
+  // a credit taken as a payment (points, a gift card: a negative 0% line) is no rate of the goods: the advance splits over the
+  // rates that carry goods, so a rate whose lines add up to nothing or less gives no share
+  const rates = [...byRate]
+    .filter(([, gross]) => gross > 0)
+    .sort((a, b) => b[1] - a[1] || Number(b[0]) - Number(a[0]));
+  const base = rates.reduce((sum, [, gross]) => sum + gross, 0);
+  const shares = rates.map(([, gross]) => Math.floor((advance * gross) / base));
+  if (shares.length)
+    shares[0] = shares[0]! + advance - shares.reduce((sum, x) => sum + x, 0);
+
+  const lines: BillingDocumentLineInput[] = [];
+  for (const [i, [rate]] of rates.entries()) {
+    const gross = shares[i]!;
+    if (gross <= 0) continue;
+    const amounts = szamlazzUnitNetFromGross({
+      grossAmount: String(gross),
+      quantity: "1",
+      vatRatePercent: rate,
+      currency,
+    });
+    // a forint invoice's total rounds each line to the forint (`szamlazzDocumentTotals`, what the stored total and the bank
+    // pairing read): 27% of 10 000,00 comes out as 10 000,01, which is 10 000 on the proforma
+    if (!amounts.ok || Math.round(Number(amounts.grossAmount)) !== gross)
+      return {
+        ok: false,
+        message: `Az előleg ${rate}% ÁFA-kulcsú része (${gross} Ft) nem állítható elő pontosan; adj meg más összeget.`,
+      };
+    lines.push({
+      productId: null,
+      description: `Előleg: webshop rendelés #${order.display_id}`,
+      quantity: "1",
+      unit: "db",
+      unitNet: amounts.unitNet,
+      vatRatePercent: rate,
+      discountPercent: null,
+      comment: null,
+    });
+  }
+  lines.sort((a, b) => Number(b.vatRatePercent) - Number(a.vatRatePercent));
+  const proformaGross = Number(
+    szamlazzDocumentTotals(
+      lines.map((line) => {
+        const amounts = szamlazzLineAmounts({ ...line, currency });
+        if (!amounts.ok) throw new Error("ADVANCE_LINE_AMOUNTS");
+        return amounts;
+      }),
+      currency,
+    ).grossAmount,
+  );
+  if (proformaGross !== advance)
+    return {
+      ok: false,
+      message: `Az előleg-díjbekérő végösszege (${proformaGross} Ft) nem a beírt előleg (${advance} Ft); adj meg más összeget.`,
+    };
+  return { ok: true, difference: 0, draft: { ...full.draft, lines } };
+}
+
+/** The advance in whole forints, or why it cannot be one. */
+export function advanceAmountOf(
+  advance: WebshopProformaAdvance,
+  total: number,
+): number | string {
+  const tooLarge =
+    "Az előleg nem lehet a rendelés végösszege vagy annál több: arra a teljes díjbekérő való.";
+  if ("percent" in advance) {
+    const text = advance.percent.trim().replace(",", ".");
+    if (!/^\d{1,2}(\.\d{1,2})?$/.test(text) || !(Number(text) > 0))
+      return "Az előleg százaléka 0-nál nagyobb, 100-nál kisebb szám legyen (legfeljebb két tizedessel).";
+    const amount = Math.round((total * Number(text)) / 100);
+    if (amount <= 0) return "Az előleg ennél a százaléknál 0 Ft lenne.";
+    return amount >= total ? tooLarge : amount;
+  }
+  const text = advance.amount.trim().replace(/\s/g, "");
+  if (!/^\d+$/.test(text) || !(Number(text) > 0))
+    return "Az előleg összege egész forint legyen, 0-nál nagyobb.";
+  return Number(text) >= total ? tooLarge : Number(text);
 }
 
 /** A lista jelölése: a rendelés díjbekérője lejárt-e (nincs díjbekérő: nem). */

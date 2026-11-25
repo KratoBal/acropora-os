@@ -135,6 +135,7 @@ export type {
   BillingDocumentListQuery,
   BillingDocumentListResponse,
   BillingDocumentListTarget,
+  BillingMaintenanceDraftLink,
   BillingDocumentOrigin,
   BillingListPaymentFilter,
   BillingDocumentPdfInfo,
@@ -2315,6 +2316,8 @@ export type {
   WebshopInvoiceConfirmation,
   WebshopInvoiceIssueResult,
   WebshopInvoiceSummary,
+  WebshopProformaAdvance,
+  WebshopProformaSummary,
 } from "./billing-issue-summary.js";
 export {
   ATTENDANCE_DAY_KIND_LABELS,

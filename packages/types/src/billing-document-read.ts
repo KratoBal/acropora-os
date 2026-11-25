@@ -74,6 +74,19 @@ export const BILLING_DOCUMENT_ORIGINS = ["OWN", "EXTERNAL"] as const;
 export type BillingDocumentOrigin = (typeof BILLING_DOCUMENT_ORIGINS)[number];
 
 /**
+ * A TIG-SZÁMLA PISZKOZAT HELYE (Luca kérése, acrobot 61225; KT-2026-009): a lista a piszkozatot a számlázás saját vázlatai mellett
+ * mutatja, de a sora a szerviz munka (`serviceJobId`, `jobKind`) vagy a megrendelés (`partnerOrderId`) lapjára visz, mert a tétel az
+ * igazolásból jön, nem szerkeszthető, és ott van a "Piszkozat törlése" és az újra elkészítés.
+ */
+export interface BillingMaintenanceDraftLink {
+  serviceJobId: string | null;
+  /** `MAINTENANCE` a karbantartási lapnak, `REPAIR` a hibajegynek; a megrendeléses TIG-nél `null`. */
+  jobKind: "MAINTENANCE" | "REPAIR" | null;
+  partnerOrderId: string | null;
+  certificateNumber: string;
+}
+
+/**
  * A sor kattintásának célja (brief 24. pont): vázlatnál a szerkesztő, minden
  * más állapotban a részletek.
  */
@@ -94,7 +107,16 @@ export const BILLING_LIST_PATH = "/penzugy/szamlazas";
 export function billingDocumentPath(item: {
   id: string;
   opens: BillingDocumentListTarget;
+  maintenanceDraft?: BillingMaintenanceDraftLink | null;
 }): string {
+  // a TIG piszkozat NEM számlázási szerkesztő-vázlat: a tétele az igazolásból jön, ezért a saját panelje (a szerviz munka vagy a
+  // megrendelés lapja) a hely, ahol törölhető és újra elkészíthető
+  const draft = item.maintenanceDraft;
+  if (draft?.partnerOrderId) return `/megrendelesek/${draft.partnerOrderId}`;
+  if (draft?.serviceJobId)
+    return draft.jobKind === "MAINTENANCE"
+      ? `/szerviz/karbantartas/${draft.serviceJobId}`
+      : `/szerviz/hibajegyek/${draft.serviceJobId}`;
   if (item.opens === "EDITOR")
     return `${BILLING_LIST_PATH}/${item.id}/szerkesztes`;
   // a Számlázz.hu-ból kapott külső bizonylat: csak olvasható adatlap (acrobot 25812)
@@ -142,6 +164,8 @@ export interface BillingDocumentListItem {
   status: BillingDocumentStatus;
   emailStatus: BillingEmailStatus | null;
   opens: BillingDocumentListTarget;
+  /** Csak a TIG-számla piszkozatán: hová vigyen a sor (lásd `BillingMaintenanceDraftLink`); a többi soron hiányzik. */
+  maintenanceDraft?: BillingMaintenanceDraftLink | null;
   origin: BillingDocumentOrigin;
   /**
    * Külső bizonylatnál a Számlázz.hu bizonylattípusának felirata (Számla,

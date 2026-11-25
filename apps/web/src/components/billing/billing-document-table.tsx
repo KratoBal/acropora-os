@@ -26,6 +26,8 @@ export const BILLING_LIST_PATH = SHARED_BILLING_LIST_PATH;
 export function billingDocumentHref(item: {
   id: string;
   opens: BillingDocumentListItem["opens"];
+  /** A TIG-számla piszkozata a szerviz munka vagy a megrendelés lapjára visz, nem a számlázás szerkesztőjébe. */
+  maintenanceDraft?: BillingDocumentListItem["maintenanceDraft"];
 }): string {
   // egy szabály a listának és a globális keresésnek (`@acropora/types`, T2.2)
   return billingDocumentPath(item);

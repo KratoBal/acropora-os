@@ -15,6 +15,7 @@ import {
   ServicePanel,
   ServicePanelHeading,
 } from "@/components/service/service-detail-chrome";
+import { MaintenanceInvoiceDraftDelete } from "./maintenance-invoice-draft-delete";
 import { completionCertificatesApi } from "@/lib/api/completion-certificates";
 import { maintenanceInvoiceApi } from "@/lib/api/maintenance-invoice";
 import {
@@ -237,6 +238,20 @@ export function MaintenanceInvoicePanel({
                 >
                   {issuing.busy ? "Kiállítás…" : "Kiállítás"}
                 </PilotButton>
+                <MaintenanceInvoiceDraftDelete
+                  token={token}
+                  invoiceId={invoice.id}
+                  onDeleted={() => {
+                    setError(null);
+                    setInvoice(null);
+                    void load();
+                  }}
+                  onError={(message) => {
+                    setError(message);
+                    // a szerver döntött (például a kiállítás közben elindult): újraolvassuk az állapotot
+                    void load();
+                  }}
+                />
                 {/*
                   LÁTHATÓ FELIRAT, NEM CSAK `title`: egy tiltott gomb
                   `pointer-events: none` szabállyal jár (lásd a `PilotButton`

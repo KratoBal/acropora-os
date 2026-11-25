@@ -45,6 +45,16 @@ export const LIST_SELECT = {
   pdfStorageKey: true,
   paperOriginalAt: true,
   customer: { select: { companyName: true, displayName: true } },
+  // a forrás nélküli TIG-piszkozat sorának célja: a szerviz munka vagy a megrendelés (`maintenanceDraftOf`)
+  sourceType: true,
+  completionCertificate: {
+    select: {
+      number: true,
+      serviceJobId: true,
+      partnerOrderId: true,
+      serviceJob: { select: { kind: true } },
+    },
+  },
   // a kiállított sztornó (számlázási brief, 1. pont)
   correctionInvoices: {
     where: { documentType: "STORNO", status: "ISSUED" },
