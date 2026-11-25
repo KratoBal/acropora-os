@@ -26,8 +26,32 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { customersApi } from "@/lib/api/customers";
+import { sortFromParams, useUrlSort } from "@/lib/navigation/use-url-sort";
 
 type CustomerRow = CustomerListResponse["items"][number];
+
+/** A lista rendezhető oszlopa: a táblázat oszlop-azonosítója -> a szerver rendezési mezeje (`CUSTOMER_LIST_SORT_FIELDS`). Csak a név; az indok a típusnál áll. */
+export const CUSTOMER_SORT_COLUMNS = { name: "displayName" } as const;
+
+/**
+ * A kérés az oldal URL-jéből. Az oldal az URL paramétereit továbbadja az API-nak, ezért a rendezés CSAK akkor marad benne, ha ismert
+ * mezőre és érvényes irányra szól: egy régi vagy kézzel írt link ne törje el a listát 400-zal.
+ */
+export function customerListQuery(params: URLSearchParams): URLSearchParams {
+  const q = new URLSearchParams(params.toString());
+  q.delete("sort");
+  q.delete("direction");
+  const sort = sortFromParams(params, CUSTOMER_SORT_COLUMNS);
+  if (sort) {
+    q.set("sort", CUSTOMER_SORT_COLUMNS.name);
+    q.set("direction", sort.direction);
+  }
+  // egy lista a vevőkkel és a partnerekkel: szerep nélkül mindenki jön (a szerep-szűrő szűkít)
+  if (!q.has("role")) q.set("role", "ALL");
+  if (!q.has("page")) q.set("page", "1");
+  if (!q.has("pageSize")) q.set("pageSize", "25");
+  return q;
+}
 
 /** A szerep jelvénye a soron (egy partnertörzs): a Supplier-kötésből származtatva, külön oszlop nélkül. */
 const ROLE_BADGE: Record<CustomerPartnerRole, string> = {
@@ -49,6 +73,7 @@ const ROLE_FILTER_LABEL: Record<(typeof CUSTOMER_LIST_ROLES)[number], string> =
 const columns: PilotTableColumn<CustomerRow>[] = [
   {
     id: "name",
+    sortable: true,
     header: "Név",
     cell: (item) => (
       <span className="font-semibold text-dusk-900">
@@ -118,14 +143,8 @@ export function CustomerListPage() {
     session && hasPermission(session.user, PERMISSIONS.CUSTOMERS_MANAGE),
   );
   const token = session?.token ?? "";
-  const query = useMemo(() => {
-    const q = new URLSearchParams(params.toString());
-    // egy lista a vevőkkel és a partnerekkel: szerep nélkül mindenki jön (a szerep-szűrő szűkít)
-    if (!q.has("role")) q.set("role", "ALL");
-    if (!q.has("page")) q.set("page", "1");
-    if (!q.has("pageSize")) q.set("pageSize", "25");
-    return q;
-  }, [params]);
+  const { sort, onSort } = useUrlSort(CUSTOMER_SORT_COLUMNS);
+  const query = useMemo(() => customerListQuery(params), [params]);
   const load = useCallback(
     async (signal?: AbortSignal) => {
       if (!canView) return;
@@ -273,6 +292,8 @@ export function CustomerListPage() {
                 />
               </div>
               <PilotDataTable
+                sort={sort}
+                onSort={onSort}
                 columns={columns}
                 rows={data.items}
                 rowKey={(item) => item.id}

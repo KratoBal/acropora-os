@@ -16,7 +16,9 @@ import {
 import {
   CUSTOMER_LIST_PAGE_SIZE,
   CUSTOMER_LIST_ROLES,
+  CUSTOMER_LIST_SORT_FIELDS,
   type CustomerListRole,
+  type CustomerListSortField,
 } from "@acropora/types";
 
 export class CreateCustomerAddressDto {
@@ -108,4 +110,7 @@ export class CustomerListQueryDto {
    * `includePartnerMirrors` szerint). Jelen van: a lista a partnereket is mutatja, a szerep szerint szűkítve.
    */
   @IsIn(CUSTOMER_LIST_ROLES) @IsOptional() role?: CustomerListRole;
+  /** The sort column and direction (whitelist: `CUSTOMER_LIST_SORT_FIELDS`); without them the name, ascending. */
+  @IsIn(CUSTOMER_LIST_SORT_FIELDS) @IsOptional() sort?: CustomerListSortField;
+  @IsIn(["asc", "desc"]) @IsOptional() direction?: "asc" | "desc";
 }

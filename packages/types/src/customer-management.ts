@@ -112,6 +112,14 @@ export interface CustomerDetail extends CustomerSummary {
  */
 export const CUSTOMER_LIST_PAGE_SIZE = { min: 10, max: 100 } as const;
 
+/**
+ * A VEVŐK LISTÁJÁNAK RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4). A lista lapozott, ezért a rendezés a szerveren történik.
+ * CSAK A NÉV rendezhető: a "Partnerkód" a webshop azonosítója, ennek hiányában a vevőszám (két forrásból számolt érték), a "Cím" több
+ * mezőből összerakott szöveg, a "Forrás" pedig ebből a külső azonosítóból következik. Egyik sem egy tárolt mező. Az alap sorrend a név.
+ */
+export const CUSTOMER_LIST_SORT_FIELDS = ["displayName"] as const;
+export type CustomerListSortField = (typeof CUSTOMER_LIST_SORT_FIELDS)[number];
+
 export interface CustomerListResponse {
   items: CustomerSummary[];
   pagination: {

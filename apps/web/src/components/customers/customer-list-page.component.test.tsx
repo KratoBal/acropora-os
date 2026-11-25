@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -9,7 +10,7 @@ import type { CustomerListResponse, Session } from "@acropora/types";
 import { useSyncExternalStore } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CustomerListPage } from "./customer-list-page";
+import { CustomerListPage, customerListQuery } from "./customer-list-page";
 
 const navigation = vi.hoisted(() => ({
   params: new URLSearchParams(),
@@ -220,5 +221,88 @@ describe("CustomerListPage paging", () => {
     navigation.params = new URLSearchParams("role=SUPPLIER");
     render(<CustomerListPage />);
     expect(await screen.findByText(/a partner-átvezetés után/)).toBeTruthy();
+  });
+});
+
+/*
+  A LISTA RENDEZÉSE A NÉV FEJLÉCÉN (Balázs kérése, kártya 2f6369a4). MI PIROSÍT: ha a Név fejléce nem a `displayName` mezőt írja az
+  URL-be; ha a ciklus (növekvő, csökkenő, alap) elakad; ha a rendezés nem nullázza a lapot, vagy elveszíti a szerep-szűrőt; ha az URL
+  rendezése nem jut a kérésbe, vagy egy ismeretlen mező (régi vagy kézzel írt link) igen (az API 400-at adna, és az egész lista
+  eltörne); ha a partnerkód, a cím vagy a forrás oszlop rendezhetőnek látszik (nem tárolt mezők).
+*/
+describe("CustomerListPage sorting", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.params = new URLSearchParams("page=3&role=SERVICE");
+    navigation.replace.mockReset();
+    api.list.mockReset().mockResolvedValue(response(3));
+  });
+
+  const lastReplace = () =>
+    new URLSearchParams(
+      String(navigation.replace.mock.calls.at(-1)?.[0]).split("?")[1],
+    );
+
+  it("the name header writes displayName, ascending first, drops the page and keeps the role filter", async () => {
+    render(<CustomerListPage />);
+    await screen.findAllByTestId("customer-row");
+    fireEvent.click(screen.getByRole("button", { name: /Név/ }));
+    const url = lastReplace();
+    expect(url.get("sort")).toBe("displayName");
+    expect(url.get("direction")).toBe("asc");
+    expect(url.has("page")).toBe(false);
+    expect(url.get("role")).toBe("SERVICE");
+  });
+
+  it("the second click is descending, the third clears the sort", async () => {
+    navigation.params = new URLSearchParams("sort=displayName&direction=asc");
+    render(<CustomerListPage />);
+    await screen.findAllByTestId("customer-row");
+    fireEvent.click(screen.getByRole("button", { name: /Név/ }));
+    expect(lastReplace().get("direction")).toBe("desc");
+
+    // a mock a címet csak értesítésre olvassa újra: az URL "megváltozott"
+    navigation.params = new URLSearchParams("sort=displayName&direction=desc");
+    act(() => {
+      for (const listener of navigation.listeners) listener();
+    });
+    navigation.replace.mockReset();
+    fireEvent.click(screen.getByRole("button", { name: /Név/ }));
+    expect(lastReplace().has("sort")).toBe(false);
+    expect(lastReplace().has("direction")).toBe(false);
+  });
+
+  it("the URL's sort reaches the request, and an unknown or incomplete one does not", async () => {
+    navigation.params = new URLSearchParams("sort=displayName&direction=desc");
+    render(<CustomerListPage />);
+    await screen.findAllByTestId("customer-row");
+    const sent = api.list.mock.calls.at(-1)?.[1] as URLSearchParams;
+    expect(sent.get("sort")).toBe("displayName");
+    expect(sent.get("direction")).toBe("desc");
+
+    for (const bad of [
+      "sort=partnerCode&direction=asc",
+      "sort=displayName",
+      "sort=displayName&direction=up",
+      "direction=asc",
+    ]) {
+      const query = customerListQuery(new URLSearchParams(bad));
+      expect(query.has("sort"), bad).toBe(false);
+      expect(query.has("direction"), bad).toBe(false);
+    }
+    // a szerep, a lap és a lapméret alapértékei érintetlenek
+    expect(
+      Object.fromEntries(customerListQuery(new URLSearchParams("search=x"))),
+    ).toEqual({ search: "x", role: "ALL", page: "1", pageSize: "25" });
+  });
+
+  it("only the name column has a sort button", async () => {
+    render(<CustomerListPage />);
+    const table = await screen.findByRole("table");
+    const sortable = within(table)
+      .getAllByRole("columnheader")
+      .filter((header) => within(header).queryByRole("button"))
+      .map((header) => header.textContent?.replace(/[⇅↑↓]/g, ""));
+    expect(sortable).toEqual(["Név"]);
   });
 });
