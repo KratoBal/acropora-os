@@ -6,14 +6,17 @@ import type {
   StripePayoutDetail,
   StripePayoutError,
   StripePayoutListResponse,
+  StripePayoutSortField,
   StripePayoutStatus,
   StripePayoutSummary,
   StripeSyncRunSummary,
   StripeTransactionLine,
 } from "@acropora/types";
 
+import { listOrderBy, type SortDirection } from "../../common/list-sort.js";
 import type { SimplePayOrderDocument } from "../simplepay/simplepay-resolution.js";
 import { stripeLineChanged } from "./stripe-line-change.js";
+import { PAYOUT_SORT } from "./stripe-payout-sort.js";
 import { payoutTotals } from "./stripe-payout-totals.js";
 
 /** A line to store: the feed's figures and the resolution (see `stripe-resolution.ts`). Money in major units. */
@@ -111,6 +114,8 @@ export interface StripeSettlementStore {
     status?: StripePayoutStatus;
     page: number;
     pageSize: number;
+    sort?: StripePayoutSortField;
+    direction?: SortDirection;
   }): Promise<StripePayoutListResponse>;
   payoutDetail(id: string): Promise<StripePayoutDetail>;
   approveLine(input: {
@@ -537,13 +542,15 @@ export class PrismaStripeSettlementStore implements StripeSettlementStore {
     status?: StripePayoutStatus;
     page: number;
     pageSize: number;
+    sort?: StripePayoutSortField;
+    direction?: SortDirection;
   }): Promise<StripePayoutListResponse> {
     const where = query.status ? { status: query.status } : {};
     const [total, payouts] = await Promise.all([
       prisma.stripePayout.count({ where }),
       prisma.stripePayout.findMany({
         where,
-        orderBy: [{ arrivalDate: "desc" }, { createdAt: "desc" }],
+        orderBy: listOrderBy(PAYOUT_SORT, query.sort, query.direction),
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
         select: summarySelect,

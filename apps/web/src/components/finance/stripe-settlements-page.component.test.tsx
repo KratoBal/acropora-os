@@ -7,6 +7,8 @@ import type {
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { urlNavigation } from "@/test/url-navigation";
+
 import { StripeSettlementsPage } from "./stripe-settlements-page";
 
 const api = vi.hoisted(() => ({
@@ -21,6 +23,10 @@ const auth = vi.hoisted(() => ({
   session: null as Session | null,
 }));
 
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/url-navigation")).nextNavigationModule,
+);
 // a lap `PilotThemeRoot` alatt áll (Inter, `next/font/local`)
 vi.mock("next/font/local", () => ({
   default: () => ({ className: "pilot-inter-stub" }),
@@ -134,6 +140,7 @@ const detail: StripePayoutDetail = {
 };
 
 beforeEach(() => {
+  urlNavigation.reset("/penzugy/elszamolasok/stripe");
   auth.session = session("OWNER");
   api.list.mockReset().mockResolvedValue(payouts);
   api.detail.mockReset().mockResolvedValue(detail);
@@ -363,5 +370,80 @@ describe("StripeSettlementsPage", () => {
     expect(
       await screen.findByText("Még nincs Stripe-kifizetés"),
     ).toBeInTheDocument();
+  });
+  it("sorts by a header: ascending, descending, back to the default, each one a server query", async () => {
+    render(createElement(StripeSettlementsPage));
+    await screen.findAllByTestId("stripe-kifizetes");
+    const lastQuery = () => api.list.mock.calls.at(-1)![1];
+    expect(lastQuery()).not.toHaveProperty("sort");
+
+    fireEvent.click(screen.getByRole("button", { name: /Bruttó/ }));
+    await waitFor(() =>
+      expect(lastQuery()).toMatchObject({
+        sort: "grossTotal",
+        direction: "asc",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Bruttó/ }));
+    await waitFor(() =>
+      expect(lastQuery()).toMatchObject({
+        sort: "grossTotal",
+        direction: "desc",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Bruttó/ }));
+    await waitFor(() => expect(lastQuery()).not.toHaveProperty("sort"));
+  });
+
+  it("sends the right server field for each sortable header", async () => {
+    render(createElement(StripeSettlementsPage));
+    await screen.findAllByTestId("stripe-kifizetes");
+    for (const [name, field] of [
+      ["Kifizetés napja", "arrivalDate"],
+      ["Kifizetve", "amount"],
+      ["Visszatérítés", "refundTotal"],
+      ["Díj", "feeTotal"],
+    ] as const) {
+      fireEvent.click(screen.getByRole("button", { name }));
+      await waitFor(() =>
+        expect(api.list.mock.calls.at(-1)![1]).toMatchObject({
+          sort: field,
+          direction: "asc",
+        }),
+      );
+      // a következő oszlop új rendezése növekvőben indul: előbb vissza az alapra két kattintással
+      fireEvent.click(screen.getByRole("button", { name }));
+      fireEvent.click(screen.getByRole("button", { name }));
+      await waitFor(() =>
+        expect(api.list.mock.calls.at(-1)![1]).not.toHaveProperty("sort"),
+      );
+    }
+  });
+
+  it("a new sort goes back to the first page", async () => {
+    api.list.mockResolvedValue({
+      ...payouts,
+      pagination: { page: 1, pageSize: 50, totalItems: 120, totalPages: 3 },
+    });
+    render(createElement(StripeSettlementsPage));
+    await screen.findAllByTestId("stripe-kifizetes");
+    fireEvent.click(screen.getAllByRole("button", { name: "Következő" })[0]!);
+    await waitFor(() =>
+      expect(api.list.mock.calls.at(-1)![1]).toMatchObject({ page: 2 }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Díj/ }));
+    await waitFor(() =>
+      expect(api.list.mock.calls.at(-1)![1]).toMatchObject({
+        page: 1,
+        sort: "feeTotal",
+      }),
+    );
+  });
+
+  it("the pairing and the state have no sort button", async () => {
+    render(createElement(StripeSettlementsPage));
+    await screen.findAllByTestId("stripe-kifizetes");
+    expect(screen.queryByRole("button", { name: /Párosítva/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Állapot/ })).toBeNull();
   });
 });

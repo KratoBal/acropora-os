@@ -1080,6 +1080,7 @@ export type {
   StripePayoutError,
   StripePayoutListResponse,
   StripePayoutStatus,
+  StripePayoutSortField,
   StripePayoutSummary,
   StripeResolutionSource,
   StripeSyncRunSummary,
@@ -1087,6 +1088,7 @@ export type {
   StripeSyncStatus,
   StripeTransactionLine,
 } from "./integrations/stripe-settlement.js";
+export { STRIPE_PAYOUT_SORT_FIELDS } from "./integrations/stripe-settlement.js";
 export {
   AI_ACCURACY_RATINGS,
   AI_LANGUAGE_RATINGS,
