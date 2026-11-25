@@ -63,6 +63,8 @@ export function toUserDetail(
     ...toUserSummary(user),
     notificationRoles: [...notificationRoles],
     serviceCapabilities: [...serviceCapabilities],
+    // KÖTELEZŐ mező: a fejléc leírta, hogy a mező kiesik, a fordító hallgat, a képernyőn üres hely látszik
+    isServiceAccount: user.isServiceAccount,
     avatarUrl: user.avatarUrl ?? undefined,
     passwordUpdatedAt: user.passwordUpdatedAt?.toISOString(),
     /**

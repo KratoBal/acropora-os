@@ -290,6 +290,10 @@ export class UsersRepository extends Repository {
             ...(input.customerId === undefined
               ? {}
               : { customerId: input.customerId || null }),
+            // a gépi / flotta fiók jelölő: hiányzó mező nem nyúl hozzá (card b2e74712)
+            ...(input.isServiceAccount === undefined
+              ? {}
+              : { isServiceAccount: input.isServiceAccount }),
           },
         });
         if (changed.count !== 1) throw new Error("STALE_UPDATE");

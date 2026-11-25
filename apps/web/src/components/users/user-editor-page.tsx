@@ -72,6 +72,11 @@ export function UserEditorPage({ userId }: { userId?: string }) {
   const [serviceCapabilities, setServiceCapabilities] = useState<
     ServiceCapabilityValue[]
   >([]);
+  /**
+   * GÉPI / FLOTTA FIÓK JELÖLŐ (card b2e74712, acrobot 2026-11-25). A jelölt fiók nem osztható felelősnek (munkalap, hibajegy, üzemeltetési
+   * napló), és nem kap ticket@ levélfogadást. Eddig csak adatbázis-úton volt állítható; az admin itt állítja, a mentés auditnaplóba megy.
+   */
+  const [isServiceAccount, setIsServiceAccount] = useState(false);
   const [loading, setLoading] = useState(Boolean(userId));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +112,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
       setUser(next);
       setNotificationRoles(next.notificationRoles);
       setServiceCapabilities(next.serviceCapabilities);
+      setIsServiceAccount(next.isServiceAccount);
       setFirstName(next.firstName);
       setLastName(next.lastName);
       setNickname(next.nickname ?? "");
@@ -170,6 +176,8 @@ export function UserEditorPage({ userId }: { userId?: string }) {
             customerId: customerId || null,
             notificationRoles,
             serviceCapabilities,
+            // a partner-fiók nem lehet gépi fiók: a jelölő csak a saját kollégánál kapcsolható, partnernél hamis marad
+            isServiceAccount: customerId === "" ? isServiceAccount : false,
             expectedUpdatedAt: user.updatedAt,
           }),
         );
@@ -486,6 +494,32 @@ export function UserEditorPage({ userId }: { userId?: string }) {
               </div>
             );
           })()}
+          {/* the marker is only for an existing, internal account (a new account starts as a person; a partner account is never a machine) */}
+          {user && customerId === "" ? (
+            <div className="mt-6">
+              <h2 className="text-sm font-semibold text-dusk-800">Gépi fiók</h2>
+              <label className="mt-3 flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={isServiceAccount}
+                  onChange={(event) =>
+                    setIsServiceAccount(event.target.checked)
+                  }
+                />
+                <span>
+                  <span className="block text-sm font-medium text-dusk-800">
+                    Gépi / flotta fiók, nem ember
+                  </span>
+                  <span className="block text-xs text-dusk-500">
+                    Nem osztható ki felelősnek (munkalap, hibajegy, üzemeltetési
+                    napló), és nem kap ticket@ levélfogadást. A már rá kiosztott
+                    munka megmarad.
+                  </span>
+                </span>
+              </label>
+            </div>
+          ) : null}
           {!user ? (
             <div className="mt-4">
               <FormField label="Jelszó">

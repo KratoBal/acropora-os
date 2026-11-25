@@ -38,6 +38,12 @@ export interface UserDetail extends UserSummary {
    * jelentene.
    */
   serviceCapabilities: ServiceCapabilityValue[];
+  /**
+   * GÉPI / FLOTTA FIÓK-E (card f6694b49, b2e74712). KIFEJEZETT JELÖLŐ, nem szerep és nem név: a flotta fiókja ugyanolyan szerepű, mint egy
+   * ember. Aki jelölt, az nem osztható felelősnek (munkalap, hibajegy, üzemeltetési napló), és nem kap ticket@ levélfogadást. KÖTELEZŐ
+   * mező `false` értékkel, nem elhagyható: a hiányzó és a hamis a képernyőn ugyanúgy nézne ki (nincs bejelölve), de mást jelentene.
+   */
+  isServiceAccount: boolean;
   avatarUrl?: string;
   passwordUpdatedAt?: string;
   /**
@@ -126,6 +132,8 @@ export interface UpdateUserInput {
   notificationRoles?: NotificationRoleValue[];
   /** A PARJA, UGYANAZZAL AZ ALAKKAL -- lasd a `notificationRoles` fejlecet. */
   serviceCapabilities?: ServiceCapabilityValue[];
+  /** A gépi / flotta fiók jelölő (card b2e74712): hiányzó mező nem nyúl hozzá. */
+  isServiceAccount?: boolean;
   firstName?: string;
   lastName?: string;
   /** Empty string clears it, absent leaves it alone. */

@@ -671,6 +671,18 @@ export class WorksheetsRepository extends Repository {
   }
 
   /** A megadottak közül azok, akik ma tényleg kioszthatók. */
+  /**
+   * A MÁR RAJTA LÉVŐ FELELŐSÖK (a jelenlegi sorok azonosítói): a mentés ezeket NEM kérdőjelezi meg újra. Egy gépi fiók
+   * (`isServiceAccount`) ma már nem osztható újra, de a rá korábban kiosztott sor megmarad, és nem akadályozza a többi felelős mentését.
+   */
+  async currentAssigneeIds(id: string): Promise<Set<string>> {
+    const rows = await this.database.worksheetAssignee.findMany({
+      where: { worksheetId: id },
+      select: { userId: true },
+    });
+    return new Set(rows.map((row) => row.userId));
+  }
+
   async assignableUserIds(ids: readonly string[]): Promise<Set<string>> {
     if (ids.length === 0) return new Set();
     const rows = await this.database.user.findMany({

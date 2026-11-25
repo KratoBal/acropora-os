@@ -199,6 +199,7 @@ function repository(
     }),
     existingAssetIds: async () => new Set<string>(),
     assignableUserIds: async (ids: readonly string[]) => new Set(ids),
+    currentAssigneeIds: async () => new Set<string>(),
     createDraft: async () => "worksheet-1",
     replaceDraftContent: async () => true,
     close: async () => ({ ok: true }),
@@ -854,6 +855,7 @@ describe("WorksheetsService.create és a felelősök", () => {
         repository({
           ticketPartner: async () => ticket as never,
           assignableUserIds: async (ids: readonly string[]) => new Set(ids),
+          currentAssigneeIds: async () => new Set<string>(),
           createDraft: async (input: unknown) => {
             received = input;
             return "worksheet-1";
