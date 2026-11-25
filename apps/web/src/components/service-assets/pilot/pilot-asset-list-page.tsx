@@ -112,13 +112,16 @@ export const ASSET_COLUMNS: PilotTableColumn<AssetRow>[] = [
     cell: (asset) => (
       <>
         <p className="text-sm font-medium text-pilot-grey-900">{asset.name}</p>
-        <p className="mt-0.5 break-all font-mono text-[11px] text-pilot-grey-400">
+        <p className="mt-0.5 break-all font-mono text-xs text-pilot-grey-700">
           {asset.assetNumber}
           {asset.partnerInternalCode ? ` · ${asset.partnerInternalCode}` : ""}
         </p>
         {asset.labelCode ? (
-          <p className="mt-0.5 text-[11px] text-pilot-grey-400">
-            Matricakód: <span className="font-mono">{asset.labelCode}</span>
+          <p className="mt-0.5 text-xs text-pilot-grey-600">
+            Matricakód:{" "}
+            <span className="font-mono text-pilot-grey-700">
+              {asset.labelCode}
+            </span>
           </p>
         ) : null}
       </>
@@ -204,6 +207,26 @@ export const ASSET_COLUMNS: PilotTableColumn<AssetRow>[] = [
     ),
   },
 ];
+
+const HIERARCHY_COLUMN_WIDTH = 150;
+export const ASSET_TABLE_MIN_WIDTH_WITHOUT_HIERARCHY =
+  ASSET_TABLE_MIN_WIDTH - HIERARCHY_COLUMN_WIDTH;
+
+/**
+ * A HIERARCHIA OSZLOP CSAK AKKOR ÁLL, HA VAN MIT MONDANIA (Picasso 3.5, acrobot 61933): ha az oldal MINDEN sora önálló eszköz
+ * (nincs szülője és nincs részegysége), az oszlop minden sorban ugyanazt írná, és helyet visz. Üres oldalon a teljes oszlopkészlet
+ * marad (nincs sor, amiből dönteni lehetne).
+ */
+export function assetColumnsFor(
+  items: readonly AssetRow[],
+): PilotTableColumn<AssetRow>[] {
+  const allStandalone =
+    items.length > 0 &&
+    items.every((asset) => !asset.parent && !asset.childCount);
+  return allStandalone
+    ? ASSET_COLUMNS.filter((column) => column.id !== "hierarchy")
+    : ASSET_COLUMNS;
+}
 
 export function PilotAssetListPage() {
   const { session } = useAuth();
@@ -393,6 +416,7 @@ export function PilotAssetListPage() {
       />
     );
 
+  const tableColumns = assetColumnsFor(data?.items ?? []);
   const counts = data?.counts ?? null;
   const tabCounts: Record<string, number | null> = counts
     ? {
@@ -495,28 +519,22 @@ export function PilotAssetListPage() {
           <option value="with">Van kézikönyve</option>
           <option value="without">Nincs kézikönyve</option>
         </PilotSelect>
-        <PilotSelect
-          aria-label="Hány eszköz egy oldalon"
-          value={params.get("pageSize") ?? DEFAULT_PAGE_SIZE}
-          onChange={(nextValue) => filter("pageSize", nextValue)}
-          chevron
+        <div
+          role="group"
+          aria-label="Lista kimenete"
+          className="flex items-center gap-3 sm:ml-auto sm:border-l sm:border-pilot-grey-200 sm:pl-3"
         >
-          {PAGE_SIZES.map((size) => (
-            <option key={size} value={String(size)}>
-              {size} / oldal
-            </option>
-          ))}
-        </PilotSelect>
-        <PilotButton variant="secondary" onClick={printList}>
-          Nyomtatás
-        </PilotButton>
-        <PilotButton
-          variant="secondary"
-          disabled={exporting}
-          onClick={() => void downloadExcel()}
-        >
-          {exporting ? "Excel…" : "Excel"}
-        </PilotButton>
+          <PilotButton variant="secondary" onClick={printList}>
+            Nyomtatás
+          </PilotButton>
+          <PilotButton
+            variant="secondary"
+            disabled={exporting}
+            onClick={() => void downloadExcel()}
+          >
+            {exporting ? "Excel…" : "Excel"}
+          </PilotButton>
+        </div>
       </div>
       {exportError ? (
         <p
@@ -540,13 +558,17 @@ export function PilotAssetListPage() {
       {data?.items.length ? (
         <>
           <PilotDataTable
-            columns={ASSET_COLUMNS}
+            columns={tableColumns}
             sort={sort}
             onSort={onSort}
             rows={data.items}
             rowKey={(asset) => asset.id}
             rowTestId="asset-row"
-            minWidth={ASSET_TABLE_MIN_WIDTH}
+            minWidth={
+              tableColumns.length === ASSET_COLUMNS.length
+                ? ASSET_TABLE_MIN_WIDTH
+                : ASSET_TABLE_MIN_WIDTH_WITHOUT_HIERARCHY
+            }
             onRowActivate={(asset) =>
               router.push(`/szerviz/eszkozok/${asset.id}`)
             }
@@ -555,9 +577,23 @@ export function PilotAssetListPage() {
           <div
             className={`flex items-center justify-between border-t border-pilot-grey-100 bg-white ${PAGE_GUTTER_X} py-3`}
           >
-            <p className="text-xs text-pilot-grey-400">
-              {data.items.length} / {data.pagination.totalItems} eszköz
-            </p>
+            <div className="flex items-center gap-3">
+              <p className="text-xs text-pilot-grey-400">
+                {data.items.length} / {data.pagination.totalItems} eszköz
+              </p>
+              <PilotSelect
+                aria-label="Hány eszköz egy oldalon"
+                value={params.get("pageSize") ?? DEFAULT_PAGE_SIZE}
+                onChange={(nextValue) => filter("pageSize", nextValue)}
+                chevron
+              >
+                {PAGE_SIZES.map((size) => (
+                  <option key={size} value={String(size)}>
+                    {size} / oldal
+                  </option>
+                ))}
+              </PilotSelect>
+            </div>
             {/*
               SZÁMOZOTT GOMBOK, NYÍL NÉLKÜL, A SAJÁT TERVKÖR SZERINT
               (2026-09-25, acrobot döntése): a web Eszköz lista terve
