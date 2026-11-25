@@ -74,6 +74,20 @@ export interface WebshopInvoiceSummary extends BillingIssueSummary {
   documentId: string;
 }
 
+/**
+ * AN ADVANCE PROFORMA ON A WEBSHOP ORDER (card d31a66a3, 2a; Balázs 2026-11-25 10:19 UTC): for a high-value product the order is
+ * switched to bank transfer and the proforma asks for a deposit, not the whole total. The person types a percentage of the
+ * order's total or an amount in forints, one of the two.
+ */
+export type WebshopProformaAdvance = { percent: string } | { amount: string };
+
+/** The proforma's window: the summary, plus the amount the proforma asks for, and whether that is an advance. */
+export interface WebshopProformaSummary extends WebshopInvoiceSummary {
+  /** The proforma's gross total, with a decimal point; the send carries it back and the server checks it. */
+  grossAmount: string;
+  advance: boolean;
+}
+
 export type BillingIssueDatesCheck =
   | {
       ok: true;

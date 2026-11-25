@@ -3,6 +3,8 @@ import type {
   WebshopInvoiceConfirmation,
   WebshopInvoiceIssueResult,
   WebshopInvoiceSummary,
+  WebshopProformaAdvance,
+  WebshopProformaSummary,
   WebshopOrderAttentionResponse,
   WebshopOrderDetail,
   WebshopOrderListQuery,
@@ -59,6 +61,12 @@ export const WEBSHOP_ORDER_QUERY_KEYS = [
 ] as const satisfies readonly (keyof WebshopOrderListQuery)[];
 
 /** Webshop / Rendelések: az új (Medusa) webshop rendelései. */
+/** The advance as the proforma routes read it: one of the two fields. */
+const advanceBody = (advance: WebshopProformaAdvance) =>
+  "percent" in advance
+    ? { advancePercent: advance.percent }
+    : { advanceAmount: advance.amount };
+
 export const webshopOrdersApi = {
   /** A rendelés adószáma a NAV-nál (c977aed2, P2): kérésre, minden hívás egy NAV-kérés. */
   taxCheck(token: string, id: string) {
@@ -396,6 +404,8 @@ export const webshopOrdersApi = {
     id: string,
     /** What the window showed (card 7ba97e0d follow-up): the first send issues with it; a resend sends none. */
     confirmation?: BillingIssueConfirmation,
+    /** What the window was opened with (an advance, card d31a66a3, 2a) and the amount it showed: every first send carries it. */
+    shown?: { advance?: WebshopProformaAdvance; grossAmount: string },
   ) {
     return apiRequest<WebshopOrderDetail>(
       `/webshop-orders/${encodeURIComponent(id)}/proforma`,
@@ -404,17 +414,27 @@ export const webshopOrdersApi = {
         ? {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(confirmation),
+            body: JSON.stringify({
+              ...confirmation,
+              ...(shown?.advance ? advanceBody(shown.advance) : {}),
+              ...(shown ? { grossAmount: shown.grossAmount } : {}),
+            }),
           }
         : { method: "POST" },
     );
   },
   /** The proforma's confirmation window: the draft the first send would issue, and where it goes (the order's e-mail). */
-  proformaSummary(token: string, id: string) {
-    return apiRequest<WebshopInvoiceSummary>(
+  proformaSummary(token: string, id: string, advance?: WebshopProformaAdvance) {
+    return apiRequest<WebshopProformaSummary>(
       `/webshop-orders/${encodeURIComponent(id)}/proforma/summary`,
       token,
-      { method: "POST" },
+      advance
+        ? {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(advanceBody(advance)),
+          }
+        : { method: "POST" },
     );
   },
   /** „Utalás beérkezett” kézzel (bb3a6bd5); a válasz a friss adatlap. */

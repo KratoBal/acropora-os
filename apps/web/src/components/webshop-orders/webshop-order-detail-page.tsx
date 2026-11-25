@@ -41,6 +41,8 @@ import {
   type WebshopInvoiceConfirmation,
   type WebshopInvoiceIssueResult,
   type WebshopInvoiceSummary,
+  type WebshopProformaAdvance,
+  type WebshopProformaSummary,
 } from "@acropora/types";
 import Link from "next/link";
 import {
@@ -516,15 +518,23 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setOrder(await webshopOrdersApi.issueDeliveryNote(token, id));
     setNow(Date.now());
   };
-  const sendProforma = async (confirmation?: BillingIssueConfirmation) => {
+  const sendProforma = async (
+    confirmation?: BillingIssueConfirmation,
+    advance?: ProformaAdvanceSend,
+  ) => {
     setOrder(
       await (confirmation
-        ? webshopOrdersApi.sendProforma(token, id, confirmation)
+        ? advance
+          ? webshopOrdersApi.sendProforma(token, id, confirmation, advance)
+          : webshopOrdersApi.sendProforma(token, id, confirmation)
         : webshopOrdersApi.sendProforma(token, id)),
     );
     setNow(Date.now());
   };
-  const proformaSummary = () => webshopOrdersApi.proformaSummary(token, id);
+  const proformaSummary = (advance?: WebshopProformaAdvance) =>
+    advance
+      ? webshopOrdersApi.proformaSummary(token, id, advance)
+      : webshopOrdersApi.proformaSummary(token, id);
   const recordTransfer = async (input: WebshopTransferReceiptInput) => {
     setOrder(await webshopOrdersApi.recordTransferReceived(token, id, input));
     setNow(Date.now());
@@ -1118,9 +1128,14 @@ function ProformaSection({
   canSend: boolean;
   /** Az „Utalás beérkezett” joga (a rendelés kezelése és a kiállítás joga). */
   canRecord: boolean;
-  onSend: (confirmation?: BillingIssueConfirmation) => Promise<void>;
-  /** The first send's confirmation window (card 7ba97e0d follow-up). */
-  onSummary: () => Promise<WebshopInvoiceSummary>;
+  onSend: (
+    confirmation?: BillingIssueConfirmation,
+    advance?: ProformaAdvanceSend,
+  ) => Promise<void>;
+  /** The first send's confirmation window (card 7ba97e0d follow-up), for the whole order or an advance (d31a66a3, 2a). */
+  onSummary: (
+    advance?: WebshopProformaAdvance,
+  ) => Promise<WebshopProformaSummary>;
   onRecord: (input: WebshopTransferReceiptInput) => Promise<void>;
   /** A rögzített beérkezés újraküldése a webshopnak (commerce #509). */
   onSyncShop: () => Promise<void>;
@@ -1159,7 +1174,16 @@ function ProformaSection({
     setBusy(true);
     setError(null);
     try {
-      await onSend(confirmation);
+      // every first send carries the amount its window showed, and the advance it was opened with (barracuda on #2837)
+      await onSend(
+        confirmation,
+        confirmation && summary
+          ? {
+              ...(windowAdvance ? { advance: windowAdvance } : {}),
+              grossAmount: summary.grossAmount,
+            }
+          : undefined,
+      );
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "A művelet nem sikerült.",
@@ -1177,15 +1201,35 @@ function ProformaSection({
     keeps the plain confirmation.
   */
   const [windowOpen, setWindowOpen] = useState(false);
-  const [summary, setSummary] = useState<WebshopInvoiceSummary | null>(null);
+  const [summary, setSummary] = useState<WebshopProformaSummary | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  /*
+    AN ADVANCE PROFORMA (card d31a66a3, 2a; Balázs 2026-11-25 10:19 UTC): for a high-value product the proforma asks for a deposit,
+    not the whole total. The person picks the kind and types the forints or the percentage; the window shows what the proforma
+    asks for, and the send carries the same advance back.
+  */
+  const [advanceKind, setAdvanceKind] = useState<"FULL" | "AMOUNT" | "PERCENT">(
+    "FULL",
+  );
+  const [advanceText, setAdvanceText] = useState("");
+  const [windowAdvance, setWindowAdvance] = useState<
+    WebshopProformaAdvance | undefined
+  >(undefined);
+  const typedAdvance = (): WebshopProformaAdvance | undefined =>
+    advanceKind === "AMOUNT"
+      ? { amount: advanceText }
+      : advanceKind === "PERCENT"
+        ? { percent: advanceText }
+        : undefined;
   const openWindow = async () => {
+    const advance = typedAdvance();
     setError(null);
     setSummary(null);
     setSummaryError(null);
+    setWindowAdvance(advance);
     setWindowOpen(true);
     try {
-      setSummary(await onSummary());
+      setSummary(await onSummary(advance));
     } catch (cause) {
       setSummaryError(
         cause instanceof Error
@@ -1213,6 +1257,18 @@ function ProformaSection({
         <div className="grid grid-cols-2 gap-4">
           <Field label="Díjbekérő">{proforma.number ?? "—"}</Field>
           <Field label="Fizetési határidő">{proforma.dueDate ?? "—"}</Field>
+          {proforma.grossAmount ? (
+            <Field label="Összeg">
+              <span data-testid="proforma-amount">
+                {formatMoney(Number(proforma.grossAmount), order.currency, {
+                  fractionDigits: 0,
+                })}
+                {Number(proforma.grossAmount) < order.totals.total
+                  ? " (előleg)"
+                  : ""}
+              </span>
+            </Field>
+          ) : null}
           <Field label="Levél">
             {(proforma.emailStatus && PROFORMA_MAIL[proforma.emailStatus]) ??
               "Még nem ment ki"}
@@ -1262,6 +1318,39 @@ function ProformaSection({
         >
           Megnyitás a Számlázásban
         </Link>
+      ) : null}
+      {canSend && !issued && !stuck && !closed && !receipt && !paidByInvoice ? (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="text-xs text-pilot-grey-600">
+            A díjbekérő összege
+            <PilotSelect
+              chevron
+              aria-label="A díjbekérő összege"
+              value={advanceKind}
+              onChange={(value) =>
+                setAdvanceKind(value as "FULL" | "AMOUNT" | "PERCENT")
+              }
+              className="mt-1 [&_select]:h-10"
+            >
+              <option value="FULL">A teljes rendelés</option>
+              <option value="AMOUNT">Előleg forintban</option>
+              <option value="PERCENT">Előleg százalékban</option>
+            </PilotSelect>
+          </label>
+          {advanceKind !== "FULL" ? (
+            <label className="text-xs text-pilot-grey-600">
+              {advanceKind === "AMOUNT" ? "Előleg (Ft)" : "Előleg (%)"}
+              <input
+                type="text"
+                inputMode="decimal"
+                value={advanceText}
+                onChange={(event) => setAdvanceText(event.target.value)}
+                className="mt-1 block h-10 w-32 rounded-lg border border-pilot-grey-300 px-3 text-sm"
+                data-testid="proforma-advance-value"
+              />
+            </label>
+          ) : null}
+        </div>
       ) : null}
       {canSend && !stuck && !closed && !receipt && !paidByInvoice ? (
         <PilotButton
@@ -1324,7 +1413,7 @@ function ProformaSection({
       <BillingIssueConfirmDialog
         open={windowOpen}
         title={label}
-        consequence={`A kiküldéssel valódi díjbekérő készül a Számlázz.hu-n, saját számmal, alapból ${WEBSHOP_PROFORMA_DUE_DAYS} napos fizetési határidővel, és a vevő e-mailben megkapja. A kiment levél nem vonható vissza.`}
+        consequence={`A kiküldéssel valódi díjbekérő készül a Számlázz.hu-n, saját számmal, alapból ${WEBSHOP_PROFORMA_DUE_DAYS} napos fizetési határidővel, és a vevő e-mailben megkapja.${summary ? ` Összege: ${formatMoney(Number(summary.grossAmount), order.currency, { fractionDigits: 0 })}${summary.advance ? " (előleg)" : ""}.` : ""} A kiment levél nem vonható vissza.`}
         confirmLabel={label}
         summary={summary}
         loadError={summaryError}
@@ -1349,6 +1438,12 @@ function ProformaSection({
     </div>
   );
 }
+
+/** A proforma's first send: the advance the window was opened with (card d31a66a3, 2a), if any, and the amount it showed. */
+type ProformaAdvanceSend = {
+  advance?: WebshopProformaAdvance;
+  grossAmount: string;
+};
 
 /** Miből tudjuk, hogy a Számlázz.hu számlája ehhez a rendeléshez tartozik. */
 const EXTERNAL_LINK_TEXT: Record<
@@ -2293,10 +2388,15 @@ function OrderBody({
   canIssue: boolean;
   canSendProforma: boolean;
   canRecordTransfer: boolean;
-  onSendProforma: (confirmation?: BillingIssueConfirmation) => Promise<void>;
+  onSendProforma: (
+    confirmation?: BillingIssueConfirmation,
+    advance?: ProformaAdvanceSend,
+  ) => Promise<void>;
   /** Átállítás előre utalásra (kártya d31a66a3). */
   onSwitchToTransfer: () => Promise<void>;
-  onProformaSummary: () => Promise<WebshopInvoiceSummary>;
+  onProformaSummary: (
+    advance?: WebshopProformaAdvance,
+  ) => Promise<WebshopProformaSummary>;
   onRecordTransfer: (input: WebshopTransferReceiptInput) => Promise<void>;
   onSyncTransferToShop: () => Promise<void>;
   onChangeStatus: (

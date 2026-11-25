@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  szamlazzDocumentTotals,
   szamlazzLineAmounts,
   WEBSHOP_INVOICE_DUE_DAYS,
   WEBSHOP_PROFORMA_DUE_DAYS,
@@ -9,6 +10,7 @@ import {
 
 import type { MedusaOrderDetailRow } from "../../integrations/medusa/medusa-admin.client.js";
 import {
+  advanceProformaDraftOf,
   buyerMismatch,
   customerKeyOf,
   invoiceDraftOf,
@@ -746,5 +748,139 @@ describe("a rendelés jóváírásai a számlán", () => {
       result.draft.lines.at(-1)!.description,
       "Hűségpont kedvezmény (400 pont)",
     );
+  });
+});
+
+/*
+  AZ ELŐLEG-DÍJBEKÉRŐ (kártya d31a66a3, 2a). MI PIROSÍT: a sorok bruttója nem pontosan a beírt előleg (a banki párosítás erre az
+  összegre vár); a kulcsok aránya nem a rendelésé; a százalék nem a végösszegből számol; a végösszegnyi vagy nagyobb "előleg"
+  átmegy; egy jóváírásos (fizetőeszközként vett pont) rendelésre nem készül előleg.
+*/
+describe("the advance proforma", () => {
+  // the proforma's total as the shop's invoicing writes it: each line rounded to the forint (`szamlazzDocumentTotals`)
+  const totalOf = (
+    lines: { quantity: string; unitNet: string; vatRatePercent: string }[],
+  ) =>
+    Number(
+      szamlazzDocumentTotals(
+        lines.map((line) => {
+          const amounts = szamlazzLineAmounts({ ...line, currency: "HUF" });
+          assert.ok(amounts.ok);
+          return amounts;
+        }),
+        "HUF",
+      ).grossAmount,
+    );
+  const mixed = () =>
+    order({
+      items: order().items.map((item) =>
+        item.id === "i2" ? { ...item, tax_lines: rate(5) } : item,
+      ),
+    });
+
+  it("a percentage of the total, split over the VAT rates as the order's goods: the lines add up to exactly the advance", () => {
+    const result = advanceProformaDraftOf(mixed(), {
+      customerId: "c",
+      now: NOW,
+      advance: { percent: "30" },
+    });
+    assert.ok(result.ok, !result.ok ? result.message : "");
+    assert.equal(result.draft.documentType, "PROFORMA");
+    assert.equal(result.draft.paymentMethod, "Átutalás");
+    // 30% of 26 840 is 8052: 27% carries 20 840 of the goods, 5% carries 6000 (the forint left goes to the larger rate)
+    assert.deepEqual(
+      result.draft.lines.map((line) => [
+        line.vatRatePercent,
+        totalOf([line]),
+        line.description,
+      ]),
+      [
+        ["27", 6252, "Előleg: webshop rendelés #38"],
+        ["5", 1800, "Előleg: webshop rendelés #38"],
+      ],
+    );
+    assert.equal(totalOf(result.draft.lines), 8052);
+
+    // a split that leaves a forint: 10 001 gives 7765,18 and 2235,69, the floors add up to 10 000, the forint left goes to 27%
+    const odd = advanceProformaDraftOf(mixed(), {
+      customerId: "c",
+      now: NOW,
+      advance: { amount: "10001" },
+    });
+    assert.ok(odd.ok, !odd.ok ? odd.message : "");
+    assert.deepEqual(
+      odd.draft.lines.map((line) => [line.vatRatePercent, totalOf([line])]),
+      [
+        ["27", 7766],
+        ["5", 2235],
+      ],
+    );
+  });
+
+  it("an amount in forints, on a one-rate order: one line, exactly that amount", () => {
+    const result = advanceProformaDraftOf(order(), {
+      customerId: "c",
+      now: NOW,
+      advance: { amount: "10 000" },
+    });
+    assert.ok(result.ok, !result.ok ? result.message : "");
+    assert.equal(result.draft.lines.length, 1);
+    assert.equal(totalOf(result.draft.lines), 10000);
+  });
+
+  it("an order with points taken as a payment: the advance splits over the goods' rates, and is exact", () => {
+    const result = advanceProformaDraftOf(
+      order({
+        credit_lines: [
+          {
+            id: "cl_p",
+            amount: 400,
+            reference: "loyalty_points",
+            reference_id: "cus_1",
+            metadata: { points: 400 },
+          },
+        ],
+        total: 26440,
+      }),
+      {
+        customerId: "c",
+        now: NOW,
+        loyaltyShape: "payment",
+        advance: { amount: "5000" },
+      },
+    );
+    assert.ok(result.ok, !result.ok ? result.message : "");
+    assert.deepEqual(
+      result.draft.lines.map((line) => line.vatRatePercent),
+      ["27"],
+    );
+    assert.equal(totalOf(result.draft.lines), 5000);
+  });
+
+  it("refuses what is no advance: the total or more, zero, not a number, a fraction of a forint, another currency", () => {
+    const refused: [
+      Parameters<typeof advanceProformaDraftOf>[1]["advance"],
+      RegExp,
+      MedusaOrderDetailRow?,
+    ][] = [
+      [{ amount: "26840" }, /nem lehet a rendelés végösszege/],
+      [{ amount: "30000" }, /nem lehet a rendelés végösszege/],
+      [{ percent: "100" }, /100-nál kisebb/],
+      [{ percent: "0" }, /0-nál nagyobb/],
+      [{ percent: "harminc" }, /0-nál nagyobb/],
+      [{ amount: "0" }, /egész forint/],
+      [{ amount: "1200.5" }, /egész forint/],
+      [{ amount: "" }, /egész forint/],
+      [{ amount: "1000" }, /csak forintos/, order({ currency_code: "eur" })],
+    ];
+    for (const [advance, message, source] of refused) {
+      const result = advanceProformaDraftOf(source ?? order(), {
+        customerId: "c",
+        now: NOW,
+        advance,
+      });
+      assert.equal(result.ok, false, JSON.stringify(advance));
+      assert.match(!result.ok ? result.message : "", message);
+    }
   });
 });
