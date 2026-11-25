@@ -636,7 +636,7 @@ export function PilotWorksheetCreatePage() {
               />
             </PilotFormField>
             <PilotFormField
-              label="Felelősök"
+              label="Felelős"
               className="sm:col-span-2"
               help="Elhagyható: a kiosztás a lap adatlapján később is elvégezhető."
             >

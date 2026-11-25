@@ -56,7 +56,7 @@ describe("WorksheetAssigneeEditor", () => {
     );
 
     fireEvent.click(await screen.findByLabelText("Kiss Péter"));
-    fireEvent.click(screen.getByRole("button", { name: "Felelősök mentése" }));
+    fireEvent.click(screen.getByRole("button", { name: "Felelős mentése" }));
 
     await waitFor(() => expect(api.setAssignees).toHaveBeenCalled());
     expect(api.setAssignees.mock.calls[0]?.[2]).toEqual({
@@ -78,7 +78,7 @@ describe("WorksheetAssigneeEditor", () => {
     );
 
     fireEvent.click(await screen.findByLabelText("Sanyi"));
-    fireEvent.click(screen.getByRole("button", { name: "Felelősök mentése" }));
+    fireEvent.click(screen.getByRole("button", { name: "Felelős mentése" }));
 
     await waitFor(() => expect(api.setAssignees).toHaveBeenCalled());
     expect(api.setAssignees.mock.calls[0]?.[2]).toEqual({ userIds: [] });
@@ -96,7 +96,7 @@ describe("WorksheetAssigneeEditor", () => {
     );
 
     await screen.findByLabelText("Sanyi");
-    const save = screen.getByRole("button", { name: "Felelősök mentése" });
+    const save = screen.getByRole("button", { name: "Felelős mentése" });
     expect((save as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -112,7 +112,7 @@ describe("WorksheetAssigneeEditor", () => {
     );
 
     expect(screen.getByText("Sanyi")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Felelősök mentése" })).toBe(
+    expect(screen.queryByRole("button", { name: "Felelős mentése" })).toBe(
       null,
     );
     expect(api.assignableUsers).not.toHaveBeenCalled();

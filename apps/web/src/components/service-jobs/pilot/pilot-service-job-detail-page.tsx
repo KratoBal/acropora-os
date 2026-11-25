@@ -1349,7 +1349,7 @@ export function PilotServiceJobDetailPage({
                 />
               ) : null}
               <PilotDataRow
-                label="Felelősök"
+                label="Felelős"
                 labelWidth="110px"
                 value={names ?? NO_ASSIGNEE}
               />

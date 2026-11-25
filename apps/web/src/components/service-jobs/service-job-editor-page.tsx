@@ -669,7 +669,7 @@ export function ServiceJobEditorPage({
             alatta, es a sajat feliratat minden sor viszi. Egy `htmlFor`
             nelkuli `label` csendben semmire nem mutatna.
           */}
-              <span className="text-sm font-semibold">Delegált kollégák</span>
+              <span className="text-sm font-semibold">Felelős</span>
               <WorksheetAssigneePicker
                 candidates={candidates}
                 selected={assigneeIds}
@@ -689,7 +689,7 @@ export function ServiceJobEditorPage({
             kiadja, a legvegen dont rola.
           */}
               <p className="pt-1 text-xs text-dusk-500">
-                Elhagyható. A delegált kollégák értesítést kapnak a{" "}
+                Elhagyható. A kiosztott kollégák értesítést kapnak a{" "}
                 {maintenance ? "lapról" : "jegyről"}.
               </p>
             </div>

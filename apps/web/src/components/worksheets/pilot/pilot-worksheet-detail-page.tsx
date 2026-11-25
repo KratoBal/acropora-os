@@ -677,7 +677,7 @@ export function PilotWorksheetDetailPage({
                 ),
               )}
               {fieldRow(
-                "Felelősök",
+                "Felelős",
                 worksheet.assignees.length
                   ? worksheet.assignees.map((person) => person.name).join(", ")
                   : "Nincs kiosztva",
@@ -776,7 +776,7 @@ export function PilotWorksheetDetailPage({
                     : "még nincs"}
                 </li>
                 <li>
-                  Felelősök:{" "}
+                  Felelős:{" "}
                   {worksheet.assignees.length ? "megadva" : "nincs kiosztva"}
                 </li>
                 <li>
