@@ -36,6 +36,7 @@ import { budapestDayKey } from "../dashboard/budapest-day.js";
 import {
   proformaPaidOf,
   webshopOverbillingProblem,
+  webshopTransferInvoiceProblem,
   billingIssueSummary,
   buildIssueInput,
   finalInvoiceIssueProblem,
@@ -175,6 +176,38 @@ export class BillingDocumentIssueService {
     return contractOverbillingProblem(facts.items, facts.billed, draft);
   }
 
+  /**
+   * A webshop invoice whose proforma the order's transfer paid, checked the way the order page checks it
+   * (`webshopTransferInvoiceProblem`); the feed is asked only for such an invoice. Other documents pass.
+   */
+  private async webshopTransferInvoice(
+    row: BillingDocumentRow,
+  ): Promise<string | null> {
+    const proformaId = row.proformaInvoice?.id;
+    if (
+      row.documentType !== "INVOICE" ||
+      row.sourceType !== "WEBSHOP_ORDER" ||
+      !row.sourceId ||
+      !proformaId
+    )
+      return null;
+    const facts = await this.documents.webshopTransferFacts(
+      row.sourceId,
+      proformaId,
+    );
+    if (!facts) return null;
+    return webshopTransferInvoiceProblem(
+      row,
+      facts,
+      facts.advance
+        ? []
+        : await this.documents.webshopForeignFeedInvoices(
+            row.sourceId,
+            proformaId,
+          ),
+    );
+  }
+
   /** The webshop order's other invoices against this one (`webshopOverbillingProblem`); other sources pass. */
   private async webshopOverbilling(row: {
     id: string;
@@ -295,6 +328,9 @@ export class BillingDocumentIssueService {
     // EGY WEBSHOP RENDELÉS EGYSZER (kártya d31a66a3, S1): vagy egy számla, vagy előleg- és végszámla, a kettő együtt nem
     const webshopProblem = await this.webshopOverbilling(row);
     if (webshopProblem) throw new ConflictException(webshopProblem);
+    // AZ ELŐRE UTALÁS SZÁMLÁJA A SZERKESZTŐBŐL IS (barracuda a #2884-en): összeg fillérre, előleg, Autokassza, a rendelés oldalával azonos szabállyal
+    const transferProblem = await this.webshopTransferInvoice(row);
+    if (transferProblem) throw new ConflictException(transferProblem);
 
     // WHAT THE WINDOW SHOWED IS WHAT THE INVOICE CARRIES (card 7ba97e0d): the same summary again, the shown values
     // compared by their digest, the three dates checked by the shared rule and put into the invoice

@@ -138,6 +138,8 @@ function setup(
     webshopInvoices?: (afterClaim: boolean) => WebshopOrderInvoiceFact[];
     /** The webshop transfer that paid the proforma (d31a66a3, S1); null: none (the default). */
     transfer?: { amount: string; advance?: boolean } | null;
+    /** Számlázz.hu feed invoices of the order the OS did not issue (the Autokassza check, barracuda on #2884). */
+    foreign?: string[];
   } = {},
 ) {
   const calls = {
@@ -192,6 +194,10 @@ function setup(
     webshopOrderInvoices: async (orderId: string, excludeId: string) => {
       calls.webshopAsked.push(`invoices ${orderId} without ${excludeId}`);
       return options.webshopInvoices?.(calls.claim > 0) ?? [];
+    },
+    webshopForeignFeedInvoices: async (orderId: string, proformaId: string) => {
+      calls.webshopAsked.push(`feed ${orderId} ${proformaId}`);
+      return options.foreign ?? [];
     },
     webshopTransferFacts: async (orderId: string, proformaId: string) => {
       calls.webshopAsked.push(`transfer ${orderId} ${proformaId}`);
@@ -440,22 +446,65 @@ describe("BillingDocumentIssueService", () => {
     assert.ok(calls.webshopAsked.includes("transfer order_38 p-38"));
   });
 
-  it("WEBSHOP-UNPAID: an advance transfer, or none, leaves the invoice unpaid; a contract invoice never asks", async () => {
-    for (const transfer of [{ amount: "1270", advance: true }, null]) {
+  /*
+    A SZERKESZTŐBŐL KIÁLLÍTOTT WEBSHOP-SZÁMLA (barracuda a #2884-en, CHANGES A). A rendelés oldalának őrzői a vázlat mentésekor
+    futnak; ugyanaz a vázlat a Számlázás szerkesztőjéből a közös kiállításon át is kimehet. MI PIROSÍT: egy szerkesztett (más
+    bruttójú) számla kimegy, fizetve vagy anélkül; egy nem OS-es Számlázz.hu-számla mellé kimegy; egy előleg-beérkezésre teljes
+    számla megy ki; beérkezés nélkül megáll, vagy egy nem webshop bizonylat a webshopot kérdezi.
+  */
+  const linkedWebshop = {
+    ...webshopRow,
+    proformaInvoice: { id: "p-38", invoiceNumber: "D-ACR-12" },
+  };
+
+  it("WEBSHOP-EDITOR-AMOUNT: a gross that is not the transfer is refused before the claim, paid or not", async () => {
+    for (const amount of ["1300", "1200"]) {
       const { service, calls } = setup({
-        over: {
-          ...webshopRow,
-          proformaInvoice: { id: "p-38", invoiceNumber: "D-ACR-12" },
-        },
-        transfer,
+        over: linkedWebshop,
+        transfer: { amount },
       });
-      await issue(service);
-      assert.doesNotMatch(
-        calls.xml[0] ?? "",
-        /fizetve/,
-        JSON.stringify(transfer),
+      await assert.rejects(
+        issue(service),
+        (error: unknown) =>
+          error instanceof ConflictException &&
+          /nem egyezik a rendelés beérkezett utalásával/.test(error.message),
       );
+      assert.deepEqual([calls.claim, calls.generate], [0, 0], amount);
     }
+  });
+
+  it("WEBSHOP-EDITOR-FOREIGN: a Számlázz.hu invoice the OS did not issue stops it, by its number", async () => {
+    const { service, calls } = setup({
+      over: linkedWebshop,
+      transfer: { amount: "1270" },
+      foreign: ["E-ACR-77"],
+    });
+    await assert.rejects(
+      issue(service),
+      (error: unknown) =>
+        error instanceof ConflictException && /E-ACR-77/.test(error.message),
+    );
+    assert.deepEqual([calls.claim, calls.generate], [0, 0]);
+    assert.ok(calls.webshopAsked.includes("feed order_38 p-38"));
+  });
+
+  it("WEBSHOP-EDITOR-ADVANCE: an advance transfer gets no whole invoice", async () => {
+    const { service, calls } = setup({
+      over: linkedWebshop,
+      transfer: { amount: "1270", advance: true },
+    });
+    await assert.rejects(
+      issue(service),
+      (error: unknown) =>
+        error instanceof ConflictException && /előleg/.test(error.message),
+    );
+    assert.deepEqual([calls.claim, calls.generate], [0, 0]);
+  });
+
+  it("WEBSHOP-UNPAID: without a transfer for the proforma it goes out as before, unpaid; a contract invoice never asks", async () => {
+    const { service, calls } = setup({ over: linkedWebshop, transfer: null });
+    assert.equal((await issue(service)).status, "ISSUED");
+    assert.doesNotMatch(calls.xml[0] ?? "", /fizetve/);
     const contract = setup({
       over: contractRow,
       contractFacts: () => ({ items: ONE_ITEM, billed: [] }),

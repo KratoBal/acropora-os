@@ -390,11 +390,16 @@ export interface WebshopTransferFacts {
   advance: boolean;
 }
 
+/** The gross the issue sends and an amount, compared to the fillér (as the order page compares them). */
+const sameFiller = (gross: string, amount: Prisma.Decimal) =>
+  new Prisma.Decimal(gross).toDecimalPlaces(2).eq(amount.toDecimalPlaces(2));
+
 /**
  * IS THIS WEBSHOP INVOICE THE MONEY THAT CAME IN (card d31a66a3, S1). A prepaid webshop order's invoice is made from its
  * proforma once the transfer is recorded in the OS: Számlázz.hu does not know about that payment (its Autokassza is off), so
  * the feed cannot say "paid" here, the OS receipt does. Paid only when the receipt paid THIS invoice's proforma, it was not
- * an advance, and it covers this invoice's own gross in the same currency; anything else goes out as before, unpaid.
+ * an advance, and it IS this invoice's own gross, to the fillér, in the same currency (barracuda on #2884: "covers" let an
+ * invoice with a line deleted in the editor go out smaller and paid); anything else is not paid.
  */
 export function invoicePaidByTransfer(
   row: BillingDocumentRow,
@@ -406,7 +411,36 @@ export function invoicePaidByTransfer(
     return false;
   const input = buildIssueInput(row);
   if (!input.ok) return false;
-  return facts.amount.gte(new Prisma.Decimal(input.totals.grossAmount));
+  return sameFiller(input.totals.grossAmount, facts.amount);
+}
+
+/**
+ * A WEBSHOP INVOICE SETTLING A TRANSFER-PAID PROFORMA, ON THE SHARED ISSUE (barracuda on #2884). The order page checks these
+ * before it saves the draft, but the same draft can be issued from the billing editor, where nothing of the order page runs.
+ * So the shared issue checks them too, for an INVOICE whose proforma the order's recorded transfer paid:
+ * - an advance transfer is settled by advance and final invoices, not by this one;
+ * - the invoice is the money that came in, to the fillér (a line deleted or added in the editor stops it, paid or not);
+ * - a Számlázz.hu invoice of the order that the OS did not issue (`foreignFeedInvoices`) stops it, by its number.
+ * Without such a transfer (no proforma, another source, no receipt for this proforma) nothing changes.
+ */
+export function webshopTransferInvoiceProblem(
+  row: BillingDocumentRow,
+  facts: WebshopTransferFacts | null,
+  foreignFeedInvoices: readonly string[],
+): string | null {
+  if (row.documentType !== "INVOICE" || facts === null) return null;
+  if (facts.advance)
+    return "Ennek a rendelésnek előleg-díjbekérőjét fizették: arra előlegszámla és végszámla jár, nem ez a számla.";
+  const input = buildIssueInput(row);
+  if (!input.ok) return null;
+  if (
+    facts.currency.trim().toUpperCase() !== row.currency.trim().toUpperCase() ||
+    !sameFiller(input.totals.grossAmount, facts.amount)
+  )
+    return `A számla bruttója (${input.totals.grossAmount} ${row.currency}) nem egyezik a rendelés beérkezett utalásával (${facts.amount.toFixed(2)} ${facts.currency}). A beérkezett összegre szóló számla nem szerkeszthető más összegre: állítsd ki a rendelés oldaláról, változatlanul.`;
+  if (foreignFeedInvoices.length)
+    return `A Számlázz.hu-n már van számla ehhez a rendeléshez, amit nem az OS állított ki (${foreignFeedInvoices.join(", ")}). Az OS nem állít ki mellé másikat: nézd meg a Számlázásban, ez-e a rendelés számlája.`;
+  return null;
 }
 
 /**

@@ -11,6 +11,7 @@ import {
   proformaPaidOf,
   vatRateText,
   webshopOverbillingProblem,
+  webshopTransferInvoiceProblem,
   type WebshopOrderInvoiceFact,
 } from "./billing-document-issue.js";
 import { toSzamlazzAgentInput } from "./billing-document-szamlazz.adapter.js";
@@ -614,7 +615,11 @@ describe("an invoice paid by the recorded transfer", () => {
     assert.equal(invoicePaidByTransfer(webshop, facts()), true);
   });
 
-  it("is not paid for an advance, a smaller amount, another currency, or no transfer", () => {
+  it("is not paid for an advance, a smaller or larger amount, another currency, or no transfer", () => {
+    assert.equal(
+      invoicePaidByTransfer(webshop, facts({ amount: "2986.0000" })),
+      false,
+    );
     assert.equal(
       invoicePaidByTransfer(webshop, facts({ advance: true })),
       false,
@@ -736,5 +741,74 @@ describe("a webshop order invoiced once", () => {
     assert.equal(webshopOverbillingProblem("INVOICE", []), null);
     assert.equal(webshopOverbillingProblem("DELIVERY_NOTE", [fact({})]), null);
     assert.equal(webshopOverbillingProblem("PROFORMA", [fact({})]), null);
+  });
+});
+
+/*
+  A KÖZÖS KIÁLLÍTÁS SZABÁLYA A BEÉRKEZETT UTALÁS SZÁMLÁJÁRA (barracuda a #2884-en). MI PIROSÍT: egy fillérrel is más bruttó, más
+  deviza, előleg-beérkezés vagy egy nem OS-es Számlázz.hu-számla mellett is átengedi; vagy egy nem számlát, vagy utalás nélküli
+  számlát megállít.
+*/
+describe("the transfer-paid invoice on the shared issue", () => {
+  const webshop = row({
+    sourceType: "WEBSHOP_ORDER",
+    sourceId: "order_38",
+    proformaInvoice: { id: "p-1", invoiceNumber: "D-2026-7" },
+  });
+  const facts = (
+    amount = "2985.0000",
+    over: Partial<{ currency: string; advance: boolean }> = {},
+  ) => ({
+    amount: d(amount),
+    currency: over.currency ?? "HUF",
+    advance: over.advance ?? false,
+  });
+
+  it("passes the invoice that is the transfer, with no foreign feed invoice", () => {
+    assert.equal(webshopTransferInvoiceProblem(webshop, facts(), []), null);
+  });
+
+  it("stops on a fillér off either way, another currency, an advance, or a foreign invoice", () => {
+    for (const amount of ["2984.9900", "2985.0100"])
+      assert.match(
+        webshopTransferInvoiceProblem(webshop, facts(amount), []) ?? "",
+        /nem egyezik/,
+        amount,
+      );
+    assert.match(
+      webshopTransferInvoiceProblem(
+        webshop,
+        facts("2985", { currency: "EUR" }),
+        [],
+      ) ?? "",
+      /nem egyezik/,
+    );
+    assert.match(
+      webshopTransferInvoiceProblem(
+        webshop,
+        facts("2985", { advance: true }),
+        [],
+      ) ?? "",
+      /előleg/,
+    );
+    assert.match(
+      webshopTransferInvoiceProblem(webshop, facts(), ["E-ACR-77"]) ?? "",
+      /E-ACR-77/,
+    );
+  });
+
+  it("leaves alone a document without such a transfer, or another type", () => {
+    assert.equal(
+      webshopTransferInvoiceProblem(webshop, null, ["E-ACR-77"]),
+      null,
+    );
+    assert.equal(
+      webshopTransferInvoiceProblem(
+        row({ ...webshop, documentType: "ADVANCE_INVOICE" }),
+        facts("1"),
+        ["E-ACR-77"],
+      ),
+      null,
+    );
   });
 });

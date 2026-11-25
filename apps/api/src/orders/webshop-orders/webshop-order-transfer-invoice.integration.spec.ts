@@ -216,6 +216,11 @@ describe(
         }),
         ["E-ITTRINV-A", "E-ITTRINV-B"],
       );
+      // the shared billing issue asks the same question by the proforma's id, and gets the same answer
+      assert.deepEqual(
+        await billing.webshopForeignFeedInvoices(`${ORDER}1`, proforma.id),
+        ["E-ITTRINV-A", "E-ITTRINV-B"],
+      );
       // another order's proforma, with no reference and no mention: nothing
       assert.deepEqual(
         await orders.foreignFeedInvoices(`${ORDER}2`, {

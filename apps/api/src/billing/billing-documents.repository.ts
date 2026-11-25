@@ -8,6 +8,7 @@ import {
 import { prisma, Prisma } from "@acropora/database";
 import type { PartnerTaxHint } from "@acropora/types";
 
+import { foreignFeedInvoicesOf } from "../orders/webshop-orders/webshop-foreign-feed-invoices.js";
 import { WEBSHOP_ADVANCE_TAG } from "../orders/webshop-orders/webshop-order-invoice.rules.js";
 import type {
   WebshopOrderInvoiceFact,
@@ -462,6 +463,27 @@ export class BillingDocumentsRepository {
       currency: receipt.currency,
       advance: proforma?.tags.includes(WEBSHOP_ADVANCE_TAG) ?? false,
     };
+  }
+
+  /**
+   * THE AUTOKASSZA CHECK ON THE SHARED ISSUE (barracuda on #2884): the same query the order page runs
+   * (`foreignFeedInvoicesOf`), for a webshop invoice draft issued from the billing editor. The proforma's number, reference
+   * and day come from the proforma row; a proforma without a number has nothing in the feed to compare with.
+   */
+  async webshopForeignFeedInvoices(
+    orderId: string,
+    proformaId: string,
+  ): Promise<string[]> {
+    const proforma = await this.database.invoice.findUnique({
+      where: { id: proformaId },
+      select: { invoiceNumber: true, reference: true, createdAt: true },
+    });
+    if (!proforma?.invoiceNumber) return [];
+    return foreignFeedInvoicesOf(this.database, orderId, {
+      number: proforma.invoiceNumber,
+      reference: proforma.reference,
+      issuedOn: proforma.createdAt,
+    });
   }
 
   async proformaPaymentFacts(documentNumber: string): Promise<{
