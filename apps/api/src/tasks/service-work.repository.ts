@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 
+import { commonJobStates } from "../service-jobs/common-job-states.js";
+
 /**
  * A SZERVIZES SAJÁT HIBAJEGYEI ÉS MUNKALAPJAI a Feladataim oldalhoz (kártya
  * 041a3dd5). A kiosztás a `ServiceJobAssignee` és a `WorksheetAssignee`
@@ -53,6 +55,11 @@ export type ServiceWorkWorksheetRow = Prisma.WorksheetGetPayload<{
 export class ServiceWorkRepository extends Repository {
   constructor() {
     super(prisma);
+  }
+
+  /** A jegyek közös állapota (kártya 7f23785c), egy kötegben, ugyanúgy, mint a hibajegy-listán. */
+  commonStates(rows: readonly ServiceWorkJobRow[]) {
+    return commonJobStates(this.database, rows);
   }
 
   /** A rám osztott, nem rejtett hibajegyek; nyitott vagy lezárt. */

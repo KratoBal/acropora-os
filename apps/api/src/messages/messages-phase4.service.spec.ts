@@ -272,6 +272,12 @@ function fake() {
     }) => void audits.push(input),
     worksheetForContext: async (id: string) => worksheets.get(id) ?? null,
     serviceJobForContext: async (id: string) => jobs.get(id) ?? null,
+    // the shared state of the card's job (card 7f23785c): the server derives it from the sheets; here a fixed answer, deliberately not
+    // the stored IN_PROGRESS's plain reading, so the card can be seen to carry it
+    commonStateOfJob: async () => ({
+      status: "DONE",
+      reason: "AWAITING_SIGNATURE",
+    }),
     serviceJobKinds: async (ids: readonly string[]) =>
       ids.flatMap((id) => {
         const kind = jobs.get(id)?.kind;
@@ -350,6 +356,11 @@ describe("the conversation of a worksheet or a service job", () => {
       ["a", "c"],
     );
     assert.equal(detail.context?.status, "IN_PROGRESS");
+    // the shared state rides next to the stored one (card 7f23785c)
+    assert.deepEqual(
+      [detail.context?.commonStatus, detail.context?.commonReason],
+      ["DONE", "AWAITING_SIGNATURE"],
+    );
     assert.equal(
       repo.messages.at(-1)!.text,
       "Teljes a beszélgetést indított ehhez a hibajegyhez: HJ-2026-007.",

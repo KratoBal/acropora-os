@@ -1815,6 +1815,9 @@ export class MessagesService {
       };
     }
     const job = await this.repository.serviceJobForContext(id);
+    // the shared state (card 7f23785c) only for whoever sees the service, like the stored status
+    const common =
+      sees && job ? await this.repository.commonStateOfJob(job) : null;
     return {
       type,
       id,
@@ -1823,6 +1826,9 @@ export class MessagesService {
       restricted: !sees,
       partnerName: sees ? (job?.customer?.displayName ?? null) : null,
       status: sees ? (job?.status ?? null) : null,
+      ...(common
+        ? { commonStatus: common.status, commonReason: common.reason }
+        : {}),
       createdAt: sees && job ? job.createdAt.toISOString() : null,
     };
   }

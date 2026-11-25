@@ -42,6 +42,7 @@ import {
   type NotificationRole,
 } from "@acropora/database";
 import { unitPathFor, unitPathsFor } from "../common/unit-path-lookup.js";
+import { readCommonWorksheetFacts } from "./common-job-states.js";
 import { advanceTicketOnAttach } from "../worksheets/first-line-ticket-step.js";
 
 /**
@@ -1510,26 +1511,7 @@ export class ServiceJobsRepository {
   async commonWorksheetFacts(
     serviceJobIds: readonly string[],
   ): Promise<Map<string, CommonJobWorksheetFacts[]>> {
-    const facts = new Map<string, CommonJobWorksheetFacts[]>();
-    if (serviceJobIds.length === 0) return facts;
-    const rows = await this.database.worksheet.findMany({
-      where: { serviceJobId: { in: [...serviceJobIds] } },
-      select: {
-        serviceJobId: true,
-        handedOverAt: true,
-        latestVersion: { select: { status: true } },
-      },
-    });
-    for (const row of rows) {
-      if (row.serviceJobId === null) continue;
-      const list = facts.get(row.serviceJobId) ?? [];
-      list.push({
-        currentVersionStatus: row.latestVersion?.status ?? null,
-        handedOver: row.handedOverAt !== null,
-      });
-      facts.set(row.serviceJobId, list);
-    }
-    return facts;
+    return readCommonWorksheetFacts(this.database, serviceJobIds);
   }
 
   /** Az idei legnagyobb sorszám (élő ÉS törölt/felszabadított szám), a következő szám kiosztásához. */

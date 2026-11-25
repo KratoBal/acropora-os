@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
 import {
   type AuthenticatedUser,
+  type CommonServiceState,
   type MyServiceWorkItem,
   type MyServiceWorkResponse,
   type MyServiceWorkView,
@@ -47,9 +48,18 @@ export class ServiceWorkService {
       this.repository.worksheets(user.id),
     ]);
 
+    // the shared state (card 7f23785c), read in one batch for every listed job
+    const states = await this.repository.commonStates([
+      ...openJobs,
+      ...closedJobs,
+    ]);
     const items = [
-      ...openJobs.map((row) => job(row, todayStart, tomorrowStart)),
-      ...closedJobs.map((row) => job(row, todayStart, tomorrowStart)),
+      ...openJobs.map((row) =>
+        job(row, todayStart, tomorrowStart, states.get(row.id)),
+      ),
+      ...closedJobs.map((row) =>
+        job(row, todayStart, tomorrowStart, states.get(row.id)),
+      ),
       ...worksheets.flatMap((row) => worksheet(row)),
     ];
     const open = items.filter((item) => item.bucket !== "CLOSED");
@@ -84,6 +94,7 @@ function job(
   row: ServiceWorkJobRow,
   todayStart: Date,
   tomorrowStart: Date,
+  common?: CommonServiceState,
 ): MyServiceWorkItem {
   const overdue = serviceJobOverdueSince({
     status: row.status,
@@ -96,6 +107,9 @@ function job(
     id: row.id,
     number: row.jobNumber,
     status: row.status,
+    ...(common
+      ? { commonStatus: common.status, commonReason: common.reason }
+      : {}),
     title: row.title,
     partnerName: row.customer?.displayName ?? null,
     unitName: row.department?.name ?? null,

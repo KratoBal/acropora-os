@@ -23,6 +23,7 @@ import {
   type PartnerScope,
 } from "../auth/partner-scope.util.js";
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
+import { commonJobStates } from "../service-jobs/common-job-states.js";
 import { serviceJobVisibilityWhere } from "../service-jobs/service-job-visibility.js";
 import { worksheetListWheres } from "../worksheets/worksheets.repository.js";
 
@@ -138,19 +139,28 @@ export class DashboardRepository extends Repository {
           jobNumber: true,
           title: true,
           status: true,
+          kind: true,
           createdAt: true,
         },
       }),
     ]);
+    // the shared state (card 7f23785c), read in one batch for the listed rows, as on the ticket list
+    const states = await commonJobStates(this.database, rows);
     return {
       count,
-      items: rows.map((row) => ({
-        id: row.id,
-        number: row.jobNumber,
-        title: row.title,
-        status: row.status,
-        createdAt: row.createdAt.toISOString(),
-      })),
+      items: rows.map((row) => {
+        const state = states.get(row.id);
+        return {
+          id: row.id,
+          number: row.jobNumber,
+          title: row.title,
+          status: row.status,
+          ...(state
+            ? { commonStatus: state.status, commonReason: state.reason }
+            : {}),
+          createdAt: row.createdAt.toISOString(),
+        };
+      }),
     };
   }
 

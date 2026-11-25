@@ -1076,6 +1076,12 @@ export interface DashboardServiceTicketsWidgetData {
       number
     >
   >;
+  /**
+   * THE OPEN TICKETS IN THE SHARED STATES (card 7f23785c): Új, Folyamatban, Elkészült and Vár valamire, by the same rule as the ticket
+   * list (`common-status-where.ts`). The derived Elkészült is a part of the stored IN_PROGRESS, so `byStatus` cannot tell it. Optional:
+   * an older answer lacks it.
+   */
+  commonCounts?: Record<"NEW" | "IN_PROGRESS" | "WAITING" | "DONE", number>;
   /** `createdAt` of the oldest open ticket, or `null` when none is open. */
   oldestOpenAt: string | null;
 }
