@@ -1169,6 +1169,29 @@ export class ServiceJobsService {
     return this.repository.countAssignedOpen(visibility, user.id);
   }
 
+  /**
+   * A LISTA LÁTHATÓSÁGI SZŰRŐJE EGY HELYEN (barracuda, #2883 javaslata): a hozzárendelés szerinti láthatóság, a rejtés és a létrehozás napjának
+   * tól-ig tartománya. A lista, a számlálók ÉS a szűrő-lehetőségek (`listFacets`) ugyanezt kapják, hogy szerkezetileg ne csússzanak szét:
+   * egy második, szó szerint másolt blokk az egyik oldalon elmaradó változtatást csendben engedné át. Hibás vagy fordított tartomány: 400.
+   */
+  private async listVisibility(
+    query: ServiceJobListQueryDto,
+    user: AuthenticatedUser,
+  ): Promise<Prisma.ServiceJobWhereInput> {
+    const created = createdDayRange(query.createdFrom, query.createdTo);
+    return {
+      AND: [
+        await this.visibilityFor(user),
+        hiddenRowsWhere(
+          partnerScopeOf(user),
+          query.includeHidden,
+          hasPermission(user, PERMISSIONS.SERVICE_HIDE),
+        ),
+        ...(created ? [{ createdAt: created }] : []),
+      ],
+    };
+  }
+
   async list(
     query: ServiceJobListQueryDto,
     user: AuthenticatedUser,
@@ -1196,18 +1219,7 @@ export class ServiceJobsService {
       A LÉTREHOZÁS NAPJA (Luca, 2026-11-20) UGYANEBBE AZ ÁGBA KERÜL, ugyanazért, amiért a rejtés: a lista és a számlálók egy
       változóból kapják, tehát a csempéken álló szám a szűrt listáé, nem az egészé. Hibás vagy fordított tartomány: 400.
     */
-    const created = createdDayRange(query.createdFrom, query.createdTo);
-    const visibility: Prisma.ServiceJobWhereInput = {
-      AND: [
-        await this.visibilityFor(user),
-        hiddenRowsWhere(
-          partnerScopeOf(user),
-          query.includeHidden,
-          hasPermission(user, PERMISSIONS.SERVICE_HIDE),
-        ),
-        ...(created ? [{ createdAt: created }] : []),
-      ],
-    };
+    const visibility = await this.listVisibility(query, user);
     const kind = query.kind ?? "REPAIR";
     // a `page` megadása kapcsolja be a lapozást; nélküle a régi alak (a legújabb kétszáz sor és a `truncated`) marad
     const paged = query.page !== undefined;
@@ -1295,18 +1307,7 @@ export class ServiceJobsService {
     query: ServiceJobListQueryDto,
     user: AuthenticatedUser,
   ): Promise<ServiceJobListFacets> {
-    const created = createdDayRange(query.createdFrom, query.createdTo);
-    const visibility: Prisma.ServiceJobWhereInput = {
-      AND: [
-        await this.visibilityFor(user),
-        hiddenRowsWhere(
-          partnerScopeOf(user),
-          query.includeHidden,
-          hasPermission(user, PERMISSIONS.SERVICE_HIDE),
-        ),
-        ...(created ? [{ createdAt: created }] : []),
-      ],
-    };
+    const visibility = await this.listVisibility(query, user);
     return this.repository.listFacets(
       query.scope ?? "open",
       visibility,
