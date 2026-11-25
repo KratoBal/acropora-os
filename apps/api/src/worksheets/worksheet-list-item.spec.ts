@@ -60,6 +60,28 @@ function row(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 describe("a munkalap-lista sora", () => {
+  // card 28f31715: the partner overview's "aláírásra vár" reads it; the partner's sheet detail gates on the same timestamp
+  it("says whether the newest version was sent for signature, not when", () => {
+    const sent = (sentForSignatureAt: Date | null) =>
+      toWorksheetListItem(
+        row({
+          versions: [
+            {
+              version: 1,
+              status: "AWAITING_SIGNATURE",
+              subject: "Kitalált munka",
+              grossAmount: new Prisma.Decimal("0"),
+              sentForSignatureAt,
+              _count: { lines: 0 },
+              lines: [],
+            },
+          ],
+        }),
+      ).sentForSignature;
+    assert.equal(sent(new Date("2026-11-25T10:00:00.000Z")), true);
+    assert.equal(sent(null), false);
+  });
+
   it("kiadja a jelenlegi verzió összes munkaóráját", () => {
     assert.equal(toWorksheetListItem(row()).laborHours, "4");
   });

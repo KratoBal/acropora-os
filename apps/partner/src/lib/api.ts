@@ -10,6 +10,7 @@ import type {
   AuthenticatedUser,
   CompletionCertificatePartnerDetail,
   CompletionCertificatePartnerListResponse,
+  PartnerOverview,
   CreateAquariumInput,
   CurrentUserResponse,
   MaintenanceOrderPartnerDetail,
@@ -500,6 +501,8 @@ export const partnerApi = {
       { method: "POST", body: form },
     );
   },
+  /** Az áttekintés (kártya 28f31715): a partner teendői, a szerver a saját listáiból számolja. */
+  overview: () => request<PartnerOverview>("/service/partner-overview"),
   completionCertificates: () =>
     request<CompletionCertificatePartnerListResponse>(
       "/service/completion-certificates",

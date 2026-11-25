@@ -644,6 +644,11 @@ export interface WorksheetListItem {
   subject: string;
   status: WorksheetVersionStatus;
   /**
+   * KIKÜLDTÉK-E A LEGUTOLSÓ VÁLTOZATOT ALÁÍRÁSRA (kártya 28f31715, a partner áttekintése): a jelölő az időbélyegből, ahogy a
+   * `hidden`. A partner adatlapja ugyanígy kapuz (`sentForSignatureAt !== null`). Hiányzik a régi válaszból.
+   */
+  sentForSignature?: boolean;
+  /**
    * A legutolsó változat tételsorainak száma: ebből és az állapotból jön a
    * megjelenített állapot (`worksheetDisplayStatus`, Új vagy Folyamatban).
    */

@@ -45,6 +45,8 @@ const MUSZAKI_MENU: {
   icon: IconName;
   entryId?: string;
 }[] = [
+  // a kezdőlap: a partner teendői (kártya 28f31715)
+  { href: "/attekintes", label: "Áttekintés", icon: "clipboard" },
   { href: "/hibajegyek", label: "Hibajegyek", icon: "clipboard" },
   // a karbantartási lap NEM hibajegy, külön menüpont (Luca, 2026-11-18 14:50 UTC; acrobot 55980)
   { href: "/karbantartas", label: "Karbantartás", icon: "clipboard" },
@@ -286,7 +288,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
       >
         <div className="border-b border-pilot-grey-100 px-5 py-4">
           <Link
-            href="/hibajegyek"
+            href="/attekintes"
             className="flex items-center gap-2 no-underline"
           >
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-pilot-aqua-600 text-white">

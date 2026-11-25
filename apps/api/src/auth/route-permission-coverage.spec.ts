@@ -127,6 +127,8 @@ const CONTROLLERS = [
   // The attendance sheet (os-jelenleti-iv, S1): every route behind attendance.manage.
   "src/attendance/attendance.controller.ts",
   "src/attendance/attendance-employees.controller.ts",
+  // The partner portal's overview (card 28f31715): read-only, behind service.view, as the lists it counts from.
+  "src/partner-overview/partner-overview.controller.ts",
 ];
 
 const ROUTE = new RegExp(
