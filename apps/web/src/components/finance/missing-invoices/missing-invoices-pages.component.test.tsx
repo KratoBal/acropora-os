@@ -1245,10 +1245,10 @@ describe("MissingInvoicesPage: a hónapok rendezése", () => {
         {
           month: "2026-08",
           debitCount: 67,
-          found: 27,
+          found: 5,
           notMatched: 15,
           noInvoice: 25,
-          originalMissing: 0,
+          originalMissing: 1,
           noInvoiceNeeded: 24,
           missingAmountHuf: "693967",
           status: "INCOMPLETE",
@@ -1257,10 +1257,10 @@ describe("MissingInvoicesPage: a hónapok rendezése", () => {
         {
           month: "2026-09",
           debitCount: 9,
-          found: 5,
-          notMatched: 2,
-          noInvoice: 2,
-          originalMissing: 1,
+          found: 27,
+          notMatched: 40,
+          noInvoice: 5,
+          originalMissing: 0,
           noInvoiceNeeded: 0,
           missingAmountHuf: "10.5",
           status: "INCOMPLETE",
@@ -1270,9 +1270,9 @@ describe("MissingInvoicesPage: a hónapok rendezése", () => {
           month: "2026-10",
           debitCount: 30,
           found: 20,
-          notMatched: 5,
-          noInvoice: 5,
-          originalMissing: 0,
+          notMatched: 2,
+          noInvoice: 2,
+          originalMissing: 2,
           noInvoiceNeeded: 0,
           missingAmountHuf: "10.25",
           status: "INCOMPLETE",
@@ -1357,6 +1357,35 @@ describe("MissingInvoicesPage: a hónapok rendezése", () => {
         "2026. október",
       ]),
     );
+  });
+
+  it("mindegyik számoszlop a SAJÁT mezője szerint rendez (öt különböző sorrend), a kivonat nélküli hónap a végén", async () => {
+    const cases: [string, string[]][] = [
+      ["Terhelések", ["2026. szeptember", "2026. október", "2026. augusztus"]],
+      ["Megvan", ["2026. augusztus", "2026. október", "2026. szeptember"]],
+      [
+        "Nem párosodott",
+        ["2026. október", "2026. augusztus", "2026. szeptember"],
+      ],
+      [
+        "Nincs számla",
+        ["2026. október", "2026. szeptember", "2026. augusztus"],
+      ],
+      [
+        "Eredeti hiányzik",
+        ["2026. szeptember", "2026. augusztus", "2026. október"],
+      ],
+    ];
+    for (const [name, expected] of cases) {
+      urlNavigation.reset("/penzugy/hianyzo-szamlak");
+      const { unmount } = render(<MissingInvoicesPage />);
+      await screen.findAllByRole("row", { name: /megnyitása/ });
+      fireEvent.click(await header(name));
+      await waitFor(() =>
+        expect(order(), name).toEqual([...expected, "2026. július"]),
+      );
+      unmount();
+    }
   });
 
   it("csak a hónap és a számoszlopoknak van rendezés-gombja, az állapotnak nincs", async () => {

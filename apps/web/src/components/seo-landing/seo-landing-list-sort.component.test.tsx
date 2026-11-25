@@ -73,7 +73,7 @@ const page = (
 const PAGES = [
   page("p-beta", "Béta", "beta", true, "2026-11-10T10:00:00.000Z"),
   page("p-gamma", "Gamma", "gamma", false, "2026-11-20T10:00:00.000Z"),
-  page("p-alfa", "Álfa", "alfa", false, "2026-10-05T10:00:00.000Z"),
+  page("p-alfa", "Álfa", "alfa", false, "2026-11-25T10:00:00.000Z"),
 ];
 
 const titles = () =>
@@ -107,14 +107,24 @@ describe("SeoLandingListPage sorting", () => {
     await waitFor(() => expect(titles()).toEqual(["Béta", "Gamma", "Álfa"]));
   });
 
-  it("the update day sorts as a time, and the state puts the drafts before the published ones", async () => {
+  it("the update day sorts as a time (not as the title), both ways", async () => {
     render(<SeoLandingListPage />);
     await screen.findAllByTestId("seo-landing-row");
     fireEvent.click(await header("Frissítve"));
-    await waitFor(() => expect(titles()).toEqual(["Álfa", "Béta", "Gamma"]));
+    // Béta 11-10, Gamma 11-20, Álfa 11-25: az idő szerinti sorrend NEM az ábécé szerinti
+    await waitFor(() => expect(titles()).toEqual(["Béta", "Gamma", "Álfa"]));
+    fireEvent.click(await header("Frissítve"));
+    await waitFor(() => expect(titles()).toEqual(["Álfa", "Gamma", "Béta"]));
+  });
+
+  it("the state puts the drafts before the published ones, the equal ones in the server's order", async () => {
+    render(<SeoLandingListPage />);
+    await screen.findAllByTestId("seo-landing-row");
     fireEvent.click(await header("Állapot"));
     // vázlat (Gamma, Álfa) előbb, a közzétett (Béta) utána; az egyenlők a szerver sorrendjében
     await waitFor(() => expect(titles()).toEqual(["Gamma", "Álfa", "Béta"]));
+    fireEvent.click(await header("Állapot"));
+    await waitFor(() => expect(titles()).toEqual(["Béta", "Gamma", "Álfa"]));
   });
 
   it("an unknown sort in the address leaves the server's order", async () => {
