@@ -16,6 +16,7 @@ import {
   type GlsCodReportDetail,
   type GlsCodReportLine,
   type GlsCodReportListResponse,
+  type GlsCodReportSortField,
   type GlsCodReportStatus,
   type GlsCodReportSummary,
   type GlsInvoiceSummary,
@@ -31,6 +32,7 @@ import {
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
 import { glsSettlementsApi } from "@/lib/api/gls-settlements";
+import { useUrlSort } from "@/lib/navigation/use-url-sort";
 
 import {
   SettlementApproveField,
@@ -110,6 +112,13 @@ function drafts(detail: GlsCodReportDetail): Record<string, string> {
   );
 }
 
+/** Az utalás-lista rendezhető oszlopai: a táblázat oszlop-azonosítója -> a szerver rendezési mezeje (`GLS_COD_REPORT_SORT_FIELDS`). A "Párosítva" és az "Állapot" nem rendezhető. */
+const COD_SORT_COLUMNS = {
+  date: "transferDate",
+  file: "fileName",
+  total: "total",
+} as const;
+
 export function GlsSettlementsPage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -137,6 +146,12 @@ export function GlsSettlementsPage() {
   );
   const [downloading, setDownloading] = useState(false);
   const [listPage, setListPage] = useState(1);
+  const { sort, onSort, apiSort } = useUrlSort(COD_SORT_COLUMNS);
+  // a lap száma itt állapot, nem URL: egy új sorrend az 1. oldalról indul (a 3. oldalon állva az új sorrend 3. oldala nem az, amit várnak)
+  const sortBy = (columnId: string) => {
+    setListPage(1);
+    onSort(columnId);
+  };
 
   const load = useCallback(async () => {
     if (!canView) return;
@@ -147,8 +162,14 @@ export function GlsSettlementsPage() {
         glsSettlementsApi.list(token, {
           page: listPage,
           pageSize: SETTLEMENT_PAGE_SIZE,
+          ...(apiSort
+            ? {
+                sort: apiSort.sort as GlsCodReportSortField,
+                direction: apiSort.direction,
+              }
+            : {}),
         }),
-        // the monthly summary's window: the latest ones, newest first
+        // the monthly summary's window: the latest ones, newest first, and NEVER in the table's sort (the month card reads "the latest")
         glsSettlementsApi.list(token, {
           page: 1,
           pageSize: SETTLEMENT_RECENT_SIZE,
@@ -169,7 +190,7 @@ export function GlsSettlementsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canView, token, listPage]);
+  }, [canView, token, listPage, apiSort]);
 
   useEffect(() => {
     void load();
@@ -531,18 +552,21 @@ export function GlsSettlementsPage() {
   const listColumns: PilotTableColumn<GlsCodReportSummary>[] = [
     {
       id: "date",
+      sortable: true,
       header: "Utalás napja",
       width: "17%",
       cell: (item) => formatDate(item.transferDate),
     },
     {
       id: "file",
+      sortable: true,
       header: "Fájl",
       width: "33%",
       cell: (item) => item.fileName,
     },
     {
       id: "total",
+      sortable: true,
       header: "Összeg",
       width: "17%",
       cell: (item) => (
@@ -694,6 +718,8 @@ export function GlsSettlementsPage() {
         >
           <PilotDataTable
             columns={listColumns}
+            sort={sort}
+            onSort={sortBy}
             rows={data.items}
             rowKey={(item) => item.id}
             rowTestId="gls-utalas"

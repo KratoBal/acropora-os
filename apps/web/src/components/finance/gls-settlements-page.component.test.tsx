@@ -14,6 +14,7 @@ import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { pickMonth } from "@/test/month-field";
+import { urlNavigation } from "@/test/url-navigation";
 
 import { GlsSettlementsPage } from "./gls-settlements-page";
 
@@ -33,6 +34,10 @@ const auth = vi.hoisted(() => ({
   session: null as Session | null,
 }));
 
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/url-navigation")).nextNavigationModule,
+);
 // a lap a Figma 45 · OS / Settlements óta `PilotThemeRoot` alatt áll (Inter, `next/font/local`)
 vi.mock("next/font/local", () => ({
   default: () => ({ className: "pilot-inter-stub" }),
@@ -113,6 +118,7 @@ const detail: GlsCodReportDetail = {
 };
 
 beforeEach(() => {
+  urlNavigation.reset("/penzugy/elszamolasok/gls");
   auth.session = session("OWNER");
   api.list.mockReset().mockResolvedValue(reports);
   api.invoices.mockReset().mockResolvedValue([]);
@@ -479,5 +485,96 @@ describe("GlsSettlementsPage", () => {
       }),
     );
     expect(await screen.findByText(/^21–40 \/ 120$/)).toBeInTheDocument();
+  });
+  // a lap két listát kér: a táblázatét (20 soros lapok) és a havi kártya ablakát (100 sor, "a legutóbbiak"); a rendezés CSAK az elsőé
+  const tableQueries = () =>
+    api.list.mock.calls
+      .map((call) => call[1] as Record<string, unknown>)
+      .filter((query) => query.pageSize === 20);
+  const windowQueries = () =>
+    api.list.mock.calls
+      .map((call) => call[1] as Record<string, unknown>)
+      .filter((query) => query.pageSize === 100);
+
+  it("sorts the table by a header, as server queries, and never the monthly window", async () => {
+    render(createElement(GlsSettlementsPage));
+    await screen.findAllByTestId("gls-utalas");
+    expect(tableQueries().at(-1)).not.toHaveProperty("sort");
+
+    fireEvent.click(screen.getByRole("button", { name: /Összeg/ }));
+    await waitFor(() =>
+      expect(tableQueries().at(-1)).toMatchObject({
+        sort: "total",
+        direction: "asc",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Összeg/ }));
+    await waitFor(() =>
+      expect(tableQueries().at(-1)).toMatchObject({
+        sort: "total",
+        direction: "desc",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Összeg/ }));
+    await waitFor(() =>
+      expect(tableQueries().at(-1)).not.toHaveProperty("sort"),
+    );
+    // a havi kártya ablaka a legutóbbi utalásokat kéri, a tábla sorrendjétől függetlenül
+    expect(windowQueries().length).toBeGreaterThan(0);
+    for (const query of windowQueries())
+      expect(query).not.toHaveProperty("sort");
+  });
+
+  it("sends the right server field for the date and the file headers", async () => {
+    render(createElement(GlsSettlementsPage));
+    await screen.findAllByTestId("gls-utalas");
+    for (const [name, field] of [
+      ["Utalás napja", "transferDate"],
+      ["Fájl", "fileName"],
+    ] as const) {
+      fireEvent.click(screen.getByRole("button", { name }));
+      await waitFor(() =>
+        expect(tableQueries().at(-1)).toMatchObject({
+          sort: field,
+          direction: "asc",
+        }),
+      );
+      fireEvent.click(screen.getByRole("button", { name }));
+      fireEvent.click(screen.getByRole("button", { name }));
+      await waitFor(() =>
+        expect(tableQueries().at(-1)).not.toHaveProperty("sort"),
+      );
+    }
+  });
+
+  it("a new sort goes back to the first page", async () => {
+    api.list.mockResolvedValue({
+      ...reports,
+      pagination: { page: 1, pageSize: 20, totalItems: 120, totalPages: 6 },
+    });
+    render(createElement(GlsSettlementsPage));
+    await screen.findAllByTestId("gls-utalas");
+    fireEvent.click(
+      within(
+        screen.getByRole("navigation", { name: "Lapozás, alul" }),
+      ).getByRole("button", { name: "Következő" }),
+    );
+    await waitFor(() =>
+      expect(tableQueries().at(-1)).toMatchObject({ page: 2 }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Fájl/ }));
+    await waitFor(() =>
+      expect(tableQueries().at(-1)).toMatchObject({
+        page: 1,
+        sort: "fileName",
+      }),
+    );
+  });
+
+  it("the pairing and the state have no sort button", async () => {
+    render(createElement(GlsSettlementsPage));
+    await screen.findAllByTestId("gls-utalas");
+    expect(screen.queryByRole("button", { name: /Párosítva/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Állapot/ })).toBeNull();
   });
 });

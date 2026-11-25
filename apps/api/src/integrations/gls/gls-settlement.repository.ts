@@ -10,10 +10,13 @@ import type {
   GlsCodReportDetail,
   GlsCodReportLine,
   GlsCodReportListResponse,
+  GlsCodReportSortField,
   GlsCodReportSummary,
   GlsInvoiceSummary,
 } from "@acropora/types";
 
+import { listOrderBy, type SortDirection } from "../../common/list-sort.js";
+import { COD_REPORT_SORT } from "./gls-cod-report-sort.js";
 import type { GlsLineResolution } from "./gls-cod-resolution.js";
 import type { GlsCompensation } from "./gls-compensation.parser.js";
 import type {
@@ -413,13 +416,15 @@ export class GlsSettlementRepository {
     status?: "COMPLETED" | "NEEDS_REVIEW";
     page: number;
     pageSize: number;
+    sort?: GlsCodReportSortField;
+    direction?: SortDirection;
   }): Promise<GlsCodReportListResponse> {
     const where = query.status ? { status: query.status } : {};
     const [total, reports] = await Promise.all([
       prisma.glsCodReport.count({ where }),
       prisma.glsCodReport.findMany({
         where,
-        orderBy: [{ transferDate: "desc" }, { createdAt: "desc" }],
+        orderBy: listOrderBy(COD_REPORT_SORT, query.sort, query.direction),
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
         select: {

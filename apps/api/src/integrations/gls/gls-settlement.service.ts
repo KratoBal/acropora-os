@@ -4,11 +4,13 @@ import type {
   GlsCodLineError,
   GlsCodReportDetail,
   GlsCodReportListResponse,
+  GlsCodReportSortField,
   GlsDocumentUploadResult,
   GlsInvoiceSummary,
   GlsManualApprovalInput,
 } from "@acropora/types";
 
+import type { SortDirection } from "../../common/list-sort.js";
 import { pdfTextLines } from "../../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import { classifyCodReference, orderKeyOf } from "./gls-cod-reference.js";
 import { resolveGlsCodLine } from "./gls-cod-resolution.js";
@@ -276,6 +278,8 @@ export class GlsSettlementService {
     status?: "COMPLETED" | "NEEDS_REVIEW";
     page: number;
     pageSize: number;
+    sort?: GlsCodReportSortField;
+    direction?: SortDirection;
   }): Promise<GlsCodReportListResponse> {
     return this.repository.listReports(query);
   }

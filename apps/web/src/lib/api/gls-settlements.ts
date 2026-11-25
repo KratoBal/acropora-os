@@ -1,6 +1,7 @@
 import type {
   GlsCodReportDetail,
   GlsCodReportListResponse,
+  GlsCodReportSortField,
   GlsDocumentUploadResult,
   GlsInvoiceSummary,
   GlsManualApprovalInput,
@@ -22,11 +23,23 @@ export const glsSettlementsApi = {
       { method: "POST", body: form },
     );
   },
-  list(token: string, query: { page?: number; pageSize?: number } = {}) {
+  list(
+    token: string,
+    query: {
+      page?: number;
+      pageSize?: number;
+      sort?: GlsCodReportSortField;
+      direction?: "asc" | "desc";
+    } = {},
+  ) {
     const params = new URLSearchParams({
       page: String(query.page ?? 1),
       pageSize: String(query.pageSize ?? 50),
     });
+    if (query.sort && query.direction) {
+      params.set("sort", query.sort);
+      params.set("direction", query.direction);
+    }
     return apiRequest<GlsCodReportListResponse>(
       `/integrations/gls/cod-reports?${params.toString()}`,
       token,
