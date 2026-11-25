@@ -591,6 +591,11 @@ export interface WebshopOrderDetail {
    */
   lineEdit: { allowed: boolean; reason: string | null };
   /**
+   * Átállítható-e most a rendelés előre utalásra (kártya d31a66a3; Balázs, 2026-11-25: a vevő bármivel rendel, előleget kérünk,
+   * és MI állítjuk át, MI készítjük a díjbekérőt), és ha nem, miért.
+   */
+  transferSwitch: { allowed: boolean; reason: string | null };
+  /**
    * Bontható-e most a rendelés (kártya 0a14f739 C/3). Ugyanaz a határ, mint a
    * tételeké: a bontás az eredeti rendelés tételeit csökkenti. A webshop a
    * saját tiltásait (fizetett, vegyes kosár bolti fele) a kérésre mondja ki.
@@ -954,4 +959,15 @@ export interface WebshopOrderAttentionResponse {
   reason?: "not_found" | "error";
   count: number;
   items: WebshopOrderAttentionItem[];
+}
+
+/** „Átállítás előre utalásra” (kártya d31a66a3): a webshop válasza és a friss adatlap. */
+export interface WebshopOrderTransferSwitchResult {
+  order: WebshopOrderDetail;
+  /** `false`: már előre utalásos volt, nem történt semmi. */
+  switched: boolean;
+  /** Honnan: a webshop fizetési szerepe (ONLINE_CARD, COD, PAY_AT_STORE). */
+  from: string | null;
+  /** Lekerült-e az utánvét-díj sora. */
+  removedCodFee: boolean;
 }
