@@ -122,4 +122,16 @@ describe("toUserDetail", () => {
     assert.deepEqual(detail.serviceCapabilities, []);
     assert.ok("serviceCapabilities" in detail);
   });
+
+  /** A jelölő a kiadott részletben KÖTELEZŐ mezőként áll (a mezőt a fejléc szerint a lekéṕezés ejtheti el némán). */
+  it("a gépi fiók jelölőt a részlet kiadja, igaz és hamis értékkel is", () => {
+    assert.equal(
+      toUserDetail(row({ isServiceAccount: true }), [], []).isServiceAccount,
+      true,
+    );
+    assert.equal(
+      toUserDetail(row({ isServiceAccount: false }), [], []).isServiceAccount,
+      false,
+    );
+  });
 });
