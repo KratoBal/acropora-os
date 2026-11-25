@@ -5,6 +5,9 @@ import {
   type PartnerOrderDocumentStep,
   type PartnerOrderStatus,
 } from "@acropora/database";
+import type { PartnerOrderListSortField } from "@acropora/types";
+import { listOrderBy, type SortDirection } from "../common/list-sort.js";
+import { PARTNER_ORDER_LIST_SORT } from "./partner-order-list-sort.js";
 import type { SystemDocumentSource } from "./partner-order-system-documents.js";
 import { endOfIssueDay, latestMovements } from "./partner-order-movements.js";
 
@@ -78,6 +81,8 @@ export type OrderDocumentRow = Prisma.PartnerOrderDocumentGetPayload<{
 export interface OrderListFilter {
   q?: string;
   status?: PartnerOrderStatus;
+  sort?: PartnerOrderListSortField;
+  direction?: SortDirection;
 }
 
 /**
@@ -121,11 +126,6 @@ export const CERTIFICATE_SYSTEM_DOCUMENTS = {
 
 /** The id of the orders' one settings row (S4b). */
 export const PARTNER_ORDER_SETTING_ID = "default";
-
-const LIST_ORDER = [
-  { createdAt: "desc" },
-  { id: "desc" },
-] satisfies Prisma.PartnerOrderOrderByWithRelationInput[];
 
 const LIST_SELECT = {
   id: true,
@@ -172,7 +172,11 @@ export class PartnerOrdersRepository {
       [
         prisma.partnerOrder.findMany({
           where,
-          orderBy: LIST_ORDER,
+          orderBy: listOrderBy(
+            PARTNER_ORDER_LIST_SORT,
+            filter.sort,
+            filter.direction,
+          ),
           skip: (page - 1) * pageSize,
           take: pageSize,
           select: LIST_SELECT,
@@ -197,7 +201,11 @@ export class PartnerOrdersRepository {
   async listAll(filter: OrderListFilter) {
     const rows = await prisma.partnerOrder.findMany({
       where: listWhere(filter),
-      orderBy: LIST_ORDER,
+      orderBy: listOrderBy(
+        PARTNER_ORDER_LIST_SORT,
+        filter.sort,
+        filter.direction,
+      ),
       select: LIST_SELECT,
     });
     return { rows, chain: await this.chainCounts(rows) };
