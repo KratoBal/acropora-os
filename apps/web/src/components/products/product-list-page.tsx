@@ -73,6 +73,19 @@ export function isNegativeStock(value: string | null): boolean {
   return value !== null && Number(value) < 0;
 }
 
+/**
+ * A TARTÁSI ADAT OSZLOP CSAK AKKOR ÁLL, HA AZ OLDALON VAN ILYEN SOR (Picasso 3.10, acrobot 62085): az oszlop csak az élő állatnak mond valamit, egy 1932 termékes
+ * listán a legtöbb oldalon minden sor "—", és 190 px-et visz a név oszlopától. Ahogy a Hierarchia az eszközlistán: ha az oldal egyetlen sorának sincs tartási
+ * adata, az oszlop eltűnik; üres oldalon a teljes oszlopkészlet marad. (A tartási szűrő bekapcsolva csak ilyen sort ad, tehát ott az oszlop áll.)
+ */
+const HUSBANDRY_COLUMN_WIDTH = 190;
+
+export function showHusbandryColumn(
+  items: readonly { husbandry?: unknown }[],
+): boolean {
+  return items.length === 0 || items.some((item) => Boolean(item.husbandry));
+}
+
 function formatStock(value: string | null): string {
   if (value === null) return "—";
   return Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 });
@@ -401,7 +414,7 @@ export function ProductListPage() {
     ),
   };
 
-  const columns: PilotTableColumn<ProductListItem>[] = [
+  const allColumns: PilotTableColumn<ProductListItem>[] = [
     ...(canManage ? [selectColumn] : []),
     {
       id: "product",
@@ -538,6 +551,10 @@ export function ProductListPage() {
       ),
     },
   ];
+  const withHusbandry = showHusbandryColumn(data?.items ?? []);
+  const columns = withHusbandry
+    ? allColumns
+    : allColumns.filter((column) => column.id !== "husbandry");
 
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
@@ -788,7 +805,7 @@ export function ProductListPage() {
             columns={columns}
             rows={data.items}
             // below this the table scrolls instead of squeezing the name column (it has no fixed width)
-            minWidth={1160}
+            minWidth={withHusbandry ? 1160 : 1160 - HUSBANDRY_COLUMN_WIDTH}
             rowKey={(product) => product.id}
             onRowActivate={openDetail}
           />

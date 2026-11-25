@@ -10,7 +10,7 @@ import type { ProductListResponse, Session } from "@acropora/types";
 import { createElement, useSyncExternalStore } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ProductListPage } from "./product-list-page";
+import { ProductListPage, showHusbandryColumn } from "./product-list-page";
 
 const navigation = vi.hoisted(() => ({
   params: new URLSearchParams(),
@@ -227,6 +227,52 @@ describe("ProductListPage", () => {
       ).toBeNull();
   });
 
+  /*
+    A TARTÁSI ADAT OSZLOP CSAK AKKOR ÁLL, HA VAN ILYEN SOR (Picasso 3.10, acrobot 62085). MI PIROSÍT: ha az oszlop akkor is áll, amikor az oldal minden sora "—"; ha
+    eltűnik, amikor egy sornak van tartási adata; ha üres oldalon is eltűnik (nincs sor, amiből dönteni lehetne).
+  */
+  it("hides the Tartási adat column when no row on the page has husbandry data, and keeps the others", async () => {
+    api.list.mockResolvedValue(populatedResponse);
+    render(createElement(ProductListPage));
+    const table = await screen.findByRole("table");
+    const headers = within(table)
+      .getAllByRole("columnheader")
+      .map((header) => header.textContent);
+    expect(headers).not.toContain("Tartási adat");
+    // the table minimum shrinks with the dropped 190 px column (it was 1160, the name column's room is the point)
+    expect(tableMin(table)).toBe("970px");
+    expect(headers).toEqual([
+      "",
+      "Termék",
+      "Bruttó ár",
+      "Akciós ár",
+      "Készlet",
+      "Szállítás",
+      "Állapot",
+      "Művelet",
+    ]);
+  });
+
+  it("keeps the Tartási adat column as soon as one row has husbandry data", async () => {
+    api.list.mockResolvedValue(withHusbandryRow);
+    render(createElement(ProductListPage));
+    const table = await screen.findByRole("table");
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((header) => header.textContent),
+    ).toContain("Tartási adat");
+    expect(tableMin(table)).toBe("1160px");
+  });
+
+  it("showHusbandryColumn: an empty page keeps the column, a page of plain products drops it", () => {
+    expect(showHusbandryColumn([])).toBe(true);
+    expect(showHusbandryColumn([{ husbandry: null }, {}])).toBe(false);
+    expect(
+      showHusbandryColumn([{ husbandry: null }, { husbandry: { missing: 0 } }]),
+    ).toBe(true);
+  });
+
   it("a helyi terméket külön Acropora OS badge-dzsel jelöli", async () => {
     api.list.mockResolvedValue({
       ...populatedResponse,
@@ -413,8 +459,23 @@ describe("ProductListPage", () => {
     ).toBeInTheDocument();
   });
 
+  // the shared table carries its minimum as the CSS variable --pilot-table-min on the wrapper around the table
+  const tableMin = (table: HTMLElement) =>
+    (
+      table.closest("[style*='--pilot-table-min']") as HTMLElement | null
+    )?.style.getPropertyValue("--pilot-table-min");
+  const withHusbandryRow = {
+    ...populatedResponse,
+    items: [
+      {
+        ...populatedResponse.items[0]!,
+        husbandry: { verified: false, missing: 2, hazard: false },
+      },
+    ],
+  };
+
   it("a fejléc és a sor ugyanabból az oszlopból igazodik: a számoszlop mindkettőben jobbra zár", async () => {
-    api.list.mockResolvedValue(populatedResponse);
+    api.list.mockResolvedValue(withHusbandryRow);
     render(createElement(ProductListPage));
     const table = await screen.findByRole("table");
     const headers = within(table).getAllByRole("columnheader");
