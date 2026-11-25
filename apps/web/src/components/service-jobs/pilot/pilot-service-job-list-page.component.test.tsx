@@ -19,6 +19,7 @@ import {
   JOB_COLUMNS,
   JOB_TABLE_MIN_WIDTH,
   PilotServiceJobListPage,
+  emptyFilterSentence,
   resolveUrlFilters,
   serviceJobListPageFromUrl,
   serviceJobListQuery,
@@ -898,13 +899,52 @@ describe("service-job list (b): old URLs that carry a name", () => {
     });
     await settle();
     // the narrowed options have arrived (a third request, answered) and the partner is still the user's
-    await waitFor(() => expect(api.facets).toHaveBeenCalledTimes(3));
+    await waitFor(() =>
+      expect(
+        api.facets.mock.calls.filter((call) => call[1] === "open"),
+      ).toHaveLength(3),
+    ); // two on mount (Strict Mode runs the effect twice) and one for the search
     await settle();
     expect(screen.queryByText(/A régi szűrő nem érvényes/)).toBeNull();
     expect(lastExtra().customerId).toBe("cust-alfa");
     expect(navigation.replace).not.toHaveBeenCalledWith(
       expect.not.stringContaining("partner="),
       expect.anything(),
+    );
+  });
+
+  it("keeps a VALID partner that has no ticket on this tab: the filter stays, the list is empty and says so (acrobot 61769)", async () => {
+    // the tab-scoped options do not know the partner; the tab-less check does
+    api.facets.mockImplementation(async (...args: unknown[]) =>
+      args[6] ? { partners: [], locations: [] } : facets,
+    );
+    api.list.mockResolvedValue({ ...response, items: [] });
+    renderAt("tab=closed&partner=cust-beta");
+    expect(
+      await screen.findByText(
+        "Ennek a partnernek ezen a fülön nincs hibajegye.",
+      ),
+    ).toBeTruthy();
+    await settle();
+    expect(screen.queryByText(/A régi szűrő nem érvényes/)).toBeNull();
+    // asked with the partner, never the whole tab
+    for (const call of api.list.mock.calls)
+      expect((call[8] as { customerId?: string }).customerId).toBe("cust-beta");
+    // the dropdown still shows the chosen partner, though the tab's options lack it
+    expect(
+      (screen.getByLabelText("Partner szűrő") as HTMLSelectElement).value,
+    ).toBe("cust-beta");
+    expect(screen.queryByText("Jegy 1")).toBeNull();
+  });
+
+  it("emptyFilterSentence: names the partner or the location only when it is the only filter", () => {
+    expect(emptyFilterSentence("", true, false)).toMatch(/partnernek/);
+    expect(emptyFilterSentence("", false, true)).toMatch(/helyszínen/);
+    expect(emptyFilterSentence("x", true, false)).toBe(
+      "Próbálj más keresési feltételt.",
+    );
+    expect(emptyFilterSentence("", true, true)).toBe(
+      "Próbálj más keresési feltételt.",
     );
   });
 

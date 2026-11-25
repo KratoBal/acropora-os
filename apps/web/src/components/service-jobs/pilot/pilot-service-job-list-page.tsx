@@ -361,6 +361,39 @@ export function resolveUrlFilters(
   return { partner: nextPartner, location: nextLocation, dropped };
 }
 
+/**
+ * A LEGÖRDÜLŐ OPCIÓI A KIVÁLASZTOTT ÉRTÉKKEL: az opciók a fülre és a keresésre szűrtek, a kiválasztott partner vagy helyszín viszont lehet,
+ * hogy azon a fülön nem szerepel (nincs ott hibajegye). Ilyenkor az ellenőrzés fül nélküli listájából kerül be, hogy a választó ne
+ * mutasson üres vagy más értéket, miközben a szűrő él.
+ */
+function withChosen<T extends { id: string }>(
+  options: readonly T[] | undefined,
+  known: readonly T[] | undefined,
+  chosen: string,
+): T[] {
+  const list = [...(options ?? [])];
+  if (chosen === ALL_PARTNERS || list.some((entry) => entry.id === chosen))
+    return list;
+  const extra = known?.find((entry) => entry.id === chosen);
+  return extra ? [...list, extra] : list;
+}
+
+/**
+ * AZ ÜRES SZŰRT LISTA MONDATA: ha CSAK a partner (vagy CSAK a helyszín) szűr, a mondat kimondja, hogy az ő hibajegyei hiányoznak ezen a
+ * fülön, nem azt, hogy más keresést kellene próbálni (acrobot 61769: egy érvényes partner üres listája nem hiba, és nem is a teljes lista).
+ */
+export function emptyFilterSentence(
+  search: string,
+  partnerFilter: boolean,
+  locationFilter: boolean,
+): string {
+  if (!search && partnerFilter && !locationFilter)
+    return "Ennek a partnernek ezen a fülön nincs hibajegye.";
+  if (!search && locationFilter && !partnerFilter)
+    return "Ezen a helyszínen ezen a fülön nincs hibajegy.";
+  return "Próbálj más keresési feltételt.";
+}
+
 /** A lábléc sor-tartománya: "26–50 / 61" a lapozott válaszra, "7" a lapozatlanra. */
 function pageRange(data: ServiceJobListResponse, page: number): string {
   if (!data.pagination) return String(data.items.length);
@@ -400,6 +433,7 @@ export function PilotServiceJobListPage() {
   );
   const [staleFilter, setStaleFilter] = useState(false);
   const checkedRef = useRef(filtersChecked);
+  const [known, setKnown] = useState<ServiceJobListFacets | null>(null);
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_VIEW),
   );
@@ -501,6 +535,37 @@ export function PilotServiceJobListPage() {
   }, [load]);
 
   /*
+    AZ URL-BŐL JÖVŐ PARTNER ÉS HELYSZÍN ELLENŐRZÉSE, EGYSZER (acrobot 61769). Az érvényességet a FÜL- ÉS KERESÉS-NÉLKÜLI lehetőségekből
+    döntjük el (minden hatókör, nincs állapot, nincs keresés, nincs nap), nem a fülre szűrtekből: egy érvényes partner, akinek az adott fülön
+    nincs hibajegye, érvényes marad, és üres listát kap (nem a teljes listát egy másik partner jegyeivel az ő neve alatt). Az ellenőrzés
+    lehetőségei a legördülőben is megmaradnak (`known`), hogy a kiválasztott partner akkor is látsszon, ha a fülön nincs.
+  */
+  useEffect(() => {
+    if (!canView || checkedRef.current) return;
+    const controller = new AbortController();
+    serviceJobsApi
+      .facets(token, "all", controller.signal, "", true, undefined, undefined)
+      .then((all) => {
+        checkedRef.current = true;
+        const fixed = resolveUrlFilters(all, partner, location);
+        setKnown(all);
+        setPartner(fixed.partner);
+        setLocation(fixed.location);
+        if (fixed.dropped) setStaleFilter(true);
+        setFiltersChecked(true);
+      })
+      .catch(() => {
+        // az ellenőrzés hiánya nem akasztja a listát: az URL szűrője marad
+        if (controller.signal.aborted) return;
+        checkedRef.current = true;
+        setFiltersChecked(true);
+      });
+    return () => controller.abort();
+    // a partner és a helyszín szándékosan nincs a függésben: csak az ELSŐ válasznál számítanak (`checkedRef`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canView, token]);
+
+  /*
     A SZŰRŐ-LEHETŐSÉGEK KÜLÖN KÉRÉS: a szűrt halmaz (keresés, fül, nap, rejtettek) partnerei és helyszínei, a partner- és helyszín-szűrő
     nélkül, hogy a kiválasztott partner mellett ne ő maradjon az egyetlen opció. Az oldalszám és a rendezés nem érinti.
   */
@@ -517,26 +582,13 @@ export function PilotServiceJobListPage() {
         { from: createdFrom, to: createdTo },
         tabStatuses ?? undefined,
       )
-      .then((next) => {
-        setFacets(next);
-        if (checkedRef.current) return;
-        checkedRef.current = true;
-        const fixed = resolveUrlFilters(next, partner, location);
-        setPartner(fixed.partner);
-        setLocation(fixed.location);
-        if (fixed.dropped) setStaleFilter(true);
-        setFiltersChecked(true);
-      })
+      .then(setFacets)
       .catch(() => {
-        // a szűrő-lehetőségek hiánya nem akasztja a listát: a legördülők csak a "Minden"-t kínálják, az URL szűrője marad
-        if (controller.signal.aborted) return;
-        setFacets({ partners: [], locations: [] });
-        checkedRef.current = true;
-        setFiltersChecked(true);
+        // a szűrő-lehetőségek hiánya nem akasztja a listát: a legördülők csak a "Minden"-t kínálják
+        if (!controller.signal.aborted)
+          setFacets({ partners: [], locations: [] });
       });
     return () => controller.abort();
-    // a partner és a helyszín szándékosan nincs a függésben: csak az ELSŐ válasznál számítanak (`checkedRef`)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     appliedSearch,
     canView,
@@ -722,11 +774,13 @@ export function PilotServiceJobListPage() {
           chevron
         >
           <option value={ALL_PARTNERS}>Minden partner</option>
-          {(facets?.partners ?? []).map((entry) => (
-            <option key={entry.id} value={entry.id}>
-              {entry.name}
-            </option>
-          ))}
+          {withChosen(facets?.partners, known?.partners, partner).map(
+            (entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.name}
+              </option>
+            ),
+          )}
         </PilotSelect>
         <PilotSelect
           aria-label="Helyszín szűrő"
@@ -736,11 +790,13 @@ export function PilotServiceJobListPage() {
           chevron
         >
           <option value={ALL_LOCATIONS}>Minden helyszín</option>
-          {(facets?.locations ?? []).map((entry) => (
-            <option key={entry.id} value={entry.id}>
-              {entry.label}
-            </option>
-          ))}
+          {withChosen(facets?.locations, known?.locations, location).map(
+            (entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.label}
+              </option>
+            ),
+          )}
         </PilotSelect>
         {/* A JELÖLŐ CSAK ANNAK LÁTSZIK, aki vissza is tudja állítani a
             rejtett jegyeket -- ugyanaz a szabály, mint a mai listán. */}
@@ -802,7 +858,7 @@ export function PilotServiceJobListPage() {
         <Alert
           variant="info"
           title="A régi szűrő nem érvényes, a teljes lista látszik"
-          description="A hivatkozásban álló partner vagy helyszín nem azonosítható, ezért nem szűr."
+          description="A hivatkozásban álló partner vagy helyszín nem azonosítható (nincs hibajegye), ezért nem szűr."
         />
       ) : null}
 
@@ -839,7 +895,11 @@ export function PilotServiceJobListPage() {
             </p>
             <p className="max-w-xs text-xs text-pilot-grey-400">
               {appliedSearch || hasActiveFilters
-                ? "Próbálj más keresési feltételt."
+                ? emptyFilterSentence(
+                    appliedSearch,
+                    partner !== ALL_PARTNERS,
+                    location !== ALL_LOCATIONS,
+                  )
                 : "Hozz létre egy új hibajegyet a bejelentett problémák nyomon követéséhez."}
             </p>
           </div>
