@@ -12,7 +12,9 @@ import type {
   ServiceJobHandoverMailResult,
   ServiceJobLinkableWorksheetsResponse,
   ServiceJobLinkedWorksheetsResponse,
+  ServiceJobListFacets,
   ServiceJobListResponse,
+  ServiceJobListSortField,
   ServiceJobStatusValue,
 } from "@acropora/types";
 
@@ -23,6 +25,44 @@ const base = "/service/jobs";
 
 function jobPath(id: string, suffix = "") {
   return `${base}/${encodeURIComponent(id)}${suffix}`;
+}
+
+export interface ServiceJobListExtra {
+  page?: number;
+  pageSize?: number;
+  sort?: ServiceJobListSortField;
+  direction?: "asc" | "desc";
+  /** Az állapot-szűrő (a fülek): a szerver szűr, hogy a fül száma, az oldalszám és a sorok egyezzenek. */
+  statuses?: readonly ServiceJobStatusValue[] | null;
+  customerId?: string;
+  departmentId?: string;
+}
+
+/** A lista és a szűrő-lehetőségek KÖZÖS paraméterei: egy helyen, hogy a két kérés ne csússzon szét. */
+function listQueryParams(
+  scope: "open" | "all",
+  search: string | undefined,
+  includeHidden: boolean | undefined,
+  kind: "REPAIR" | "MAINTENANCE",
+  maintenanceState: "progress" | "done" | undefined,
+  created: { from?: string; to?: string } | undefined,
+  statuses: readonly string[] | null | undefined,
+): URLSearchParams {
+  const query = new URLSearchParams({ scope });
+  query.set("kind", kind);
+  if (maintenanceState) query.set("maintenanceState", maintenanceState);
+  if (created?.from) query.set("createdFrom", created.from);
+  if (created?.to) query.set("createdTo", created.to);
+  if (statuses?.length) query.set("statuses", statuses.join(","));
+  const trimmed = search?.trim();
+  if (trimmed) query.set("search", trimmed);
+  /**
+   * CSAK AKKOR KERUL BE, HA KERTEK. Egy `includeHidden=false` ugyanazt
+   * jelentene a szervernek, mint a hianyzo mezo, es minden lekerest
+   * megkulonboztethetetlenne tenne a naplokban attol, amelyik tenyleg kerte.
+   */
+  if (includeHidden) query.set("includeHidden", "true");
+  return query;
 }
 
 export const serviceJobsApi = {
@@ -42,21 +82,54 @@ export const serviceJobsApi = {
     maintenanceState?: "progress" | "done",
     /** A létrehozás napjának tól-ig szűrője (`ÉÉÉÉ-HH-NN`, Luca 2026-11-20): a szerver szűr, mindkét határnap benne van. */
     created?: { from?: string; to?: string },
-  ) {
-    const query = new URLSearchParams({ scope });
-    query.set("kind", kind);
-    if (maintenanceState) query.set("maintenanceState", maintenanceState);
-    if (created?.from) query.set("createdFrom", created.from);
-    if (created?.to) query.set("createdTo", created.to);
-    const trimmed = search?.trim();
-    if (trimmed) query.set("search", trimmed);
     /**
-     * CSAK AKKOR KERUL BE, HA KERTEK. Egy `includeHidden=false` ugyanazt
-     * jelentene a szervernek, mint a hianyzo mezo, es minden lekerest
-     * megkulonboztethetetlenne tenne a naplokban attol, amelyik tenyleg kerte.
+     * A HIBAJEGY-LISTA SZERVEROLDALI LAPOZÁSA, RENDEZÉSE ÉS ÚJ SZŰRŐI (f0b70dbd): a `page` megadása kapcsolja be a lapozást (a válasz
+     * `pagination`-t kap); nélküle a régi alak jön (a legújabb kétszáz sor és a `truncated`), amit a mobil és a karbantartási lista ismer.
      */
-    if (includeHidden) query.set("includeHidden", "true");
+    extra?: ServiceJobListExtra,
+  ) {
+    const query = listQueryParams(
+      scope,
+      search,
+      includeHidden,
+      kind,
+      maintenanceState,
+      created,
+      extra?.statuses,
+    );
+    if (extra?.page) query.set("page", String(extra.page));
+    if (extra?.pageSize) query.set("pageSize", String(extra.pageSize));
+    if (extra?.sort) query.set("sort", extra.sort);
+    if (extra?.direction) query.set("direction", extra.direction);
+    if (extra?.customerId) query.set("customerId", extra.customerId);
+    if (extra?.departmentId) query.set("departmentId", extra.departmentId);
     return apiRequest<ServiceJobListResponse>(`${base}?${query}`, token, {
+      signal,
+    });
+  },
+  /**
+   * A LISTA SZŰRŐ-LEHETŐSÉGEI: a szűrt halmaz (keresés, hatókör, állapotok, létrehozás napja) partnerei és helyszínei, a partner- és
+   * helyszín-szűrő NÉLKÜL. Ugyanazok a paraméterek, mint a listán, hogy a legördülők a listát mondják.
+   */
+  facets(
+    token: string,
+    scope: "open" | "all",
+    signal?: AbortSignal,
+    search?: string,
+    includeHidden?: boolean,
+    created?: { from?: string; to?: string },
+    statuses?: readonly string[],
+  ) {
+    const query = listQueryParams(
+      scope,
+      search,
+      includeHidden,
+      "REPAIR",
+      undefined,
+      created,
+      statuses,
+    );
+    return apiRequest<ServiceJobListFacets>(`${base}/facets?${query}`, token, {
       signal,
     });
   },

@@ -3,15 +3,24 @@ import {
   IsBoolean,
   IsArray,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
+  Min,
   MinLength,
   ValidateIf,
 } from "class-validator";
 
-import { Transform } from "class-transformer";
+import { Transform, Type } from "class-transformer";
+import {
+  ALL_SERVICE_JOB_STATUS_VALUES,
+  SERVICE_JOB_LIST_SORT_FIELDS,
+  type ServiceJobListSortField,
+  type ServiceJobStatusValue,
+} from "@acropora/types";
 
 import { optionalQueryBoolean } from "../common/query-boolean.util.js";
 import {
@@ -387,6 +396,54 @@ export class ServiceJobListQueryDto {
   @Transform(({ value }: { value: unknown }) => optionalQueryBoolean(value))
   @IsBoolean()
   includeHidden?: boolean;
+
+  /**
+   * A LAPOZÁS (picasso, f0b70dbd, 8. pont; acrobot 61735). A `page` MEGADÁSA KAPCSOLJA BE: nélküle a lista a régi alakú (a legújabb
+   * kétszáz sor és a `truncated` jelző, amit a mobil és a régi lista ismer), vele a válasz egy oldal és a `pagination`. A `pageSize` alapja 25.
+   */
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  page?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(10)
+  @Max(100)
+  @IsOptional()
+  pageSize?: number;
+
+  /** A rendezett oszlop és az irány (`SERVICE_JOB_LIST_SORT_FIELDS`); nélkülük a létrehozás ideje, a legújabb elöl. */
+  @IsIn(SERVICE_JOB_LIST_SORT_FIELDS)
+  @IsOptional()
+  sort?: ServiceJobListSortField;
+
+  @IsIn(["asc", "desc"])
+  @IsOptional()
+  direction?: "asc" | "desc";
+
+  /**
+   * AZ ÁLLAPOT-SZŰRŐ, VESSZŐVEL ELVÁLASZTVA (`NEW,TRIAGED`): a fülek ezt kérik, hogy a ful száma, az oldalszám és a sorok mindig
+   * egyezzenek (eddig a fülek a betöltött sorokon szűrtek). Üres vagy hiányzó: minden állapot. Az ismeretlen állapot 400.
+   */
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === "string"
+      ? value
+          .split(",")
+          .map((part) => part.trim())
+          .filter(Boolean)
+      : value,
+  )
+  @IsArray()
+  @ArrayMaxSize(ALL_SERVICE_JOB_STATUS_VALUES.length)
+  @IsIn(ALL_SERVICE_JOB_STATUS_VALUES, { each: true })
+  statuses?: ServiceJobStatusValue[];
+
+  /** A partner és a helyszín szűrője (a hibajegy partnere, illetve pontosan az a helyszín): eddig a lap szűrt a betöltött sorokon. */
+  @IsString() @IsOptional() customerId?: string;
+  @IsString() @IsOptional() departmentId?: string;
 }
 
 /**

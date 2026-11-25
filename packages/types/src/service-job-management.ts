@@ -149,6 +149,25 @@ export interface ServiceJobListItem {
  */
 export type ServiceJobStatusCounts = Record<ServiceJobStatusValue, number>;
 
+/**
+ * A HIBAJEGY-LISTA RENDEZHETŐ OSZLOPAI (picasso, f0b70dbd, 9. pont; acrobot 61735). A lista szerveroldali lapozású, ezért a rendezés a
+ * szerveren történik. Két oszlop rendezhető: a hibajegy kódja és a létrehozás ideje. AZ ÁLLAPOT NEM, amíg Balázs a közös állapot-listáról
+ * nem dönt (D1): ha az lesz, a sorrend a folyamat sorrendje (az enum deklarációs sorrendje), nem a felirat betűrendje. Az alap sorrend a
+ * létrehozás ideje, a legújabb elöl.
+ */
+export const SERVICE_JOB_LIST_SORT_FIELDS = ["jobNumber", "createdAt"] as const;
+export type ServiceJobListSortField =
+  (typeof SERVICE_JOB_LIST_SORT_FIELDS)[number];
+
+/**
+ * A LISTA SZŰRŐ-LEHETŐSÉGEI (`GET /service/jobs/facets`): azok a partnerek és helyszínek, amelyekhez a szűrt halmazban van hibajegy. A
+ * szűrő maga (partner, helyszín) NEM szűkíti őket, különben a választott partner mellett csak ő maradna a legördülőben.
+ */
+export interface ServiceJobListFacets {
+  partners: { id: string; name: string }[];
+  locations: { id: string; label: string }[];
+}
+
 export interface ServiceJobListResponse {
   items: ServiceJobListItem[];
   counts: ServiceJobStatusCounts;
@@ -164,6 +183,16 @@ export interface ServiceJobListResponse {
    * hatar valaha valtozik.
    */
   truncated: boolean;
+  /**
+   * LAPOZOTT KÉRÉSNÉL (`page` megadva) a találatok száma és az oldalak. A lapozatlan, régi alakú kérésnél hiányzik, és a `truncated` az
+   * ismert marad (a mobil és a régi lista nem ismeri a lapozást).
+   */
+  pagination?: {
+    page: number;
+    pageSize: number;
+    totalItems: number;
+    totalPages: number;
+  };
 }
 
 /**

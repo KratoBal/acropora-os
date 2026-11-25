@@ -6,6 +6,7 @@ import {
   Skeleton,
   PilotDataTable,
   PilotDateField,
+  Pagination,
   PilotSelect,
   type PilotTableColumn,
   PAGE_GUTTER_X,
@@ -13,14 +14,17 @@ import {
 import {
   hasPermission,
   PERMISSIONS,
+  type ServiceJobListFacets,
   type ServiceJobListResponse,
+  type ServiceJobListSortField,
 } from "@acropora/types";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
+import { useUrlSort } from "@/lib/navigation/use-url-sort";
 // A DÁTUMFORMÁZÓ A MUNKALAPOKNÁL ÉL, UGYANÚGY, MINT A MAI LISTÁN -- nem
 // másolom ide, két formázó egy felületen előbb-utóbb két alakot adna
 // ugyanarra az időpontra.
@@ -35,7 +39,6 @@ import {
 import {
   assigneeNames,
   NO_ASSIGNEE,
-  pilotItemsForTab,
   pilotStatTiles,
   pilotTabCounts,
   pilotTabDef,
@@ -73,13 +76,13 @@ import {
  * kötegelt lekérdezés (`service-jobs.repository.ts`) ennek a PR-nak a
  * része -- meglévő adat felszínre hozása, nem új képesség.
  *
- * === PARTNER ÉS HELYSZÍN SZŰRŐ: A BETÖLTÖTT LAPON BELÜL ===
+ * === LAPOZÁS, RENDEZÉS, FÜLEK ÉS SZŰRŐK A SZERVEREN (f0b70dbd, (b) kör) ===
  *
- * A keresés a szerveren megy (mint eddig), a Partner/Helyszín szűrő viszont
- * a MÁR BETÖLTÖTT (fülre + keresésre + rejtettségre szűrt, legfeljebb
- * 200 soros) listán belül válogat, és az opciók is ebből a halmazból
- * származnak. Ez a mai 200-as korláttal (`LIST_LIMIT`) egyező hatókör --
- * nem tágabb és nem szűkebb ígéret, mint amit a lista amúgy is hordoz.
+ * Eddig a lista a legújabb 200 sort kapta, és a fülek, a partner és a helyszín a betöltött soron szűrtek, tehát a fül száma és a
+ * látható sorok eltérhettek. Mostantól MINDEN a szerveren megy: egy oldal 25 sor (`page`, `pageSize`), a fül az állapot-szűrő
+ * (`statuses`), a partner és a helyszín az azonosítójukkal (`customerId`, `departmentId`), a rendezés a kód és a Létrehozva (`sort`,
+ * `direction`). A legördülők opciói a szűrt halmaz partnerei és helyszínei (`/service/jobs/facets`), a saját szűrőjük nélkül.
+ * A fül -> állapotok megfeleltetés EGY helyen áll (`PILOT_TABS` a view fájlban): ha a közös állapot-lista (D1) megváltozik, ott cserélődik.
  *
  * === AZ "ÖSSZES" FÜL MEGMARADT, A FIGMA NEM MUTATJA ===
  *
@@ -157,6 +160,33 @@ export function serviceJobListQuery(state: {
 
 type JobRow = ServiceJobListResponse["items"][number];
 
+/**
+ * A LISTA OLDALMÉRETE ÉS RENDEZHETŐ OSZLOPAI (f0b70dbd, (b) kör). A lista szerveroldali lapozású: egy oldal 25 sor, a rendezés a szerveren
+ * megy (az oszlop-azonosító -> `SERVICE_JOB_LIST_SORT_FIELDS`). Két oszlop rendezhető: a hibajegy (a kódja szerint) és a Létrehozva.
+ * AZ ÁLLAPOT NEM, amíg Balázs a közös állapot-listáról nem dönt (D1): akkor a sorrend a folyamat sorrendje lesz, nem a felirat betűrendje.
+ */
+export const JOB_PAGE_SIZE = 25;
+export const JOB_SORT_COLUMNS = {
+  job: "jobNumber",
+  createdAt: "createdAt",
+} as const;
+
+/** Az URL oldalszáma: pozitív egész, egyébként az első oldal (egy kézzel átírt érték nem üres listát ad). */
+export function serviceJobListPageFromUrl(params: URLSearchParams): number {
+  const page = Number(params.get("page"));
+  return Number.isInteger(page) && page >= 1 ? page : 1;
+}
+
+/** Két lekérdezés-szöveg egyezése a kulcsok sorrendjétől függetlenül (az URL-t más író más sorrendben írhatja). */
+function sameQuery(a: string, b: string): boolean {
+  const canon = (query: string) =>
+    Array.from(new URLSearchParams(query).entries())
+      .map(([key, value]) => `${key}=${value}`)
+      .sort()
+      .join("&");
+  return canon(a) === canon(b);
+}
+
 /*
   A HIBAJEGYLISTA OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a
   tábla kártyalistává alakul (a hibajegy címe a kártya címe); a sor végi nyíl csak asztali jelzés.
@@ -175,6 +205,7 @@ export const JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
   {
     id: "job",
     header: "Hibajegy",
+    sortable: true,
     cell: (item) => (
       <>
         {/*
@@ -263,6 +294,7 @@ export const JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
   {
     id: "createdAt",
     header: "Létrehozva",
+    sortable: true,
     width: "140px",
     nowrap: true,
     cell: (item) => (
@@ -287,6 +319,88 @@ export const JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
   },
 ];
 
+/**
+ * AZ URL-BŐL JÖVŐ PARTNER ÉS HELYSZÍN ELLENŐRZÉSE az első szűrő-lehetőségek ellen. Ismert azonosító: marad. Régi, NEVET hordozó érték:
+ * a partner neve egyértelműen megadja az azonosítót; a helyszín régi értéke az útvonal volt ("Cápárium / Nagy medence"), ennek az utolsó
+ * tagja egyértelműen egy lehetőség feliratának végére esik ("CAP · Nagy medence"). Ami így sem azonosítható, eldobódik (`dropped`),
+ * és a lap kimondja, mert egy üres lista itt a hibát nyugtatónak mutatná.
+ */
+export function resolveUrlFilters(
+  facets: ServiceJobListFacets,
+  partner: string,
+  location: string,
+): { partner: string; location: string; dropped: boolean } {
+  let dropped = false;
+  let nextPartner = partner;
+  if (
+    partner !== ALL_PARTNERS &&
+    !facets.partners.some((entry) => entry.id === partner)
+  ) {
+    const byName = facets.partners.filter((entry) => entry.name === partner);
+    if (byName.length === 1) nextPartner = byName[0]!.id;
+    else {
+      nextPartner = ALL_PARTNERS;
+      dropped = true;
+    }
+  }
+  let nextLocation = location;
+  if (
+    location !== ALL_LOCATIONS &&
+    !facets.locations.some((entry) => entry.id === location)
+  ) {
+    const leaf = location.split(" / ").pop() ?? location;
+    const byLeaf = facets.locations.filter(
+      (entry) => entry.label === leaf || entry.label.endsWith(` · ${leaf}`),
+    );
+    if (byLeaf.length === 1) nextLocation = byLeaf[0]!.id;
+    else {
+      nextLocation = ALL_LOCATIONS;
+      dropped = true;
+    }
+  }
+  return { partner: nextPartner, location: nextLocation, dropped };
+}
+
+/**
+ * A LEGÖRDÜLŐ OPCIÓI A KIVÁLASZTOTT ÉRTÉKKEL: az opciók a fülre és a keresésre szűrtek, a kiválasztott partner vagy helyszín viszont lehet,
+ * hogy azon a fülön nem szerepel (nincs ott hibajegye). Ilyenkor az ellenőrzés fül nélküli listájából kerül be, hogy a választó ne
+ * mutasson üres vagy más értéket, miközben a szűrő él.
+ */
+function withChosen<T extends { id: string }>(
+  options: readonly T[] | undefined,
+  known: readonly T[] | undefined,
+  chosen: string,
+): T[] {
+  const list = [...(options ?? [])];
+  if (chosen === ALL_PARTNERS || list.some((entry) => entry.id === chosen))
+    return list;
+  const extra = known?.find((entry) => entry.id === chosen);
+  return extra ? [...list, extra] : list;
+}
+
+/**
+ * AZ ÜRES SZŰRT LISTA MONDATA: ha CSAK a partner (vagy CSAK a helyszín) szűr, a mondat kimondja, hogy az ő hibajegyei hiányoznak ezen a
+ * fülön, nem azt, hogy más keresést kellene próbálni (acrobot 61769: egy érvényes partner üres listája nem hiba, és nem is a teljes lista).
+ */
+export function emptyFilterSentence(
+  search: string,
+  partnerFilter: boolean,
+  locationFilter: boolean,
+): string {
+  if (!search && partnerFilter && !locationFilter)
+    return "Ennek a partnernek ezen a fülön nincs hibajegye.";
+  if (!search && locationFilter && !partnerFilter)
+    return "Ezen a helyszínen ezen a fülön nincs hibajegy.";
+  return "Próbálj más keresési feltételt.";
+}
+
+/** A lábléc sor-tartománya: "26–50 / 61" a lapozott válaszra, "7" a lapozatlanra. */
+function pageRange(data: ServiceJobListResponse, page: number): string {
+  if (!data.pagination) return String(data.items.length);
+  const first = (page - 1) * data.pagination.pageSize + 1;
+  return `${first}–${first + data.items.length - 1} / ${data.pagination.totalItems}`;
+}
+
 export function PilotServiceJobListPage() {
   const { session } = useAuth();
   const router = useRouter();
@@ -304,8 +418,22 @@ export function PilotServiceJobListPage() {
   const reversedRange =
     Boolean(createdFrom && createdTo) && createdFrom > createdTo;
   const [data, setData] = useState<ServiceJobListResponse | null>(null);
+  const [facets, setFacets] = useState<ServiceJobListFacets | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /*
+    A RÉGI URL-EK (Luca könyvjelzői): a partner és a helyszín régen NEVET hordozott, ma azonosítót. Egy ismeretlen érték üres listát adna,
+    ami itt a hibát nyugtatónak mutatná. Ezért ha az URL-ből jön partner vagy helyszín, a lista kérése megvárja az első szűrő-lehetőségeket
+    (`filtersChecked`), és ott az érték vagy átíródik azonosítóra (a név egyértelműen egy partnert, illetve egy helyszínt jelöl), vagy
+    eldobódik, és a lap kimondja (`staleFilter`). CSAK AZ ELSŐ válaszra fut: később a lehetőségek a kereséssel szűkülnek, és egy
+    gépeléssel nem szabad kidobni a kiválasztott partnert.
+  */
+  const [filtersChecked, setFiltersChecked] = useState(
+    initial.partner === ALL_PARTNERS && initial.location === ALL_LOCATIONS,
+  );
+  const [staleFilter, setStaleFilter] = useState(false);
+  const checkedRef = useRef(filtersChecked);
+  const [known, setKnown] = useState<ServiceJobListFacets | null>(null);
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_VIEW),
   );
@@ -316,7 +444,25 @@ export function PilotServiceJobListPage() {
     session && hasPermission(session.user, PERMISSIONS.SERVICE_HIDE),
   );
   const token = session?.token ?? "";
-  const { scope } = pilotTabDef(tab);
+  const { scope, statuses: tabStatuses } = pilotTabDef(tab);
+  const { sort, onSort, apiSort } = useUrlSort(JOB_SORT_COLUMNS);
+  /*
+    AZ OLDALSZÁM AZ URL-BŐL JÖN, DE EGY SZŰRŐVÁLTÁS AZ ELSŐ OLDALRA VISZ. A szűrő (fül, keresés, partner, helyszín, nap) helyi állapot,
+    amit az effekt ír vissza az URL-be; amíg a kettő nem egyezik, szűrőváltás van folyamatban, és az oldal 1. Így a kérés EGYSZER megy
+    el, az új szűrővel és az 1. oldallal, nem kétszer (előbb a régi oldalszámmal).
+  */
+  const stateQuery = serviceJobListQuery({
+    tab,
+    search: appliedSearch,
+    includeHidden,
+    partner,
+    location,
+    createdFrom,
+    createdTo,
+  });
+  const urlQuery = serviceJobListQuery(serviceJobListStateFromUrl(params));
+  const filtersSettled = stateQuery === urlQuery;
+  const page = filtersSettled ? serviceJobListPageFromUrl(params) : 1;
 
   /*
     A GÉPELÉS NEM KÉRÉSENKÉNT MEGY LE, UGYANÚGY, MINT A MAI LISTÁN: a keresés
@@ -329,7 +475,7 @@ export function PilotServiceJobListPage() {
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
-      if (!canView) return;
+      if (!canView || !filtersChecked) return;
       setLoading(true);
       setError(null);
       try {
@@ -343,6 +489,15 @@ export function PilotServiceJobListPage() {
             "REPAIR",
             undefined,
             { from: createdFrom, to: createdTo },
+            {
+              page,
+              pageSize: JOB_PAGE_SIZE,
+              sort: apiSort?.sort as ServiceJobListSortField | undefined,
+              direction: apiSort?.direction,
+              statuses: tabStatuses,
+              customerId: partner === ALL_PARTNERS ? undefined : partner,
+              departmentId: location === ALL_LOCATIONS ? undefined : location,
+            },
           ),
         );
       } catch (cause) {
@@ -357,12 +512,18 @@ export function PilotServiceJobListPage() {
       }
     },
     [
+      apiSort,
       appliedSearch,
       canView,
       createdFrom,
       createdTo,
+      filtersChecked,
       includeHidden,
+      location,
+      page,
+      partner,
       scope,
+      tabStatuses,
       token,
     ],
   );
@@ -372,6 +533,72 @@ export function PilotServiceJobListPage() {
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  /*
+    AZ URL-BŐL JÖVŐ PARTNER ÉS HELYSZÍN ELLENŐRZÉSE, EGYSZER (acrobot 61769). Az érvényességet a FÜL- ÉS KERESÉS-NÉLKÜLI lehetőségekből
+    döntjük el (minden hatókör, nincs állapot, nincs keresés, nincs nap), nem a fülre szűrtekből: egy érvényes partner, akinek az adott fülön
+    nincs hibajegye, érvényes marad, és üres listát kap (nem a teljes listát egy másik partner jegyeivel az ő neve alatt). Az ellenőrzés
+    lehetőségei a legördülőben is megmaradnak (`known`), hogy a kiválasztott partner akkor is látsszon, ha a fülön nincs.
+  */
+  useEffect(() => {
+    if (!canView || checkedRef.current) return;
+    const controller = new AbortController();
+    serviceJobsApi
+      .facets(token, "all", controller.signal, "", true, undefined, undefined)
+      .then((all) => {
+        checkedRef.current = true;
+        const fixed = resolveUrlFilters(all, partner, location);
+        setKnown(all);
+        setPartner(fixed.partner);
+        setLocation(fixed.location);
+        if (fixed.dropped) setStaleFilter(true);
+        setFiltersChecked(true);
+      })
+      .catch(() => {
+        // az ellenőrzés hiánya nem akasztja a listát: az URL szűrője marad
+        if (controller.signal.aborted) return;
+        checkedRef.current = true;
+        setFiltersChecked(true);
+      });
+    return () => controller.abort();
+    // a partner és a helyszín szándékosan nincs a függésben: csak az ELSŐ válasznál számítanak (`checkedRef`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canView, token]);
+
+  /*
+    A SZŰRŐ-LEHETŐSÉGEK KÜLÖN KÉRÉS: a szűrt halmaz (keresés, fül, nap, rejtettek) partnerei és helyszínei, a partner- és helyszín-szűrő
+    nélkül, hogy a kiválasztott partner mellett ne ő maradjon az egyetlen opció. Az oldalszám és a rendezés nem érinti.
+  */
+  useEffect(() => {
+    if (!canView) return;
+    const controller = new AbortController();
+    serviceJobsApi
+      .facets(
+        token,
+        scope,
+        controller.signal,
+        appliedSearch,
+        includeHidden,
+        { from: createdFrom, to: createdTo },
+        tabStatuses ?? undefined,
+      )
+      .then(setFacets)
+      .catch(() => {
+        // a szűrő-lehetőségek hiánya nem akasztja a listát: a legördülők csak a "Minden"-t kínálják
+        if (!controller.signal.aborted)
+          setFacets({ partners: [], locations: [] });
+      });
+    return () => controller.abort();
+  }, [
+    appliedSearch,
+    canView,
+    createdFrom,
+    createdTo,
+    includeHidden,
+    scope,
+    tabStatuses,
+    token,
+  ]);
 
   /* A FÜLVÁLTÁS A PARTNER/HELYSZÍN SZŰRŐT IS NULLÁZZA -- egy korábban
      kiválasztott partner/helyszín az ÚJ fülön lehet, hogy nem is szerepel
@@ -385,79 +612,48 @@ export function PilotServiceJobListPage() {
     setLocation(ALL_LOCATIONS);
   };
 
-  /* Az állapot visszaírása az URL-be, csak ha tényleg változott. */
+  /*
+    Az állapot visszaírása az URL-be, csak ha tényleg változott. A rendezés (`sort`, `direction`) és az oldalszám (`page`) NEM a helyi
+    állapoté, hanem az URL-é: a visszaírás megtartja őket, az oldalszámot viszont csak akkor, ha a szűrők nem változtak (szűrőváltás az
+    1. oldalra visz).
+  */
   useEffect(() => {
-    const next = serviceJobListQuery({
-      tab,
-      search: appliedSearch,
-      includeHidden,
-      partner,
-      location,
-      createdFrom,
-      createdTo,
-    });
-    if (next === params.toString()) return;
-    router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
-  }, [
-    appliedSearch,
-    createdFrom,
-    createdTo,
-    includeHidden,
-    location,
-    params,
-    partner,
-    pathname,
-    router,
-    tab,
-  ]);
-
-  const tabItems = useMemo(
-    () => (data ? pilotItemsForTab(data.items, tab) : []),
-    [data, tab],
-  );
-
-  const partnerOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          tabItems
-            .map((item) => item.customerName)
-            .filter((name): name is string => Boolean(name)),
-        ),
-      ).sort((a, b) => a.localeCompare(b, "hu")),
-    [tabItems],
-  );
-
-  const locationOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const item of tabItems) {
-      if (!item.departmentPath?.length) continue;
-      const key = item.departmentPath.join(" / ");
-      const leaf = item.departmentPath[item.departmentPath.length - 1]!;
-      const label = item.departmentCode
-        ? `${item.departmentCode} · ${leaf}`
-        : leaf;
-      map.set(key, label);
+    const next = new URLSearchParams(stateQuery);
+    for (const key of ["sort", "direction"]) {
+      const value = params.get(key);
+      if (value) next.set(key, value);
     }
-    return Array.from(map.entries()).sort((a, b) =>
-      a[1].localeCompare(b[1], "hu"),
-    );
-  }, [tabItems]);
+    if (filtersSettled && page > 1) next.set("page", String(page));
+    const nextQuery = next.toString();
+    if (sameQuery(nextQuery, params.toString())) return;
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
+      scroll: false,
+    });
+  }, [filtersSettled, page, params, pathname, router, stateQuery]);
 
-  const filtered = useMemo(
-    () =>
-      tabItems.filter((item) => {
-        if (partner !== ALL_PARTNERS && item.customerName !== partner)
-          return false;
-        if (
-          location !== ALL_LOCATIONS &&
-          (item.departmentPath?.join(" / ") ?? "") !== location
-        )
-          return false;
-        return true;
-      }),
-    [tabItems, partner, location],
-  );
+  /** Lapozás: csak az `page` kulcs változik; a szűrő- és rendezés-kulcsok maradnak. */
+  const goToPage = (target: number) => {
+    const next = new URLSearchParams(params.toString());
+    if (target > 1) next.set("page", String(target));
+    else next.delete("page");
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, {
+      scroll: false,
+    });
+  };
+
+  /* Ha a lista rövidült (törlés, másik szűrő), és az URL oldala már nincs, az utolsó oldalra visz, nem üres listára. */
+  const lastPage = data?.pagination?.totalPages;
+  const pageGone =
+    data !== null &&
+    data.items.length === 0 &&
+    (data.pagination?.totalItems ?? 0) > 0 &&
+    lastPage !== undefined &&
+    page > lastPage;
+  useEffect(() => {
+    if (pageGone && lastPage !== undefined) goToPage(lastPage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageGone, lastPage]);
 
   const counts = data ? pilotTabCounts(data.counts) : null;
   const hasActiveFilters =
@@ -578,11 +774,13 @@ export function PilotServiceJobListPage() {
           chevron
         >
           <option value={ALL_PARTNERS}>Minden partner</option>
-          {partnerOptions.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
+          {withChosen(facets?.partners, known?.partners, partner).map(
+            (entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.name}
+              </option>
+            ),
+          )}
         </PilotSelect>
         <PilotSelect
           aria-label="Helyszín szűrő"
@@ -592,11 +790,13 @@ export function PilotServiceJobListPage() {
           chevron
         >
           <option value={ALL_LOCATIONS}>Minden helyszín</option>
-          {locationOptions.map(([key, label]) => (
-            <option key={key} value={key}>
-              {label}
-            </option>
-          ))}
+          {withChosen(facets?.locations, known?.locations, location).map(
+            (entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.label}
+              </option>
+            ),
+          )}
         </PilotSelect>
         {/* A JELÖLŐ CSAK ANNAK LÁTSZIK, aki vissza is tudja állítani a
             rejtett jegyeket -- ugyanaz a szabály, mint a mai listán. */}
@@ -654,6 +854,14 @@ export function PilotServiceJobListPage() {
         </div>
       </div>
 
+      {staleFilter ? (
+        <Alert
+          variant="info"
+          title="A régi szűrő nem érvényes, a teljes lista látszik"
+          description="A hivatkozásban álló partner vagy helyszín nem azonosítható (nincs hibajegye), ezért nem szűr."
+        />
+      ) : null}
+
       {error ? (
         <Alert
           variant="danger"
@@ -674,7 +882,7 @@ export function PilotServiceJobListPage() {
         </div>
       ) : null}
 
-      {data && filtered.length === 0 ? (
+      {data && data.items.length === 0 && !pageGone ? (
         <PilotCard className="flex flex-col items-center justify-center gap-4 py-20">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-pilot-aqua-50">
             <Icon name="clipboard" size={24} className="text-pilot-aqua-600" />
@@ -687,7 +895,11 @@ export function PilotServiceJobListPage() {
             </p>
             <p className="max-w-xs text-xs text-pilot-grey-400">
               {appliedSearch || hasActiveFilters
-                ? "Próbálj más keresési feltételt."
+                ? emptyFilterSentence(
+                    appliedSearch,
+                    partner !== ALL_PARTNERS,
+                    location !== ALL_LOCATIONS,
+                  )
                 : "Hozz létre egy új hibajegyet a bejelentett problémák nyomon követéséhez."}
             </p>
           </div>
@@ -715,11 +927,13 @@ export function PilotServiceJobListPage() {
         </PilotCard>
       ) : null}
 
-      {data && filtered.length > 0 ? (
+      {data && data.items.length > 0 ? (
         <PilotCard className="overflow-hidden">
           <PilotDataTable
             columns={JOB_COLUMNS}
-            rows={filtered}
+            sort={sort}
+            onSort={onSort}
+            rows={data.items}
             rowKey={(item) => item.id}
             rowTestId="service-job-row"
             minWidth={JOB_TABLE_MIN_WIDTH}
@@ -731,14 +945,10 @@ export function PilotServiceJobListPage() {
           />
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-pilot-grey-100 px-4 py-3 text-xs text-pilot-grey-500">
             <span>
-              {filtered.length} / {counts ? counts[tab] : filtered.length}{" "}
-              {PILOT_TAB_NOUN[tab]}
+              {/* a találatszám a SZŰRT halmazé (a szerver adja), a sor-tartomány az oldalé */}
+              {pageRange(data, page)} {PILOT_TAB_NOUN[tab]}
             </span>
-            {/*
-              A VÁGÁS JELZÉSE MEGMARAD -- a lista nem lapoz (decision E10), és
-              kimondja, ha több sor van, mint amennyit a szerver egy körben ad
-              (`LIST_LIMIT` a repository-ban).
-            */}
+            {/* a régi, lapozatlan válasz vágott jelzése: a lapozott kérésnél nincs, de a szerver alakja még ismeri */}
             {data.truncated ? (
               <span>
                 Csak az első 200 hibajegy látszik ezen a fülön. Szűkítsd a
@@ -746,6 +956,15 @@ export function PilotServiceJobListPage() {
               </span>
             ) : null}
           </div>
+          {data.pagination && data.pagination.totalPages > 1 ? (
+            <Pagination
+              variant="directionF"
+              position="bottom"
+              page={data.pagination.page}
+              totalPages={data.pagination.totalPages}
+              onPageChange={goToPage}
+            />
+          ) : null}
         </PilotCard>
       ) : null}
     </PilotThemeRoot>

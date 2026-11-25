@@ -1,11 +1,15 @@
 import {
   SERVICE_JOB_FINISHED_STATUSES,
   serviceJobReporterName,
+  type ServiceJobListFacets,
+  type ServiceJobListSortField,
 } from "@acropora/types";
 import { Injectable } from "@nestjs/common";
 import type { NamedPerson } from "@acropora/types";
 
 import { NOT_HIDDEN } from "../common/hidden-rows.js";
+import { listOrderBy, type SortDirection } from "../common/list-sort.js";
+import { SERVICE_JOB_LIST_SORT } from "./service-job-list-sort.js";
 import { assignedUnitIdsFor } from "./assigned-units.query.js";
 import { assetsOutsideDepartment } from "../common/assets-in-department.js";
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
@@ -37,6 +41,20 @@ import { unitPathFor, unitPathsFor } from "../common/unit-path-lookup.js";
  * elobb-utobb elcsuszik, es a kulonbseg itt NEMA lenne.
  */
 const LIST_LIMIT = 200;
+
+/** A lapozott lista alap oldalmérete (a `page` megadásakor, ha a `pageSize` hiányzik). */
+export const LIST_PAGE_SIZE = 25;
+
+/** A lista lapozása, rendezése és új szűrői; a `page` megadása kapcsolja be a lapozást (lásd a repository `list`-jét). */
+export interface ServiceJobListOptions {
+  statuses?: ServiceJobStatus[];
+  customerId?: string;
+  departmentId?: string;
+  page?: number;
+  pageSize?: number;
+  sort?: ServiceJobListSortField;
+  direction?: SortDirection;
+}
 
 /**
  * A SZABAD SZAVAS KERESES FELTETELE.
@@ -1014,7 +1032,27 @@ export class ServiceJobsRepository {
      * és a karbantartási lap sosem zárul: kliensoldali szűrésnél épp a régi, beragadt "Folyamatban" lap esne ki elsőként (barracuda, #2710).
      */
     maintenanceState?: MaintenanceListState,
-  ): Promise<{ rows: ServiceJobRow[]; truncated: boolean }> {
+    /**
+     * A LAPOZAS, A RENDEZES ES A SZUROK (picasso, f0b70dbd). A `page` MEGADASA kapcsolja be a lapozast: nelkule a regi alak (a legujabb
+     * ketszaz sor es a `truncated`) marad valtozatlanul, mert a mobil es a regi lista azt varja.
+     */
+    options: ServiceJobListOptions = {},
+  ): Promise<{
+    rows: ServiceJobRow[];
+    truncated: boolean;
+    totalItems?: number;
+  }> {
+    const where = this.listWhere(
+      scope,
+      visibility,
+      search,
+      kind,
+      viewerUserId,
+      maintenanceState,
+      options,
+    );
+    const paged = options.page !== undefined;
+    const pageSize = options.pageSize ?? LIST_PAGE_SIZE;
     /**
      * A LATHATOSAGI SZURO `AND` AGBAN ALL, nem kulcskent. Ugyanaz az indok, mint
      * a partner-hatokornel: a felso szintu objektum implicit ES, es egy kesobbi
@@ -1026,24 +1064,6 @@ export class ServiceJobsRepository {
      * "ram kiosztva" SZUKIT a lathatoon belul, nem nyit meg semmit, amit a
      * nezo amugy nem lathatna.
      */
-    const where: Prisma.ServiceJobWhereInput = {
-      AND: [
-        visibility,
-        // Az `ALL` nem Prisma-érték: ilyenkor nincs fajta-szűkítés. Az üres
-        // ág szándékosan az `AND` tömbben marad, hogy a jogosultsági és scope
-        // feltételek szerkezete mindkét kérésnél azonos legyen.
-        kind === "ALL" ? {} : { kind },
-        serviceJobScopeWhere(scope, viewerUserId),
-        serviceJobSearchWhere(search),
-      ],
-    };
-    // the tab is one more `AND` part: EXISTS / NOT EXISTS subqueries in the same query, no id list (a9db2779)
-    if (maintenanceState && kind === "MAINTENANCE") {
-      (where.AND as Prisma.ServiceJobWhereInput[]).push(
-        maintenanceStateWhere(maintenanceState),
-      );
-    }
-
     /**
      * EGGYEL TOBBET KERUNK, MINT AMENNYIT ADUNK.
      *
@@ -1052,32 +1072,44 @@ export class ServiceJobsRepository {
      * megkulonbozteti a levagott listatol -- egy sima `length === LIMIT`
      * osszehasonlitas a ket esetet EGYFORMAN vagottnak mondana.
      */
-    const rows = await this.database.serviceJob.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      take: LIST_LIMIT + 1,
-      select: {
-        id: true,
-        jobNumber: true,
-        title: true,
-        kind: true,
-        status: true,
-        createdAt: true,
-        hiddenAt: true,
-        openedById: true,
-        reporterPersonName: true,
-        customer: { select: { displayName: true } },
-        // A HELYSZIN AZONOSITOJA A LISTARA IS. A nevet nem kerjuk el: a listan
-        // a TELJES ut all majd, azt pedig egy kotegelt lekerdezes epiti fel,
-        // nem ez a `select`.
-        departmentId: true,
-        // A DARABSZÁM A LISTÁN LÁTSZIK, mert a jegy értéke abból derül ki,
-        // hány munka áll mögötte. Egy külön lekérdezés soronként N+1 lenne.
-        _count: { select: { worksheets: true } },
-      },
-    });
+    const [rows, totalItems] = await Promise.all([
+      this.database.serviceJob.findMany({
+        where,
+        orderBy: listOrderBy(
+          SERVICE_JOB_LIST_SORT,
+          options.sort,
+          options.direction,
+        ),
+        ...(paged
+          ? { skip: ((options.page ?? 1) - 1) * pageSize, take: pageSize }
+          : { take: LIST_LIMIT + 1 }),
+        select: {
+          id: true,
+          jobNumber: true,
+          title: true,
+          kind: true,
+          status: true,
+          createdAt: true,
+          hiddenAt: true,
+          openedById: true,
+          reporterPersonName: true,
+          customer: { select: { displayName: true } },
+          // A HELYSZIN AZONOSITOJA A LISTARA IS. A nevet nem kerjuk el: a listan
+          // a TELJES ut all majd, azt pedig egy kotegelt lekerdezes epiti fel,
+          // nem ez a `select`.
+          departmentId: true,
+          // A DARABSZÁM A LISTÁN LÁTSZIK, mert a jegy értéke abból derül ki,
+          // hány munka áll mögötte. Egy külön lekérdezés soronként N+1 lenne.
+          _count: { select: { worksheets: true } },
+        },
+      }),
+      // a lapozott kérésnél a szűrt halmaz összes találata (az oldalszámhoz); a régi alaknál nincs rá szükség
+      paged
+        ? this.database.serviceJob.count({ where })
+        : Promise.resolve(undefined),
+    ]);
 
-    const lap = rows.slice(0, LIST_LIMIT);
+    const lap = paged ? rows : rows.slice(0, LIST_LIMIT);
     /**
      * A TELJES UTAK EGY KOTEGBEN. Ket lekerdezes, fuggetlenul attol, hany sor
      * jott: a `unitPathFor` soronkent ketto lenne, ami ezen a listan
@@ -1194,7 +1226,118 @@ export class ServiceJobsRepository {
           : {}),
         hiddenAt: row.hiddenAt,
       })),
-      truncated: rows.length > LIST_LIMIT,
+      // lapozva a lista nem "vágott": az oldalak adják a többit
+      truncated: paged ? false : rows.length > LIST_LIMIT,
+      ...(totalItems !== undefined ? { totalItems } : {}),
+    };
+  }
+
+  /**
+   * A LISTA FELTÉTELE EGY HELYEN, A LISTA ÉS A SZŰRŐ-LEHETŐSÉGEK KÖZÖSEN (barracuda, #2710 szelleme: ket lekerdezes, egy `where`): a
+   * lathatosag, a fajta, a hatokor, a kereses, a karbantartas fule, es az uj allapot-, partner- es helyszin-szuro. A szuro-lehetosegek
+   * (`listFacets`) ugyanezt kapjak a partner- es helyszin-szuro NELKUL.
+   */
+  private listWhere(
+    scope: ServiceJobListScope,
+    visibility: Prisma.ServiceJobWhereInput,
+    search: string | undefined,
+    kind: "REPAIR" | "MAINTENANCE" | "ALL",
+    viewerUserId: string,
+    maintenanceState: MaintenanceListState | undefined,
+    filters: Pick<
+      ServiceJobListOptions,
+      "statuses" | "customerId" | "departmentId"
+    >,
+  ): Prisma.ServiceJobWhereInput {
+    const where: Prisma.ServiceJobWhereInput = {
+      AND: [
+        visibility,
+        // Az `ALL` nem Prisma-érték: ilyenkor nincs fajta-szűkítés. Az üres
+        // ág szándékosan az `AND` tömbben marad, hogy a jogosultsági és scope
+        // feltételek szerkezete mindkét kérésnél azonos legyen.
+        kind === "ALL" ? {} : { kind },
+        serviceJobScopeWhere(scope, viewerUserId),
+        serviceJobSearchWhere(search),
+        ...(filters.statuses && filters.statuses.length > 0
+          ? [{ status: { in: filters.statuses } }]
+          : []),
+        ...(filters.customerId ? [{ customerId: filters.customerId }] : []),
+        ...(filters.departmentId
+          ? [{ departmentId: filters.departmentId }]
+          : []),
+      ],
+    };
+    // the tab is one more `AND` part: EXISTS / NOT EXISTS subqueries in the same query, no id list (a9db2779)
+    if (maintenanceState && kind === "MAINTENANCE") {
+      (where.AND as Prisma.ServiceJobWhereInput[]).push(
+        maintenanceStateWhere(maintenanceState),
+      );
+    }
+    return where;
+  }
+
+  /**
+   * A SZŰRŐ-LEHETŐSÉGEK: a szűrt halmaz (kereső, fül, hatókör) partnerei és helyszínei, a PARTNER- ÉS HELYSZÍN-SZŰRŐ NÉLKÜL. Két
+   * csoportosítás és két névkeresés, egy-egy kötegben: nem soronként. A helyszín felirata ugyanaz, mint a listán: a kódja és a levele.
+   */
+  async listFacets(
+    scope: ServiceJobListScope,
+    visibility: Prisma.ServiceJobWhereInput,
+    search: string | undefined,
+    kind: "REPAIR" | "MAINTENANCE" | "ALL",
+    viewerUserId: string,
+    maintenanceState: MaintenanceListState | undefined,
+    statuses: ServiceJobStatus[] | undefined,
+  ): Promise<ServiceJobListFacets> {
+    const where = this.listWhere(
+      scope,
+      visibility,
+      search,
+      kind,
+      viewerUserId,
+      maintenanceState,
+      { statuses },
+    );
+    const [byCustomer, byDepartment] = await Promise.all([
+      this.database.serviceJob.groupBy({
+        by: ["customerId"],
+        where: { AND: [where, { customerId: { not: null } }] },
+      }),
+      this.database.serviceJob.groupBy({ by: ["departmentId"], where }),
+    ]);
+    const customerIds = byCustomer
+      .map((row) => row.customerId)
+      .filter((id): id is string => id !== null);
+    const departmentIds = byDepartment.map((row) => row.departmentId);
+    const [customers, paths, departments] = await Promise.all([
+      customerIds.length
+        ? this.database.customer.findMany({
+            where: { id: { in: customerIds } },
+            select: { id: true, displayName: true },
+          })
+        : Promise.resolve([]),
+      unitPathsFor(this.database, departmentIds),
+      departmentIds.length
+        ? this.database.worksheetDepartment.findMany({
+            where: { id: { in: departmentIds } },
+            select: { id: true, code: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const codes = new Map(departments.map((unit) => [unit.id, unit.code]));
+    return {
+      partners: customers
+        .map((customer) => ({ id: customer.id, name: customer.displayName }))
+        .sort((a, b) => a.name.localeCompare(b.name, "hu")),
+      locations: departmentIds
+        .flatMap((id) => {
+          const path = paths.get(id);
+          if (!path?.length) return [];
+          const leaf = path[path.length - 1]!;
+          const code = codes.get(id);
+          return [{ id, label: code ? `${code} · ${leaf}` : leaf }];
+        })
+        .sort((a, b) => a.label.localeCompare(b.label, "hu")),
     };
   }
 

@@ -26,6 +26,7 @@ export {
 } from "./document-variant.js";
 export {
   ALL_SERVICE_JOB_STATUS_VALUES,
+  SERVICE_JOB_LIST_SORT_FIELDS,
   SERVICE_JOB_FINISHED_STATUSES,
   isFinishedServiceJob,
   PARTNER_STATUS_LABELS,
@@ -363,7 +364,9 @@ export type {
   ServiceJobHandoverMailSkipReason,
   ServiceJobKind,
   ServiceJobListItem,
+  ServiceJobListFacets,
   ServiceJobListResponse,
+  ServiceJobListSortField,
   ServiceJobStatusCounts,
   ServiceJobPartnerDetail,
   ServiceJobPartnerStatus,
