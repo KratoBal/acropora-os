@@ -53,6 +53,8 @@ interface Eset {
   lapok: Lap[];
   vart: CommonServiceStatus;
   ok: CommonServiceStatusReason | null;
+  /** Alapból hibajegy; a karbantartás a jelvény szabályát kapja (2c). */
+  kind?: "MAINTENANCE";
 }
 
 const ESETEK: Eset[] = [
@@ -145,6 +147,55 @@ const ESETEK: Eset[] = [
     vart: "CLOSED",
     ok: "CANCELLED",
   },
+  // a karbantartás: Lezárt, ha minden lap legutolsó verziója aláírt; különben Folyamatban, a tárolt állapottól függetlenül
+  {
+    nev: "karbantartás, lap nélkül",
+    kind: "MAINTENANCE",
+    status: "NEW",
+    lapok: [],
+    vart: "IN_PROGRESS",
+    ok: null,
+  },
+  {
+    nev: "karbantartás, aláírásra vár",
+    kind: "MAINTENANCE",
+    status: "IN_PROGRESS",
+    lapok: [{ versions: ["AWAITING_SIGNATURE"] }],
+    vart: "IN_PROGRESS",
+    ok: null,
+  },
+  {
+    nev: "karbantartás, aláírva, átadás nélkül",
+    kind: "MAINTENANCE",
+    status: "IN_PROGRESS",
+    lapok: [{ versions: ["SIGNED"] }],
+    vart: "CLOSED",
+    ok: null,
+  },
+  {
+    nev: "karbantartás, tárolt NEW, aláírt lappal",
+    kind: "MAINTENANCE",
+    status: "NEW",
+    lapok: [{ versions: ["SIGNED"], handedOver: true }],
+    vart: "CLOSED",
+    ok: null,
+  },
+  {
+    nev: "karbantartás, tárolt COMPLETED, piszkozat lappal",
+    kind: "MAINTENANCE",
+    status: "COMPLETED",
+    lapok: [{ versions: ["DRAFT"] }],
+    vart: "IN_PROGRESS",
+    ok: null,
+  },
+  {
+    nev: "karbantartás, a legutolsó verzió piszkozat",
+    kind: "MAINTENANCE",
+    status: "IN_PROGRESS",
+    lapok: [{ versions: ["SIGNED", "DRAFT"] }],
+    vart: "IN_PROGRESS",
+    ok: null,
+  },
 ];
 
 describe(
@@ -192,6 +243,7 @@ describe(
           data: {
             jobNumber: `${TEST_JOB_PREFIX}${suffix}-${sorszam}`,
             title: `${KERESES} ${eset.nev}`,
+            kind: eset.kind ?? "REPAIR",
             status: eset.status,
             customerId: customer.id,
             departmentId: unit.id,
@@ -230,7 +282,7 @@ describe(
 
     const lista = (commonStatuses?: CommonServiceStatus[]) =>
       service.list(
-        { scope: "all", search: KERESES, kind: "REPAIR", commonStatuses },
+        { scope: "all", search: KERESES, kind: "ALL", commonStatuses },
         belsos,
       );
 

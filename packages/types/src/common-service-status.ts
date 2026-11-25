@@ -1,4 +1,5 @@
 import type {
+  ServiceJobKind,
   ServiceJobPartnerStatus,
   ServiceJobStatusValue,
 } from "./service-job-management.js";
@@ -84,7 +85,9 @@ export interface CommonJobWorksheetFacts {
 export function commonJobStatus(
   status: ServiceJobStatusValue,
   worksheets: readonly CommonJobWorksheetFacts[],
+  kind: ServiceJobKind = "REPAIR",
 ): CommonServiceState {
+  if (kind === "MAINTENANCE") return commonMaintenanceStatus(worksheets);
   switch (status) {
     case "NEW":
       return { status: "NEW", reason: null };
@@ -107,6 +110,27 @@ export function commonJobStatus(
     case "CANCELLED":
       return { status: "CLOSED", reason: "CANCELLED" };
   }
+}
+
+/**
+ * A KARBANTARTÁSI LAP KÖZÖS ÁLLAPOTA (terv 3. pont): a karbantartás marad
+ * állapotgép nélkül, és a mai „Kész / Folyamatban" jelvény szabálya szól a
+ * közös szavakkal (`MAINTENANCE_DONE`, Balázs 2026-11-18): Lezárt, ha van
+ * munkalapja, és mindegyiknek a legutolsó verziója aláírt; minden más
+ * Folyamatban. A tárolt állapotot NEM nézi, ahogy a jelvény sem; Új, Vár
+ * valamire és Elkészült nincs. Az átadás itt nem feltétel, mert a jelvényé sem.
+ *
+ * MIÉRT KÜLÖN ÁG (stage-mérés, 2026-11-25, acrobot 61921): a hibajegy szabálya
+ * a karbantartásra 9 Elkészültet és 3 Újat adott ott, ahol a lap ma Kész vagy
+ * Folyamatban.
+ */
+function commonMaintenanceStatus(
+  worksheets: readonly CommonJobWorksheetFacts[],
+): CommonServiceState {
+  const signed =
+    worksheets.length > 0 &&
+    worksheets.every((sheet) => sheet.currentVersionStatus === "SIGNED");
+  return { status: signed ? "CLOSED" : "IN_PROGRESS", reason: null };
 }
 
 /**

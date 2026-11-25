@@ -59,7 +59,7 @@ async function szolgaltatasSzuroje(
     | "list"
     | "assignedUnitIds"
     | "countsByStatus"
-    | "countCommonDone"
+    | "commonCounts"
     | "commonWorksheetFacts"
   > = {
     assignedUnitIds: async () => EGYSEGEK,
@@ -67,7 +67,13 @@ async function szolgaltatasSzuroje(
       kapott = visibility;
       return { rows: [], truncated: false };
     },
-    countCommonDone: async () => 0,
+    commonCounts: async () => ({
+      NEW: 0,
+      IN_PROGRESS: 0,
+      WAITING: 0,
+      DONE: 0,
+      CLOSED: 0,
+    }),
     commonWorksheetFacts: async () => new Map(),
     countsByStatus: async () => ({
       NEW: 0,

@@ -26,8 +26,8 @@ import {
 } from "./service-job-list-scope.js";
 import { ALL_SERVICE_JOB_STATUSES } from "./service-job-status.js";
 import {
-  COMMON_DONE_WHERE,
   commonStatusesWhere,
+  commonStatusWhere,
 } from "./common-status-where.js";
 import {
   MAINTENANCE_DONE,
@@ -1468,24 +1468,37 @@ export class ServiceJobsRepository {
   }
 
   /**
-   * AZ ELKÉSZÜLT DARABSZÁMA a csempékhez és a fülekhez: ugyanaz a láthatóság, fajta és keresés, mint a `countsByStatus`-nál, és ugyanaz a
-   * feltétel, mint a fül szűrőjén (`COMMON_DONE_WHERE`). A másik négy közös szám a `countsByStatus`-ból jön (`commonCountsFrom`).
+   * A KÖZÖS ÖT ÁLLAPOT DARABSZÁMA a csempékhez és a fülekhez: ugyanaz a láthatóság, fajta és keresés, mint a `countsByStatus`-nál, és
+   * MINDEN állapot ugyanazzal a feltétellel, mint a fül szűrője (`commonStatusWhere`). Öt `count`, nem a tárolt számokból összeadva:
+   * a karbantartás szabálya a tárolt állapottól független (2c, stage-mérés 2026-11-25), tehát csak a szűrő maga adhat egyező számot.
    */
-  async countCommonDone(
+  async commonCounts(
     visibility: Prisma.ServiceJobWhereInput,
     search?: string,
     kind: "REPAIR" | "MAINTENANCE" | "ALL" = "REPAIR",
-  ): Promise<number> {
-    return this.database.serviceJob.count({
-      where: {
-        AND: [
-          visibility,
-          kind === "ALL" ? {} : { kind },
-          serviceJobSearchWhere(search),
-          COMMON_DONE_WHERE,
-        ],
-      },
-    });
+  ): Promise<Record<CommonServiceStatus, number>> {
+    const base: Prisma.ServiceJobWhereInput[] = [
+      visibility,
+      kind === "ALL" ? {} : { kind },
+      serviceJobSearchWhere(search),
+    ];
+    const statuses: CommonServiceStatus[] = [
+      "NEW",
+      "IN_PROGRESS",
+      "WAITING",
+      "DONE",
+      "CLOSED",
+    ];
+    const counts = await Promise.all(
+      statuses.map((status) =>
+        this.database.serviceJob.count({
+          where: { AND: [...base, commonStatusWhere(status)] },
+        }),
+      ),
+    );
+    return Object.fromEntries(
+      statuses.map((status, index) => [status, counts[index]!]),
+    ) as Record<CommonServiceStatus, number>;
   }
 
   /**

@@ -23,7 +23,7 @@ import {
 } from "./description-edit-boundary.js";
 import { mayAssignUnit } from "./visibility-assignment.js";
 import { serviceJobNoun } from "./service-job-noun.js";
-import { commonCountsFrom, commonFields } from "./common-status-where.js";
+import { commonFields, needsWorksheetFacts } from "./common-status-where.js";
 
 import {
   commonJobStatus,
@@ -1229,7 +1229,7 @@ export class ServiceJobsService {
     const [
       { rows, truncated, totalItems },
       counts,
-      commonDone,
+      commonCounts,
       maintenanceCounts,
     ] = await Promise.all([
       this.repository.list(
@@ -1251,7 +1251,7 @@ export class ServiceJobsService {
         },
       ),
       this.repository.countsByStatus(visibility, query.search, kind),
-      this.repository.countCommonDone(visibility, query.search, kind),
+      this.repository.commonCounts(visibility, query.search, kind),
       // the maintenance list's tabs count by the badge's rule, not by the ticket status (f4590db6)
       kind === "MAINTENANCE"
         ? this.repository.maintenanceStateCounts(visibility, query.search)
@@ -1262,9 +1262,9 @@ export class ServiceJobsService {
       elagazas, mint a reszletlapon, tehat a szallito is a szukebb iranyba esik.
     */
     const partner = partnerScopeOf(user).kind !== "internal";
-    // the common status (card 7f23785c): the sheets are read in one batch, and only for IN_PROGRESS rows (the only ones it derives)
+    // the common status (card 7f23785c): the sheets are read in one batch, only for the rows whose status depends on them
     const facts = await this.repository.commonWorksheetFacts(
-      rows.filter((row) => row.status === "IN_PROGRESS").map((row) => row.id),
+      rows.filter(needsWorksheetFacts).map((row) => row.id),
     );
     const items: ServiceJobListItem[] = rows.map((row) => ({
       id: row.id,
@@ -1272,7 +1272,9 @@ export class ServiceJobsService {
       title: row.title,
       kind: row.kind,
       status: row.status,
-      ...commonFields(commonJobStatus(row.status, facts.get(row.id) ?? [])),
+      ...commonFields(
+        commonJobStatus(row.status, facts.get(row.id) ?? [], row.kind),
+      ),
       partnerStatus: partnerVisibleStatus(row.status),
       partnerStatusLabel: partnerStatusLabel(row.status),
       customerName: row.customerName,
@@ -1296,7 +1298,7 @@ export class ServiceJobsService {
     }));
     return {
       counts,
-      commonCounts: commonCountsFrom(counts, commonDone),
+      commonCounts,
       ...(maintenanceCounts ? { maintenanceCounts } : {}),
       truncated,
       ...(paged && totalItems !== undefined
@@ -1413,11 +1415,12 @@ export class ServiceJobsService {
       ...commonFields(
         commonJobStatus(
           row.status,
-          row.status === "IN_PROGRESS"
+          needsWorksheetFacts(row)
             ? ((await this.repository.commonWorksheetFacts([row.id])).get(
                 row.id,
               ) ?? [])
             : [],
+          row.kind,
         ),
       ),
       partnerStatus: partnerVisibleStatus(row.status),

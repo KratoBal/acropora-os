@@ -1,9 +1,12 @@
 import type { Prisma, ServiceJobStatus } from "@acropora/database";
+
 import type {
   CommonServiceState,
   CommonServiceStatus,
   CommonServiceStatusReason,
 } from "@acropora/types";
+
+import { MAINTENANCE_DONE } from "./maintenance-done.js";
 
 /**
  * A KÖZÖS ÁLLAPOT SZŰRŐKÉNT (kártya 7f23785c, terv 8/c pont).
@@ -40,7 +43,8 @@ const WORKSHEETS_FINISHED: Prisma.ServiceJobWhereInput = {
 };
 
 /** Az Elkészült CSAK az IN_PROGRESS jegyre vezetődik le (terv 8/a-b). */
-export const COMMON_DONE_WHERE: Prisma.ServiceJobWhereInput = {
+/** A hibajegy Elkészültje CSAK az IN_PROGRESS jegyre vezetődik le (terv 8/a-b). */
+const REPAIR_DONE: Prisma.ServiceJobWhereInput = {
   AND: [{ status: "IN_PROGRESS" }, WORKSHEETS_FINISHED],
 };
 
@@ -48,9 +52,7 @@ const ONLY = (statuses: ServiceJobStatus[]): Prisma.ServiceJobWhereInput => ({
   status: { in: statuses },
 });
 
-export function commonStatusWhere(
-  status: CommonServiceStatus,
-): Prisma.ServiceJobWhereInput {
+function repairWhere(status: CommonServiceStatus): Prisma.ServiceJobWhereInput {
   switch (status) {
     case "NEW":
       return ONLY(["NEW"]);
@@ -64,10 +66,35 @@ export function commonStatusWhere(
     case "WAITING":
       return ONLY(["WAITING_FOR_PARTS", "WAITING_FOR_CUSTOMER"]);
     case "DONE":
-      return COMMON_DONE_WHERE;
+      return REPAIR_DONE;
     case "CLOSED":
       return ONLY(["COMPLETED", "CANCELLED"]);
   }
+}
+
+/**
+ * A KARBANTARTÁS (terv 3. pont, `commonJobStatus` MAINTENANCE ága): a jelvény szabálya, a tárolt állapottól függetlenül.
+ * Lezárt = `MAINTENANCE_DONE`, Folyamatban = a tagadása; a másik három közös állapot karbantartásra nem fordul elő.
+ */
+function maintenanceWhere(
+  status: CommonServiceStatus,
+): Prisma.ServiceJobWhereInput | null {
+  if (status === "CLOSED") return MAINTENANCE_DONE;
+  if (status === "IN_PROGRESS") return { NOT: MAINTENANCE_DONE };
+  return null;
+}
+
+/** Egy közös állapot szűrője, a két fajta saját szabályával. */
+export function commonStatusWhere(
+  status: CommonServiceStatus,
+): Prisma.ServiceJobWhereInput {
+  const maintenance = maintenanceWhere(status);
+  const branches: Prisma.ServiceJobWhereInput[] = [
+    { AND: [{ kind: "REPAIR" }, repairWhere(status)] },
+  ];
+  if (maintenance)
+    branches.push({ AND: [{ kind: "MAINTENANCE" }, maintenance] });
+  return { OR: branches };
 }
 
 /** A fül szűrője: a kért közös állapotok bármelyike. */
@@ -77,28 +104,21 @@ export function commonStatusesWhere(
   return { OR: statuses.map(commonStatusWhere) };
 }
 
-/**
- * Az öt darabszám a tárolt állapotok számából és az Elkészült számából. Az
- * Elkészült a Folyamatban (IN_PROGRESS) része, ezért abból vonódik le; a
- * Felmérve és az Ütemezve a Folyamatbanhoz adódik (terv 3. pont).
- */
-export function commonCountsFrom(
-  counts: Record<ServiceJobStatus, number>,
-  done: number,
-): Record<CommonServiceStatus, number> {
-  return {
-    NEW: counts.NEW,
-    IN_PROGRESS: counts.TRIAGED + counts.SCHEDULED + counts.IN_PROGRESS - done,
-    WAITING: counts.WAITING_FOR_PARTS + counts.WAITING_FOR_CUSTOMER,
-    DONE: done,
-    CLOSED: counts.COMPLETED + counts.CANCELLED,
-  };
-}
-
 /** A válasz két mezője egy levezetett állapotból (lista-elem és adatlap). */
 export function commonFields(state: CommonServiceState): {
   commonStatus: CommonServiceStatus;
   commonReason: CommonServiceStatusReason | null;
 } {
   return { commonStatus: state.status, commonReason: state.reason };
+}
+
+/**
+ * Kell-e a sornak a munkalap-tények olvasása: a hibajegyből csak az IN_PROGRESS-é (csak arra fut az Elkészült), a karbantartásé
+ * mindig (a szabálya csak a lapokból áll).
+ */
+export function needsWorksheetFacts(row: {
+  status: ServiceJobStatus;
+  kind: "REPAIR" | "MAINTENANCE";
+}): boolean {
+  return row.kind === "MAINTENANCE" || row.status === "IN_PROGRESS";
 }

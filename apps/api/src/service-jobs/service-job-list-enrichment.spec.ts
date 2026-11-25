@@ -17,7 +17,7 @@ describe("a hibajegy-lista delegáltak és helyszín-kód mezői", () => {
   it("a departmentCode változatlanul átmegy, az assignees a becenevet használja", async () => {
     const repository: Pick<
       ServiceJobsRepository,
-      "list" | "countsByStatus" | "countCommonDone" | "commonWorksheetFacts"
+      "list" | "countsByStatus" | "commonCounts" | "commonWorksheetFacts"
     > = {
       list: async () => ({
         rows: [
@@ -54,7 +54,13 @@ describe("a hibajegy-lista delegáltak és helyszín-kód mezői", () => {
         ],
         truncated: false,
       }),
-      countCommonDone: async () => 0,
+      commonCounts: async () => ({
+        NEW: 0,
+        IN_PROGRESS: 0,
+        WAITING: 0,
+        DONE: 0,
+        CLOSED: 0,
+      }),
       commonWorksheetFacts: async () => new Map(),
       countsByStatus: async () => ({
         NEW: 1,
@@ -94,7 +100,7 @@ describe("a hibajegy-lista delegáltak és helyszín-kód mezői", () => {
   it("helyszín és delegált nélkül departmentCode null, assignees üres tömb", async () => {
     const repository: Pick<
       ServiceJobsRepository,
-      "list" | "countsByStatus" | "countCommonDone" | "commonWorksheetFacts"
+      "list" | "countsByStatus" | "commonCounts" | "commonWorksheetFacts"
     > = {
       list: async () => ({
         rows: [
@@ -115,7 +121,13 @@ describe("a hibajegy-lista delegáltak és helyszín-kód mezői", () => {
         ],
         truncated: false,
       }),
-      countCommonDone: async () => 0,
+      commonCounts: async () => ({
+        NEW: 0,
+        IN_PROGRESS: 0,
+        WAITING: 0,
+        DONE: 0,
+        CLOSED: 0,
+      }),
       commonWorksheetFacts: async () => new Map(),
       countsByStatus: async () => ({
         NEW: 1,
@@ -180,7 +192,13 @@ describe("a hibajegy-lista partner alakja", () => {
   const service = () =>
     new ServiceJobsService({
       list: async () => ({ rows: [sor], truncated: false }),
-      countCommonDone: async () => 0,
+      commonCounts: async () => ({
+        NEW: 0,
+        IN_PROGRESS: 0,
+        WAITING: 0,
+        DONE: 0,
+        CLOSED: 0,
+      }),
       commonWorksheetFacts: async () => new Map(),
       countsByStatus: async () => counts,
       // a partner lathatosaga a kiosztott egysegeken all; itt nincs egyseg
@@ -258,7 +276,13 @@ describe("a karbantartás-lista sora", () => {
         rows: [sor("1", 1), sor("2", 2), sor("3", 0)],
         truncated: false,
       }),
-      countCommonDone: async () => 0,
+      commonCounts: async () => ({
+        NEW: 0,
+        IN_PROGRESS: 0,
+        WAITING: 0,
+        DONE: 0,
+        CLOSED: 0,
+      }),
       commonWorksheetFacts: async () => new Map(),
       countsByStatus: async () => counts,
       assignedUnitIds: async () => [],
@@ -283,7 +307,13 @@ describe("a karbantartás-lista sora", () => {
         ],
         truncated: false,
       }),
-      countCommonDone: async () => 0,
+      commonCounts: async () => ({
+        NEW: 0,
+        IN_PROGRESS: 0,
+        WAITING: 0,
+        DONE: 0,
+        CLOSED: 0,
+      }),
       commonWorksheetFacts: async () => new Map(),
       countsByStatus: async () => counts,
       assignedUnitIds: async () => [],

@@ -147,7 +147,7 @@ describe("a szolgáltatás a fület továbbadja, és a számlálót csak a karba
       ServiceJobsRepository,
       | "list"
       | "countsByStatus"
-      | "countCommonDone"
+      | "commonCounts"
       | "commonWorksheetFacts"
       | "maintenanceStateCounts"
     > = {
@@ -155,7 +155,13 @@ describe("a szolgáltatás a fület továbbadja, és a számlálót csak a karba
         kapott.push(state);
         return { rows: [], truncated: false };
       },
-      countCommonDone: async () => 0,
+      commonCounts: async () => ({
+        NEW: 0,
+        IN_PROGRESS: 0,
+        WAITING: 0,
+        DONE: 0,
+        CLOSED: 0,
+      }),
       commonWorksheetFacts: async () => new Map(),
       countsByStatus: async () => STATUSES,
       maintenanceStateCounts: async () => ({ progress: 3, done: 4 }),
