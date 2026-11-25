@@ -13,7 +13,8 @@ import {
   huBase,
 } from "../../partner-duplicates/partner-duplicate-groups.js";
 import {
-  isAdvanceProformaLines,
+  WEBSHOP_ADVANCE_TAG,
+  tagsWithAdvance,
   type OrderTaxKey,
 } from "./webshop-order-invoice.rules.js";
 import { shortageCountsOf } from "./webshop-orders.rules.js";
@@ -576,18 +577,37 @@ export class WebshopOrdersRepository {
   }
 
   /** A díjbekérő bruttó összege és devizája (a kézi rögzítés ezt írja be). */
-  /** Whether the order's recorded transfer paid an advance proforma (its lines, `isAdvanceProformaLines`). */
+  /** Whether the order's recorded transfer paid an advance proforma (the document's own mark, `WEBSHOP_ADVANCE_TAG`). */
   async receiptProformaIsAdvance(orderId: string): Promise<boolean> {
     const receipt = await prisma.webshopTransferReceipt.findUnique({
       where: { orderId },
       select: { proformaId: true },
     });
     if (!receipt) return false;
-    const lines = await prisma.invoiceLine.findMany({
-      where: { invoiceId: receipt.proformaId },
-      select: { description: true },
+    const proforma = await prisma.invoice.findUnique({
+      where: { id: receipt.proformaId },
+      select: { tags: true },
     });
-    return isAdvanceProformaLines(lines.map((line) => line.description));
+    return proforma?.tags.includes(WEBSHOP_ADVANCE_TAG) ?? false;
+  }
+
+  /**
+   * The proforma draft's advance mark (card 2c5fbfb5): set when the window was opened for an advance, cleared when for the whole
+   * order. Only on a draft: an issued proforma keeps what it was issued as.
+   */
+  async markProformaAdvance(
+    proformaId: string,
+    advance: boolean,
+  ): Promise<void> {
+    const row = await prisma.invoice.findUnique({
+      where: { id: proformaId },
+      select: { tags: true, status: true },
+    });
+    if (!row || row.status !== "DRAFT") return;
+    await prisma.invoice.update({
+      where: { id: proformaId },
+      data: { tags: tagsWithAdvance(row.tags, advance) },
+    });
   }
 
   async proformaAmount(

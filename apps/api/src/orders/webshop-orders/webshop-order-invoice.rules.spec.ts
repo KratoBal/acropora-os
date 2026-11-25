@@ -12,7 +12,8 @@ import type { MedusaOrderDetailRow } from "../../integrations/medusa/medusa-admi
 import {
   advanceProformaDraftOf,
   buyerMismatch,
-  isAdvanceProformaLines,
+  tagsWithAdvance,
+  WEBSHOP_ADVANCE_TAG,
   customerKeyOf,
   invoiceDraftOf,
   invoiceRefusal,
@@ -818,29 +819,20 @@ describe("the advance proforma", () => {
     );
   });
 
-  it("an advance proforma reads back from its lines: every line is an advance line; a full proforma or no line is not", () => {
-    const result = advanceProformaDraftOf(mixed(), {
-      customerId: "c",
-      now: NOW,
-      advance: { percent: "30" },
-    });
-    assert.ok(result.ok);
-    assert.equal(
-      isAdvanceProformaLines(result.draft.lines.map((l) => l.description)),
-      true,
-    );
-    const full = proformaDraftOf(order(), { customerId: "c", now: NOW });
-    assert.ok(full.ok);
-    assert.equal(
-      isAdvanceProformaLines(full.draft.lines.map((l) => l.description)),
-      false,
-    );
-    assert.equal(isAdvanceProformaLines([]), false);
-    // one advance line beside an ordinary one is no advance proforma
-    assert.equal(
-      isAdvanceProformaLines(["Előleg: webshop rendelés #38", "Szállítás"]),
-      false,
-    );
+  // card 2c5fbfb5: the mark is the document's own tag, set and cleared with the others kept
+  it("the advance mark is set and cleared on the document's tags, the other tags kept", () => {
+    assert.deepEqual(tagsWithAdvance([], true), [WEBSHOP_ADVANCE_TAG]);
+    assert.deepEqual(tagsWithAdvance(["mas"], true), [
+      "mas",
+      WEBSHOP_ADVANCE_TAG,
+    ]);
+    assert.deepEqual(tagsWithAdvance(["mas", WEBSHOP_ADVANCE_TAG], true), [
+      "mas",
+      WEBSHOP_ADVANCE_TAG,
+    ]);
+    assert.deepEqual(tagsWithAdvance(["mas", WEBSHOP_ADVANCE_TAG], false), [
+      "mas",
+    ]);
   });
 
   it("an amount in forints, on a one-rate order: one line, exactly that amount", () => {
