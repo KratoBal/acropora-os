@@ -32,7 +32,8 @@ import {
 
 type SupplierRow = SupplierListResponse["items"][number];
 
-export const SUPPLIER_TABLE_MIN_WIDTH = 950;
+export const SUPPLIER_TABLE_MIN_WIDTH = 870;
+export const SUPPLIER_TABLE_MIN_WIDTH_WITHOUT_CONTACT = 610;
 
 /*
   A PARTNERLISTA OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a tábla
@@ -101,31 +102,24 @@ export const SUPPLIER_COLUMNS: PilotTableColumn<SupplierRow>[] = [
     ),
   },
   {
+    // AZ ÜGYINTÉZŐ ÉS AZ ELÉRHETŐSÉG EGY OSZLOP (Picasso 3.6, acrobot 61991): két oszlop volt, és tíz sorból kilencben mindkettő "—". Egy cellában
+    // a név (rendezhető), alatta az e-mail és a telefon; ha az oldal egyetlen sorában sincs semmi, az oszlop el is tűnik (`supplierColumnsFor`).
     id: "contact",
     sortable: true,
-    header: "Ügyintéző",
-    width: "150px",
-    cell: (item) => (
-      <span className="text-pilot-grey-700">
-        {item.contactPersonName ?? (
-          <span className="text-pilot-grey-300">—</span>
-        )}
-      </span>
-    ),
-  },
-  {
-    id: "reach",
-    header: "Elérhetőség",
-    width: "190px",
+    header: "Kapcsolattartó",
+    width: "260px",
     cell: (item) => (
       <>
+        {item.contactPersonName ? (
+          <p className="text-pilot-grey-900">{item.contactPersonName}</p>
+        ) : null}
         {item.email ? (
           <p className="break-all text-xs text-pilot-grey-700">{item.email}</p>
         ) : null}
         {item.phone ? (
           <p className="text-xs text-pilot-grey-500">{item.phone}</p>
         ) : null}
-        {!item.email && !item.phone ? (
+        {!item.contactPersonName && !item.email && !item.phone ? (
           <span className="text-pilot-grey-300">—</span>
         ) : null}
       </>
@@ -142,6 +136,23 @@ export const SUPPLIER_COLUMNS: PilotTableColumn<SupplierRow>[] = [
     ),
   },
 ];
+
+/**
+ * A KAPCSOLATTARTÓ OSZLOP CSAK AKKOR ÁLL, HA VAN MIT MONDANIA (Picasso 3.6, acrobot 61991): ha az oldal egyetlen partnerének sincs ügyintézője,
+ * e-mailje és telefonja, az oszlop minden sorban "—" lenne, és helyet visz. Üres oldalon a teljes oszlopkészlet marad.
+ */
+export function supplierColumnsFor(
+  items: readonly SupplierRow[],
+): PilotTableColumn<SupplierRow>[] {
+  const noneHasContact =
+    items.length > 0 &&
+    items.every(
+      (item) => !item.contactPersonName && !item.email && !item.phone,
+    );
+  return noneHasContact
+    ? SUPPLIER_COLUMNS.filter((column) => column.id !== "contact")
+    : SUPPLIER_COLUMNS;
+}
 
 /**
  * A FIGMA MAKE TERV ÁTÜLTETÉSE -- LISTA KÉPERNYŐ.
@@ -221,7 +232,7 @@ export function PilotSupplierListPage() {
           setError(
             cause instanceof Error
               ? cause.message
-              : "A beszállítólista nem tölthető be.",
+              : "A partnerlista nem tölthető be.",
           );
       } finally {
         if (!signal?.aborted) setLoading(false);
@@ -274,13 +285,15 @@ export function PilotSupplierListPage() {
       </PilotThemeRoot>
     );
 
+  const tableColumns = supplierColumnsFor(data?.items ?? []);
+
   return (
     <PilotThemeRoot bleed>
       <div className="flex min-h-full flex-col">
         <PageHeader
           className={`${PAGE_GUTTER_X} pt-6`}
           title="Partnerek"
-          description="Beszállítói törzsadatok: elérhetőség, bankszámla és kapcsolattartó."
+          description="Beszállítók és szerviz partnerek törzsadatai: kód, kapcsolattartó és elérhetőség."
           actions={
             canManage ? (
               <Link href="/partnerek/uj">
@@ -295,32 +308,39 @@ export function PilotSupplierListPage() {
 
         <div className={`flex flex-1 flex-col gap-4 ${PAGE_GUTTER_X} py-6`}>
           <PilotCard>
-            <div className="flex flex-wrap items-center gap-3 p-5">
-              <PilotInput
-                aria-label="Beszállító keresése"
-                value={search}
-                onChange={setSearch}
-                placeholder="Név, kód, adószám, ügyintéző"
-              />
+            <div className="flex flex-wrap items-center gap-3 p-4">
+              {/* EGY SORBAN 1440 PX-EN (Picasso 3.6): a kereső legfeljebb 300 px, a két választó fix szélességű és nem zsugorodik; keskenyen tördel */}
+              <div className="min-w-52 flex-[1_1_208px] sm:max-w-[300px]">
+                <PilotInput
+                  aria-label="Partner keresése"
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="Név, kód, adószám, ügyintéző"
+                />
+              </div>
               <PilotSelect
+                chevron
                 aria-label="Státusz"
                 value={params.get("status") ?? "ACTIVE"}
                 onChange={(value) => filter("status", value)}
+                className="w-full shrink-0 sm:w-[150px]"
               >
                 <option value="ACTIVE">Aktív</option>
                 <option value="INACTIVE">Inaktív</option>
-                <option value="ALL">Mind</option>
+                <option value="ALL">Minden státusz</option>
               </PilotSelect>
               {/* "Mind" is the absence of the parameter rather than a third
                   value: a partner can be both kinds at once, so SUPPLIER and
                   SERVICE are not a partition and an "ALL" value would suggest
                   they are. */}
               <PilotSelect
+                chevron
                 aria-label="Partner típusa"
                 value={params.get("kind") ?? ""}
                 onChange={(value) => filter("kind", value)}
+                className="w-full shrink-0 sm:w-[170px]"
               >
-                <option value="">Mind</option>
+                <option value="">Minden típus</option>
                 <option value="SUPPLIER">Beszállító</option>
                 <option value="SERVICE">Szerviz</option>
               </PilotSelect>
@@ -355,13 +375,17 @@ export function PilotSupplierListPage() {
             data.items.length ? (
               <PilotCard className="overflow-x-auto">
                 <PilotDataTable
-                  columns={SUPPLIER_COLUMNS}
+                  columns={tableColumns}
                   sort={sort}
                   onSort={onSort}
                   rows={data.items}
                   rowKey={(item) => item.id}
                   rowTestId="supplier-row"
-                  minWidth={SUPPLIER_TABLE_MIN_WIDTH}
+                  minWidth={
+                    tableColumns.length === SUPPLIER_COLUMNS.length
+                      ? SUPPLIER_TABLE_MIN_WIDTH
+                      : SUPPLIER_TABLE_MIN_WIDTH_WITHOUT_CONTACT
+                  }
                   onRowActivate={(item) => router.push(`/partnerek/${item.id}`)}
                   rowLabel={(item) => `${item.name} megnyitása`}
                 />
@@ -400,9 +424,9 @@ export function PilotSupplierListPage() {
                 title={
                   data.pagination.totalItems
                     ? "Nincs találat"
-                    : "Nincsenek beszállítók"
+                    : "Nincsenek partnerek"
                 }
-                description="Módosítsd a szűrőket vagy rögzíts új beszállítót."
+                description="Módosítsd a szűrőket vagy rögzíts új partnert."
                 action={
                   data.pagination.totalItems ? (
                     <PilotButton

@@ -14,6 +14,8 @@ import {
   PilotSupplierListPage,
   SUPPLIER_COLUMNS,
   SUPPLIER_TABLE_MIN_WIDTH,
+  SUPPLIER_TABLE_MIN_WIDTH_WITHOUT_CONTACT,
+  supplierColumnsFor,
   supplierListQuery,
 } from "./pilot-supplier-list-page";
 
@@ -81,6 +83,9 @@ function response(page: number): SupplierListResponse {
         isService: false,
         country: "HU",
         isActive: true,
+        contactPersonName: "Kovács Anna",
+        email: "anna@aqua.example",
+        phone: "+36 30 000 0000",
         createdAt: "2026-08-19T10:00:00.000Z",
         updatedAt: "2026-08-19T10:00:00.000Z",
       },
@@ -131,7 +136,7 @@ describe("PilotSupplierListPage paging", () => {
       [...row.querySelectorAll("td")].map((td) =>
         td.getAttribute("data-label"),
       ),
-    ).toEqual(["Kód", "Név", "Ország", "Ügyintéző", "Elérhetőség", "Státusz"]);
+    ).toEqual(["Kód", "Név", "Ország", "Kapcsolattartó", "Státusz"]);
     expect(row.getAttribute("aria-label")).toContain("megnyitása");
   });
 
@@ -271,7 +276,7 @@ describe("PilotSupplierListPage sorting", () => {
   it("a header writes its own server field, ascending first, drops the page and keeps the filter", async () => {
     render(<PilotSupplierListPage />);
     await screen.findAllByTestId("supplier-row");
-    fireEvent.click(screen.getByRole("button", { name: /Ügyintéző/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Kapcsolattartó/ }));
     const url = lastReplace();
     expect(url.get("sort")).toBe("contactPersonName");
     expect(url.get("direction")).toBe("asc");
@@ -336,13 +341,128 @@ describe("PilotSupplierListPage sorting", () => {
     ).toEqual({ kind: "SERVICE", page: "1", pageSize: "25" });
   });
 
-  it("the contact reach and the state have no sort button", async () => {
+  it("only the state has no sort button (the contact column sorts by the contact person)", async () => {
     render(<PilotSupplierListPage />);
     const table = await screen.findByRole("table");
     const sortable = within(table)
       .getAllByRole("columnheader")
       .filter((header) => within(header).queryByRole("button"))
       .map((header) => header.textContent?.replace(/[⇅↑↓]/g, ""));
-    expect(sortable).toEqual(["Kód", "Név", "Ország", "Ügyintéző"]);
+    expect(sortable).toEqual(["Kód", "Név", "Ország", "Kapcsolattartó"]);
+  });
+});
+
+/*
+  A PARTNERLISTA (Picasso 3.6, acrobot 61991): az Ügyintéző és az Elérhetőség tíz sorból kilencben üres volt, ezért egy "Kapcsolattartó" oszlop lett belőlük
+  (a név, alatta az e-mail és a telefon), ami el is tűnik, ha az oldal egyetlen sorában sincs semmi; a szűrők egy sorban állnak; a leírás a tartalomról szól.
+  MI PIROSÍT: ha az üres oszlop újra áll; ha egy kapcsolati adat nélküli sor miatt eltűnik egy másiké; ha a leírás újra csak beszállítóról szól;
+  ha a szűrők újra nyúlnak vagy külön sorba törnek.
+*/
+describe("PilotSupplierListPage: kapcsolattartó, szűrősor, leírás", () => {
+  const row = (over: Record<string, unknown> = {}) =>
+    ({
+      ...response(1).items[0]!,
+      ...over,
+    }) as SupplierListResponse["items"][number];
+
+  beforeEach(() => {
+    auth.session = session;
+    navigation.params = new URLSearchParams("");
+    navigation.replace.mockReset();
+    api.list.mockReset().mockResolvedValue(response(1));
+  });
+
+  it("the contact column is one cell: the person, the e-mail and the phone", async () => {
+    render(<PilotSupplierListPage />);
+    const cell = (await screen.findByText("Kovács Anna")).closest("td")!;
+    expect(cell.textContent).toContain("anna@aqua.example");
+    expect(cell.textContent).toContain("+36 30 000 0000");
+    expect(
+      screen.queryByRole("columnheader", { name: /Elérhetőség/ }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("columnheader", { name: /Ügyintéző/ }),
+    ).toBeNull();
+  });
+
+  it("the column is hidden when no partner on the page has any contact data, and the table minimum shrinks with it", async () => {
+    const bare = row({ contactPersonName: null, email: null, phone: null });
+    expect(supplierColumnsFor([bare, bare]).map((c) => c.id)).not.toContain(
+      "contact",
+    );
+    expect(supplierColumnsFor([bare, bare])).toHaveLength(
+      SUPPLIER_COLUMNS.length - 1,
+    );
+    expect(SUPPLIER_TABLE_MIN_WIDTH_WITHOUT_CONTACT).toBeLessThan(
+      SUPPLIER_TABLE_MIN_WIDTH,
+    );
+
+    api.list.mockResolvedValue({ ...response(1), items: [bare] });
+    render(<PilotSupplierListPage />);
+    await screen.findByText("Aqua Kereskedés Kft.");
+    expect(
+      screen.queryByRole("columnheader", { name: /Kapcsolattartó/ }),
+    ).toBeNull();
+  });
+
+  it("one partner with a phone alone keeps the column for the whole page, and an empty page keeps all columns", () => {
+    const bare = row({ contactPersonName: null, email: null, phone: null });
+    const phoneOnly = row({
+      id: "s2",
+      contactPersonName: null,
+      email: null,
+      phone: "+36 1 000 0000",
+    });
+    expect(supplierColumnsFor([bare, phoneOnly]).map((c) => c.id)).toContain(
+      "contact",
+    );
+    expect(supplierColumnsFor([])).toBe(SUPPLIER_COLUMNS);
+  });
+
+  it("a partner without contact data shows a pale dash in the column the others fill", async () => {
+    api.list.mockResolvedValue({
+      ...response(1),
+      items: [
+        row(),
+        row({
+          id: "s2",
+          name: "Üres Kft.",
+          contactPersonName: null,
+          email: null,
+          phone: null,
+        }),
+      ],
+    });
+    render(<PilotSupplierListPage />);
+    const cell = (await screen.findByText("Üres Kft."))
+      .closest("tr")!
+      .querySelectorAll("td")[3]!;
+    expect(cell.textContent).toBe("—");
+  });
+
+  it("the description speaks about suppliers AND service partners, not only suppliers", async () => {
+    render(<PilotSupplierListPage />);
+    await screen.findByText("Aqua Kereskedés Kft.");
+    expect(
+      screen.getByText(/Beszállítók és szerviz partnerek/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Beszállítói törzsadatok/)).toBeNull();
+    expect(screen.getByLabelText("Partner keresése")).toBeInTheDocument();
+  });
+
+  it("the filter bar: the search is capped, the two selects have a fixed width that does not shrink, and the type filter says what it filters", async () => {
+    render(<PilotSupplierListPage />);
+    await screen.findByText("Aqua Kereskedés Kft.");
+    const search = screen
+      .getByLabelText("Partner keresése")
+      .closest("div[class*='sm:max-w']");
+    expect(search).not.toBeNull();
+    for (const label of ["Státusz", "Partner típusa"]) {
+      const wrapper = screen.getByLabelText(label).parentElement!;
+      expect(wrapper.className).toContain("shrink-0");
+      expect(wrapper.className).toMatch(/sm:w-\[\d+px\]/);
+    }
+    const kind = screen.getByLabelText("Partner típusa") as HTMLSelectElement;
+    expect(kind.options[0]!.textContent).toBe("Minden típus");
   });
 });

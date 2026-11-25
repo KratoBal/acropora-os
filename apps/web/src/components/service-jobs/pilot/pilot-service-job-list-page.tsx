@@ -37,6 +37,12 @@ import { useUrlSort } from "@/lib/navigation/use-url-sort";
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
 import { serviceJobStatusLabel } from "../service-job-labels";
 import {
+  commonLabel,
+  commonPilotVariant,
+  commonReasonText,
+  commonStateOf,
+} from "../common-status-view";
+import {
   PilotBadge,
   PilotButton,
   PilotCard,
@@ -50,7 +56,6 @@ import {
   pilotTabDef,
   PILOT_TAB_NOUN,
   PILOT_TABS,
-  STATUS_BADGE_VARIANT,
   type PilotTab,
 } from "./pilot-service-job-list-view";
 
@@ -86,9 +91,9 @@ import {
  *
  * Eddig a lista a legújabb 200 sort kapta, és a fülek, a partner és a helyszín a betöltött soron szűrtek, tehát a fül száma és a
  * látható sorok eltérhettek. Mostantól MINDEN a szerveren megy: egy oldal 25 sor (`page`, `pageSize`), a fül az állapot-szűrő
- * (`statuses`), a partner és a helyszín az azonosítójukkal (`customerId`, `departmentId`), a rendezés a kód és a Létrehozva (`sort`,
- * `direction`). A legördülők opciói a szűrt halmaz partnerei és helyszínei (`/service/jobs/facets`), a saját szűrőjük nélkül.
- * A fül -> állapotok megfeleltetés EGY helyen áll (`PILOT_TABS` a view fájlban): ha a közös állapot-lista (D1) megváltozik, ott cserélődik.
+ * (`commonStatuses`, a közös öt állapotból), a partner és a helyszín az azonosítójukkal (`customerId`, `departmentId`), a rendezés a kód
+ * és a Létrehozva (`sort`, `direction`). A legördülők opciói a szűrt halmaz partnerei és helyszínei (`/service/jobs/facets`), a saját
+ * szűrőjük nélkül. A fül -> állapotok megfeleltetés EGY helyen áll (`PILOT_TABS` a view fájlban).
  *
  * === AZ "ÖSSZES" FÜL MEGMARADT, A FIGMA NEM MUTATJA ===
  *
@@ -97,14 +102,12 @@ import {
  * megmarad -- a ház szabálya szerint amit a Figma nem mutat, de ma megvan,
  * az nem tűnik el csendben.
  *
- * === AZ ÁLLAPOT-JELVÉNY SZÍNE HÁROM TÓNUSRA EGYSZERŰSÖDIK ===
+ * === AZ ÁLLAPOT A KÖZÖS ÖT SZÓVAL (kártya 7f23785c, 3. szelet) ===
  *
- * A valódi rendszer NYOLC belső állapotot ismer (lásd `serviceJobStatusLabel`),
- * a Figma-terv viszont csak négy szín köré épült, és abból is csak három
- * token áll rendelkezésre ebben a repóban (`pilot-aqua`, `pilot-amber`,
- * `pilot-grey` -- lásd `figma-theme.css` fejlécét: "Use ONLY those
- * tokens"). A CÍMKE SZÖVEGE ezért a nyolc valódi név marad (nem vész el
- * részlet), csak a SZÍN egyszerűsödik három csoportra.
+ * A jelvény a szerver `commonStatus`-a (Új, Folyamatban, Vár valamire,
+ * Elkészült, Lezárt), alatta kis betűvel az ok (`commonReason`: „alkatrészre",
+ * „aláírásra vár", „meghiúsult"; picasso 1. pont). A tárolt nyolc állapotból
+ * a lap semmit nem vezet le: lásd `common-status-view.ts`.
  */
 
 const ALL_LOCATIONS = "Mind";
@@ -272,13 +275,27 @@ export const JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
     id: "status",
     header: "Állapot",
     width: "190px",
-    cell: (item) => (
-      <>
-        <PilotBadge variant={STATUS_BADGE_VARIANT[item.status]}>
-          {serviceJobStatusLabel[item.status]}
-        </PilotBadge>
-      </>
-    ),
+    cell: (item) => {
+      const state = commonStateOf(item);
+      // a szerver 2026-11-25 óta mindig küldi; a hiánya régi válasz, ott a tárolt állapot neve áll, szín nélkül
+      if (!state)
+        return (
+          <PilotBadge variant="grey">
+            {serviceJobStatusLabel[item.status]}
+          </PilotBadge>
+        );
+      const reason = commonReasonText(state);
+      return (
+        <>
+          <PilotBadge variant={commonPilotVariant(state)}>
+            {commonLabel(state)}
+          </PilotBadge>
+          {reason ? (
+            <p className="mt-1 text-xs text-pilot-grey-600">{reason}</p>
+          ) : null}
+        </>
+      );
+    },
   },
   {
     id: "worksheets",
@@ -476,7 +493,7 @@ export function PilotServiceJobListPage() {
     session && hasPermission(session.user, PERMISSIONS.SERVICE_HIDE),
   );
   const token = session?.token ?? "";
-  const { scope, statuses: tabStatuses } = pilotTabDef(tab);
+  const { scope, commonStatuses: tabStatuses } = pilotTabDef(tab);
   const { sort, onSort, apiSort } = useUrlSort(JOB_SORT_COLUMNS);
   /*
     AZ OLDALSZÁM AZ URL-BŐL JÖN, DE EGY SZŰRŐVÁLTÁS AZ ELSŐ OLDALRA VISZ. A szűrő (fül, keresés, partner, helyszín, nap) helyi állapot,
@@ -526,7 +543,7 @@ export function PilotServiceJobListPage() {
               pageSize: JOB_PAGE_SIZE,
               sort: apiSort?.sort as ServiceJobListSortField | undefined,
               direction: apiSort?.direction,
-              statuses: tabStatuses,
+              commonStatuses: tabStatuses,
               customerId: partner === ALL_PARTNERS ? undefined : partner,
               departmentId: location === ALL_LOCATIONS ? undefined : location,
             },
@@ -612,6 +629,7 @@ export function PilotServiceJobListPage() {
         appliedSearch,
         includeHidden,
         { from: createdFrom, to: createdTo },
+        undefined,
         tabStatuses ?? undefined,
       )
       .then(setFacets)
@@ -687,7 +705,8 @@ export function PilotServiceJobListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageGone, lastPage]);
 
-  const counts = data ? pilotTabCounts(data.counts) : null;
+  // a fül és a csempe száma a közös számlálóból; ha a válasz nem hozza (régi szerver), nincs szám, nem kitalált
+  const counts = data?.commonCounts ? pilotTabCounts(data.commonCounts) : null;
   const hasActiveFilters =
     partner !== ALL_PARTNERS || location !== ALL_LOCATIONS;
   /*
@@ -787,7 +806,10 @@ export function PilotServiceJobListPage() {
         aria-label="Összesítés"
         className="grid grid-cols-3 gap-2 sm:gap-4 lg:max-w-[780px]"
       >
-        {(data ? pilotStatTiles(data.counts) : []).map((tile) => (
+        {(data?.commonCounts
+          ? pilotStatTiles(data.counts, data.commonCounts)
+          : []
+        ).map((tile) => (
           <PilotCard key={tile.key} className="px-3 py-3 sm:px-4 sm:py-4">
             <p className="text-xs text-pilot-grey-600 sm:text-sm">
               {tile.label}
@@ -829,7 +851,7 @@ export function PilotServiceJobListPage() {
             }`}
           >
             {entry.label}
-            {/* A FÜL SZÁMA UGYANABBÓL A `counts`-BÓL, mint a csempék (egy függvény, két megjelenítés: pilotTabCounts) */}
+            {/* A FÜL SZÁMA UGYANABBÓL A `commonCounts`-BÓL, mint a csempék (egy függvény, két megjelenítés: pilotTabCounts) */}
             {counts ? (
               <span
                 className={`ml-1.5 tabular-nums ${tab === entry.id ? "" : "text-pilot-grey-400"}`}

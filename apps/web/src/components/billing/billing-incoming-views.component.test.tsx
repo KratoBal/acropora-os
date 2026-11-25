@@ -476,26 +476,46 @@ describe("the incoming list", () => {
     expect(urlNavigation.search).toBe("nezet=bejovo");
   });
 
-  // A SZŰRŐSOR RÁCSA, ugyanaz, mint a kimenő listán (Balázs, 2026-11-04): MI PIROSÍT: ha a bejövő szűrősor ismét nyújtó
-  // (flex-grow) alakú, vagy egy szűrő saját nyújtó méretet kap; ha a fizetés szűrője nem „mind”-del kezdődik.
-  it("the filter row is the same fixed-column fill grid as on the outgoing list, and the payment filter starts at 'all'", async () => {
+  // A SZŰRŐSOR, ugyanaz a váz, mint a kimenő listán (Balázs, 2026-11-04; Picasso 3.12): MI PIROSÍT: ha a bejövő szűrősor ismét nyújtó alakú, vagy
+  // egy ritka szűrő visszakerül a sorba; ha a fizetés szűrője nem „mind”-del kezdődik.
+  it("the filter bar is the same shared bar as on the outgoing list: three frequent filters in the row, four behind További szűrők, and the payment filter starts at 'all'", async () => {
     urlNavigation.reset("/penzugy/szamlazas", "nezet=bejovo");
     render(<BillingDocumentListPage />);
     const search = await screen.findByLabelText("Szállító keresése");
-    const grid = search.closest("div[class*='grid']") as HTMLElement;
-    expect(grid.className).toContain("grid-cols-1");
-    expect(grid.className).toContain(
-      "sm:grid-cols-[repeat(auto-fill,minmax(190px,1fr))]",
+    const bar = search.closest("section[aria-label='Szűrők']") as HTMLElement;
+    expect(bar).not.toBeNull();
+    for (const name of ["Időszak", "Fizetés", "Banki párosítás"])
+      expect(within(bar).getByRole("combobox", { name })).toBeInTheDocument();
+    for (const name of ["Dátum alapja", "Típus", "Pénznem", "Ellenőrzés"])
+      expect(within(bar).queryByRole("combobox", { name })).toBeNull();
+    fireEvent.click(
+      within(bar).getByRole("button", { name: /További szűrők/ }),
     );
-    expect(grid.className).not.toMatch(/flex|auto-fit/);
-    for (const child of grid.children)
-      expect((child as HTMLElement).className).not.toMatch(
-        /flex-\[|min-w-\[|flex-grow|\bgrow\b/,
-      );
+    for (const name of ["Dátum alapja", "Típus", "Pénznem", "Ellenőrzés"])
+      expect(within(bar).getByRole("combobox", { name })).toBeInTheDocument();
+    for (const select of bar.querySelectorAll("select")) {
+      const cls = (select.parentElement as HTMLElement).className;
+      expect(cls).toContain("sm:w-[180px]");
+      expect(cls).toContain("shrink-0");
+    }
     const payment = screen.getByRole("combobox", {
       name: "Fizetés",
     }) as HTMLSelectElement;
     expect(payment.options[0]!.textContent).toBe("Fizetés: mind");
+  });
+
+  it("one pager, at the bottom, on the incoming list too", async () => {
+    urlNavigation.reset("/penzugy/szamlazas", "nezet=bejovo");
+    render(<BillingDocumentListPage />);
+    await screen.findByLabelText("Szállító keresése");
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("navigation", { name: "Lapozás, felül" }),
+      ).toBeNull(),
+    );
+    expect(
+      await screen.findByRole("navigation", { name: "Lapozás, alul" }),
+    ).toBeInTheDocument();
   });
 });
 

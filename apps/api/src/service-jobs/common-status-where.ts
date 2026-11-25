@@ -1,9 +1,13 @@
 import type { Prisma, ServiceJobStatus } from "@acropora/database";
 
-import type {
-  CommonServiceState,
-  CommonServiceStatus,
-  CommonServiceStatusReason,
+import {
+  PARTNER_STATUS_LABELS,
+  partnerStatusFromCommon,
+  type CommonServiceState,
+  type CommonServiceStatus,
+  type CommonServiceStatusReason,
+  type PartnerClosedReason,
+  type ServiceJobPartnerStatus,
 } from "@acropora/types";
 
 import { MAINTENANCE_DONE } from "./maintenance-done.js";
@@ -110,6 +114,29 @@ export function commonFields(state: CommonServiceState): {
   commonReason: CommonServiceStatusReason | null;
 } {
   return { commonStatus: state.status, commonReason: state.reason };
+}
+
+/**
+ * A PARTNER RÖVIDEBB LISTÁJA UGYANABBÓL A LEVEZETETT ÁLLAPOTBÓL (kártya 7f23785c, 4. szelet; terv 3. és 10. pont): a négy partner-szó
+ * (`PARTNER_STATUS_LABELS`) és a lezárt jegy kimenetele. A lista és az adatlap ezt a `commonFields` mellé teszi, tehát a partner
+ * Elkészültje és a belső Elkészült ugyanabból a tényből jön.
+ */
+export function partnerFields(state: CommonServiceState): {
+  partnerStatus: ServiceJobPartnerStatus;
+  partnerStatusLabel: string;
+  partnerClosedReason: PartnerClosedReason | null;
+} {
+  const partner = partnerStatusFromCommon(state);
+  return {
+    partnerStatus: partner.status,
+    partnerStatusLabel: PARTNER_STATUS_LABELS[partner.status],
+    partnerClosedReason: partner.closedReason,
+  };
+}
+
+/** A válasz közös és partner-mezői egy levezetett állapotból (lista-elem és adatlap). */
+export function statusFields(state: CommonServiceState) {
+  return { ...commonFields(state), ...partnerFields(state) };
 }
 
 /**

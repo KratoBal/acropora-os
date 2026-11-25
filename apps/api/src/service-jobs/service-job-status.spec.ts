@@ -42,9 +42,15 @@ describe("mit lát a partner a hibajegy állapotából", () => {
     }
   });
 
-  it("az új jegy új, az elkészült elkészült", () => {
+  /*
+    A LEZÁRT JEGY A PARTNERNEK LEZÁRVA (kártya 7f23785c, 4. szelet): a közös listában az Elkészült a kész, de még aláírásra vagy
+    átadásra váró munka, és azt csak a munkalapok tényeiből lehet tudni. Ez a leképezés tények nélkül fut (napló, kimutatás), tehát a
+    tárolt COMPLETED itt Lezárva, ahogy a közösből tények nélkül.
+  */
+  it("az új jegy új, a lezárt (COMPLETED) jegy lezárva", () => {
     assert.equal(partnerVisibleStatus("NEW"), "NEW");
-    assert.equal(partnerVisibleStatus("COMPLETED"), "COMPLETED");
+    assert.equal(partnerVisibleStatus("COMPLETED"), "CLOSED");
+    assert.equal(partnerStatusLabel("COMPLETED"), "Lezárva");
   });
 
   /**

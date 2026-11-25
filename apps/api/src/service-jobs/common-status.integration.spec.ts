@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
 import { prisma, type WorksheetVersionStatus } from "@acropora/database";
-import type {
-  AuthenticatedUser,
-  CommonServiceStatus,
-  CommonServiceStatusReason,
+import {
+  partnerStatusFromCommon,
+  type AuthenticatedUser,
+  type CommonServiceStatus,
+  type CommonServiceStatusReason,
 } from "@acropora/types";
 
 import { AuthUserResolver } from "../auth/auth-user-resolver.js";
@@ -343,6 +344,38 @@ describe(
             (reszlet as { commonReason?: unknown }).commonReason,
           ],
           [eset.vart, eset.ok],
+          eset.nev,
+        );
+      }
+    });
+
+    /*
+      A PARTNER RÖVIDEBB LISTÁJA UGYANABBÓL AZ ÁLLAPOTBÓL (4. szelet, terv 3. és 10. pont): a sor és az adatlap partner-mezői a várt
+      közös állapot rövidítései. A „kész lapú IN_PROGRESS" eset itt Elkészült, a COMPLETED Lezárva, a CANCELLED Lezárva + CANCELLED
+      kimenetel; ha a szerver a tárolt állapotból képezne (a 3. szeletig így volt), a kész lapú jegyek Feldolgozás alatt maradnának.
+    */
+    it("a partner négy szava a sor és az adatlap közös állapotából jön", async () => {
+      const sorok = new Map(
+        (await lista()).items.map((item) => [item.id, item]),
+      );
+      for (const [id, eset] of jegyek) {
+        const vart = partnerStatusFromCommon({
+          status: eset.vart,
+          reason: eset.ok,
+        });
+        const sor = sorok.get(id)!;
+        const reszlet = (await service.detail(id, belsos)) as {
+          partnerStatus?: unknown;
+          partnerClosedReason?: unknown;
+        };
+        assert.deepEqual(
+          [
+            sor.partnerStatus,
+            sor.partnerClosedReason,
+            reszlet.partnerStatus,
+            reszlet.partnerClosedReason,
+          ],
+          [vart.status, vart.closedReason, vart.status, vart.closedReason],
           eset.nev,
         );
       }

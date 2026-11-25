@@ -283,7 +283,12 @@ describe("ServiceJobListPage", () => {
     ha a sor a hibajegy állapotát (Alkatrészre vár) vagy a partner-állapotot mutatja; ha a Kész/Folyamatban felcserélődik; ha a hibajegy-állapot szerinti csempék a karbantartási listán megjelennek (a fülek külön, későbbi
     kör: a szűrő a szerveren a hibajegy-állapoton áll).
   */
-  it("az állapot a munkalapok aláírásából jön (Kész / Folyamatban), nincs hibajegy-állapot és csempe", async () => {
+  /*
+    A KÖZÖS SZAVAK (kártya 7f23785c, picasso 9. pont): Lezárt, mellette „minden munkalap aláírva", különben Folyamatban. Az első sor a
+    szerver `commonStatus`-át viszi, és SZÁNDÉKOSAN ellentmond a régi `maintenanceDone`-nak: ha a cella a régi mezőt olvasná,
+    Folyamatbant írna. A második és a harmadik sor régi válasz (nincs `commonStatus`): ott a `maintenanceDone` dönt, ugyanazzal a szóval.
+  */
+  it("az állapot a szerver közös állapota (Lezárt / Folyamatban), nincs hibajegy-állapot és csempe", async () => {
     const base = response().items[0]!;
     api.list.mockResolvedValue(
       response({
@@ -293,7 +298,9 @@ describe("ServiceJobListPage", () => {
             id: "job-1",
             title: "Aláírt karbantartás",
             kind: "MAINTENANCE",
-            maintenanceDone: true,
+            maintenanceDone: false,
+            commonStatus: "CLOSED",
+            commonReason: null,
           },
           {
             ...base,
@@ -301,6 +308,13 @@ describe("ServiceJobListPage", () => {
             title: "Folyamatban lévő karbantartás",
             kind: "MAINTENANCE",
             maintenanceDone: false,
+          },
+          {
+            ...base,
+            id: "job-3",
+            title: "Régi válasz, aláírt",
+            kind: "MAINTENANCE",
+            maintenanceDone: true,
           },
         ],
       }),
@@ -312,8 +326,9 @@ describe("ServiceJobListPage", () => {
     const rows = screen.getAllByTestId("maintenance-job-row");
     const statusOf = (row: HTMLElement) =>
       row.querySelector("td[data-label='Állapot']")?.textContent;
-    expect(statusOf(rows[0]!)).toBe("Kész");
+    expect(statusOf(rows[0]!)).toBe("Lezártminden munkalap aláírva");
     expect(statusOf(rows[1]!)).toBe("Folyamatban");
+    expect(statusOf(rows[2]!)).toBe("Lezártminden munkalap aláírva");
     expect(screen.queryByText(/A partner ezt látja/)).toBeNull();
     expect(screen.queryByText("Alkatrészre vár")).toBeNull();
     expect(
@@ -447,7 +462,7 @@ describe("ServiceJobListPage", () => {
     "Nyitott" fül alatt "Kész" jelvényű lap állt. MI PIROSÍT: ha a régi fülek jönnek vissza; ha a Kész fül alatt nem kész lap áll, vagy
     fordítva; ha a lista nem mindent kér (a fülek a kliensen szűrnek).
   */
-  it("a karbantartás fülei Folyamatban, Kész, Összes, és a SZERVERTŐL kérik a jelvény szerinti szűrést", async () => {
+  it("a karbantartás fülei Folyamatban, Lezárt, Összes, és a SZERVERTŐL kérik a jelvény szerinti szűrést", async () => {
     const base = response().items[0]!;
     const kesz = {
       ...base,
@@ -483,13 +498,16 @@ describe("ServiceJobListPage", () => {
     expect(screen.getByRole("tab", { name: "Folyamatban" })).toBeTruthy();
     expect(screen.queryByRole("tab", { name: "Nyitott" })).toBeNull();
     expect(screen.queryByRole("tab", { name: "Várakozik" })).toBeNull();
-    expect(screen.queryByRole("tab", { name: "Lezárt" })).toBeNull();
+    // the maintenance's own three tabs; its done tab says Lezárt since card 7f23785c (it was Kész), the ticket tabs stay away
+    expect(
+      screen.getAllByRole("tab").map((tab) => tab.textContent?.trim()),
+    ).toEqual(["Folyamatban", "Lezárt", "Összes"]);
     expect(api.list.mock.calls.at(-1)?.[1]).toBe("all");
     expect(api.list.mock.calls.at(-1)?.[6]).toBe("progress");
     // a lábléc a szerver számát mondja, nem a betöltött sorokét
     expect(await screen.findByText(/^7 találat/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Kész" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Lezárt" }));
     expect(await screen.findByText("KT-2026-005")).toBeTruthy();
     expect(screen.queryByText("KT-2026-004")).toBeNull();
     expect(api.list.mock.calls.at(-1)?.[6]).toBe("done");
@@ -589,7 +607,7 @@ describe("ServiceJobListPage -- állapot az URL-ben", () => {
     await screen.findByText("Alkatrészre vár");
 
     // a karbantartás fülei: Folyamatban / Kész / Összes (acrobot 56182)
-    fireEvent.click(screen.getByRole("tab", { name: "Kész" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Lezárt" }));
     await waitFor(() => expect(urlNavigation.search).toBe("tab=done"));
 
     fireEvent.change(screen.getByLabelText("Karbantartás keresése"), {

@@ -4,8 +4,12 @@ import { describe, it } from "node:test";
 import {
   isPartnerServiceJobDetail,
   partnerServiceJobDetail,
+  partnerServiceJobListItem,
 } from "./service-job-management.js";
-import type { ServiceJobDetail } from "./service-job-management.js";
+import type {
+  ServiceJobDetail,
+  ServiceJobListItem,
+} from "./service-job-management.js";
 
 /**
  * A partner valasza SAJAT TIPUS, nem a belso megszurve (Balazs dontese,
@@ -29,6 +33,10 @@ const BELSO: ServiceJobDetail = {
     megkulonboztetni, melyik jon a valodi tablabol.
   */
   partnerStatusLabel: "Feldolgozás alatt",
+  // a belső közös állapot és oka (kártya 7f23785c): kitöltve, hogy az átmenetét a lenti állítás lássa
+  commonStatus: "WAITING",
+  commonReason: "PARTS",
+  partnerClosedReason: null,
   customerName: "Teszt Kft.",
   customerId: "cust-1",
   departmentId: "dep-1",
@@ -93,6 +101,9 @@ const ELVETT = [
   "assignees",
   // a karbantartási lap forrása (felmérés S7): szerződésszám, belső adat
   "source",
+  // a közös állapot oka belső munkaszervezés („alkatrészre"): a partner a rövidebbet kapja (4. szelet, barracuda 61910)
+  "commonStatus",
+  "commonReason",
 ] as const;
 
 describe("a partner reszletlapja", () => {
@@ -332,11 +343,67 @@ describe("a partner reszletlapja", () => {
     assert.equal(valtas.event.isCreation, false);
   });
 
+  /*
+    A LEZÁRT JEGY KIMENETELE ÁTMEGY (kártya 7f23785c, 4. szelet; acrobot 61894): a partner Lezárva szava a teljesült és a meghiúsult
+    jegyre is áll, a „Nem teljesült" sor és a csomag kapuja ebből a mezőből dönt. MI PIROSÍT: ha a mező nem megy át, vagy a hiánya
+    nem `null` (a portál egy hiányzó mezőt teljesültnek olvasna).
+  */
+  it("a lezárt jegy kimenetele átmegy, a hiánya null", () => {
+    assert.equal(
+      partnerServiceJobDetail({
+        ...BELSO,
+        partnerStatus: "CLOSED",
+        partnerStatusLabel: "Lezárva",
+        partnerClosedReason: "CANCELLED",
+      }).partnerClosedReason,
+      "CANCELLED",
+    );
+    const { partnerClosedReason: _hianyzik, ...regi } = BELSO;
+    assert.equal(partnerServiceJobDetail(regi).partnerClosedReason, null);
+  });
+
   it("a predikatum megkulonbozteti a ket alakot", () => {
     assert.equal(isPartnerServiceJobDetail(BELSO), false);
     assert.equal(
       isPartnerServiceJobDetail(partnerServiceJobDetail(BELSO)),
       true,
     );
+  });
+});
+
+/*
+  A LISTA-SOR PARTNER ALAKJA (4. szelet, barracuda 61910): a belső közös állapot és oka nem megy ki, a partner-szó és a kimenetel igen.
+  Ugyanaz az elv, mint a részletlapon. MI PIROSÍT: ha a `commonStatus`/`commonReason` a szórással kimegy, vagy ha a partner-mezők
+  vesznek el vele.
+*/
+describe("a partner lista-sora", () => {
+  const SOR: ServiceJobListItem = {
+    id: "job-1",
+    jobNumber: "HJ-2026-001",
+    title: "Szivattyú zúg",
+    kind: "REPAIR",
+    status: "CANCELLED",
+    commonStatus: "CLOSED",
+    commonReason: "CANCELLED",
+    partnerStatus: "CLOSED",
+    partnerStatusLabel: "Lezárva",
+    partnerClosedReason: "CANCELLED",
+    customerName: "Teszt Kft.",
+    departmentPath: null,
+    departmentCode: null,
+    assignees: [],
+    worksheetCount: 0,
+    createdAt: "2026-09-20T08:00:00.000Z",
+    hidden: false,
+  };
+
+  it("a közös állapot és oka nem megy ki, a partner-szó és a kimenetel igen", () => {
+    const partner = partnerServiceJobListItem(SOR);
+    const kulcsok = new Set(Object.keys(partner));
+    assert.ok(!kulcsok.has("commonStatus"));
+    assert.ok(!kulcsok.has("commonReason"));
+    assert.equal(partner.partnerStatus, "CLOSED");
+    assert.equal(partner.partnerStatusLabel, "Lezárva");
+    assert.equal(partner.partnerClosedReason, "CANCELLED");
   });
 });

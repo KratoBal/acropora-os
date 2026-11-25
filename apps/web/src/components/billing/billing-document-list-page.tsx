@@ -44,10 +44,7 @@ import {
   BillingDocumentTable,
   billingDocumentHref,
 } from "./billing-document-table";
-import {
-  BillingFilterGrid,
-  FILTER_GRID_SEARCH_CLASS,
-} from "./billing-filter-grid";
+import { BILLING_SELECT_CLASS, BillingFilterBar } from "./billing-filter-bar";
 import {
   BillingIncomingList,
   monthOptions,
@@ -331,8 +328,8 @@ function OutgoingList({
 
   return (
     <>
-      <BillingFilterGrid>
-        <div className={FILTER_GRID_SEARCH_CLASS}>
+      <BillingFilterBar
+        search={
           <PilotInput
             aria-label="Bizonylat keresése"
             value={search}
@@ -341,115 +338,125 @@ function OutgoingList({
             placeholder="Bizonylatszám, partner, hivatkozás…"
             className="h-10"
           />
-        </div>
-        <PilotSelect
-          chevron
-          aria-label="Dokumentumtípus"
-          value={documentType}
-          onChange={(value) => setFilter("documentType", value)}
-          className="[&_select]:h-10"
-        >
-          <option value="">Minden dokumentumtípus</option>
-          {BILLING_DOCUMENT_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {getDocumentCapabilities(type).label}
-            </option>
-          ))}
-        </PilotSelect>
-        <PilotSelect
-          chevron
-          aria-label="Állapot"
-          value={status}
-          onChange={(value) => setFilter("status", value)}
-          className="[&_select]:h-10"
-        >
-          <option value="">Minden állapot</option>
-          {BILLING_DOCUMENT_STATUSES.map((value) => (
-            <option key={value} value={value}>
-              {BILLING_DOCUMENT_STATUS_LABELS[value]}
-            </option>
-          ))}
-        </PilotSelect>
-        <PilotSelect
-          chevron
-          aria-label="Formátum"
-          value={invoiceFormat}
-          onChange={(value) => setFilter("invoiceFormat", value)}
-          className="[&_select]:h-10"
-        >
-          <option value="">Minden formátum</option>
-          {INVOICE_FORMATS.map((value) => (
-            <option key={value} value={value}>
-              {INVOICE_FORMAT_LABELS[value]}
-            </option>
-          ))}
-        </PilotSelect>
-        <PilotSelect
-          chevron
-          aria-label="Forrás"
-          value={origin}
-          onChange={(value) => setFilter("origin", value)}
-          className="[&_select]:h-10"
-        >
-          <option value="">Minden forrás</option>
-          <option value="OWN">Csak a mieink</option>
-          <option value="EXTERNAL">Csak a külsők</option>
-        </PilotSelect>
-        <PilotSelect
-          chevron
-          aria-label="Időszak"
-          value={period}
-          onChange={(value) => setFilter("idoszak", value)}
-          className="[&_select]:h-10"
-        >
-          <option value="">Időszak: mind</option>
-          {months.map((month) => (
-            <option key={month.value} value={month.value}>
-              Időszak: {month.label}
-            </option>
-          ))}
-        </PilotSelect>
-        <PilotSelect
-          chevron
-          aria-label="Fizetés"
-          value={paymentState}
-          onChange={(value) => setFilter("fizetes", value)}
-          className="[&_select]:h-10"
-        >
-          <option value="">Fizetés: mind</option>
-          <option value="PAID">Fizetve</option>
-          <option value="UNPAID">Nincs fizetve</option>
-        </PilotSelect>
-        <PilotSelect
-          chevron
-          aria-label="Fizetési mód"
-          value={paymentMethod}
-          onChange={(value) => setFilter("fizmod", value)}
-          className="[&_select]:h-10"
-        >
-          <option value="">Minden fizetési mód</option>
-          {/* a választott érték akkor is áll, ha a választék még nem jött meg */}
-          {[
-            ...new Set([
-              ...(data?.facets?.paymentMethods ?? []),
-              ...(paymentMethod ? [paymentMethod] : []),
-            ]),
-          ].map((method) => (
-            <option key={method} value={method}>
-              {method}
-            </option>
-          ))}
-        </PilotSelect>
-        {hasFilters ? (
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="cursor-pointer justify-self-start whitespace-nowrap text-xs text-pilot-accent-warm-text hover:underline"
-          >
-            Szűrők törlése
-          </button>
-        ) : null}
-      </BillingFilterGrid>
+        }
+        primary={
+          <>
+            <PilotSelect
+              chevron
+              aria-label="Dokumentumtípus"
+              value={documentType}
+              onChange={(value) => setFilter("documentType", value)}
+              className={`${BILLING_SELECT_CLASS} [&_select]:h-10`}
+            >
+              <option value="">Minden típus</option>
+              {BILLING_DOCUMENT_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {getDocumentCapabilities(type).label}
+                </option>
+              ))}
+            </PilotSelect>
+            <PilotSelect
+              chevron
+              aria-label="Állapot"
+              value={status}
+              onChange={(value) => setFilter("status", value)}
+              className={`${BILLING_SELECT_CLASS} [&_select]:h-10`}
+            >
+              <option value="">Minden állapot</option>
+              {BILLING_DOCUMENT_STATUSES.map((value) => (
+                <option key={value} value={value}>
+                  {BILLING_DOCUMENT_STATUS_LABELS[value]}
+                </option>
+              ))}
+            </PilotSelect>
+            <PilotSelect
+              chevron
+              aria-label="Fizetés"
+              value={paymentState}
+              onChange={(value) => setFilter("fizetes", value)}
+              className={`${BILLING_SELECT_CLASS} [&_select]:h-10`}
+            >
+              <option value="">Fizetés: mind</option>
+              <option value="PAID">Fizetve</option>
+              <option value="UNPAID">Nincs fizetve</option>
+            </PilotSelect>
+          </>
+        }
+        more={
+          <>
+            <PilotSelect
+              chevron
+              aria-label="Időszak"
+              value={period}
+              onChange={(value) => setFilter("idoszak", value)}
+              className={`${BILLING_SELECT_CLASS} [&_select]:h-10`}
+            >
+              <option value="">Időszak: mind</option>
+              {months.map((month) => (
+                <option key={month.value} value={month.value}>
+                  Időszak: {month.label}
+                </option>
+              ))}
+            </PilotSelect>
+            <PilotSelect
+              chevron
+              aria-label="Formátum"
+              value={invoiceFormat}
+              onChange={(value) => setFilter("invoiceFormat", value)}
+              className={`${BILLING_SELECT_CLASS} [&_select]:h-10`}
+            >
+              <option value="">Minden formátum</option>
+              {INVOICE_FORMATS.map((value) => (
+                <option key={value} value={value}>
+                  {INVOICE_FORMAT_LABELS[value]}
+                </option>
+              ))}
+            </PilotSelect>
+            <PilotSelect
+              chevron
+              aria-label="Forrás"
+              value={origin}
+              onChange={(value) => setFilter("origin", value)}
+              className={`${BILLING_SELECT_CLASS} [&_select]:h-10`}
+            >
+              <option value="">Minden forrás</option>
+              <option value="OWN">Csak a mieink</option>
+              <option value="EXTERNAL">Csak a külsők</option>
+            </PilotSelect>
+            <PilotSelect
+              chevron
+              aria-label="Fizetési mód"
+              value={paymentMethod}
+              onChange={(value) => setFilter("fizmod", value)}
+              className={`${BILLING_SELECT_CLASS} [&_select]:h-10`}
+            >
+              <option value="">Minden fizetési mód</option>
+              {/* a választott érték akkor is áll, ha a választék még nem jött meg */}
+              {[
+                ...new Set([
+                  ...(data?.facets?.paymentMethods ?? []),
+                  ...(paymentMethod ? [paymentMethod] : []),
+                ]),
+              ].map((method) => (
+                <option key={method} value={method}>
+                  {method}
+                </option>
+              ))}
+            </PilotSelect>
+          </>
+        }
+        primaryCount={
+          (documentType ? 1 : 0) + (status ? 1 : 0) + (paymentState ? 1 : 0)
+        }
+        moreCount={
+          (period ? 1 : 0) +
+          (invoiceFormat ? 1 : 0) +
+          (origin ? 1 : 0) +
+          (paymentMethod ? 1 : 0)
+        }
+        hasFilters={hasFilters}
+        onClear={clearFilters}
+      />
 
       {error ? (
         <Alert
@@ -477,17 +484,11 @@ function OutgoingList({
               aria-hidden="true"
               className="absolute inset-x-4 top-0 h-0.5 bg-pilot-accent-warm"
             />
-            <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            {/* EGY LAPOZÓ, ALUL (Picasso 3.12, acrobot 61971): felül csak a darabszám áll */}
+            <div className="px-5 py-4">
               <p className="text-sm text-pilot-accent-warm-text">
                 {data.pagination.totalItems.toLocaleString("hu-HU")} bizonylat
               </p>
-              <Pagination
-                variant="directionF"
-                position="top"
-                page={data.pagination.page}
-                totalPages={data.pagination.totalPages}
-                onPageChange={goToPage}
-              />
             </div>
             <BillingDocumentTable
               items={data.items}
