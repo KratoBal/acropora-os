@@ -4,6 +4,7 @@ import { useState } from "react";
 import { describe, expect, it } from "vitest";
 
 import {
+  NOT_SELECTABLE_NAME,
   toggleAssignee,
   WorksheetAssigneePicker,
 } from "./worksheet-assignee-picker";
@@ -98,7 +99,7 @@ describe("WorksheetAssigneePicker (keresős többes választó)", () => {
     expect(state()).toBe("u2");
   });
 
-  it("a listán nem szereplő, már kiosztott (gépi) fiók a nevét mutatja, nem a nyers azonosítót; név nélkül általános szöveget", () => {
+  it("a listán nem szereplő, már kiosztott fiók a nevét mutatja, nem a nyers azonosítót; név nélkül SEMLEGES szöveget (nem 'gépi': lehet inaktivált ember is)", () => {
     const first = render(
       <Harness initial={["bot-1"]} knownNames={{ "bot-1": "Acro Bot" }} />,
     );
@@ -111,10 +112,38 @@ describe("WorksheetAssigneePicker (keresős többes választó)", () => {
     first.unmount();
     render(<Harness initial={["bot-2"]} />);
     expect(
-      screen.getByRole("button", { name: "Gépi fiók eltávolítása" }),
+      screen.getByRole("button", { name: "Nem választható fiók eltávolítása" }),
     ).toBeTruthy();
     expect(
       screen.getByRole("list", { name: "Kiválasztott felelősök" }).textContent,
     ).not.toContain("bot-2");
+  });
+
+  it("a fallback label is neutral: it does not call an unknown account a machine", () => {
+    expect(NOT_SELECTABLE_NAME).toBe("Nem választható fiók");
+    expect(NOT_SELECTABLE_NAME.toLowerCase()).not.toContain("gép");
+  });
+
+  // barracuda a #2892-n: ha a választót egyszer űrlapba teszik, az Enter a keresőben ne indítsa el csendben a felvitelt
+  it("Enter a keresőben nem küld be űrlapot", () => {
+    let submitted = false;
+    render(
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          submitted = true;
+        }}
+      >
+        <Harness />
+        <button type="submit">Mentés</button>
+      </form>,
+    );
+    const box = screen.getByLabelText("Felelős keresése");
+    const notPrevented = fireEvent.keyDown(box, { key: "Enter" });
+    // fireEvent returns false when the event's default was prevented
+    expect(notPrevented).toBe(false);
+    expect(submitted).toBe(false);
+    // another key is not swallowed
+    expect(fireEvent.keyDown(box, { key: "a" })).toBe(true);
   });
 });

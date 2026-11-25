@@ -15,7 +15,11 @@ const BELSOS_KERO = {
   supplierId: null,
 } as never;
 
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 
 import type { WorksheetsRepository } from "./worksheets.repository.js";
@@ -227,6 +231,157 @@ describe("WorksheetsService assignees", () => {
       BadRequestException,
     );
     assert.equal(written, false);
+  });
+
+  /*
+    A JELÖLÉS ÉS A KEEP SZABÁLY MEGÁLLAPÍTÁSA (barracuda a #2891-en, acrobot 2026-11-25): a rajta lévők NEM mennek át újra a szűrőn, tehát nem
+    csak a gépi fiók marad, hanem az is, akit az assignableUserWhere ma kizárna (például azóta inaktivált felhasználó). Ez SZÁNDÉK, nem mellékhatás.
+    MI PIROSÍT: ha a rajta lévő inaktivált felhasználó miatt a többi felelős mentése 400-at kap; ha egy ÚJ inaktivált átmegy.
+  */
+  it("keeps an inactivated user who is already on the sheet, and still refuses a new one", async () => {
+    let received: readonly string[] | null = null;
+    const service = new WorksheetsService(
+      repository({
+        // user-old was deactivated after he was assigned: the filter would refuse him now
+        assignableUserIds: async (ids: readonly string[]) =>
+          new Set(ids.filter((id) => id !== "user-old" && id !== "user-off")),
+        currentAssigneeIds: async () => new Set(["user-old"]),
+        setAssignees: async (input: { userIds: readonly string[] }) => {
+          received = input.userIds;
+          return { ok: true, added: [] };
+        },
+      }),
+    );
+    await service.setAssignees(
+      "worksheet-1",
+      { userIds: ["user-old", "user-2"] },
+      BELSOS_KERO,
+    );
+    assert.deepEqual(received, ["user-old", "user-2"]);
+    await assert.rejects(
+      service.setAssignees(
+        "worksheet-1",
+        { userIds: ["user-old", "user-off"] },
+        BELSOS_KERO,
+      ),
+      BadRequestException,
+    );
+  });
+
+  /*
+    LEZÁRT (ALÁÍRT) LAPON A FELELŐSÖK ÉS AZ ESZKÖZÖK NEM MÓDOSÍTHATÓK (acrobot, 2026-11-25, technikai döntés). MI PIROSÍT: ha egy aláírt lapon a
+    megváltozott lista átmegy (nincs 409); ha a VÁLTOZATLAN lista (más sorrenddel, ismétléssel) is hibát kap, vagy mégis ír (és értesít,
+    és a követő jelölőt átbillenti); ha a piszkozaton is tilt (a kontroll: a lenti tesztek előtti, tiltás nélküli mentések mind zöldek).
+  */
+  describe("a closed (signed) worksheet", () => {
+    const signed = (over: Partial<WorksheetDetailRow> = {}) =>
+      worksheetRow({
+        versions: [{ ...versionRow(), status: "SIGNED" }],
+        // full rows: the detail mapping reads the nested user and asset
+        assignees: ["user-1", "user-2"].map((userId) => ({
+          userId,
+          assignedAt: CREATED_AT,
+          user: { displayName: `Kolléga ${userId}`, nickname: null },
+        })) as unknown as WorksheetDetailRow["assignees"],
+        assets: ["asset-1", "asset-2"].map((assetId) => ({
+          id: `wa-${assetId}`,
+          assetId,
+          createdAt: CREATED_AT,
+          asset: { assetNumber: `ESZK-${assetId}`, name: `Eszköz ${assetId}` },
+        })) as unknown as WorksheetDetailRow["assets"],
+        ...over,
+      });
+
+    function world() {
+      const writes = { assignees: 0, assets: 0, notified: 0 };
+      const service = new WorksheetsService(
+        repository({
+          detail: async () => signed(),
+          setAssignees: async () => {
+            writes.assignees += 1;
+            return { ok: true, added: ["user-3"] };
+          },
+          setAssets: async () => {
+            writes.assets += 1;
+            return true;
+          },
+        }),
+      );
+      return { service, writes };
+    }
+
+    it("refuses a CHANGED assignee list with 409 and writes nothing", async () => {
+      const { service, writes } = world();
+      await assert.rejects(
+        service.setAssignees(
+          "worksheet-1",
+          { userIds: ["user-1", "user-3"] },
+          BELSOS_KERO,
+        ),
+        (error: unknown) =>
+          error instanceof ConflictException &&
+          /lezárt munkalap felelősei nem módosíthatók/.test(error.message),
+      );
+      await assert.rejects(
+        service.setAssignees("worksheet-1", { userIds: [] }, BELSOS_KERO),
+        ConflictException,
+      );
+      assert.equal(writes.assignees, 0);
+    });
+
+    it("answers the UNCHANGED assignee list (any order, repeated) with the detail and writes nothing", async () => {
+      const { service, writes } = world();
+      const detail = await service.setAssignees(
+        "worksheet-1",
+        { userIds: ["user-2", "user-1", " user-2 "] },
+        BELSOS_KERO,
+      );
+      assert.equal(detail.id, "worksheet-1");
+      assert.equal(writes.assignees, 0);
+    });
+
+    it("refuses a CHANGED asset list with 409 and answers the unchanged one without a write", async () => {
+      const { service, writes } = world();
+      await assert.rejects(
+        service.setAssets(
+          "worksheet-1",
+          { assetIds: ["asset-1"] },
+          BELSOS_KERO,
+        ),
+        (error: unknown) =>
+          error instanceof ConflictException &&
+          /lezárt munkalap eszközei nem módosíthatók/.test(error.message),
+      );
+      const detail = await service.setAssets(
+        "worksheet-1",
+        { assetIds: ["asset-2", "asset-1", "asset-2"] },
+        BELSOS_KERO,
+      );
+      assert.equal(detail.id, "worksheet-1");
+      assert.equal(writes.assets, 0);
+    });
+
+    it("does not lock a draft or an awaiting-signature sheet", async () => {
+      for (const status of ["DRAFT", "AWAITING_SIGNATURE"] as const) {
+        let written = 0;
+        const service = new WorksheetsService(
+          repository({
+            detail: async () =>
+              signed({ versions: [{ ...versionRow(), status }] }),
+            setAssignees: async () => {
+              written += 1;
+              return { ok: true, added: [] };
+            },
+          }),
+        );
+        await service.setAssignees(
+          "worksheet-1",
+          { userIds: ["user-1", "user-3"] },
+          BELSOS_KERO,
+        );
+        assert.equal(written, 1, status);
+      }
+    });
   });
 
   it("accepts an empty list: a wrongly assigned worksheet can be taken back", async () => {

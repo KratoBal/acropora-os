@@ -5,7 +5,10 @@ import { useEffect, useRef, useState } from "react";
 
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
-import { useAssignableUsers } from "@/components/worksheets/worksheet-assignee-picker";
+import {
+  NOT_SELECTABLE_NAME,
+  useAssignableUsers,
+} from "@/components/worksheets/worksheet-assignee-picker";
 import {
   PilotAvatar,
   PilotButton,
@@ -263,7 +266,8 @@ function PilotDelegationPicker({
           <div className="mt-3 flex flex-wrap gap-1.5">
             {selected.map((userId) => {
               const candidate = candidates.find((item) => item.id === userId);
-              const name = candidate?.name ?? knownNames[userId] ?? "Gépi fiók";
+              const name =
+                candidate?.name ?? knownNames[userId] ?? NOT_SELECTABLE_NAME;
               return (
                 <button
                   key={userId}

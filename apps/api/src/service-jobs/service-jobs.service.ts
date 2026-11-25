@@ -23,8 +23,10 @@ import {
 } from "./description-edit-boundary.js";
 import { mayAssignUnit } from "./visibility-assignment.js";
 import { serviceJobNoun } from "./service-job-noun.js";
+import { commonCountsFrom, commonFields } from "./common-status-where.js";
 
 import {
+  commonJobStatus,
   hasPermission,
   PERMISSIONS,
   personDisplayName,
@@ -1224,42 +1226,53 @@ export class ServiceJobsService {
     // a `page` megadása kapcsolja be a lapozást; nélküle a régi alak (a legújabb kétszáz sor és a `truncated`) marad
     const paged = query.page !== undefined;
     const pageSize = query.pageSize ?? LIST_PAGE_SIZE;
-    const [{ rows, truncated, totalItems }, counts, maintenanceCounts] =
-      await Promise.all([
-        this.repository.list(
-          query.scope ?? "open",
-          visibility,
-          query.search,
-          kind,
-          user.id,
-          query.maintenanceState,
-          {
-            statuses: query.statuses,
-            customerId: query.customerId,
-            departmentId: query.departmentId,
-            page: query.page,
-            pageSize: paged ? pageSize : undefined,
-            sort: query.sort,
-            direction: query.direction,
-          },
-        ),
-        this.repository.countsByStatus(visibility, query.search, kind),
-        // the maintenance list's tabs count by the badge's rule, not by the ticket status (f4590db6)
-        kind === "MAINTENANCE"
-          ? this.repository.maintenanceStateCounts(visibility, query.search)
-          : Promise.resolve(undefined),
-      ]);
+    const [
+      { rows, truncated, totalItems },
+      counts,
+      commonDone,
+      maintenanceCounts,
+    ] = await Promise.all([
+      this.repository.list(
+        query.scope ?? "open",
+        visibility,
+        query.search,
+        kind,
+        user.id,
+        query.maintenanceState,
+        {
+          statuses: query.statuses,
+          commonStatuses: query.commonStatuses,
+          customerId: query.customerId,
+          departmentId: query.departmentId,
+          page: query.page,
+          pageSize: paged ? pageSize : undefined,
+          sort: query.sort,
+          direction: query.direction,
+        },
+      ),
+      this.repository.countsByStatus(visibility, query.search, kind),
+      this.repository.countCommonDone(visibility, query.search, kind),
+      // the maintenance list's tabs count by the badge's rule, not by the ticket status (f4590db6)
+      kind === "MAINTENANCE"
+        ? this.repository.maintenanceStateCounts(visibility, query.search)
+        : Promise.resolve(undefined),
+    ]);
     /*
       A PARTNER SAJAT ALAKOT KAP (kartya a0660885): ugyanaz a `!== "internal"`
       elagazas, mint a reszletlapon, tehat a szallito is a szukebb iranyba esik.
     */
     const partner = partnerScopeOf(user).kind !== "internal";
+    // the common status (card 7f23785c): the sheets are read in one batch, and only for IN_PROGRESS rows (the only ones it derives)
+    const facts = await this.repository.commonWorksheetFacts(
+      rows.filter((row) => row.status === "IN_PROGRESS").map((row) => row.id),
+    );
     const items: ServiceJobListItem[] = rows.map((row) => ({
       id: row.id,
       jobNumber: row.jobNumber,
       title: row.title,
       kind: row.kind,
       status: row.status,
+      ...commonFields(commonJobStatus(row.status, facts.get(row.id) ?? [])),
       partnerStatus: partnerVisibleStatus(row.status),
       partnerStatusLabel: partnerStatusLabel(row.status),
       customerName: row.customerName,
@@ -1283,6 +1296,7 @@ export class ServiceJobsService {
     }));
     return {
       counts,
+      commonCounts: commonCountsFrom(counts, commonDone),
       ...(maintenanceCounts ? { maintenanceCounts } : {}),
       truncated,
       ...(paged && totalItems !== undefined
@@ -1316,6 +1330,7 @@ export class ServiceJobsService {
       user.id,
       query.maintenanceState,
       query.statuses,
+      query.commonStatuses,
     );
   }
 
@@ -1395,6 +1410,16 @@ export class ServiceJobsService {
        */
       hidden: row.hiddenAt !== null,
       status: row.status,
+      ...commonFields(
+        commonJobStatus(
+          row.status,
+          row.status === "IN_PROGRESS"
+            ? ((await this.repository.commonWorksheetFacts([row.id])).get(
+                row.id,
+              ) ?? [])
+            : [],
+        ),
+      ),
       partnerStatus: partnerVisibleStatus(row.status),
       partnerStatusLabel: partnerStatusLabel(row.status),
       customerName: row.customer?.displayName ?? null,
