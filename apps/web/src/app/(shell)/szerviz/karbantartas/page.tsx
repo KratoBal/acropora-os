@@ -1,5 +1,5 @@
-import { ServiceJobListPage } from "@/components/service-jobs/service-job-list-page";
+import { PilotMaintenanceListPage } from "@/components/service-jobs/pilot/pilot-maintenance-list-page";
 
 export default function MaintenanceRoute() {
-  return <ServiceJobListPage kind="MAINTENANCE" />;
+  return <PilotMaintenanceListPage />;
 }

@@ -72,9 +72,9 @@ import {
  * ("Kis, felülvizsgálható PR-ok").
  *
  * EZ CSAK A HIBAJEGYEKET (Szerviz / Hibajegyek) ÉRINTI, A KARBANTARTÁST
- * NEM: a `ServiceJobListPage` (a régi, közös komponens) `kind="MAINTENANCE"`
- * paraméterrel VÁLTOZATLANUL fut a `/szerviz/karbantartas` útvonalon -- ez a
- * komponens NEM veszi át azt a szerepet, saját fájl, saját route.
+ * NEM: a `/szerviz/karbantartas` útvonalon 2026-11-26 óta a saját Pilot
+ * listája fut (`pilot-maintenance-list-page.tsx`, picasso leltár 3.9), ugyanezzel
+ * a lista-mintával (fülek a szerver számával, 25-ös lapozás). Saját fájl, saját route.
  *
  * === A DELEGÁLÁS BENNE VAN, ÉS EZ NEM ÚJ HATÓKÖR ===
  *
