@@ -105,6 +105,20 @@ export interface StripePayoutDetail extends StripePayoutSummary {
   lines: StripeTransactionLine[];
 }
 
+/**
+ * A STRIPE-KIFIZETÉSEK LISTÁJÁNAK RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4). A lista lapozott, ezért a rendezés a szerveren
+ * történik. Csak a közvetlen szám- és naposzlopok szerepelnek: a "Párosítva" (két számláló hányadosa) és az "Állapot" (a kijelzett
+ * felirat nem az enum sorrendje) nem rendezhető.
+ */
+export const STRIPE_PAYOUT_SORT_FIELDS = [
+  "arrivalDate",
+  "amount",
+  "grossTotal",
+  "refundTotal",
+  "feeTotal",
+] as const;
+export type StripePayoutSortField = (typeof STRIPE_PAYOUT_SORT_FIELDS)[number];
+
 export interface StripePayoutListResponse {
   items: StripePayoutSummary[];
   pagination: {

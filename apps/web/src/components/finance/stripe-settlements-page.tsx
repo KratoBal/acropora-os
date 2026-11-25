@@ -16,6 +16,7 @@ import {
   type StripePayoutDetail,
   type StripePayoutError,
   type StripePayoutListResponse,
+  type StripePayoutSortField,
   type StripePayoutStatus,
   type StripePayoutSummary,
   type StripeSyncState,
@@ -31,6 +32,7 @@ import {
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
 import { stripeSettlementsApi } from "@/lib/api/stripe-settlements";
+import { useUrlSort } from "@/lib/navigation/use-url-sort";
 
 import {
   SettlementApproveField,
@@ -133,6 +135,15 @@ const SYNC_OFF: Record<Exclude<StripeSyncState, "ENABLED">, string> = {
     "a Stripe-behúzás kapcsolója értéke se nem true, se nem false",
 };
 
+/** A kifizetés-lista rendezhető oszlopai: a táblázat oszlop-azonosítója -> a szerver rendezési mezeje (`STRIPE_PAYOUT_SORT_FIELDS`). A "Párosítva" és az "Állapot" nem rendezhető. */
+const PAYOUT_SORT_COLUMNS = {
+  arrival: "arrivalDate",
+  amount: "amount",
+  gross: "grossTotal",
+  refund: "refundTotal",
+  fee: "feeTotal",
+} as const;
+
 /**
  * STRIPE ELSZÁMOLÁS (A9, kártya 6339b04c; Balázs, 2026-11-18 20:16 UTC): a Stripe kifizetései (payout), tételenként a
  * webshop-rendeléshez és a kimenő számlájához kötve, a díjjal és a nettóval. A SimplePay lapja mintájára; az OS-nek nincs
@@ -158,6 +169,12 @@ export function StripeSettlementsPage() {
     {},
   );
   const [listPage, setListPage] = useState(1);
+  const { sort, onSort, apiSort } = useUrlSort(PAYOUT_SORT_COLUMNS);
+  // a lap száma itt állapot, nem URL: egy új sorrend az 1. oldalról indul (a 3. oldalon állva az új sorrend 3. oldala nem az, amit várnak)
+  const sortBy = (columnId: string) => {
+    setListPage(1);
+    onSort(columnId);
+  };
 
   const load = useCallback(async () => {
     if (!canView) return;
@@ -168,6 +185,12 @@ export function StripeSettlementsPage() {
         stripeSettlementsApi.list(token, {
           page: listPage,
           pageSize: SETTLEMENT_PAGE_SIZE,
+          ...(apiSort
+            ? {
+                sort: apiSort.sort as StripePayoutSortField,
+                direction: apiSort.direction,
+              }
+            : {}),
         }),
         stripeSettlementsApi.syncStatus(token),
       ]);
@@ -182,7 +205,7 @@ export function StripeSettlementsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canView, token, listPage]);
+  }, [canView, token, listPage, apiSort]);
 
   useEffect(() => {
     void load();
@@ -450,12 +473,14 @@ export function StripeSettlementsPage() {
     {
       id: "arrival",
       header: "Kifizetés napja",
+      sortable: true,
       width: "16%",
       cell: (item) => formatDate(item.arrivalDate),
     },
     {
       id: "amount",
       header: "Kifizetve",
+      sortable: true,
       width: "14%",
       cell: (item) => (
         <span className="font-semibold text-pilot-grey-900">
@@ -466,18 +491,21 @@ export function StripeSettlementsPage() {
     {
       id: "gross",
       header: "Bruttó",
+      sortable: true,
       width: "14%",
       cell: (item) => money(item.grossTotal),
     },
     {
       id: "refund",
       header: "Visszatérítés",
+      sortable: true,
       width: "12%",
       cell: (item) => money(item.refundTotal),
     },
     {
       id: "fee",
       header: "Díj",
+      sortable: true,
       width: "10%",
       cell: (item) => money(item.feeTotal),
     },
@@ -570,6 +598,8 @@ export function StripeSettlementsPage() {
         >
           <PilotDataTable
             columns={listColumns}
+            sort={sort}
+            onSort={sortBy}
             rows={data.items}
             rowKey={(item) => item.id}
             rowTestId="stripe-kifizetes"

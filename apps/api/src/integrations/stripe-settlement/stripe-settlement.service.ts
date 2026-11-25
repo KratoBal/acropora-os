@@ -3,6 +3,7 @@ import type {
   StripeManualApprovalInput,
   StripePayoutDetail,
   StripePayoutListResponse,
+  StripePayoutSortField,
   StripeSyncRunSummary,
   StripeSyncStatus,
 } from "@acropora/types";
@@ -15,6 +16,7 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 
+import type { SortDirection } from "../../common/list-sort.js";
 import {
   MedusaAdminHttpError,
   MedusaConfigurationError,
@@ -103,6 +105,8 @@ export class StripeSettlementService {
     status?: "COMPLETED" | "NEEDS_REVIEW";
     page: number;
     pageSize: number;
+    sort?: StripePayoutSortField;
+    direction?: SortDirection;
   }): Promise<StripePayoutListResponse> {
     return this.store.listPayouts(query);
   }
