@@ -75,13 +75,38 @@ vi.mock("../maintenance-invoice-panel", () => ({
   MaintenanceInvoicePanel: ({
     serviceJobId,
     refreshKey,
+    onChanged,
   }: {
     serviceJobId: string;
     refreshKey?: number;
+    onChanged?: () => void;
   }) => (
     <div data-testid="maintenance-invoice-panel-stub">
       számla panel ({serviceJobId})
       <span data-testid="invoice-refresh-key">{refreshKey}</span>
+      <button onClick={onChanged}>számla változott</button>
+    </div>
+  ),
+}));
+// the process strip at the top of a maintenance sheet (Picasso 3.3): its own component test reads the data; here only WHERE it shows and with what
+vi.mock("../maintenance-process-steps", () => ({
+  MaintenanceProcessSteps: ({
+    serviceJobId,
+    worksheets,
+    certificateBlockedReason,
+    refreshKey,
+  }: {
+    serviceJobId: string;
+    worksheets: readonly { status: string }[];
+    certificateBlockedReason?: string | null;
+    refreshKey: number;
+  }) => (
+    <div data-testid="process-steps-stub">
+      lépéssor ({serviceJobId}) lapok:{worksheets.length}
+      <span data-testid="steps-refresh-key">{refreshKey}</span>
+      <span data-testid="steps-blocked">
+        {certificateBlockedReason ?? "nincs ok"}
+      </span>
     </div>
   ),
 }));
@@ -314,6 +339,28 @@ describe("PilotServiceJobDetailPage -- MAINTENANCE panelek", () => {
     A KÉT PANEL ÖSSZEKÖTÉSE (stage-végigjárás, 2026-11-18): az igazolás panel változása újratölti a számla-kártyát, és a forrás nélküli lap okot ad át a TIG-gombnak. MI PIROSÍT: ha az
     "igazolás változott" jelzés nem változtatja a számla-panel `refreshKey`-ét; ha a forrás nélküli lapnál nem megy át az ok.
   */
+  it("the process strip passes the certificate's blocked reason, so a sheet without an order says so", async () => {
+    api.detail.mockResolvedValue(detail({ kind: "MAINTENANCE", source: null }));
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    expect(await screen.findByTestId("steps-blocked")).toHaveTextContent(
+      /nincs megrendelőlapja/,
+    );
+  });
+
+  it("a ticket (REPAIR) has no process strip", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        kind: "REPAIR",
+        partnerStatus: "COMPLETED",
+        status: "COMPLETED",
+        allowedSteps: [],
+      }),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" route="hibajegyek" />);
+    await screen.findByText("Negyedéves ellenőrzés");
+    expect(screen.queryByTestId("process-steps-stub")).toBeNull();
+  });
+
   it("az igazolás panel változása a számla-panel refreshKey-ét lépteti, a forrás nélküli lap okot ad át", async () => {
     api.detail.mockResolvedValue(detail({ kind: "MAINTENANCE", source: null }));
 
@@ -1318,12 +1365,29 @@ describe("PilotServiceJobDetailPage -- a karbantartási adatlap nem hibajegy", (
     const back = screen.getByRole("link", { name: /Karbantartás/ });
     expect(back.getAttribute("href")).toMatch(/^\/szerviz\/karbantartas\?/);
     expect(screen.queryByText(/Munkalapok a jegy mögött/)).toBeNull();
-    const heading = screen.getByText("Munkalapok");
+    // "Munkalapok" is also the first step of the process strip at the top (Picasso 3.3): the card's title is the other one
+    const heading = screen
+      .getAllByText("Munkalapok")
+      .find(
+        (node) => !node.closest('ol[aria-label="A karbantartás lépései"]'),
+      )!;
     // the worksheets card leads the left column
     expect(
       heading.closest("section, div[class*='order-first']"),
     ).not.toBeNull();
     expect(screen.queryByText(/hibajegy/i)).toBeNull();
+  });
+
+  it("the process strip stands on a maintenance sheet with its worksheets, and refreshes when the certificate OR the invoice panel changes (Picasso 3.3)", async () => {
+    api.detail.mockResolvedValue(maintenance(["SIGNED", "DRAFT"]));
+    render(<PilotServiceJobDetailPage jobId="job-1" route="karbantartas" />);
+    const strip = await screen.findByTestId("process-steps-stub");
+    expect(strip).toHaveTextContent("lapok:2");
+    expect(screen.getByTestId("steps-refresh-key")).toHaveTextContent("0");
+    fireEvent.click(screen.getByRole("button", { name: "igazolás változott" }));
+    expect(screen.getByTestId("steps-refresh-key")).toHaveTextContent("1");
+    fireEvent.click(screen.getByRole("button", { name: "számla változott" }));
+    expect(screen.getByTestId("steps-refresh-key")).toHaveTextContent("2");
   });
 
   it("a hibajegy (REPAIR) mindezt megtartja", async () => {
