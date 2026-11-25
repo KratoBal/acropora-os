@@ -24,10 +24,15 @@ vi.mock("../worksheet-material-requests", () => ({
   WorksheetMaterialRequests: () => <div data-testid="material-stub" />,
 }));
 vi.mock("../worksheet-asset-editor", () => ({
-  WorksheetAssetEditor: () => <div data-testid="assets-stub" />,
+  // the stubs report whether the page lets them write (the real editors are tested on their own)
+  WorksheetAssetEditor: ({ canManage }: { canManage: boolean }) => (
+    <div data-testid="assets-stub" data-can-manage={String(canManage)} />
+  ),
 }));
 vi.mock("../worksheet-assignee-editor", () => ({
-  WorksheetAssigneeEditor: () => <div data-testid="assignees-stub" />,
+  WorksheetAssigneeEditor: ({ canManage }: { canManage: boolean }) => (
+    <div data-testid="assignees-stub" data-can-manage={String(canManage)} />
+  ),
 }));
 vi.mock("../worksheet-documents", () => ({
   WorksheetDocuments: () => <div data-testid="documents-stub" />,
@@ -293,6 +298,54 @@ describe("PilotWorksheetDetailPage -- redesign", () => {
     expect(
       screen.queryByRole("button", { name: "Kiállítás és lezárás" }),
     ).toBeNull();
+  });
+
+  /*
+    LEZÁRT (ALÁÍRT) LAPON A FELELŐSÖK ÉS AZ ESZKÖZÖK CSAK OLVASHATÓK (picasso 3.1/4, acrobot 2026-11-25). MI PIROSÍT: ha az aláírt lapon is ott
+    marad a kereső, a jelölőnégyzet-lista és a mentés-gomb (szerkesztő vezérlők egy lezárt lapon); ha a lista maga (a nevek, az eszközök)
+    eltűnik a szerkesztő vezérlőkkel együtt; ha a piszkozaton hiányoznak (a kontroll, enélkül egy üres oldal is zöld lenne).
+  */
+  /*
+    A VERZIÓK KÁRTYA TELJES SZÉLES, A KÉT OSZLOP ALATT (picasso 3.1/2): a bal oszlopban 1280-on 600, 1024-en 344 px jutott neki, és az Aláírás oszlop
+    levágódott. MI PIROSÍT: ha a kártya visszakerül a kétoszlopos rácsba (a kontroll: az "Összesítés" kártya benne van).
+  */
+  it("renders the versions card below the two columns, not inside them", async () => {
+    api.detail.mockResolvedValue(sheet());
+    render(<PilotWorksheetDetailPage worksheetId="ws-1" />);
+    const versions = await screen.findByText("Verziók");
+    const summary = screen.getByText("Összesítés");
+    const columns = '[class*="lg:grid-cols-"]';
+    expect(summary.closest(columns)).not.toBeNull();
+    expect(versions.closest(columns)).toBeNull();
+  });
+
+  it("a signed sheet gives its assignee and asset editors NO write right, a draft does", async () => {
+    api.detail.mockResolvedValue(sheet());
+    const draft = render(<PilotWorksheetDetailPage worksheetId="ws-1" />);
+    const writes = async () => [
+      (await screen.findByTestId("assignees-stub")).getAttribute(
+        "data-can-manage",
+      ),
+      (await screen.findByTestId("assets-stub")).getAttribute(
+        "data-can-manage",
+      ),
+    ];
+    expect(await writes()).toEqual(["true", "true"]);
+    draft.unmount();
+
+    api.detail.mockResolvedValue(
+      sheet({
+        number: "ML-2026-00001",
+        currentVersion: {
+          ...sheet().currentVersion,
+          label: "ML-2026-00001/1",
+          status: "SIGNED",
+        },
+      }),
+    );
+    render(<PilotWorksheetDetailPage worksheetId="ws-1" />);
+    await screen.findByRole("region", { name: "Helyszíni lezárás" });
+    expect(await writes()).toEqual(["false", "false"]);
   });
 
   it("shows no closing panel to a reader without the manage permission", async () => {

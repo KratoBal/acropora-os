@@ -78,3 +78,34 @@ describe("keskeny képernyő: menü és hibajegy-kártyák", () => {
     );
   });
 });
+
+/**
+ * A PARTNER HIBAJEGY-LISTA FEJLÉCE TELEFONON (picasso 1b, acrobot 2026-11-25): az "Új hibajegy nyitása" gomb három sorra tört, a fülek ("Nyitott
+ * ügyek") kétsorosak voltak. Telefonon (sm alatt) a rövid felirat látszik ("Új hibajegy", "Nyitott", "Lezárt", "Összes"), az elérhető név (aria-label) és
+ * az sm fölötti látvány a teljes marad. MI PIROSIT: ha a rövid felirat nem a `sm:hidden` ágban áll (asztalon is a rövid látszana); ha a gombnak
+ * nincs teljes aria-labelje (a felolvasó a rövidet mondaná); ha a fülek sora nem gördülhet és nem szűkül telefonon.
+ * A HATÁR: forrást olvas; a 390 px-es kép és a kilógás-mérés a stage-en mérhető.
+ */
+describe("keskeny képernyő: a partner hibajegy-lista fejléce", () => {
+  it("az új hibajegy gombja telefonon rövid, teljes elérhető névvel", () => {
+    assert.match(
+      HIBAJEGYEK,
+      /aria-label="Új hibajegy nyitása">\s*<Icon name="plus" size=\{14\} \/>\s*<span className="sm:hidden">Új hibajegy<\/span>\s*<span className="hidden sm:inline">Új hibajegy nyitása<\/span>/,
+    );
+  });
+
+  it("a fülek telefonon rövid felirattal, szűkebb belső margóval, és a sorukban gördülhetnek", () => {
+    assert.match(HIBAJEGYEK, /short: "Nyitott"/);
+    assert.match(HIBAJEGYEK, /short: "Lezárt"/);
+    assert.match(HIBAJEGYEK, /short: "Összes"/);
+    assert.match(
+      HIBAJEGYEK,
+      /aria-label=\{tab\.label\}[\s\S]{0,80}px-3 py-2[^`]*sm:px-4/,
+    );
+    assert.match(
+      HIBAJEGYEK,
+      /<span className="sm:hidden">\{tab\.short\}<\/span>\s*<span className="hidden sm:inline">\{tab\.label\}<\/span>/,
+    );
+    assert.match(HIBAJEGYEK, /overflow-x-auto[^"]*px-5 py-4 sm:px-8/);
+  });
+});
