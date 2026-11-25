@@ -1,3 +1,7 @@
+import {
+  BRAND_LIST_SORT_FIELDS,
+  type BrandListSortField,
+} from "@acropora/types";
 import { Type } from "class-transformer";
 import {
   IsArray,
@@ -56,4 +60,7 @@ export class BrandListQueryDto {
     "ACTIVE" | "ARCHIVED" | "ALL" = "ACTIVE";
   @IsString() @IsOptional() source?: string;
   @Type(() => Boolean) @IsBoolean() @IsOptional() hasProducts?: boolean;
+  /** The sort column and direction (whitelist: `BRAND_LIST_SORT_FIELDS`); without them the name, ascending. */
+  @IsIn(BRAND_LIST_SORT_FIELDS) @IsOptional() sort?: BrandListSortField;
+  @IsIn(["asc", "desc"]) @IsOptional() direction?: "asc" | "desc";
 }

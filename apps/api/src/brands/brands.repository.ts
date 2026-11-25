@@ -4,6 +4,9 @@ import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 import type { BrandDetail, BrandListResponse } from "@acropora/types";
 
+import { listOrderBy } from "../common/list-sort.js";
+import { BRAND_LIST_SORT } from "./brand-list-sort.js";
+
 import {
   applyBrandSlugChange,
   assertBrandSlugFree,
@@ -76,7 +79,7 @@ export class BrandsRepository extends Repository {
       prisma.brand.findMany({
         where,
         include,
-        orderBy: [{ name: "asc" }, { id: "asc" }],
+        orderBy: listOrderBy(BRAND_LIST_SORT, query.sort, query.direction),
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),

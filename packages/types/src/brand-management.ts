@@ -50,6 +50,19 @@ export interface BrandDetail extends BrandSummary {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * A MÁRKÁK LISTÁJÁNAK RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4). A lista lapozott, ezért a rendezés a szerveren történik.
+ * Három oszlop rendezhető: a név, a termékek száma (a kapcsolat saját darabszáma, ugyanaz, amit a lap kiír) és a frissítés ideje.
+ * Nem rendezhető: a "Státusz" (kétállapotú jelző, szűrője van), az "Aliasok" (több érték) és az "UNAS" (a külső hozzárendelésből
+ * következő felirat). Az alap sorrend a név.
+ */
+export const BRAND_LIST_SORT_FIELDS = [
+  "name",
+  "productCount",
+  "updatedAt",
+] as const;
+export type BrandListSortField = (typeof BRAND_LIST_SORT_FIELDS)[number];
+
 export interface BrandListResponse {
   items: BrandSummary[];
   pagination: {

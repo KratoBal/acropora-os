@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -9,7 +10,7 @@ import type { BrandListResponse, Session } from "@acropora/types";
 import { useSyncExternalStore } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BrandListPage } from "./brand-list-page";
+import { BrandListPage, brandListQuery } from "./brand-list-page";
 
 const navigation = vi.hoisted(() => ({
   params: new URLSearchParams(),
@@ -124,5 +125,94 @@ describe("BrandListPage paging", () => {
     await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
     const target = String(navigation.replace.mock.calls.at(-1)?.[0]);
     expect(new URLSearchParams(target.split("?")[1]).get("page")).toBe("3");
+  });
+});
+
+/*
+  A LISTA RENDEZÉSE AZ OSZLOPFEJEN (Balázs kérése, kártya 2f6369a4). MI PIROSÍT: ha a márka, a termékek vagy a frissítve fejléce nem a
+  saját szerver-mezőjét írja az URL-be; ha a ciklus (növekvő, csökkenő, alap) elakad; ha a rendezés nem nullázza a lapot, vagy
+  elveszíti a szűrőt; ha az URL rendezése nem jut a kérésbe, vagy egy ismeretlen mező (régi vagy kézzel írt link) igen (az API 400-at
+  adna, és az egész lista eltörne); ha a státusz, az aliasok vagy az UNAS oszlop rendezhetőnek látszik.
+*/
+describe("BrandListPage sorting", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.params = new URLSearchParams("page=3&status=ALL");
+    navigation.replace.mockReset();
+    api.list.mockReset().mockResolvedValue(response(3));
+  });
+
+  const lastReplace = () =>
+    new URLSearchParams(
+      String(navigation.replace.mock.calls.at(-1)?.[0]).split("?")[1],
+    );
+
+  it("each header writes its own server field, ascending first, drops the page and keeps the filter", async () => {
+    render(<BrandListPage />);
+    const table = await screen.findByRole("table");
+    for (const [name, field] of [
+      ["Márka", "name"],
+      ["Termékek", "productCount"],
+      ["Frissítve", "updatedAt"],
+    ] as const) {
+      navigation.replace.mockReset();
+      fireEvent.click(within(table).getByRole("button", { name }));
+      const url = lastReplace();
+      expect(url.get("sort"), name).toBe(field);
+      expect(url.get("direction"), name).toBe("asc");
+      expect(url.has("page"), name).toBe(false);
+      expect(url.get("status"), name).toBe("ALL");
+    }
+  });
+
+  it("the second click is descending, the third clears the sort", async () => {
+    navigation.params = new URLSearchParams("sort=productCount&direction=asc");
+    render(<BrandListPage />);
+    const table = await screen.findByRole("table");
+    fireEvent.click(within(table).getByRole("button", { name: "Termékek" }));
+    expect(lastReplace().get("direction")).toBe("desc");
+
+    // a mock a címet csak értesítésre olvassa újra: az URL "megváltozott"
+    navigation.params = new URLSearchParams("sort=productCount&direction=desc");
+    act(() => {
+      for (const listener of navigation.listeners) listener();
+    });
+    navigation.replace.mockReset();
+    fireEvent.click(within(table).getByRole("button", { name: "Termékek" }));
+    expect(lastReplace().has("sort")).toBe(false);
+    expect(lastReplace().has("direction")).toBe(false);
+  });
+
+  it("the URL's sort reaches the request, and an unknown or incomplete one does not", async () => {
+    navigation.params = new URLSearchParams("sort=updatedAt&direction=desc");
+    render(<BrandListPage />);
+    await screen.findByRole("table");
+    const sent = api.list.mock.calls.at(-1)?.[1] as URLSearchParams;
+    expect(sent.get("sort")).toBe("updatedAt");
+    expect(sent.get("direction")).toBe("desc");
+
+    for (const bad of [
+      "sort=aliases&direction=asc",
+      "sort=name",
+      "sort=name&direction=up",
+      "direction=asc",
+    ]) {
+      const query = brandListQuery(new URLSearchParams(bad));
+      expect(query.has("sort"), bad).toBe(false);
+      expect(query.has("direction"), bad).toBe(false);
+    }
+    expect(
+      Object.fromEntries(brandListQuery(new URLSearchParams("status=ALL"))),
+    ).toEqual({ status: "ALL", page: "1", pageSize: "25" });
+  });
+
+  it("only the brand, the products and the updated columns have a sort button", async () => {
+    render(<BrandListPage />);
+    const table = await screen.findByRole("table");
+    const sortable = within(table)
+      .getAllByRole("columnheader")
+      .filter((header) => within(header).queryByRole("button"))
+      .map((header) => header.textContent?.replace(/[⇅↑↓]/g, ""));
+    expect(sortable).toEqual(["Márka", "Termékek", "Frissítve"]);
   });
 });
