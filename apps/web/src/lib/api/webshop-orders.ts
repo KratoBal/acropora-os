@@ -134,6 +134,14 @@ export const webshopOrdersApi = {
       { method: "POST", body: JSON.stringify({ notifyCustomer }) },
     );
   },
+  /** „Visszatérítve” (kártya abf3f8f4): a kézi kártya-visszatérítés rendezése; a „ki” a szerveren a bejelentkezett felhasználó. */
+  settleManualRefund(token: string, id: string, note: string) {
+    return apiRequest<WebshopOrderDetail>(
+      `/webshop-orders/${encodeURIComponent(id)}/manual-refund-settled`,
+      token,
+      { method: "POST", body: JSON.stringify(note.trim() ? { note } : {}) },
+    );
+  },
   /** „Fizetési link küldése” a rendelés mostani végösszegére. */
   sendPaymentLink(token: string, id: string, notifyCustomer: boolean) {
     return apiRequest<WebshopOrderStatusChangeResult>(

@@ -27,6 +27,7 @@ import {
   type WebshopStatusMailOutcome,
   WEBSHOP_CARRIER_NOTE_MAX,
   WEBSHOP_CUSTOMER_NOTE_MAX,
+  WEBSHOP_MANUAL_REFUND_NOTE_MAX,
   type WebshopOrderMethodInput,
   type WebshopOrderMethodResult,
   type WebshopOrderNotesInput,
@@ -595,6 +596,11 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setNow(Date.now());
     return statusMailText(result.mail);
   };
+  const settleManualRefund = async (note: string) => {
+    const result = await webshopOrdersApi.settleManualRefund(token, id, note);
+    setOrder(result);
+    setNow(Date.now());
+  };
   const sendPaymentLink = async (notifyCustomer: boolean) => {
     const result = await webshopOrdersApi.sendPaymentLink(
       token,
@@ -717,6 +723,7 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           onEditLine={editLine}
           onSearchVariants={searchVariants}
           onReleaseHold={releaseHold}
+          onSettleManualRefund={settleManualRefund}
           onSendPaymentLink={sendPaymentLink}
           onUpdateAddress={updateAddress}
           onSaveNote={saveNote}
@@ -1445,6 +1452,133 @@ function ResendStatusMail({ onResend }: { onResend: () => Promise<void> }) {
 }
 
 /**
+ * A KÉZI KÁRTYA-VISSZATÉRÍTÉS JELZÉSE ÉS RENDEZÉSE (kártyák 527ba41e, abf3f8f4). A jelzés eltűnik, ha a visszatérítés a webshopon át
+ * megtörtént; a Stripe irányítópultján indítottat a webshop nem látja, ezért a „Visszatérítve” gombbal rögzíti valaki, hogy elvégezte
+ * (a webshop a nevét és az időt a rendelés nyomára írja). Rendezve: ki és mikor áll a jelzés helyén, a nyom megmarad.
+ */
+function ManualRefundNotice({
+  refund,
+  money,
+  canManage,
+  onSettle,
+}: {
+  refund: NonNullable<WebshopOrderDetail["manualRefund"]>;
+  money: (value: number) => string;
+  canManage: boolean;
+  onSettle: (note: string) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  if (refund.settled) {
+    return (
+      <p
+        data-testid="manual-refund-settled"
+        className="rounded-lg bg-pilot-grey-50 p-3 text-sm text-pilot-grey-700"
+      >
+        Kézi visszatérítés rendezve ({money(refund.amount)}):{" "}
+        {refund.settled.by || "ismeretlen"},{" "}
+        {LONG_DATE.format(new Date(refund.settled.at))}
+        {refund.settled.note ? ` (${refund.settled.note})` : ""}. A sikertelen
+        lezárás nyoma megmarad.
+      </p>
+    );
+  }
+  const settle = async () => {
+    setBusy(true);
+    setFailure(null);
+    try {
+      await onSettle(note);
+      setOpen(false);
+      setNote("");
+    } catch (error) {
+      setFailure(
+        error instanceof Error && error.message
+          ? error.message
+          : "A rendezés nem sikerült.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="space-y-2">
+      <p
+        role="alert"
+        data-testid="manual-refund-notice"
+        className="rounded-lg bg-pilot-red-50 p-3 text-sm text-pilot-red-700"
+      >
+        Kézi visszatérítés kell: {money(refund.amount)}. A sikertelen lezáráskor
+        a pont és az ajándékkártya visszajárt, de a kártyán rögzített összeget a
+        rendszer nem térítette vissza (a feladott csomag miatt a rendelés nem
+        mondható le). Térítsd vissza a kártyás összeget a webshop adminjában:
+        onnan megy a Stripe-ba, és a jelzés is onnan tűnik el. Ha a Stripe
+        irányítópultján térítetted vissza, azt a webshop nem látja: rögzítsd a
+        „Visszatérítve” gombbal.
+      </p>
+      {canManage && !open ? (
+        <PilotButton
+          size="regular"
+          variant="secondary"
+          onClick={() => setOpen(true)}
+        >
+          Visszatérítve
+        </PilotButton>
+      ) : null}
+      {canManage && open ? (
+        <div className="space-y-2 rounded-lg border border-pilot-grey-200 p-3">
+          <p className="text-sm text-pilot-grey-700">
+            Biztosan elvégezted a kártyás visszatérítést? A rögzítés a jelzést
+            lezárja, és a nevedet meg az időt a rendelés nyomára írja.
+          </p>
+          <label className="block text-sm">
+            Megjegyzés (nem kötelező)
+            <input
+              type="text"
+              value={note}
+              maxLength={WEBSHOP_MANUAL_REFUND_NOTE_MAX}
+              onChange={(event) => setNote(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-pilot-grey-300 px-3 py-2"
+              data-testid="manual-refund-note"
+            />
+          </label>
+          {failure ? (
+            <p
+              role="alert"
+              data-testid="manual-refund-failure"
+              className="text-sm text-pilot-red-700"
+            >
+              {failure}
+            </p>
+          ) : null}
+          <div className="flex gap-2">
+            <PilotButton
+              size="regular"
+              disabled={busy}
+              onClick={() => void settle()}
+            >
+              {busy ? "Folyamatban…" : "Rögzítem"}
+            </PilotButton>
+            <PilotButton
+              size="regular"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => {
+                setOpen(false);
+                setFailure(null);
+              }}
+            >
+              Mégse
+            </PilotButton>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * A KÁRTYÁS FIZETÉS ÚTJA A FIZETÉS KÁRTYÁN (lejáró zárolás, Balázs döntése
  * 2026-10-05): az állapot, a zárolás lejáratának jelzése az 5. naptól, a
  * „Csúszik a szállítás” (a zárolás feloldása) és a „Fizetési link küldése”.
@@ -2019,6 +2153,7 @@ function OrderBody({
   onEditLine,
   onSearchVariants,
   onReleaseHold,
+  onSettleManualRefund,
   onSendPaymentLink,
   onUpdateAddress,
   onSaveNote,
@@ -2064,6 +2199,8 @@ function OrderBody({
   onEditLine: (itemId: string, edit: WebshopOrderLineEdit) => Promise<void>;
   onSearchVariants: (query: string) => Promise<WebshopVariantOption[]>;
   onReleaseHold: (notifyCustomer: boolean) => Promise<string>;
+  /** „Visszatérítve” (kártya abf3f8f4): a kézi kártya-visszatérítés rendezése; a „ki” a szerveren a bejelentkezett felhasználó. */
+  onSettleManualRefund: (note: string) => Promise<void>;
   onSendPaymentLink: (notifyCustomer: boolean) => Promise<string>;
   onUpdateAddress: (input: WebshopOrderAddressInput) => Promise<void>;
   onSaveNote: (text: string) => Promise<void>;
@@ -2605,19 +2742,12 @@ function OrderBody({
                   </Field>
                 ) : null}
                 {order.manualRefund ? (
-                  <p
-                    role="alert"
-                    data-testid="manual-refund-notice"
-                    className="rounded-lg bg-pilot-red-50 p-3 text-sm text-pilot-red-700"
-                  >
-                    Kézi visszatérítés kell: {money(order.manualRefund.amount)}.
-                    A sikertelen lezáráskor a pont és az ajándékkártya
-                    visszajárt, de a kártyán rögzített összeget a rendszer nem
-                    térítette vissza (a feladott csomag miatt a rendelés nem
-                    mondható le). Térítsd vissza a kártyás összeget a webshop
-                    adminjában: onnan megy a Stripe-ba, és a jelzés is onnan
-                    tűnik el.
-                  </p>
+                  <ManualRefundNotice
+                    refund={order.manualRefund}
+                    money={money}
+                    canManage={canManage}
+                    onSettle={onSettleManualRefund}
+                  />
                 ) : null}
                 {order.cardPayment ? (
                   <CardPaymentSection

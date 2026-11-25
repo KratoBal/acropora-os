@@ -1698,6 +1698,7 @@ export {
   foxpostPointType,
   WEBSHOP_CARRIER_NOTE_MAX,
   WEBSHOP_CUSTOMER_NOTE_MAX,
+  WEBSHOP_MANUAL_REFUND_NOTE_MAX,
 } from "./webshop-orders.js";
 export type {
   WebshopOrderAddress,
@@ -1732,6 +1733,7 @@ export type {
   WebshopStaleStatus,
   WebshopStaleThreshold,
   WebshopOrderAddressInput,
+  WebshopOrderManualRefundSettleInput,
   WebshopOrderNotesInput,
   WebshopParcelTracking,
   WebshopOrderSplitInput,

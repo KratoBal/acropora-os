@@ -664,6 +664,7 @@ export class WebshopOrdersRepository {
       | "pickup-point-changed"
       | "notes-edited"
       | "loyalty-adjusted"
+      | "manual-refund-settled"
       | "split"
       | "shipping-method-changed";
     before: unknown;

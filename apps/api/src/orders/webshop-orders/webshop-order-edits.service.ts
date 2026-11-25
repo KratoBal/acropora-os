@@ -10,6 +10,7 @@ import {
   type AuthenticatedUser,
   type WebshopOrderAddressInput,
   type WebshopOrderDetail,
+  type WebshopOrderManualRefundSettleInput,
   type WebshopOrderNotesInput,
   type WebshopPickupPointSearch,
 } from "@acropora/types";
@@ -185,6 +186,45 @@ export class WebshopOrderEditsService {
       orderId: id,
       action: "notes-edited",
       before: detail.notes,
+    });
+    return this.orders.detail(id, now);
+  }
+
+  /**
+   * A KÉZI KÁRTYA-VISSZATÉRÍTÉS RENDEZÉSE (kártya abf3f8f4; commerce #904). A Stripe irányítópultján indított visszatérítést a webshop nem
+   * látja, a jelzés ezért ott maradt; a „Visszatérítve” gomb ide jut: a webshop a rendelés markerére ráírja, KI és mikor rendezte.
+   * A „ki” a bejelentkezett felhasználó hivatalos neve, innen töltődik, SOHA nem a kérésből (barracuda, commerce #904): a kérés törzséből
+   * csak a rövid megjegyzés vehető át. Ismételt megnyomás az elsőt adja vissza (a webshop idempotens), és nem ír második naplósort.
+   * Csak olyan rendelésre, amin tényleg van rendezetlen kézi visszatérítés (409 különben, a jelzés szavával).
+   */
+  async settleManualRefund(
+    id: string,
+    input: WebshopOrderManualRefundSettleInput,
+    user: AuthenticatedUser,
+    now = new Date(),
+  ): Promise<WebshopOrderDetail> {
+    const detail = await this.orders.detail(id, now);
+    const refund = detail.manualRefund;
+    if (!refund)
+      throw new ConflictException(
+        "Ennél a rendelésnél nincs kézi visszatérítés, amit rendezni kellene.",
+      );
+    // már rendezve: az elsőt mutatjuk, nincs második írás és nincs második naplósor
+    if (refund.settled) return detail;
+    const client = await this.orders.adminClient();
+    try {
+      await client.settleManualRefund(id, {
+        settled_by: user.displayName,
+        ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+      });
+    } catch (error) {
+      throw refusalOf(error, "A visszatérítés rendezése nem sikerült");
+    }
+    await this.repository.recordOrderEdit({
+      userId: user.id,
+      orderId: id,
+      action: "manual-refund-settled",
+      before: refund,
     });
     return this.orders.detail(id, now);
   }

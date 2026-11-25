@@ -434,26 +434,51 @@ export function unfinishedSplitOf(
 export function manualRefundOf(
   metadata: Record<string, unknown> | null | undefined,
   outstanding?: number | null,
-): { amount: number; creditLines: number; at: string | null } | null {
+): {
+  amount: number;
+  creditLines: number;
+  at: string | null;
+  settled: { by: string; at: string; note: string | null } | null;
+} | null {
   const mark = metadata?.unsuccessful_close_credits_given_back;
   if (!mark || typeof mark !== "object") return null;
-  const { captured_unrefunded, credit_lines, at } = mark as Record<
-    string,
-    unknown
-  >;
+  const {
+    captured_unrefunded,
+    credit_lines,
+    at,
+    settled_at,
+    settled_by,
+    settled_note,
+  } = mark as Record<string, unknown>;
   const marked = Number(captured_unrefunded);
   if (!Number.isFinite(marked) || marked <= 0) return null;
+  const lines = Number(credit_lines);
+  const base = {
+    creditLines: Number.isFinite(lines) && lines > 0 ? lines : 0,
+    at: typeof at === "string" ? at : null,
+  };
+  /*
+    RENDEZVE (kártya abf3f8f4): a nyomra valaki ráírta, hogy a visszatérítést elvégezte (a Stripe irányítópultján, amit a webshop nem lát).
+    A jelzés helyén ilyenkor ki és mikor áll, és a nyom megmarad: a lezárás története nem tűnik el. A jelzett összeg a nyomé (a
+    rendezéskor kimondott összeg), nem a webshop mostani maradéka.
+  */
+  if (typeof settled_at === "string" && settled_at) {
+    return {
+      amount: marked,
+      ...base,
+      settled: {
+        by: typeof settled_by === "string" ? settled_by : "",
+        at: settled_at,
+        note: typeof settled_note === "string" ? settled_note : null,
+      },
+    };
+  }
   const amount =
     typeof outstanding === "number" && Number.isFinite(outstanding)
       ? Math.min(marked, outstanding)
       : marked;
   if (!(amount > 0)) return null;
-  const lines = Number(credit_lines);
-  return {
-    amount,
-    creditLines: Number.isFinite(lines) && lines > 0 ? lines : 0,
-    at: typeof at === "string" ? at : null,
-  };
+  return { amount, ...base, settled: null };
 }
 
 /** A webshop fizetéseinek vissza nem térített, rögzített összege; `null`: nem olvasható (nincs fizetési gyűjtemény). */

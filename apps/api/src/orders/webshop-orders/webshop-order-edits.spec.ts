@@ -220,3 +220,152 @@ describe("WebshopOrderEditsService", () => {
     assert.deepEqual(audited, [["order_38", "Első rendelése.", "user_1"]]);
   });
 });
+
+/*
+  A KÉZI KÁRTYA-VISSZATÉRÍTÉS RENDEZÉSE (kártya abf3f8f4; commerce #904; barracuda: a „ki” a munkamenetből jön). MI PIROSÍT: a „ki” a
+  kérés törzséből vagy máshonnan töltődik, nem a bejelentkezett felhasználó hivatalos nevéből; rendezés olyan rendelésre, amin nincs
+  rendezetlen kézi visszatérítés; a már rendezett rendelés újra a webshopig jut vagy második naplósort ír; a webshop elutasítása 500;
+  a rendezés nem kerül auditba; a megjegyzés tisztítatlanul megy a webshopnak.
+*/
+function settleSetup(
+  manualRefund: WebshopOrderDetail["manualRefund"],
+  fail?: MedusaAdminHttpError,
+) {
+  const calls: unknown[] = [];
+  const audited: unknown[] = [];
+  const client = {
+    settleManualRefund: async (id: string, input: unknown) => {
+      calls.push([id, input]);
+      if (fail) throw fail;
+      return {
+        settled_at: "x",
+        settled_by: "x",
+        settled_note: null,
+        already: false,
+      };
+    },
+  } as unknown as MedusaAdminClient;
+  const orders = {
+    detail: async (id: string) =>
+      ({ id, manualRefund }) as unknown as WebshopOrderDetail,
+    adminClient: async () => client,
+  } as unknown as WebshopOrdersService;
+  const repository = {
+    recordOrderEdit: async (input: unknown) => void audited.push(input),
+  } as unknown as WebshopOrdersRepository;
+  return {
+    calls,
+    audited,
+    service: new WebshopOrderEditsService(orders, repository),
+  };
+}
+const OPEN_REFUND = {
+  amount: 39100,
+  creditLines: 1,
+  at: "2026-11-25T08:45:56.259Z",
+  settled: null,
+};
+const NAMED_USER = {
+  id: "user_7",
+  displayName: "Kiss Anna",
+  email: "anna@example.hu",
+} as AuthenticatedUser;
+
+describe("settling the hand refund", () => {
+  it("the WHO comes from the signed-in user's name, never from the request: an extra field is ignored; the note is trimmed", async () => {
+    const { calls, service } = settleSetup(OPEN_REFUND);
+    await service.settleManualRefund(
+      "order_1",
+      {
+        note: "  Stripe irányítópult, re_123  ",
+        settled_by: "Valaki Más",
+      } as never,
+      NAMED_USER,
+    );
+    assert.deepEqual(calls, [
+      [
+        "order_1",
+        { settled_by: "Kiss Anna", note: "Stripe irányítópult, re_123" },
+      ],
+    ]);
+  });
+
+  it("no note, no note key; an empty note counts as none", async () => {
+    for (const input of [{}, { note: "   " }]) {
+      const { calls, service } = settleSetup(OPEN_REFUND);
+      await service.settleManualRefund("order_1", input, NAMED_USER);
+      assert.deepEqual(calls, [["order_1", { settled_by: "Kiss Anna" }]]);
+    }
+  });
+
+  it("the settlement is audited: who, which order, and the notice it closed", async () => {
+    const { audited, service } = settleSetup(OPEN_REFUND);
+    await service.settleManualRefund("order_1", {}, NAMED_USER);
+    assert.deepEqual(audited, [
+      {
+        userId: "user_7",
+        orderId: "order_1",
+        action: "manual-refund-settled",
+        before: OPEN_REFUND,
+      },
+    ]);
+  });
+
+  it("an order with no hand refund to settle is 409 and never reaches the webshop", async () => {
+    for (const none of [null, undefined]) {
+      const { calls, audited, service } = settleSetup(none);
+      await assert.rejects(
+        service.settleManualRefund("order_1", {}, NAMED_USER),
+        {
+          status: 409,
+          message:
+            "Ennél a rendelésnél nincs kézi visszatérítés, amit rendezni kellene.",
+        },
+      );
+      assert.deepEqual([calls, audited], [[], []]);
+    }
+  });
+
+  it("an already settled order is shown as it is: no second call to the webshop, no second audit row", async () => {
+    const settled = {
+      ...OPEN_REFUND,
+      settled: { by: "Első", at: "2026-11-25T09:00:00.000Z", note: null },
+    };
+    const { calls, audited, service } = settleSetup(settled);
+    const detail = await service.settleManualRefund("order_1", {}, NAMED_USER);
+    assert.deepEqual(detail.manualRefund, settled);
+    assert.deepEqual([calls, audited], [[], []]);
+  });
+
+  it("the webshop's refusal comes through with its sentence (409 stays 409, another 4xx is 422), and nothing is audited", async () => {
+    const conflict = settleSetup(
+      OPEN_REFUND,
+      new MedusaAdminHttpError(
+        409,
+        JSON.stringify({
+          message:
+            "A webshop szerint a rögzített összeg már vissza van térítve.",
+        }),
+      ),
+    );
+    await assert.rejects(
+      conflict.service.settleManualRefund("order_1", {}, NAMED_USER),
+      {
+        status: 409,
+        message: "A webshop szerint a rögzített összeg már vissza van térítve.",
+      },
+    );
+    const invalid = settleSetup(
+      OPEN_REFUND,
+      new MedusaAdminHttpError(
+        400,
+        JSON.stringify({ message: "Érvénytelen kérés." }),
+      ),
+    );
+    await assert.rejects(
+      invalid.service.settleManualRefund("order_1", {}, NAMED_USER),
+      { status: 422, message: "Érvénytelen kérés." },
+    );
+    assert.deepEqual([conflict.audited, invalid.audited], [[], []]);
+  });
+});
