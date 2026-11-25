@@ -2775,10 +2775,12 @@ describe("the proforma on the Fizetés card", () => {
       within(confirm).getByRole("button", { name: "Díjbekérő kiküldése" }),
     );
     expect(await within(payment).findByText("TESZT-D-1")).toBeTruthy();
+    // the amount the window showed goes back with the send, and the issue checks it (barracuda on #2837)
     expect(api.sendProforma).toHaveBeenCalledWith(
       "token",
       "order_38",
       PROFORMA_CONFIRMED,
+      { grossAmount: PROFORMA_SUMMARY.grossAmount },
     );
     expect(within(payment).getByText("2026-10-14")).toBeTruthy();
     expect(within(payment).getByText("Kiküldve")).toBeTruthy();

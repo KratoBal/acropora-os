@@ -112,7 +112,7 @@ export class WebshopOrderInvoiceService {
     confirmation?: BillingIssueConfirmation,
     /** An advance proforma (card d31a66a3, 2a): the same one the window was opened with. */
     advance?: WebshopProformaAdvance,
-    /** The amount the window showed: an advance proforma's first send checks it. */
+    /** The amount the window showed: every first send carries it, and the issue checks it (barracuda on #2837). */
     shownGross?: string,
   ): Promise<WebshopOrderDetail> {
     return this.serial(orderId, () =>
@@ -275,17 +275,19 @@ export class WebshopOrderInvoiceService {
           "A díjbekérő kiállítása előtt nyisd meg a megerősítést.",
         );
       /*
-        THE AMOUNT THE WINDOW SHOWED IS THE AMOUNT ISSUED (card d31a66a3, 2a): the window's digest covers the buyer and the dates,
-        not the lines, and an advance proforma's lines come from what the person typed. A send with another advance (or the
-        order changed meanwhile) stops here instead of issuing what was not shown.
+        THE AMOUNT THE WINDOW SHOWED IS THE AMOUNT ISSUED (card d31a66a3, 2a; barracuda on #2837): the window's digest covers the
+        buyer and the dates, not the lines, and an advance proforma's lines come from what the person typed. So every first send
+        carries the amount its window showed, with an advance or without: a window opened for an advance and a send that comes
+        without it (a stale tab, a retry) would otherwise issue the whole order's proforma the person never saw. A send with
+        another amount, or none, stops here instead of issuing what was not shown.
       */
-      if (
-        advance &&
-        (shownGross === undefined ||
-          Number(shownGross) !== Number(prepared.saved.totals.grossAmount))
-      )
+      if (shownGross === undefined)
+        throw new BadRequestException(
+          "A díjbekérő összege hiányzik a kiküldésből: nyisd meg újra a megerősítést.",
+        );
+      if (Number(shownGross) !== Number(prepared.saved.totals.grossAmount))
         throw new ConflictException(
-          "Az előleg-díjbekérő összege nem az, amit a megerősítés mutatott. Nyisd meg újra a megerősítést.",
+          "A díjbekérő összege nem az, amit a megerősítés mutatott. Nyisd meg újra a megerősítést.",
         );
       // what the window showed is what the proforma carries (the shared issuer re-checks the digest and the dates)
       await this.issuing.issue(

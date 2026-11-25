@@ -404,8 +404,8 @@ export const webshopOrdersApi = {
     id: string,
     /** What the window showed (card 7ba97e0d follow-up): the first send issues with it; a resend sends none. */
     confirmation?: BillingIssueConfirmation,
-    /** An advance proforma (card d31a66a3, 2a): the advance the window was opened with, and the amount it showed. */
-    advance?: { advance: WebshopProformaAdvance; grossAmount: string },
+    /** What the window was opened with (an advance, card d31a66a3, 2a) and the amount it showed: every first send carries it. */
+    shown?: { advance?: WebshopProformaAdvance; grossAmount: string },
   ) {
     return apiRequest<WebshopOrderDetail>(
       `/webshop-orders/${encodeURIComponent(id)}/proforma`,
@@ -416,12 +416,8 @@ export const webshopOrdersApi = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               ...confirmation,
-              ...(advance
-                ? {
-                    ...advanceBody(advance.advance),
-                    grossAmount: advance.grossAmount,
-                  }
-                : {}),
+              ...(shown?.advance ? advanceBody(shown.advance) : {}),
+              ...(shown ? { grossAmount: shown.grossAmount } : {}),
             }),
           }
         : { method: "POST" },

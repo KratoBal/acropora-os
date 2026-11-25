@@ -284,7 +284,7 @@ describe("sending the proforma from the order page", () => {
     for (const provider of ["pp_acropora_cod", "pp_stripe_stripe", null]) {
       const { service, calls } = setup({ provider });
       assert.equal(
-        await status(service.sendProforma("order_55", USER, NOW, CONFIRMED)),
+        await status(service.sendProforma("order_55", USER, NOW, CONFIRMED, undefined, "4800")),
         409,
       );
       assert.ok(
@@ -301,7 +301,7 @@ describe("sending the proforma from the order page", () => {
     ] as const) {
       const { service, calls } = setup({ orderStatus });
       assert.equal(
-        await status(service.sendProforma("order_55", USER, NOW, CONFIRMED)),
+        await status(service.sendProforma("order_55", USER, NOW, CONFIRMED, undefined, "4800")),
         expected,
         String(orderStatus),
       );
@@ -314,7 +314,7 @@ describe("sending the proforma from the order page", () => {
 
   it("the first press issues it and sends it to the buyer's address", async () => {
     const { service, calls, drafts } = setup({});
-    await service.sendProforma("order_55", USER, NOW, CONFIRMED);
+    await service.sendProforma("order_55", USER, NOW, CONFIRMED, undefined, "4800");
     assert.deepEqual(
       calls.filter((c) => !c.startsWith("invoices")),
       [
@@ -331,7 +331,7 @@ describe("sending the proforma from the order page", () => {
       proforma: { id: "doc_1", status: "ISSUED", number: "D-1" },
       emailStatus: "SENT",
     });
-    await service.sendProforma("order_55", USER, NOW, CONFIRMED);
+    await service.sendProforma("order_55", USER, NOW, CONFIRMED, undefined, "4800");
     assert.deepEqual(
       calls.filter((c) => !c.startsWith("invoices")),
       ["send doc_1 RESEND to vevo@example.test"],
@@ -344,7 +344,7 @@ describe("sending the proforma from the order page", () => {
         proforma: { id: "doc_1", status: s, number: null },
       });
       assert.equal(
-        await status(service.sendProforma("order_55", USER, NOW, CONFIRMED)),
+        await status(service.sendProforma("order_55", USER, NOW, CONFIRMED, undefined, "4800")),
         409,
       );
       assert.ok(!calls.some((c) => /^(create|update|issue|send)/.test(c)));
@@ -353,7 +353,7 @@ describe("sending the proforma from the order page", () => {
 
   it("the first send issues what the window confirmed; without the window nothing is issued", async () => {
     const confirmed = setup({});
-    await confirmed.service.sendProforma("order_55", USER, NOW, CONFIRMED);
+    await confirmed.service.sendProforma("order_55", USER, NOW, CONFIRMED, undefined, "4800");
     assert.deepEqual(confirmed.confirmations, [CONFIRMED]);
     // the issue re-checks the digest with the address the window named: the order's (barracuda on #2429)
     assert.deepEqual(confirmed.sendTos, ["vevo@example.test"]);
@@ -370,7 +370,7 @@ describe("sending the proforma from the order page", () => {
     // a registered buyer: a guest order without e-mail has no customer key and stops even earlier
     const { service, calls } = setup({ email: null, customerId: "cus_1" });
     assert.equal(
-      await status(service.sendProforma("order_55", USER, NOW, CONFIRMED)),
+      await status(service.sendProforma("order_55", USER, NOW, CONFIRMED, undefined, "4800")),
       409,
     );
     assert.ok(!calls.some((c) => /^(create|update|issue|send)/.test(c)));
@@ -380,7 +380,7 @@ describe("sending the proforma from the order page", () => {
     const unfinished = setup({ issueEnds: "ISSUING" });
     assert.equal(
       await status(
-        unfinished.service.sendProforma("order_55", USER, NOW, CONFIRMED),
+        unfinished.service.sendProforma("order_55", USER, NOW, CONFIRMED, undefined, "4800"),
       ),
       409,
     );
@@ -392,7 +392,7 @@ describe("sending the proforma from the order page", () => {
     });
     assert.equal(
       await status(
-        noEmail.service.sendProforma("order_55", USER, NOW, CONFIRMED),
+        noEmail.service.sendProforma("order_55", USER, NOW, CONFIRMED, undefined, "4800"),
       ),
       409,
     );
@@ -421,7 +421,7 @@ describe("the language of the proforma's mail (d5c6befd, P4)", () => {
       [null, "hu", "Bizonylat"],
     ] as const) {
       const { service, languages, sentSubjects } = setup({ locale });
-      await service.sendProforma("order_55", USER, NOW, CONFIRMED);
+      await service.sendProforma("order_55", USER, NOW, CONFIRMED, undefined, "4800");
       assert.deepEqual(languages, [language], String(locale));
       assert.deepEqual(sentSubjects, [subject], String(locale));
     }
@@ -433,7 +433,7 @@ describe("the language of the proforma's mail (d5c6befd, P4)", () => {
       proforma: { id: "doc_1", status: "ISSUED", number: "D-1" },
       emailStatus: "SENT",
     });
-    await service.sendProforma("order_55", USER, NOW, CONFIRMED);
+    await service.sendProforma("order_55", USER, NOW, CONFIRMED, undefined, "4800");
     assert.deepEqual(sentSubjects, ["Document"]);
     assert.deepEqual(
       calls.filter((c) => !c.startsWith("invoices")),
@@ -445,8 +445,8 @@ describe("the language of the proforma's mail (d5c6befd, P4)", () => {
   it("the document itself is built the same for an English order (the PDF language is not touched here)", async () => {
     const en = setup({ locale: "en" });
     const hu = setup({});
-    await en.service.sendProforma("order_55", USER, NOW, CONFIRMED);
-    await hu.service.sendProforma("order_55", USER, NOW, CONFIRMED);
+    await en.service.sendProforma("order_55", USER, NOW, CONFIRMED, undefined, "4800");
+    await hu.service.sendProforma("order_55", USER, NOW, CONFIRMED, undefined, "4800");
     assert.deepEqual(en.drafts, hu.drafts);
   });
 });
@@ -457,7 +457,7 @@ describe("a closed mail gate", () => {
       "A számlázási bizonylatok kiküldése ebben a környezetben ki van kapcsolva (TICKET_MAIL_BILLING_DOCUMENT).";
     const { service, calls } = setup({ mailClosed: closed });
     await assert.rejects(
-      service.sendProforma("order_55", USER, NOW, CONFIRMED),
+      service.sendProforma("order_55", USER, NOW, CONFIRMED, undefined, "4800"),
       {
         status: 503,
         message: closed,
@@ -473,7 +473,7 @@ describe("a closed mail gate", () => {
       emailStatus: "SENT",
     });
     assert.equal(
-      await status(service.sendProforma("order_55", USER, NOW, CONFIRMED)),
+      await status(service.sendProforma("order_55", USER, NOW, CONFIRMED, undefined, "4800")),
       503,
     );
     assert.ok(!calls.some((c) => c.startsWith("send")));
@@ -579,7 +579,10 @@ describe("the advance proforma", () => {
     );
     assert.ok(shown.calls.includes("issue doc_1"));
 
-    for (const gross of ["4800", undefined]) {
+    for (const [gross, code] of [
+      ["4800", 409],
+      [undefined, 400],
+    ] as const) {
       const other = setup({});
       assert.equal(
         await status(
@@ -592,10 +595,39 @@ describe("the advance proforma", () => {
             gross,
           ),
         ),
-        409,
+        code,
       );
       assert.ok(!other.calls.some((c) => c.startsWith("issue")));
     }
+  });
+
+  // barracuda on #2837: the check ran only with an advance, so a window opened for one and a send without it issued the whole order
+  it("a window opened for an advance and a send that comes without it issues nothing; a first send without the amount neither", async () => {
+    const stale = setup({});
+    await stale.service.proformaSummary("order_55", USER, NOW, {
+      amount: "2000",
+    });
+    assert.equal(
+      await status(
+        stale.service.sendProforma(
+          "order_55",
+          USER,
+          NOW,
+          CONFIRMED,
+          undefined,
+          "2000",
+        ),
+      ),
+      409,
+    );
+    assert.ok(!stale.calls.some((c) => c.startsWith("issue")));
+
+    const blind = setup({});
+    assert.equal(
+      await status(blind.service.sendProforma("order_55", USER, NOW, CONFIRMED)),
+      400,
+    );
+    assert.ok(!blind.calls.some((c) => c.startsWith("issue")));
   });
 
   it("an advance that is the whole total or more makes no proforma, and says why", async () => {

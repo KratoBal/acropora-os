@@ -1174,11 +1174,14 @@ function ProformaSection({
     setBusy(true);
     setError(null);
     try {
-      // the first send of an advance carries the advance the window was opened with, and the amount it showed
+      // every first send carries the amount its window showed, and the advance it was opened with (barracuda on #2837)
       await onSend(
         confirmation,
-        confirmation && windowAdvance && summary
-          ? { advance: windowAdvance, grossAmount: summary.grossAmount }
+        confirmation && summary
+          ? {
+              ...(windowAdvance ? { advance: windowAdvance } : {}),
+              grossAmount: summary.grossAmount,
+            }
           : undefined,
       );
     } catch (cause) {
@@ -1436,9 +1439,9 @@ function ProformaSection({
   );
 }
 
-/** An advance proforma's first send (card d31a66a3, 2a): the advance the window was opened with, and the amount it showed. */
+/** A proforma's first send: the advance the window was opened with (card d31a66a3, 2a), if any, and the amount it showed. */
 type ProformaAdvanceSend = {
-  advance: WebshopProformaAdvance;
+  advance?: WebshopProformaAdvance;
   grossAmount: string;
 };
 

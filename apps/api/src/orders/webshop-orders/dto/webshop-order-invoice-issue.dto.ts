@@ -75,8 +75,8 @@ export function proformaAdvanceOf(
  */
 export class WebshopProformaSendDto extends WebshopProformaAdvanceDto {
   /**
-   * The amount the window showed (`WebshopProformaSummary.grossAmount`): the first send of an advance proforma checks it against
-   * the proforma it issues, since the window's digest covers the buyer and the dates, not the amount.
+   * The amount the window showed (`WebshopProformaSummary.grossAmount`): every first send carries it and is checked against the
+   * proforma it issues, since the window's digest covers the buyer and the dates, not the amount (barracuda on #2837).
    */
   @IsOptional()
   @Matches(/^\d{1,12}(\.\d{1,4})?$/)
