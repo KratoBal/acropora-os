@@ -603,6 +603,62 @@ describe("Ajánlat adatlap: egy elsődleges gomb, a többi a Továbbiak mögött
     ).toBeInTheDocument();
   });
 
+  // the primary button is the filled one; the secondary ones are not (PilotButton variants)
+  const isPrimary = (name: string) =>
+    screen
+      .getByRole("button", { name })
+      .className.includes("bg-pilot-aqua-600");
+
+  it("with a published version the Kiküldés is the primary button and Új verzió is secondary (acrobot 61941)", async () => {
+    api.detail.mockResolvedValue(published());
+    render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByRole("button", { name: "Kiküldés" });
+    expect(isPrimary("Kiküldés")).toBe(true);
+    expect(isPrimary("Új verzió")).toBe(false);
+  });
+
+  it("a draft the user can publish: Publikálás is primary and asks first, Szerkesztés is secondary", async () => {
+    api.detail.mockResolvedValue(draftOnly());
+    api.publish.mockResolvedValue(
+      quote(
+        [
+          version({
+            id: "v1",
+            versionNumber: 1,
+            status: "PUBLISHED",
+            publishedAt: "2026-10-07T10:42:00Z",
+          }),
+        ],
+        { status: "DRAFT" },
+      ),
+    );
+    render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByRole("button", { name: "Publikálás" });
+    expect(isPrimary("Publikálás")).toBe(true);
+    expect(isPrimary("Szerkesztés")).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Publikálás" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(api.publish).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Publikálás" }));
+    await waitFor(() =>
+      expect(api.publish).toHaveBeenCalledWith("token-1", "q1", "v1"),
+    );
+    // the page now offers the send, the step after the publish
+    expect(
+      await screen.findByRole("button", { name: "Kiküldés" }),
+    ).toBeInTheDocument();
+  });
+
+  it("without the publish permission the Szerkesztés stays the primary button and there is no Publikálás", async () => {
+    auth.permissions = ["quotes.view", "quotes.manage"] as Permission[];
+    api.detail.mockResolvedValue(draftOnly());
+    render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByRole("button", { name: "Szerkesztés" });
+    expect(isPrimary("Szerkesztés")).toBe(true);
+    expect(screen.queryByRole("button", { name: "Publikálás" })).toBeNull();
+  });
+
   it("Elutasítás and Visszavonás are red in the menu, Halasztás is not", async () => {
     api.detail.mockResolvedValue(published());
     render(<QuoteDetailPage quoteId="q1" />);

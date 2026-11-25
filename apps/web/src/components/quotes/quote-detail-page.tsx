@@ -81,6 +81,9 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const canSend = Boolean(
     session && hasPermission(session.user, PERMISSIONS.QUOTES_SEND),
   );
+  const canPublish = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.QUOTES_PUBLISH),
+  );
   const canLink = Boolean(
     session &&
     hasPermission(session.user, PERMISSIONS.QUOTES_ACCEPTANCE_LINK_MANAGE),
@@ -101,6 +104,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -175,6 +179,21 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       setBusy(false);
     }
   };
+  // The draft the primary "Publikálás" publishes (acrobot 61941): the same call and the same confirmation as the PDF page.
+  const draftVersion = quote.versions.find((v) => v.status === "DRAFT") ?? null;
+  const publishDraft = async () => {
+    if (!draftVersion) return;
+    setPublishing(false);
+    setBusy(true);
+    setError(null);
+    try {
+      setQuote(await quotesApi.publish(token, quote.id, draftVersion.id));
+    } catch (cause) {
+      setError(errorText(cause, "A publikálás nem sikerült."));
+    } finally {
+      setBusy(false);
+    }
+  };
   const copyAsNew = async () => {
     setBusy(true);
     setError(null);
@@ -239,7 +258,13 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         ]
       : []),
   ];
+  // acrobot 61941: the send is the primary button where a version is published, else the Publikálás of the draft; the
+  // Szerkesztés / Új verzió becomes the secondary one then. The order of the steps (Publikálás, then Küldés) is unchanged.
+  const canPublishDraft =
+    !canMail && canPublish && draftVersion !== null && editable;
+  const sendOrPublishIsPrimary = canMail || canPublishDraft;
   const primaryActions =
+    canPublishDraft ||
     canMail ||
     (editable && canManage) ||
     (editable && canRecord && hasPublished);
@@ -327,12 +352,16 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
           primaryActions || moreItems.length > 0 ? (
             <div className="flex flex-wrap items-center gap-2">
               {canMail ? (
+                <PilotButton size="regular" onClick={() => setSending(true)}>
+                  {mailLabel}
+                </PilotButton>
+              ) : canPublishDraft ? (
                 <PilotButton
                   size="regular"
-                  variant="secondary"
-                  onClick={() => setSending(true)}
+                  disabled={busy}
+                  onClick={() => setPublishing(true)}
                 >
-                  {mailLabel}
+                  Publikálás
                 </PilotButton>
               ) : null}
               {editable && canRecord && hasPublished ? (
@@ -348,6 +377,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
                 hasDraft ? (
                   <PilotButton
                     size="regular"
+                    variant={sendOrPublishIsPrimary ? "secondary" : "primary"}
                     onClick={() =>
                       router.push(`${QUOTES_PATH}/${quote.id}/szerkesztes`)
                     }
@@ -357,6 +387,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
                 ) : (
                   <PilotButton
                     size="regular"
+                    variant={sendOrPublishIsPrimary ? "secondary" : "primary"}
                     disabled={busy}
                     onClick={() => void newVersion()}
                   >
@@ -512,6 +543,16 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         }}
       />
 
+      <ConfirmDialog
+        open={publishing}
+        title={`v${draftVersion?.versionNumber ?? ""} publikálása`}
+        consequence="A verzió zárolódik, a PDF-je rögzül a dokumentumtárban, és az előző publikált verzió felülírtnak számít. Ez még nem küld semmit az ügyfélnek."
+        recovery="Publikált verzió nem szerkeszthető; módosításhoz új verziót kell nyitni az adatlapon."
+        confirmLabel="Publikálás"
+        busy={busy}
+        onConfirm={() => void publishDraft()}
+        onCancel={() => setPublishing(false)}
+      />
       <ConfirmDialog
         open={deleting}
         title={`${quote.quoteNumber} törlése`}
