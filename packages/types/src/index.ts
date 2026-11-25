@@ -772,6 +772,7 @@ export type {
   CustomerDetail,
   CustomerListResponse,
   CustomerListRole,
+  CustomerListSortField,
   CustomerPartnerRole,
   CustomerSource,
   CustomerStatusFilter,
@@ -783,6 +784,7 @@ export type {
 export {
   CUSTOMER_LIST_PAGE_SIZE,
   CUSTOMER_LIST_ROLES,
+  CUSTOMER_LIST_SORT_FIELDS,
   CUSTOMER_PARTNER_ROLES,
 } from "./customer-management.js";
 export type {

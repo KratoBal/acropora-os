@@ -11,6 +11,8 @@ import type {
   CustomerSummary,
 } from "@acropora/types";
 
+import { listOrderBy } from "../common/list-sort.js";
+import { CUSTOMER_LIST_SORT } from "./customer-list-sort.js";
 import { withUniqueCode } from "../common/unique-code.util.js";
 import {
   linkedPartnerTaxHint,
@@ -227,7 +229,7 @@ export class CustomersRepository extends Repository {
       prisma.customer.findMany({
         where,
         include,
-        orderBy: [{ displayName: "asc" }, { id: "asc" }],
+        orderBy: listOrderBy(CUSTOMER_LIST_SORT, query.sort, query.direction),
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),
