@@ -82,7 +82,7 @@ export class MaintenanceInvoiceInputError extends Error {
 }
 
 /**
- * EGY BIZONYLAT-SOR EGYENLŐ EGY XML-TÉTEL, MENNYISÉG MINDIG 1.
+ * EGY BIZONYLAT-SOR EGYENLŐ EGY XML-TÉTEL.
  *
  * A Számlázz.hu Agent API tételenként ellenőriz: `nettoEgysegar × mennyiseg
  * = nettoErtek` (lásd generating_invoice_xml.txt). A teljesítési igazolás
@@ -92,11 +92,11 @@ export class MaintenanceInvoiceInputError extends Error {
  * egységár × mennyiség szorzat a kerekítés UTÁN már nem feltétlenül adja ki
  * pontosan a kerekített sorösszeget.
  *
- * Ezért a leképezés minden bizonylat-sort EGY XML-tételnek felel meg,
- * mennyiség=1-gyel és egységár=a kerekített sorösszeg: ez garantáltan
- * kielégíti a Számlázz.hu azonosságát, és pontosan azt az összeget viszi,
- * ami a teljesítési igazoláson is áll (ugyanaz a kerekítési szabály, ADR-014
- * "a számla a mérvadó" pontja).
+ * Ezért: ahol a szorzat PONTOSAN a kerekített sorösszeg, a sor a valódi
+ * mennyiséggel, egységgel és egységárral megy (a számlán az áll, ami az
+ * igazoláson); ahol nem, "1 db" a kerekített sorösszeggel, és a mennyiség a
+ * tétel nevében. Mindkét út kielégíti a Számlázz.hu azonosságát, és pontosan
+ * azt az összeget viszi, ami az igazoláson áll (ADR-014 "a számla a mérvadó").
  */
 function mapItem(item: {
   description: string;
@@ -123,19 +123,27 @@ function mapItem(item: {
     grossAmount: amounts.grossAmount.toNumber(),
   };
   /*
-    A MEGRENDELÉSES SOR (acrobot döntése, 42206, B): a valódi mennyiség és egység
-    külön mezőben, ahol az egységár × mennyiség PONTOSAN a kerekített sorösszeg
-    (akkor a Számlázz.hu azonossága is áll); ahol nem, "1 db" a sorösszeggel, és
-    a mennyiség a tétel nevében. A szervizes sor (egység nélkül) változatlan.
+    A SOR VALÓDI MENNYISÉGGEL ÉS EGYSÉGÁRRAL MEGY, ahol az egységár × mennyiség
+    PONTOSAN a kerekített sorösszeg (akkor a Számlázz.hu azonossága is áll); ahol
+    nem, "1 db" a sorösszeggel, és a mennyiség a tétel nevében.
+
+    A megrendeléses sor (acrobot 42206, B) egységét az ajánlat adja. A szervizes
+    (egység nélküli) sor egysége az igazoláson "alkalom" (lásd a séma
+    `quantityUnit` megjegyzését), és eddig MINDIG "1 db" ment a sorösszeggel: egy
+    "2 alkalom × 450 000" sor a számla-előnézeten "1 db, 900 000" lett (Luca
+    kérése, TIG TI-2026-003). Most a szervizes sor is a valódi mennyiséggel megy,
+    ha az nem 1; az 1 mennyiségű, egység nélküli sor alakja változatlan.
   */
-  if (item.quantityUnit) {
+  const unit =
+    item.quantityUnit ?? (item.quantity.equals(1) ? null : "alkalom");
+  if (unit) {
     if (item.quantity.times(item.unitNet).equals(amounts.netAmount))
       return {
         amounts,
         line: {
           name: item.description,
           quantity: item.quantity.toNumber(),
-          unit: item.quantityUnit,
+          unit,
           netUnitPrice: item.unitNet.toNumber(),
           ...totals,
         },
@@ -143,7 +151,7 @@ function mapItem(item: {
     return {
       amounts,
       line: {
-        name: `${item.description}, ${formatQuantity(item.quantity)} ${item.quantityUnit}`,
+        name: `${item.description}, ${formatQuantity(item.quantity)} ${unit}`,
         quantity: 1,
         unit: "db",
         netUnitPrice: amounts.netAmount.toNumber(),
