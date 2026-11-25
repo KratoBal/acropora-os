@@ -169,6 +169,19 @@ describe("a szűrők egy sorban, a Nyomtatás és az Excel jobbra, külön", () 
     expect(output.contains(search)).toBe(false);
   });
 
+  it("the three filters have a fixed width that does not shrink, the search is capped (one row at 1440 px, measured on stage 2026-11-25)", async () => {
+    api.list.mockResolvedValue(listOf([row()]));
+    render(<PilotAssetListPage />);
+    await screen.findAllByText("Kompresszor");
+    for (const label of ["Eszköztípus", "Kategória", "Kézikönyv"]) {
+      const wrapper = screen.getByLabelText(label).parentElement!;
+      expect(wrapper.className).toContain("sm:w-[170px]");
+      expect(wrapper.className).toContain("shrink-0");
+    }
+    const searchBox = screen.getByLabelText("Eszköz keresése").parentElement!;
+    expect(searchBox.className).toContain("sm:max-w-[260px]");
+  });
+
   it("the page size is no longer in the filter bar: it sits in the footer with the count", async () => {
     api.list.mockResolvedValue(listOf([row()]));
     render(<PilotAssetListPage />);

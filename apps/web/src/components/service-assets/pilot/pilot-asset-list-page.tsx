@@ -208,6 +208,15 @@ export const ASSET_COLUMNS: PilotTableColumn<AssetRow>[] = [
   },
 ];
 
+/*
+  A SZŰRŐSOR EGY SORBAN ÁLL 1440 PX-EN (acrobot 61977, a stage-képről: a kategória-választó a leghosszabb választék szélességére nyúlt, és a
+  Kézikönyv-szűrő a második sorba esett). A választók FIX szélességet kapnak és nem zsugorodnak, a kereső a maradékot tölti, de legfeljebb 260 px-et;
+  keskeny képernyőn a sor tördel (`flex-wrap`), telefonon a választó a teljes szélességet kapja.
+*/
+export const FILTER_SEARCH_CLASS =
+  "relative min-w-52 flex-[1_1_208px] sm:max-w-[260px]";
+export const FILTER_SELECT_CLASS = "w-full shrink-0 sm:w-[170px]";
+
 const HIERARCHY_COLUMN_WIDTH = 150;
 export const ASSET_TABLE_MIN_WIDTH_WITHOUT_HIERARCHY =
   ASSET_TABLE_MIN_WIDTH - HIERARCHY_COLUMN_WIDTH;
@@ -464,7 +473,7 @@ export function PilotAssetListPage() {
       <div
         className={`flex flex-wrap items-center gap-3 border-b border-pilot-grey-100 bg-white ${PAGE_GUTTER_X} py-3`}
       >
-        <div className="relative min-w-52 flex-1">
+        <div className={FILTER_SEARCH_CLASS}>
           <Icon
             name="search"
             size={14}
@@ -485,6 +494,7 @@ export function PilotAssetListPage() {
           value={params.get("kind") ?? ""}
           onChange={(nextValue) => filter("kind", nextValue)}
           chevron
+          className={FILTER_SELECT_CLASS}
         >
           <option value="">Minden típus</option>
           {Object.entries(assetKindLabel).map(([value, label]) => (
@@ -498,6 +508,7 @@ export function PilotAssetListPage() {
           value={categoryFilterValue}
           onChange={(nextValue) => setCategoryFilter(nextValue)}
           chevron
+          className={FILTER_SELECT_CLASS}
         >
           <option value="">Minden kategória</option>
           {categories.map((category) => (
@@ -514,6 +525,7 @@ export function PilotAssetListPage() {
           value={manualFilterValue}
           onChange={(nextValue) => setManualFilter(nextValue)}
           chevron
+          className={FILTER_SELECT_CLASS}
         >
           <option value="">Kézikönyv: mind</option>
           <option value="with">Van kézikönyve</option>
