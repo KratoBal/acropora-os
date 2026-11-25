@@ -29,11 +29,12 @@ const ZERO_COUNTS = {
  */
 function serviceWith(totalItems: number | undefined) {
   const calls: ServiceJobListOptions[] = [];
+  const visibilities: unknown[] = [];
   const facetCalls: unknown[][] = [];
   const repository = {
     list: async (
       _scope: unknown,
-      _visibility: unknown,
+      visibility: unknown,
       _search: unknown,
       _kind: unknown,
       _user: unknown,
@@ -41,6 +42,7 @@ function serviceWith(totalItems: number | undefined) {
       options: ServiceJobListOptions,
     ) => {
       calls.push(options);
+      visibilities.push(visibility);
       return {
         rows: [],
         truncated: totalItems === undefined,
@@ -56,7 +58,7 @@ function serviceWith(totalItems: number | undefined) {
   const service = new ServiceJobsService(
     repository as unknown as ServiceJobsRepository,
   );
-  return { service, calls, facetCalls };
+  return { service, calls, facetCalls, visibilities };
 }
 
 const admin = { id: "office-user", role: "ADMIN" } as AuthenticatedUser;
@@ -132,6 +134,35 @@ describe("a hibajegy-lista lapozása", () => {
     assert.equal(args[3], "REPAIR");
     assert.deepEqual(args[6], ["NEW"]);
     assert.equal(args.length, 7);
+  });
+});
+
+describe("a lista és a szűrő-lehetőségek közös láthatósági szűrője", () => {
+  it("a lista és a facets UGYANAZT a láthatósági feltételt kapja: rejtés és a létrehozás napja is benne van", async () => {
+    const { service, visibilities, facetCalls } = serviceWith(0);
+    const query = {
+      includeHidden: true,
+      createdFrom: "2026-11-01",
+      createdTo: "2026-11-02",
+    };
+    await service.list({ ...query, page: 1 }, admin);
+    await service.listFacets(query, admin);
+    assert.deepEqual(facetCalls[0]![1], visibilities[0]);
+    // and it is not an empty condition: the day range reached it
+    assert.match(JSON.stringify(visibilities[0]), /createdAt/);
+  });
+
+  it("a nap-tartomány nélküli és a rejtés nélküli kérés más feltételt ad, tehát a közös szűrő tényleg a lekérdezésből épül", async () => {
+    const { service, visibilities } = serviceWith(0);
+    await service.list({ page: 1 }, admin);
+    await service.list(
+      { page: 1, createdFrom: "2026-11-01", createdTo: "2026-11-02" },
+      admin,
+    );
+    assert.notDeepEqual(visibilities[0], visibilities[1]);
+    // the hidden-rows switch changes it too (the partner portal never honours it; the internal admin does)
+    await service.list({ page: 1, includeHidden: true }, admin);
+    assert.notDeepEqual(visibilities[0], visibilities[2]);
   });
 });
 
