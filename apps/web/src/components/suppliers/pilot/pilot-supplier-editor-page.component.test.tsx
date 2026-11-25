@@ -7,7 +7,7 @@ import { PilotSupplierEditorPage } from "./pilot-supplier-editor-page";
 /**
  * ÁTMÁSOLVA A RÉGI `supplier-editor-page.component.test.tsx`-BŐL
  * (2026-09-25, Figma 13. kör) -- az állítások nem változtak, a kártya-
- * sorrend (Alapadatok → Alegységek → Bankszámla → Cím → Ügyintéző) már a
+ * sorrend (Alapadatok → Helyszínek → Bankszámla → Cím → Ügyintéző) már a
  * régi komponensben is a terv szerint állt. Csak a komponens neve és egy
  * kötelező `next/font/local` mock került hozzá (a `PilotThemeRoot` ezen
  * múlik, lásd a többi pilot-teszt fejlécét).
@@ -224,7 +224,7 @@ describe("PilotSupplierEditorPage", () => {
     render(<PilotSupplierEditorPage />);
     fireEvent.click(screen.getByLabelText("Szerviz"));
 
-    expect(screen.queryByLabelText("Alegység kódja")).toBeNull();
+    expect(screen.queryByLabelText("Helyszín kódja")).toBeNull();
   });
 
   /**
@@ -251,7 +251,10 @@ describe("PilotSupplierEditorPage", () => {
     render(<PilotSupplierEditorPage supplierId="supplier-1" />);
 
     expect(await screen.findByText("Bio labor")).toBeTruthy();
-    expect(screen.getByLabelText("Alegység kódja")).toBeTruthy();
+    expect(screen.getByLabelText("Helyszín kódja")).toBeTruthy();
+    // one concept, one word (acrobot, 2026-11-25): the card is "Helyszínek", not "Alegységek"
+    expect(screen.getByRole("heading", { name: "Helyszínek" })).toBeTruthy();
+    expect(screen.queryByText(/[Aa]legység/)).toBeNull();
   });
 
   /**
@@ -310,10 +313,10 @@ describe("PilotSupplierEditorPage", () => {
     fireEvent.change(screen.getByLabelText("Szülő helyszín"), {
       target: { value: "unit-1" },
     });
-    fireEvent.change(screen.getByLabelText("Alegység kódja"), {
+    fireEvent.change(screen.getByLabelText("Helyszín kódja"), {
       target: { value: "alg" },
     });
-    fireEvent.change(screen.getByLabelText("Alegység neve"), {
+    fireEvent.change(screen.getByLabelText("Helyszín neve"), {
       target: { value: "Algásító" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Hozzáadás" }));
@@ -434,7 +437,7 @@ describe("PilotSupplierEditorPage: unit editing", () => {
 
     render(<PilotSupplierEditorPage supplierId="supplier-1" />);
     fireEvent.click(await screen.findByLabelText("Biodóm átnevezése"));
-    fireEvent.change(screen.getByLabelText("Alegység új neve"), {
+    fireEvent.change(screen.getByLabelText("Helyszín új neve"), {
       target: { value: "Biodóm 2" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
@@ -458,7 +461,7 @@ describe("PilotSupplierEditorPage: unit editing", () => {
     fireEvent.click(await screen.findByLabelText("Biodóm archiválása"));
 
     expect(suppliers.updateUnit).not.toHaveBeenCalled();
-    expect(screen.getByText(/Archiválod ezt az alegységet/)).toBeTruthy();
+    expect(screen.getByText(/Archiválod ezt a helyszínt/)).toBeTruthy();
   });
 
   it("archives only after the question is answered", async () => {
@@ -467,7 +470,7 @@ describe("PilotSupplierEditorPage: unit editing", () => {
     render(<PilotSupplierEditorPage supplierId="supplier-1" />);
     fireEvent.click(await screen.findByLabelText("Biodóm archiválása"));
     fireEvent.click(
-      screen.getByRole("button", { name: "Alegység archiválása" }),
+      screen.getByRole("button", { name: "Helyszín archiválása" }),
     );
 
     await waitFor(() => expect(suppliers.updateUnit).toHaveBeenCalledTimes(1));

@@ -37,7 +37,7 @@ interface Unit {
  * illető nem érné el a szakaszt, és ez csendben derülne ki.
  *
  * A VÁLASZTHATÓ LISTÁT A SZERVER ADJA, nem itt áll össze: a lánc felhasználó ->
- * szállító -> tükör-vevő sor -> alegységek, és a felület a második lépéshez nem
+ * szállító -> tükör-vevő sor -> helyszínek, és a felület a második lépéshez nem
  * lát utat.
  */
 export function UserVisibleUnits({
@@ -121,7 +121,7 @@ export function UserVisibleUnits({
     } catch (cause) {
       // A SZERVER MONDATA MEGY KI, NEM EGY SAJÁT: a három elutasítás három
       // KÜLÖNBÖZŐ teendőt ad (nem partner-fiók, nincs tükör-sor, másik
-      // partner alegysége), és egy közös "nem sikerült" mindhármat elrejtené.
+      // partner helyszíne), és egy közös "nem sikerült" mindhármat elrejtené.
       setActionError(
         cause instanceof Error
           ? cause.message
@@ -155,15 +155,15 @@ export function UserVisibleUnits({
 
   return (
     <PilotCard className="space-y-3 p-4">
-      <h2 className="text-sm font-semibold">Látható alegységek</h2>
+      <h2 className="text-sm font-semibold">Látható helyszínek</h2>
       {/*
         A HATÁS KIMONDVA, MERT KÜLÖNBEN NEM LÁTSZIK. Ez a lista dönti el, hogy
         a partner-oldali fiók MELYIK hibajegyeket látja -- egy üres lista nem
         "nincs beállítva", hanem "csak a sajátjait".
       */}
       <p className="text-xs text-dusk-500">
-        Ezeknek az alegységeknek a hibajegyeit látja a fiók. Üres listával csak
-        a saját nyitott jegyeit.
+        Ezeknek a helyszíneknek a hibajegyeit látja a fiók. Üres listával csak a
+        saját nyitott jegyeit.
       </p>
 
       {loadError ? (
@@ -184,7 +184,7 @@ export function UserVisibleUnits({
       {loading ? (
         <Skeleton className="h-16 w-full" />
       ) : assignments.length ? (
-        <ul className="space-y-1 text-sm" aria-label="Látható alegységek">
+        <ul className="space-y-1 text-sm" aria-label="Látható helyszínek">
           {assignments.map((row) => (
             <li key={row.departmentId} className="flex items-center gap-2">
               <span className="font-medium">
@@ -202,7 +202,7 @@ export function UserVisibleUnits({
         </ul>
       ) : loadError ? null : (
         <EmptyState
-          title="Nincs hozzárendelt alegység"
+          title="Nincs hozzárendelt helyszín"
           description="A fiók egyelőre csak a saját nyitott jegyeit látja."
         />
       )}
@@ -221,9 +221,9 @@ export function UserVisibleUnits({
         */
         <p className="text-xs text-dusk-500">
           {binding === "customer"
-            ? "Ehhez a fiókhoz nincs választható alegység. Alegység akkor jelenik meg itt, ha a fiók vevője alatt aktív alegység áll."
+            ? "Ehhez a fiókhoz nincs választható helyszín. Helyszín akkor jelenik meg itt, ha a fiók vevője alatt aktív helyszín áll."
             : binding === "supplier"
-              ? "Ehhez a fiókhoz nincs választható alegység. Alegység akkor jelenik meg itt, ha a fiók szerviz partneréhez tartozik tükör-vevő sor, és az alatt aktív alegység áll."
+              ? "Ehhez a fiókhoz nincs választható helyszín. Helyszín akkor jelenik meg itt, ha a fiók szerviz partneréhez tartozik tükör-vevő sor, és az alatt aktív helyszín áll."
               : "Ez a fiók nem partnerhez kötött, ezért nincs mit szűkíteni: belső hatókörrel amúgy is minden hibajegyet lát."}
         </p>
       ) : null}
@@ -231,12 +231,12 @@ export function UserVisibleUnits({
       {valaszthato.length ? (
         <div className="flex flex-wrap items-center gap-2">
           <PilotSelect
-            aria-label="Alegység hozzáadása"
+            aria-label="Helyszín hozzáadása"
             value={chosen}
             onChange={(nextValue) => setChosen(nextValue)}
             chevron
           >
-            <option value="">Válassz alegységet</option>
+            <option value="">Válassz helyszínt</option>
             {valaszthato.map((unit) => (
               <option key={unit.id} value={unit.id}>
                 {unit.code} - {unit.name}
@@ -255,7 +255,7 @@ export function UserVisibleUnits({
 
       {/*
         A SZEREP KIÍRVA, MERT A KÉT TENGELY KÜLÖN ÁLL: ez a lista az
-        alegység-hatókört szűkíti, a szerep pedig azt mondja meg, MIT tehet a
+        helyszín-hatókört szűkíti, a szerep pedig azt mondja meg, MIT tehet a
         fiók. Aki csak az egyiket látja, a másikat fogja hibásnak hinni.
       */}
       {role ? (
@@ -276,13 +276,13 @@ export function UserVisibleUnits({
       */}
       <ConfirmDialog
         open={toRemove !== null}
-        title="Leveszed ezt az alegységet a fiókról?"
+        title="Leveszed ezt a helyszínt a fiókról?"
         consequence={
           toRemove
-            ? `A fiók ezután nem látja a(z) ${toRemove.department.code} - ${toRemove.department.name} alegység hibajegyeit.`
+            ? `A fiók ezután nem látja a(z) ${toRemove.department.code} - ${toRemove.department.name} helyszín hibajegyeit.`
             : ""
         }
-        recovery="Visszatehető: az alegység újra megjelenik a választóban, és ugyanitt bármikor visszaadható."
+        recovery="Visszatehető: a helyszín újra megjelenik a választóban, és ugyanitt bármikor visszaadható."
         confirmLabel="Levétel"
         busy={busy}
         onConfirm={() => {

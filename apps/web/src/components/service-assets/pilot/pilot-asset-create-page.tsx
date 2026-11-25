@@ -78,7 +78,7 @@ import {
  * === A VALÓDI ŰRLAP LOGIKÁJA VÁLTOZATLAN, CSAK A STÍLUS FIGMA ===
  *
  * A validáció, a mentés (`assetsApi.create`), a mezők közötti függés
- * (Alegység csak szerviz partnernél, Vevő címe csak vevőnél, a
+ * (Helyszín csak szerviz partnernél, Vevő címe csak vevőnél, a
  * kategória/funkció/mértékegység törzsadatok, a névütközés figyelmeztetés,
  * a matricakód- és teljesítmény-pár ellenőrzés) SZÓ SZERINT a mai
  * `asset-editor-page.tsx` create-ágából jön -- ez háromszorosan tesztelt
@@ -323,7 +323,7 @@ export function PilotAssetCreatePage() {
           setError(
             cause instanceof Error
               ? cause.message
-              : "A partner alegységei nem tölthetők be.",
+              : "A partner helyszínei nem tölthetők be.",
           );
       });
     return () => controller.abort();
@@ -413,7 +413,7 @@ export function PilotAssetCreatePage() {
   const missing: string[] = [];
   if (!name.trim()) missing.push("Eszköz neve");
   if (!owner) missing.push("Partner");
-  if (owner?.type === "SUPPLIER" && !departmentId) missing.push("Alegység");
+  if (owner?.type === "SUPPLIER" && !departmentId) missing.push("Helyszín");
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -422,7 +422,7 @@ export function PilotAssetCreatePage() {
       return;
     }
     if (owner.type === "SUPPLIER" && !departmentId) {
-      setError("Szerviz partner eszközéhez alegység megadása kötelező.");
+      setError("Szerviz partner eszközéhez helyszín megadása kötelező.");
       return;
     }
     const interval = serviceIntervalDays
@@ -865,17 +865,17 @@ export function PilotAssetCreatePage() {
               <PilotFormField
                 label={
                   owner?.type === "SUPPLIER"
-                    ? "Alegység (kötelező)"
-                    : "Alegység"
+                    ? "Helyszín (kötelező)"
+                    : "Helyszín"
                 }
                 required={owner?.type === "SUPPLIER"}
-                help="A partner alegysége, ahol az eszköz áll. Ugyanaz a lista, amit a partner adatlapján Alegységek néven szerkesztesz."
+                help="A partner helyszíne, ahol az eszköz áll. Ugyanaz a lista, amit a partner adatlapján Helyszínek néven szerkesztesz."
               >
                 <PilotSelect
                   value={departmentId}
                   disabled={!owner || owner.type !== "SUPPLIER"}
                   onChange={setDepartmentId}
-                  aria-label="Alegység"
+                  aria-label="Helyszín"
                 >
                   <option value="">Nincs pontosítva</option>
                   {units.map((unit) => (

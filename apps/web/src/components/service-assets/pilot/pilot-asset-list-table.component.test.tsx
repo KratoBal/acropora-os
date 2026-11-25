@@ -25,7 +25,7 @@ describe("az eszközlista oszlopai", () => {
     expect(ASSET_COLUMNS.map((c) => c.header)).toEqual([
       "Eszköz",
       "Partner",
-      "Alegység",
+      "Helyszín",
       "Kategória",
       "Gyártó és modell",
       "Hierarchia",

@@ -601,7 +601,7 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                   <Field label="Akvárium" value={asset.aquarium?.name} />
                   {asset.owner.type === "SUPPLIER" ? (
                     <Field
-                      label="Alegység"
+                      label="Helyszín"
                       value={
                         asset.unit
                           ? `${asset.unit.path.join(" / ")} (${asset.unit.code})`
