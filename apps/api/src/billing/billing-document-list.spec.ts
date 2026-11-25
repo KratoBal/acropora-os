@@ -11,6 +11,10 @@ import {
   ownIssueRange,
   PAYMENT_FILTER_ROW_LIMIT,
   mergeListRows,
+  ownListOrderBy,
+  externalListOrderBy,
+  LIST_ORDER_BY,
+  EXTERNAL_LIST_ORDER_BY,
   ownWhere,
   externalPaymentFields,
   simplePayOrderKey,
@@ -842,6 +846,167 @@ describe("the external documents on the list", () => {
       [ids(0, 2), ids(2, 2), ids(4, 2)],
       [["draft", "ext-01"], ["own-30", "ext-29"], ["own-28"]],
     );
+  });
+});
+
+/*
+  A KIMENŐ LISTA RENDEZÉSE (Balázs kérése, kártya 2f6369a4). MI PIROSÍT: ha a rendezés nélküli sorrend változik; ha a két forrás nem
+  UGYANAZT a mezőt rendezi; ha az üres érték (a vázlat kelte, a hiányzó határidő) nem a legnagyobb (növekvőben hátul, csökkenőben elöl);
+  ha az összefésülés a két tábla sorait nem a közös kulcs szerint fésüli (a lap hézagot hagyna vagy átfedne); ha az azonos kulcsú
+  sorok sorrendje nem a létrehozás és az azonosító; ha a mező a fehér listán kívülről jöhet.
+*/
+describe("the outgoing list sort", () => {
+  it("keeps the old order without a sort", () => {
+    assert.deepEqual(ownListOrderBy(undefined, undefined), LIST_ORDER_BY);
+    assert.deepEqual(
+      externalListOrderBy(undefined, "asc"),
+      EXTERNAL_LIST_ORDER_BY,
+    );
+  });
+
+  it("both sources sort the same field, the empty value as the largest, the tie broken by creation and id", () => {
+    assert.deepEqual(ownListOrderBy("issueDate", "asc"), [
+      { issueDate: { sort: "asc", nulls: "last" } },
+      { createdAt: "asc" },
+      { id: "asc" },
+    ]);
+    assert.deepEqual(ownListOrderBy("dueDate", "desc"), [
+      { dueDate: { sort: "desc", nulls: "first" } },
+      { createdAt: "desc" },
+      { id: "desc" },
+    ]);
+    assert.deepEqual(ownListOrderBy("grossAmount", "asc")[0], {
+      grossAmount: { sort: "asc", nulls: "last" },
+    });
+    // the external table has a non-null issue date and gross, a nullable due date
+    assert.deepEqual(externalListOrderBy("issueDate", "asc"), [
+      { issueDate: "asc" },
+      { createdAt: "asc" },
+      { id: "asc" },
+    ]);
+    assert.deepEqual(externalListOrderBy("grossAmount", "desc")[0], {
+      grossAmount: "desc",
+    });
+    assert.deepEqual(externalListOrderBy("dueDate", "asc")[0], {
+      dueDate: { sort: "asc", nulls: "last" },
+    });
+  });
+
+  it("a field outside the whitelist leaves the old order", () => {
+    assert.deepEqual(
+      ownListOrderBy("partnerName" as never, "asc"),
+      LIST_ORDER_BY,
+    );
+  });
+
+  describe("the merge of the two sorted sources", () => {
+    const item = (id: string) => ({ ...toListItem(row()), id });
+    const at = (
+      id: string,
+      gross: string | null,
+      extra: Partial<MergeRow> = {},
+    ): MergeRow => ({
+      issueDate: new Date("2026-09-01T00:00:00.000Z"),
+      createdAt: new Date("2026-09-01T00:00:00.000Z"),
+      id,
+      item: item(id),
+      grossAmount: gross === null ? null : D(gross),
+      ...extra,
+    });
+    const ids = (
+      own: MergeRow[],
+      ext: MergeRow[],
+      direction: "asc" | "desc",
+      field: "grossAmount" | "dueDate" | "issueDate" = "grossAmount",
+      offset = 0,
+      limit = 10,
+    ) =>
+      mergeListRows(own, ext, offset, limit, { field, direction }).map(
+        (i) => i.id,
+      );
+
+    it("merges by the shared key in both directions, an empty amount last ascending and first descending", () => {
+      const own = [at("o100", "100"), at("o300", "300"), at("onull", null)];
+      const ext = [at("e200", "200"), at("e400", "400")];
+      assert.deepEqual(ids(own, ext, "asc"), [
+        "o100",
+        "e200",
+        "o300",
+        "e400",
+        "onull",
+      ]);
+      assert.deepEqual(
+        ids(
+          [at("onull", null), at("o300", "300"), at("o100", "100")],
+          [at("e400", "400"), at("e200", "200")],
+          "desc",
+        ),
+        ["onull", "e400", "o300", "e200", "o100"],
+      );
+    });
+
+    it("pages the sorted merge without gaps or overlaps", () => {
+      const own = [at("o100", "100"), at("o300", "300")];
+      const ext = [at("e200", "200"), at("e400", "400")];
+      assert.deepEqual(
+        [
+          ids(own, ext, "asc", "grossAmount", 0, 2),
+          ids(own, ext, "asc", "grossAmount", 2, 2),
+        ],
+        [
+          ["o100", "e200"],
+          ["o300", "e400"],
+        ],
+      );
+    });
+
+    it("breaks equal keys by creation time and then id, in the sort's direction", () => {
+      const early = new Date("2026-09-01T00:00:00.000Z");
+      const late = new Date("2026-09-02T00:00:00.000Z");
+      const own = [at("b", "100", { createdAt: late })];
+      const ext = [
+        at("a", "100", { createdAt: early }),
+        at("c", "100", { createdAt: late }),
+      ];
+      // ascending: the earlier creation first, then by id; descending the reverse
+      assert.deepEqual(ids(own, ext, "asc"), ["a", "b", "c"]);
+      assert.deepEqual(
+        ids(
+          own,
+          [
+            at("c", "100", { createdAt: late }),
+            at("a", "100", { createdAt: early }),
+          ],
+          "desc",
+        ),
+        ["c", "b", "a"],
+      );
+    });
+
+    it("sorts by the due date and the issue date through the same key rule", () => {
+      const due = (id: string, iso: string | null): MergeRow =>
+        at(id, "1", { dueDate: iso ? new Date(iso) : null });
+      assert.deepEqual(
+        ids(
+          [due("o2", "2026-10-02T00:00:00Z"), due("onone", null)],
+          [due("e1", "2026-10-01T00:00:00Z")],
+          "asc",
+          "dueDate",
+        ),
+        ["e1", "o2", "onone"],
+      );
+      const issued = (id: string, iso: string | null): MergeRow =>
+        at(id, "1", { issueDate: iso ? new Date(iso) : null });
+      assert.deepEqual(
+        ids(
+          [issued("draft", null), issued("o2", "2026-09-30T00:00:00Z")],
+          [issued("e1", "2026-10-01T00:00:00Z")],
+          "desc",
+          "issueDate",
+        ),
+        ["draft", "e1", "o2"],
+      );
+    });
   });
 });
 

@@ -95,7 +95,10 @@ function NavigationGroup({
         >
           {icon}
         </span>
-        <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+        {/* the 224 px width is the design's; a cut name shows whole on hover (picasso, f0b70dbd) */}
+        <span title={label} className="min-w-0 flex-1 truncate text-left">
+          {label}
+        </span>
         <Icon
           name="chevron-down"
           size={16}
@@ -141,7 +144,9 @@ function NavigationItem({
         size={nested ? 16 : 18}
         className={active ? "text-pilot-aqua-700" : "text-pilot-grey-500"}
       />
-      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+      <span title={item.label} className="min-w-0 flex-1 truncate">
+        {item.label}
+      </span>
       {badge}
     </a>
   );

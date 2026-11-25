@@ -8,10 +8,16 @@ import {
   type BillingDocumentStatus,
   type BillingDocumentType,
   type BillingEmailStatus,
+  type BillingListSortField,
   type BillingMaintenanceDraftLink,
   type InvoiceFormat,
 } from "@acropora/types";
 
+import {
+  listOrderBy,
+  type ListSortSpec,
+  type SortDirection,
+} from "../common/list-sort.js";
 import { startOfBudapestDay } from "../dashboard/budapest-day.js";
 import { szamlazzAmountsOfLine } from "./billing-document-issue.js";
 import type { BillingDocumentListRow } from "./billing-document-list.repository.js";
@@ -422,6 +428,51 @@ export const EXTERNAL_LIST_ORDER_BY = [
   { id: "desc" },
 ] satisfies Prisma.ExternalBillingDocumentOrderByWithRelationInput[];
 
+/**
+ * A KIMENŐ LISTA RENDEZÉSE (Balázs kérése, kártya 2f6369a4): a két forrás (saját és külső) mindegyike az adatbázisban rendez, ugyanarra a
+ * mezőre, és az összefésülés (`mergeListRows`) ugyanezt a szabályt követi. Üres érték (nincs kelt: a vázlat; nincs határidő) a Postgres
+ * szabálya szerint a legnagyobb: növekvőben a végén, csökkenőben az elején (ez az eddigi alapsorrend is: a vázlat elöl). A döntetlen:
+ * létrehozás, majd azonosító, ugyanabban az irányban. Rendezés nélkül az eddigi sorrend (`LIST_ORDER_BY`).
+ */
+const nullsFor = (direction: SortDirection): "first" | "last" =>
+  direction === "asc" ? "last" : "first";
+
+const OWN_SORT: ListSortSpec<
+  BillingListSortField,
+  Prisma.InvoiceOrderByWithRelationInput
+> = {
+  fields: {
+    issueDate: (d) => ({ issueDate: { sort: d, nulls: nullsFor(d) } }),
+    dueDate: (d) => ({ dueDate: { sort: d, nulls: nullsFor(d) } }),
+    grossAmount: (d) => ({ grossAmount: { sort: d, nulls: nullsFor(d) } }),
+  },
+  fallback: LIST_ORDER_BY,
+  tieBreaker: (d) => [{ createdAt: d }, { id: d }],
+};
+
+const EXTERNAL_SORT: ListSortSpec<
+  BillingListSortField,
+  Prisma.ExternalBillingDocumentOrderByWithRelationInput
+> = {
+  fields: {
+    issueDate: (d) => ({ issueDate: d }),
+    dueDate: (d) => ({ dueDate: { sort: d, nulls: nullsFor(d) } }),
+    grossAmount: (d) => ({ grossAmount: d }),
+  },
+  fallback: EXTERNAL_LIST_ORDER_BY,
+  tieBreaker: (d) => [{ createdAt: d }, { id: d }],
+};
+
+export const ownListOrderBy = (
+  sort: BillingListSortField | undefined,
+  direction: SortDirection | undefined,
+) => listOrderBy(OWN_SORT, sort, direction);
+
+export const externalListOrderBy = (
+  sort: BillingListSortField | undefined,
+  direction: SortDirection | undefined,
+) => listOrderBy(EXTERNAL_SORT, sort, direction);
+
 export interface ExternalListRow {
   id: string;
   kindCode: string;
@@ -782,6 +833,9 @@ export interface MergeRow {
   createdAt: Date;
   id: string;
   item: BillingDocumentListItem;
+  /** A határidő és a bruttó a rendezett összefésüléshez (hiányuk: nincs érték, a legnagyobb). */
+  dueDate?: Date | null;
+  grossAmount?: Prisma.Decimal | null;
 }
 
 /**
@@ -795,8 +849,40 @@ export function mergeListRows(
   external: readonly MergeRow[],
   offset: number,
   limit: number,
+  sort?: {
+    field: BillingListSortField | undefined;
+    direction: SortDirection | undefined;
+  },
 ): BillingDocumentListItem[] {
+  const field = sort?.field;
+  const direction: SortDirection = sort?.direction ?? "asc";
+  // a RENDEZETT összefésülés: ugyanaz a kulcs, mint az adatbázisban (üres = legnagyobb), a döntetlen a létrehozás és az azonosító
+  const keyOf = (row: MergeRow): number | null => {
+    const value =
+      field === "issueDate"
+        ? row.issueDate
+        : field === "dueDate"
+          ? row.dueDate
+          : row.grossAmount;
+    if (value === null || value === undefined) return null;
+    return value instanceof Date ? value.getTime() : value.toNumber();
+  };
+  const sortedBefore = (a: MergeRow, b: MergeRow): boolean => {
+    const x = keyOf(a);
+    const y = keyOf(b);
+    const sign = direction === "asc" ? 1 : -1;
+    if (x !== y) {
+      // üres = legnagyobb: növekvőben hátul, csökkenőben elöl
+      if (x === null) return sign < 0;
+      if (y === null) return sign > 0;
+      return (x - y) * sign < 0;
+    }
+    if (a.createdAt.getTime() !== b.createdAt.getTime())
+      return (a.createdAt.getTime() - b.createdAt.getTime()) * sign < 0;
+    return (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) * sign < 0;
+  };
   const before = (a: MergeRow, b: MergeRow): boolean => {
+    if (field) return sortedBefore(a, b);
     if ((a.issueDate === null) !== (b.issueDate === null))
       return a.issueDate === null;
     if (

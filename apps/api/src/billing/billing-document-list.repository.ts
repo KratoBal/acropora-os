@@ -6,8 +6,8 @@ import type {
 } from "@acropora/types";
 
 import {
-  EXTERNAL_LIST_ORDER_BY,
-  LIST_ORDER_BY,
+  externalListOrderBy,
+  ownListOrderBy,
   externalWhere,
   matchesPaymentFilter,
   mergeListRows,
@@ -147,7 +147,7 @@ export class BillingDocumentListRepository {
         this.database.invoice.findMany({
           where: own ?? { id: { in: [] } },
           select: LIST_SELECT,
-          orderBy: LIST_ORDER_BY,
+          orderBy: ownListOrderBy(query.sort, query.direction),
           skip: both || byPayment ? 0 : offset,
           take:
             own === null
@@ -158,7 +158,7 @@ export class BillingDocumentListRepository {
         this.database.externalBillingDocument.findMany({
           where: external ?? { id: { in: [] } },
           select: EXTERNAL_LIST_SELECT,
-          orderBy: EXTERNAL_LIST_ORDER_BY,
+          orderBy: externalListOrderBy(query.sort, query.direction),
           skip: both || byPayment ? 0 : offset,
           take:
             external === null
@@ -250,15 +250,20 @@ export class BillingDocumentListRepository {
             createdAt: row.createdAt,
             id: row.id,
             item: toOwn(row),
+            dueDate: row.dueDate,
+            grossAmount: row.grossAmount,
           })),
           externalRows.map((row) => ({
             issueDate: row.issueDate,
             createdAt: row.createdAt,
             id: row.id,
             item: toExternal(row),
+            dueDate: row.dueDate,
+            grossAmount: row.grossAmount,
           })),
           window.offset,
           window.size,
+          { field: query.sort, direction: query.direction },
         )
       : own !== null
         ? ownRows.map(toOwn)

@@ -398,7 +398,6 @@ describe("ProductListPage", () => {
     expect(headers.map((header) => header.textContent)).toEqual([
       "",
       "Termék",
-      "SKU",
       "Bruttó ár",
       "Akciós ár",
       "Készlet",
@@ -413,7 +412,6 @@ describe("ProductListPage", () => {
     expect(headers.map(right)).toEqual([
       false,
       false,
-      false,
       true,
       true,
       true,
@@ -422,6 +420,11 @@ describe("ProductListPage", () => {
       false,
       true,
     ]);
+    // f0b70dbd: the SKU is in the name's cell, not a column of its own (the fixed columns left the name one character
+    // at 1440), and the table scrolls below its minimum instead of squeezing the name
+    expect(cells[1]!.textContent).toContain("Red Sea ReefMat 500");
+    expect(cells[1]!.textContent).toContain("RS-RM500");
+    expect(table.style.getPropertyValue("--pilot-table-min")).toBe("1160px");
   });
 
   // a82ed229, 2c: WHAT TURNS THIS RED: a bulk save that sends a flag nobody touched (it would overwrite the

@@ -189,6 +189,23 @@ describe("AppShell business navigation groups", () => {
     ).toBeNull();
   });
 
+  // f0b70dbd: the 224 px menu cuts long names ("Raktár és bes...", "Eszköznyilvántar..."); the whole name is on hover
+  it("a menu heading and a menu item carry their whole name as a title, for the cut ones", () => {
+    render(<AppShell>Oldaltartalom</AppShell>);
+    const heading = screen.getByRole("button", {
+      name: "Raktár és beszerzés",
+    });
+    expect(
+      within(heading).getByTitle("Raktár és beszerzés"),
+    ).toBeInTheDocument();
+    fireEvent.click(heading);
+    expect(
+      within(screen.getByRole("link", { name: "Beszerzés" })).getByTitle(
+        "Beszerzés",
+      ),
+    ).toBeInTheDocument();
+  });
+
   /*
     AZ ELSZÁMOLÁSOK A RÉGI ÚTVONALAKON IS AKTÍV (Balázs, 2026-09-30): a fülek a
     saját útvonalukon élnek, és ott a menüpont a jelenlegi. MI PIROSÍT: ha az
