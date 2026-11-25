@@ -12,7 +12,8 @@ import { Message } from "./ticket-list";
  * ÁTTEKINTÉS, "TEENDŐIM" (kártya 28f31715; Balázs, 2026-11-25 13:07 UTC: „latna az ugyfel ... kell e alairnia vagy foglalkoznia
  * valamivel"). A portál kezdőlapja: ami MOST a partnerre vár, csoportonként a darabszámmal és a legfrissebb tételek közvetlen
  * linkjével. A számolást a szerver végzi a partner saját listáiból (`GET /service/partner-overview`); a lap csak megmutatja.
- * Az "Újdonságok" (új jegy, új munkalap a legutóbbi látogatás óta) a következő lépés.
+ * Alatta az "Újdonságok" (PR 2): új hibajegy és új munkalap a partner legutóbbi látogatása óta (a lista megnyitása a látogatás);
+ * aki még sosem nyitotta meg, annak az utolsó hét.
  */
 export function PartnerOverviewPage() {
   const [data, setData] = useState<PartnerOverview | null>(null);
@@ -107,6 +108,57 @@ export function PartnerOverviewPage() {
               ) : null}
             </section>
           ))}
+        </div>
+      ) : null}
+
+      {data?.news?.length ? (
+        <div className="mt-8" data-testid="partner-news">
+          <h2 className="mb-1 text-lg font-semibold text-pilot-grey-900">
+            Újdonságok
+          </h2>
+          <p className="mb-4 text-sm text-pilot-grey-400">
+            Ami a legutóbbi látogatása óta érkezett.
+          </p>
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            {data.news.map((news) => (
+              <section
+                key={news.area}
+                className="rounded-xl bg-white ring-1 ring-pilot-grey-200"
+                data-testid={`partner-news-${news.area}`}
+              >
+                <header className="flex items-center justify-between border-b border-pilot-grey-100 px-5 py-4">
+                  <h3 className="text-sm font-semibold text-pilot-grey-900">
+                    {news.label}
+                  </h3>
+                  <span className="rounded-full bg-pilot-aqua-50 px-2.5 py-0.5 text-xs font-semibold text-pilot-aqua-700">
+                    {news.count}
+                  </span>
+                </header>
+                <ul className="divide-y divide-pilot-grey-100">
+                  {news.items.map((item) => (
+                    <li key={item.id}>
+                      <Link
+                        href={item.href}
+                        className="block px-5 py-3 text-sm text-pilot-aqua-700 hover:bg-pilot-grey-50"
+                      >
+                        {item.title}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+                {news.count > news.items.length ? (
+                  <div className="border-t border-pilot-grey-100 px-5 py-3">
+                    <Link
+                      href={news.listHref}
+                      className="text-sm font-medium text-pilot-aqua-700 underline"
+                    >
+                      Mind a {news.count} megtekintése
+                    </Link>
+                  </div>
+                ) : null}
+              </section>
+            ))}
+          </div>
         </div>
       ) : null}
     </PilotThemeRoot>

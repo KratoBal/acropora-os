@@ -41,6 +41,101 @@ export interface PartnerTodoGroup {
 export interface PartnerOverview {
   /** Csak a nem üres csoportok, a fenti sorrendben; üres tömb: nincs teendő. */
   todos: PartnerTodoGroup[];
+  /** Az "Újdonságok" (PR 2): csak a nem üres csoportok; hiányzik a régi válaszból. */
+  news?: PartnerNewsGroup[];
+}
+
+/**
+ * "ÚJDONSÁGOK" (kártya 28f31715, PR 2): ami a partner LEGUTÓBBI LÁTOGATÁSA ÓTA keletkezett a két figyelt listán. A látogatás a lista
+ * megnyitása (`PartnerSeen`); aki még sosem nyitotta meg, annak az utolsó `PARTNER_NEWS_FIRST_VISIT_DAYS` nap új.
+ */
+export type PartnerSeenArea = "TICKETS" | "WORKSHEETS";
+
+export interface PartnerNewsGroup {
+  area: PartnerSeenArea;
+  label: string;
+  count: number;
+  items: PartnerTodoItem[];
+  listHref: string;
+  /** Mióta számít újnak (ISO): a legutóbbi látogatás, vagy az első látogatás előtti hét. */
+  since: string;
+}
+
+export const PARTNER_NEWS_FIRST_VISIT_DAYS = 7;
+
+export const PARTNER_NEWS_LABELS: Record<PartnerSeenArea, string> = {
+  TICKETS: "Új hibajegy",
+  WORKSHEETS: "Új munkalap",
+};
+
+/** Mióta új egy terület: a legutóbbi látogatás, vagy a nélkül az utolsó hét. */
+export function partnerNewsSince(
+  lastSeenAt: string | null | undefined,
+  now: Date,
+): string {
+  return (
+    lastSeenAt ??
+    new Date(
+      now.getTime() - PARTNER_NEWS_FIRST_VISIT_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString()
+  );
+}
+
+/** Az "Újdonságok": a sorok közül, amelyek a terület `since` időpontja UTÁN keletkeztek; a legfrissebb elöl, legfeljebb öt. */
+export function partnerNewsOf(input: {
+  tickets: readonly {
+    id: string;
+    jobNumber: string;
+    title: string;
+    createdAt: string;
+    kind?: "REPAIR" | "MAINTENANCE";
+  }[];
+  worksheets: readonly {
+    id: string;
+    number: string | null;
+    subject: string;
+    createdAt: string;
+  }[];
+  since: Record<PartnerSeenArea, string>;
+}): PartnerNewsGroup[] {
+  const newer = <T extends { createdAt: string }>(
+    rows: readonly T[],
+    since: string,
+  ) =>
+    rows
+      .filter((row) => Date.parse(row.createdAt) > Date.parse(since))
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  const tickets = newer(input.tickets, input.since.TICKETS).map((row) => ({
+    id: row.id,
+    title: [row.jobNumber, row.title.trim()].filter(Boolean).join(" · "),
+    href: `${row.kind === "MAINTENANCE" ? "/karbantartas" : "/hibajegyek"}/${enc(row.id)}`,
+  }));
+  const worksheets = newer(input.worksheets, input.since.WORKSHEETS).map(
+    (row) => ({
+      id: row.id,
+      title: [row.number, row.subject.trim()].filter(Boolean).join(" · "),
+      href: `/munkalapok/${enc(row.id)}`,
+    }),
+  );
+  const groups: PartnerNewsGroup[] = [
+    {
+      area: "TICKETS",
+      label: PARTNER_NEWS_LABELS.TICKETS,
+      count: tickets.length,
+      items: tickets.slice(0, PARTNER_TODO_ITEMS),
+      listHref: "/hibajegyek",
+      since: input.since.TICKETS,
+    },
+    {
+      area: "WORKSHEETS",
+      label: PARTNER_NEWS_LABELS.WORKSHEETS,
+      count: worksheets.length,
+      items: worksheets.slice(0, PARTNER_TODO_ITEMS),
+      listHref: "/munkalapok",
+      since: input.since.WORKSHEETS,
+    },
+  ];
+  return groups.filter((g) => g.count > 0);
 }
 
 export const PARTNER_TODO_ITEMS = 5;

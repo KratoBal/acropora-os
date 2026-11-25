@@ -11,6 +11,7 @@ import type {
   CompletionCertificatePartnerDetail,
   CompletionCertificatePartnerListResponse,
   PartnerOverview,
+  PartnerSeenArea,
   CreateAquariumInput,
   CurrentUserResponse,
   MaintenanceOrderPartnerDetail,
@@ -503,6 +504,12 @@ export const partnerApi = {
   },
   /** Az áttekintés (kártya 28f31715): a partner teendői, a szerver a saját listáiból számolja. */
   overview: () => request<PartnerOverview>("/service/partner-overview"),
+  /** A lista megnyitása (PR 2, Újdonságok): innentől csak az ennél későbbi számít újnak. */
+  markSeen: (area: PartnerSeenArea) =>
+    request<{ seen: true }>("/service/partner-overview/seen", {
+      method: "POST",
+      body: JSON.stringify({ area }),
+    }),
   completionCertificates: () =>
     request<CompletionCertificatePartnerListResponse>(
       "/service/completion-certificates",

@@ -1054,6 +1054,7 @@ model User {
   unitAssignments                     UserWorksheetDepartment[]
   notificationRoles                   UserNotificationRole[]              @relation("UserNotificationRole")
   serviceCapabilities                 UserServiceCapability[]             @relation("UserServiceCapability")
+  partnerSeen                         PartnerSeen[]                       @relation("PartnerSeen")
   permissionOverrides                 UserPermissionOverride[]            @relation("UserPermissionOverride")
   permissionOverridesSet              UserPermissionOverride[]            @relation("UserPermissionOverrideSetBy")
   auditLogs                           AuditLog[]
@@ -6088,6 +6089,24 @@ model UserServiceCapability {
 
   @@id([userId, capability])
   @@index([capability])
+}
+
+/// A PARTNER LEGUTÓBBI LÁTOGATÁSA EGY LISTÁN (kártya 28f31715, PR 2: az áttekintés "Újdonságok" blokkja). Ami ennél később
+/// keletkezett, az a partnernek új. Felhasználónként és területenként egy sor; a lista megnyitása frissíti.
+model PartnerSeen {
+  userId     String
+  area       PartnerSeenArea
+  lastSeenAt DateTime
+
+  user User @relation("PartnerSeen", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, area])
+}
+
+/// Az áttekintés két figyelt listája: a hibajegyek és a munkalapok.
+enum PartnerSeenArea {
+  TICKETS
+  WORKSHEETS
 }
 
 model UserWorksheetDepartment {

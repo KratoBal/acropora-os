@@ -2530,6 +2530,10 @@ export type {
   ProbablyNotTransferItem,
 } from "./due-invoices.js";
 export {
+  PARTNER_NEWS_FIRST_VISIT_DAYS,
+  PARTNER_NEWS_LABELS,
+  partnerNewsOf,
+  partnerNewsSince,
   PARTNER_TODO_ITEMS,
   PARTNER_TODO_LABELS,
   certificateAwaitsSignedCopy,
@@ -2539,6 +2543,8 @@ export {
   worksheetAwaitsPartnerSignature,
 } from "./partner-overview.js";
 export type {
+  PartnerNewsGroup,
+  PartnerSeenArea,
   PartnerOverview,
   PartnerTodoGroup,
   PartnerTodoItem,
