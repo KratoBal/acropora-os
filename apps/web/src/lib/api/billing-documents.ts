@@ -126,9 +126,15 @@ export const billingDocumentsApi = {
     day: string,
     page: number,
     signal?: AbortSignal,
+    /** A rendezett oszlop és az irány (`CASH_REGISTER_RECEIPT_SORT_FIELDS`); nélküle az alap sorrend. */
+    sort?: { sort: string; direction: "asc" | "desc" } | null,
   ) {
     return apiRequest<CashRegisterReceiptListResponse>(
-      `/billing/cash-register-receipts?${new URLSearchParams({ day, page: String(page) })}`,
+      `/billing/cash-register-receipts?${new URLSearchParams({
+        day,
+        page: String(page),
+        ...(sort ? { sort: sort.sort, direction: sort.direction } : {}),
+      })}`,
       token,
       { signal },
     );

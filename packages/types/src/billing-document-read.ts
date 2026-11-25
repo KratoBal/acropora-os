@@ -60,6 +60,18 @@ export interface BillingDocumentListQuery {
   paymentState?: BillingListPaymentFilter;
 }
 
+/**
+ * A NYUGTA-LISTA RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4): a lista egy nap nyugtáit mutatja, 50-esével lapozva, ezért a rendezés
+ * szerveroldali, az egy tábla közvetlen oszlopaira (a fizetési mód és az állapot számolt, azok nem). Az alap: kelt szerint csökkenő.
+ */
+export const CASH_REGISTER_RECEIPT_SORT_FIELDS = [
+  "issuedAt",
+  "total",
+  "receiptNumber",
+] as const;
+export type CashRegisterReceiptSortField =
+  (typeof CASH_REGISTER_RECEIPT_SORT_FIELDS)[number];
+
 /** A kimenő lista fizetés-szűrőjének két értéke; hiányzó: mind. */
 export const BILLING_LIST_PAYMENT_FILTERS = ["PAID", "UNPAID"] as const;
 export type BillingListPaymentFilter =
