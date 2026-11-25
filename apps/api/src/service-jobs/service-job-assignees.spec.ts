@@ -79,6 +79,7 @@ function setup(
     },
     detail: async () => detailRow(),
     documentRemovals: async () => [],
+    commonWorksheetFacts: async () => new Map(),
     ...overrides,
   } as unknown as ServiceJobsRepository;
 

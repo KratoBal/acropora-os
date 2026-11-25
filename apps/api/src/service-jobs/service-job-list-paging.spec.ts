@@ -49,7 +49,13 @@ function serviceWith(totalItems: number | undefined) {
         ...(totalItems === undefined ? {} : { totalItems }),
       };
     },
-    countCommonDone: async () => 0,
+    commonCounts: async () => ({
+      NEW: 0,
+      IN_PROGRESS: 0,
+      WAITING: 0,
+      DONE: 0,
+      CLOSED: 0,
+    }),
     commonWorksheetFacts: async () => new Map(),
     countsByStatus: async () => ZERO_COUNTS,
     listFacets: async (...args: unknown[]) => {

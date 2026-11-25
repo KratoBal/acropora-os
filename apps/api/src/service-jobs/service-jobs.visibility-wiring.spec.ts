@@ -27,7 +27,7 @@ function serviceWith(kapott: {
     | "list"
     | "assignedUnitIds"
     | "countsByStatus"
-    | "countCommonDone"
+    | "commonCounts"
     | "commonWorksheetFacts"
   > = {
     assignedUnitIds: async () => ["u1"],
@@ -41,7 +41,13 @@ function serviceWith(kapott: {
      * a kerdesre, es a masodik bekotese kulon tud elromlani -- akkor a partner
      * a sajat listaja folott a HAZ osszesitojet latna.
      */
-    countCommonDone: async () => 0,
+    commonCounts: async () => ({
+      NEW: 0,
+      IN_PROGRESS: 0,
+      WAITING: 0,
+      DONE: 0,
+      CLOSED: 0,
+    }),
     commonWorksheetFacts: async () => new Map(),
     countsByStatus: async (visibility, search) => {
       kapott.szamlaloWhere = visibility;

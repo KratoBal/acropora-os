@@ -39,8 +39,14 @@ const PARTNER = {
 function serviceWith(detailRow: ServiceJobDetailRow) {
   const repository: Pick<
     ServiceJobsRepository,
-    "detail" | "documentRemovals" | "assignedUnitIds" | "openerDisplayName"
+    | "detail"
+    | "documentRemovals"
+    | "assignedUnitIds"
+    | "openerDisplayName"
+    | "commonWorksheetFacts"
   > = {
+    // the maintenance detail reads its sheets for the shared status (card 7f23785c)
+    commonWorksheetFacts: async () => new Map(),
     detail: async () => detailRow,
     openerDisplayName: async () => "Cápasuli",
     /*

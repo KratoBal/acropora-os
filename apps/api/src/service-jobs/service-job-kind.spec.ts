@@ -49,7 +49,7 @@ describe("service job kind filtering", () => {
     };
     const repository: Pick<
       ServiceJobsRepository,
-      "list" | "countsByStatus" | "countCommonDone" | "commonWorksheetFacts"
+      "list" | "countsByStatus" | "commonCounts" | "commonWorksheetFacts"
     > = {
       list: async (_scope, _visibility, _search, kind) => {
         kapottFajtak.push(kind);
@@ -58,7 +58,13 @@ describe("service job kind filtering", () => {
           truncated: false,
         };
       },
-      countCommonDone: async () => 0,
+      commonCounts: async () => ({
+        NEW: 0,
+        IN_PROGRESS: 0,
+        WAITING: 0,
+        DONE: 0,
+        CLOSED: 0,
+      }),
       commonWorksheetFacts: async () => new Map(),
       countsByStatus: async () => ({
         NEW: 0,

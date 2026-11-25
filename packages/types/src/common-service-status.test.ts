@@ -143,6 +143,46 @@ describe("hibajegy közös állapota", () => {
   });
 });
 
+/**
+ * A KARBANTARTÁS: a jelvény szabálya (minden lap aláírt = Lezárt), a tárolt
+ * állapottól függetlenül. Minden tárolt állapoton végigmegy, hogy egy
+ * véletlenül átfolyó hibajegy-ág (Új, Elkészült, Vár valamire) piros legyen.
+ */
+describe("karbantartási lap közös állapota", () => {
+  const KARBANTARTAS_VART: Record<keyof typeof LAPOK, CommonServiceState> = {
+    "nincs lap": ALLAPOT("IN_PROGRESS"),
+    piszkozat: ALLAPOT("IN_PROGRESS"),
+    "verzió nélküli": ALLAPOT("IN_PROGRESS"),
+    elutasított: ALLAPOT("IN_PROGRESS"),
+    "aláírásra vár": ALLAPOT("IN_PROGRESS"),
+    "aláírva, nincs átadva": ALLAPOT("CLOSED"),
+    "aláírva és átadva": ALLAPOT("CLOSED"),
+    "aláírásra vár + aláírva és átadva": ALLAPOT("IN_PROGRESS"),
+    "aláírva és átadva + aláírva, nincs átadva": ALLAPOT("CLOSED"),
+    "aláírva és átadva + piszkozat": ALLAPOT("IN_PROGRESS"),
+    "aláírásra vár + elutasított": ALLAPOT("IN_PROGRESS"),
+    "aláírva és átadva + verzió nélküli": ALLAPOT("IN_PROGRESS"),
+  };
+  for (const [nev, lapok] of Object.entries(LAPOK)) {
+    it(`${nev}, minden tárolt állapoton`, () => {
+      for (const status of ALL_SERVICE_JOB_STATUS_VALUES)
+        assert.deepEqual(
+          commonJobStatus(status, lapok, "MAINTENANCE"),
+          KARBANTARTAS_VART[nev],
+          status,
+        );
+    });
+  }
+
+  it("a fajta nélküli hívás a hibajegy szabálya", () => {
+    const lapok = [lap("AWAITING_SIGNATURE")];
+    assert.deepEqual(
+      commonJobStatus("IN_PROGRESS", lapok),
+      commonJobStatus("IN_PROGRESS", lapok, "REPAIR"),
+    );
+  });
+});
+
 describe("munkalap közös állapota", () => {
   const SOROK: [WorksheetVersionStatus, number, CommonServiceState][] = [
     ["DRAFT", 0, ALLAPOT("NEW")],
