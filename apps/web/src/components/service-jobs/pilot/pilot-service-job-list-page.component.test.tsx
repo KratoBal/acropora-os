@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import type {
   ServiceJobListItem,
@@ -36,6 +37,7 @@ vi.mock("next/font/local", () => ({
 
 const navigation = vi.hoisted(() => ({
   replace: vi.fn(),
+  push: vi.fn(),
   search: "",
   cache: new Map<string, URLSearchParams>(),
 }));
@@ -43,7 +45,10 @@ const navigation = vi.hoisted(() => ({
 // Stable params per query string, the way Next.js keeps them between renders:
 // a fresh object on every render would re-run the URL effect for nothing.
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: navigation.replace, push: vi.fn() }),
+  useRouter: () => ({
+    replace: navigation.replace,
+    push: navigation.push,
+  }),
   usePathname: () => "/szerviz/hibajegyek",
   useSearchParams: () => {
     let params = navigation.cache.get(navigation.search);
@@ -140,6 +145,7 @@ async function settle() {
 
 beforeEach(() => {
   navigation.replace.mockReset();
+  navigation.push.mockReset();
   navigation.cache.clear();
   api.list.mockReset();
   api.list.mockResolvedValue(response);
@@ -235,7 +241,7 @@ describe("service-job list state in the URL", () => {
     renderAt("tab=closed&partner=Beta+Kft");
     await screen.findByText("Jegy 2");
 
-    fireEvent.click(screen.getByRole("tab", { name: "Összes" }));
+    fireEvent.click(screen.getByRole("tab", { name: /^Összes/ }));
     await settle();
 
     await waitFor(() =>
@@ -308,13 +314,14 @@ describe("service-job list, redesign columns", () => {
     expect(await screen.findByText("Nincs kiosztva")).toBeTruthy();
   });
 
-  it("keeps the partner's status as its own line under the internal one", async () => {
+  // A PARTNER ÁLLAPOTA NEM ISMÉTLŐDIK A LISTA SORAIBAN (picasso, f0b70dbd, 2. pont): minden soron ugyanazt mondta, zaj volt; az adatlapon marad.
+  it("shows the internal status badge and does not repeat the partner's status on the row", async () => {
     withRows([item("3", "NEW", "Alfa Kft")]);
     renderAt("");
-    expect(
-      await screen.findByText("A partner ezt látja: Feldolgozás alatt"),
-    ).toBeTruthy();
+    await screen.findByText("Jegy 3");
     expect(screen.getByText("Új")).toBeTruthy();
+    expect(screen.queryByText(/A partner ezt látja/)).toBeNull();
+    expect(screen.queryByText(/Feldolgozás alatt/)).toBeNull();
   });
 
   it("draws the stat tiles from the server's counts", async () => {
@@ -467,5 +474,118 @@ describe("service-job list, the created-day filter", () => {
     renderAt("createdFrom=2026-11-19&createdTo=2026-11-19");
     await screen.findByText("Jegy 3");
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+/*
+  A HIBAJEGY-LISTA (a) CSOMAGJA (picasso, f0b70dbd, 1., 4., 5., 7. pont és az állapotok). MI PIROSÍT: ha a fül száma nem a csempék
+  száma (egy `counts`, két megjelenítés), vagy a "Lezárt" nem a Meghiúsultat is számolja; ha a "0 munkalap" jelvény marad, vagy az "1
+  munkalap" jelvényt veszít; ha a hosszú cím nincs két sorra vágva, vagy nincs tooltip a teljes szöveggel; ha a sor billentyűvel
+  (Enter) vagy a nyílon kívüli kattintással nem nyílik; ha a szűrő miatti üres lista nem kínál "Szűrők törlése" gombot (és az nem
+  törli a keresést és a szűrőket); ha egy betöltési hiba üres listának látszik (nincs hibaüzenet, nincs újrapróbálás).
+*/
+describe("service-job list (a): tabs with numbers, quiet rows, states", () => {
+  const withRows = (rows: ServiceJobListItem[]) =>
+    api.list.mockResolvedValue({ ...response, items: rows });
+
+  it("puts the numbers on the tabs, from the same counts as the tiles, the closed tab counting the failed ones too", async () => {
+    api.list.mockResolvedValue({
+      ...response,
+      counts: {
+        NEW: 2,
+        TRIAGED: 1,
+        SCHEDULED: 1,
+        IN_PROGRESS: 2,
+        WAITING_FOR_PARTS: 2,
+        WAITING_FOR_CUSTOMER: 1,
+        COMPLETED: 20,
+        CANCELLED: 8,
+      },
+    });
+    renderAt("");
+    await screen.findByText("Jegy 3");
+    expect(screen.getByRole("tab", { name: "Nyitott 6" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Várakozik 3" })).toBeTruthy();
+    // Meghiúsult (CANCELLED) is closed: 20 + 8
+    expect(screen.getByRole("tab", { name: "Lezárt 28" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Összes 37" })).toBeTruthy();
+    // a csempe ugyanazt a három számot mondja
+    const tiles = screen.getByLabelText("Összesítés");
+    expect(within(tiles).getByText("6")).toBeTruthy();
+    expect(within(tiles).getByText("3")).toBeTruthy();
+    expect(within(tiles).getByText("28")).toBeTruthy();
+  });
+
+  it("shows no tab numbers before the counts have arrived", () => {
+    api.list.mockReturnValue(new Promise(() => undefined));
+    renderAt("");
+    expect(screen.getByRole("tab", { name: "Nyitott" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Lezárt" })).toBeTruthy();
+  });
+
+  it("gives 0 worksheets no badge and a dash, and 1 or more a badge", async () => {
+    withRows([
+      { ...item("1", "NEW", "Alfa Kft"), worksheetCount: 0 },
+      { ...item("2", "NEW", "Alfa Kft"), worksheetCount: 1 },
+      { ...item("3", "NEW", "Alfa Kft"), worksheetCount: 3 },
+    ]);
+    renderAt("");
+    await screen.findByText("Jegy 1");
+    expect(screen.queryByText("0 munkalap")).toBeNull();
+    expect(screen.getAllByLabelText("Nincs munkalap")).toHaveLength(1);
+    expect(screen.getByText("1 munkalap")).toBeTruthy();
+    expect(screen.getByText("3 munkalap")).toBeTruthy();
+  });
+
+  it("clamps a long title to two lines and keeps the whole text in the tooltip", async () => {
+    const longTitle =
+      "Rendellenesség: Vízóra-leolvasás (stage-próba), ESZK-20260922-134703h-45D5 AKV/A11 Homokszűrő és még egy hosszú folytatás";
+    withRows([{ ...item("1", "NEW", "Alfa Kft"), title: longTitle }]);
+    renderAt("");
+    const title = await screen.findByText(longTitle);
+    expect(title.className).toContain("line-clamp-2");
+    expect(title.getAttribute("title")).toBe(longTitle);
+  });
+
+  it("opens the job with Enter on the row and with a click anywhere on it, not only on the arrow", async () => {
+    withRows([item("3", "NEW", "Alfa Kft")]);
+    renderAt("");
+    const row = (await screen.findAllByTestId("service-job-row"))[0]!;
+    expect(row.getAttribute("tabindex")).toBe("0");
+    expect(row.getAttribute("aria-label")).toBe("HJ-3 Jegy 3 megnyitása");
+    fireEvent.keyDown(row, { key: "Enter" });
+    expect(navigation.push).toHaveBeenCalledWith("/szerviz/hibajegyek/3");
+    navigation.push.mockClear();
+    fireEvent.click(within(row).getByText("Jegy 3"));
+    expect(navigation.push).toHaveBeenCalledWith("/szerviz/hibajegyek/3");
+  });
+
+  it("offers Szűrők törlése on a filtered-empty list, and it clears the search and the filters", async () => {
+    withRows([item("3", "NEW", "Alfa Kft")]);
+    renderAt("partner=Nincs+Ilyen+Kft");
+    expect(await screen.findByText("Nincs találat")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Szűrők törlése" }));
+    expect(await screen.findByText("Jegy 3")).toBeTruthy();
+    expect(screen.queryByText("Nincs találat")).toBeNull();
+  });
+
+  it("a load error is said as an error, with a retry, and is not an empty list", async () => {
+    api.list.mockRejectedValue(new Error("A szerver nem érhető el."));
+    renderAt("");
+    expect(await screen.findByText("Betöltési hiba")).toBeTruthy();
+    expect(screen.getByText("A szerver nem érhető el.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Újrapróbálás" })).toBeTruthy();
+    expect(screen.queryByText("Még nincs hibajegy")).toBeNull();
+    expect(screen.queryByText("Nincs találat")).toBeNull();
+  });
+
+  it("an empty list says so and offers the first ticket", async () => {
+    withRows([]);
+    renderAt("");
+    expect(await screen.findByText("Még nincs hibajegy")).toBeTruthy();
+    // a fejlécben és az üres állapot kártyáján is ott a gomb
+    expect(screen.getAllByRole("link", { name: /Új hibajegy/ })).toHaveLength(
+      2,
+    );
   });
 });
