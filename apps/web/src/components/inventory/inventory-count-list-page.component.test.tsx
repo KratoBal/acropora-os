@@ -156,3 +156,92 @@ describe("InventoryCountListPage -- állapot az URL-ben", () => {
     );
   });
 });
+
+/*
+  A LISTA RENDEZÉSE AZ OSZLOPFEJEN (Balázs kérése, kártya 2f6369a4). MI PIROSÍT: ha a leltárszám, a raktár, a létrehozás vagy a tételek
+  fejléce nem a saját szerver-mezőjét kéri; ha a ciklus (növekvő, csökkenő, alap) elakad; ha a rendezés nem nullázza a lapot, vagy
+  elveszíti az állapot-szűrőt; ha az URL rendezése nem jut a kérésbe, vagy egy ismeretlen mező igen; ha az "Indította" vagy az "Állapot"
+  oszlop rendezhetőnek látszik.
+*/
+describe("InventoryCountListPage -- a rendezés", () => {
+  const header = async (name: string) =>
+    within(await screen.findByRole("table")).getByRole("button", { name });
+
+  it("egy fejléc a saját mezőjét kéri, növekvőben kezd, az első oldalra lapoz és megtartja az állapot-szűrőt", async () => {
+    urlNavigation.reset("/raktar", "status=DRAFT&page=3");
+    render(<InventoryCountListPage />);
+    await screen.findAllByText("LELT-2026-001");
+    for (const [name, field] of [
+      ["Leltárszám", "countNumber"],
+      ["Raktár", "warehouseName"],
+      ["Létrehozva", "createdAt"],
+      ["Tételek", "lineCount"],
+    ] as const) {
+      urlNavigation.reset("/raktar", "status=DRAFT&page=3");
+      api.list.mockClear();
+      fireEvent.click(await header(name));
+      await waitFor(() =>
+        expect(api.list).toHaveBeenLastCalledWith("token-1", {
+          page: 1,
+          pageSize: 20,
+          status: "DRAFT",
+          sort: field,
+          direction: "asc",
+        }),
+      );
+    }
+  });
+
+  it("a második kattintás csökkenő, a harmadik törli a rendezést", async () => {
+    urlNavigation.reset("/raktar", "");
+    render(<InventoryCountListPage />);
+    await screen.findAllByText("LELT-2026-001");
+    fireEvent.click(await header("Tételek"));
+    await waitFor(() =>
+      expect(urlNavigation.search).toBe("sort=lineCount&direction=asc"),
+    );
+    fireEvent.click(await header("Tételek"));
+    await waitFor(() =>
+      expect(urlNavigation.search).toBe("sort=lineCount&direction=desc"),
+    );
+    fireEvent.click(await header("Tételek"));
+    await waitFor(() => expect(urlNavigation.search).toBe(""));
+    await waitFor(() =>
+      expect(api.list).toHaveBeenLastCalledWith("token-1", {
+        page: 1,
+        pageSize: 20,
+        status: undefined,
+      }),
+    );
+  });
+
+  it.each([
+    "sort=status&direction=asc",
+    "sort=lineCount",
+    "sort=lineCount&direction=up",
+    "direction=asc",
+  ])(
+    "az érvénytelen rendezés (%s) nem megy el a szerverhez",
+    async (search) => {
+      urlNavigation.reset("/raktar", search);
+      render(<InventoryCountListPage />);
+      await screen.findAllByText("LELT-2026-001");
+      expect(api.list).toHaveBeenLastCalledWith("token-1", {
+        page: 1,
+        pageSize: 20,
+        status: undefined,
+      });
+    },
+  );
+
+  it("csak a leltárszám, a raktár, a létrehozás és a tételek oszlopnak van rendezés-gombja", async () => {
+    urlNavigation.reset("/raktar", "");
+    render(<InventoryCountListPage />);
+    const table = await screen.findByRole("table");
+    const sortable = within(table)
+      .getAllByRole("columnheader")
+      .filter((cell) => within(cell).queryByRole("button"))
+      .map((cell) => cell.textContent?.replace(/[⇅↑↓]/g, ""));
+    expect(sortable).toEqual(["Leltárszám", "Raktár", "Létrehozva", "Tételek"]);
+  });
+});

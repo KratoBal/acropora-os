@@ -906,9 +906,11 @@ export type {
   InventoryCountLineSyncStatus,
   InventoryCountListItem,
   InventoryCountListResponse,
+  InventoryCountSortField,
   InventoryCountStatus,
   InventoryCountUploadResult,
 } from "./inventory-count.js";
+export { INVENTORY_COUNT_SORT_FIELDS } from "./inventory-count.js";
 export { IMPORT_ISSUE_SEVERITIES } from "./integrations/import-staging.js";
 export type {
   BrandResolutionCandidate,

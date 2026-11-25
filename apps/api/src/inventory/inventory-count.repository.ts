@@ -23,7 +23,9 @@ import {
   ensureMainWarehouse,
   type WarehouseLookupDatabase,
 } from "../common/warehouse.util.js";
+import { listOrderBy } from "../common/list-sort.js";
 import type { InventoryCountListQueryDto } from "./dto/inventory-count-list-query.dto.js";
+import { INVENTORY_COUNT_SORT } from "./inventory-count-list-sort.js";
 import {
   toInventoryCountDetail,
   toInventoryCountListItem,
@@ -164,7 +166,7 @@ export class InventoryCountRepository extends Repository {
       this.countDatabase.inventoryCount.findMany({
         where,
         include: listInclude,
-        orderBy: { createdAt: "desc" },
+        orderBy: listOrderBy(INVENTORY_COUNT_SORT, query.sort, query.direction),
         skip,
         take: query.pageSize,
       }),

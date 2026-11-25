@@ -2,6 +2,7 @@ import type {
   InventoryCountApplyResult,
   InventoryCountDetail,
   InventoryCountListResponse,
+  InventoryCountSortField,
   InventoryCountUploadResult,
   StockItemReconciliationPage,
   StockItemReconciliationSummary,
@@ -15,6 +16,8 @@ export interface InventoryCountListQuery {
   page?: number;
   pageSize?: number;
   status?: "DRAFT" | "UPLOADED" | "CORRECTED";
+  sort?: InventoryCountSortField;
+  direction?: "asc" | "desc";
 }
 
 function listQueryString(query: InventoryCountListQuery): string {
@@ -22,6 +25,10 @@ function listQueryString(query: InventoryCountListQuery): string {
   if (query.page) params.set("page", String(query.page));
   if (query.pageSize) params.set("pageSize", String(query.pageSize));
   if (query.status) params.set("status", query.status);
+  if (query.sort && query.direction) {
+    params.set("sort", query.sort);
+    params.set("direction", query.direction);
+  }
   return params.toString();
 }
 
