@@ -2880,6 +2880,19 @@ describe("the proforma on the Fizetés card", () => {
     ).toBeNull();
   });
 
+  // an advance arrived, the balance not yet (card d31a66a3, 2b): the order is not "Kifizetve"
+  it("an advance received says Előleg beérkezett, not Kifizetve", async () => {
+    const advance = paid({ amount: "8000.0000" });
+    api.detail.mockResolvedValue({
+      ...advance,
+      payment: { ...advance.payment!, state: "PARTIALLY_CAPTURED" },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const payment = await card();
+    expect(within(payment).getByText("Előleg beérkezett")).toBeTruthy();
+    expect(within(payment).queryByText("Kifizetve")).toBeNull();
+  });
+
   it("a bank pairing is named as such", async () => {
     api.detail.mockResolvedValue(
       paid({ source: "BANK_PAIRING", recordedBy: null }),

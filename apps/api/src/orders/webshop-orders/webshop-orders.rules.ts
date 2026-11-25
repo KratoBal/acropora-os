@@ -148,6 +148,18 @@ export function paymentStateOf(
       : "PARTIALLY_REFUNDED";
   if (payment.status === "canceled") return "CANCELED";
   if (payment.status === "failed") return "FAILED";
+  /*
+    AN ADVANCE BY TRANSFER (card d31a66a3, 2b): the webshop captured the advance's amount on the order's transfer payment, the
+    balance is still to come. Only for the transfer: a card order captured for less than its hold after an order edit is paid in
+    full (its collection keeps the hold's amount).
+  */
+  if (
+    payment.provider_id === BANK_TRANSFER_PROVIDER_ID &&
+    captured > 0 &&
+    payment.amount !== null &&
+    captured < payment.amount
+  )
+    return "PARTIALLY_CAPTURED";
   if (captured > 0 || payment.status === "completed") return "CAPTURED";
   if (
     payment.status === "authorized" ||

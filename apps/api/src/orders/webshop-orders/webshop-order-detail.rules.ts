@@ -507,6 +507,7 @@ export function transferSwitchOf(input: {
         : input.invoice
           ? "A rendelésen már van számla."
           : input.paymentState === "CAPTURED" ||
+              input.paymentState === "PARTIALLY_CAPTURED" ||
               input.paymentState === "PARTIALLY_REFUNDED" ||
               input.paymentState === "REFUNDED"
             ? "A rendelést már kifizették."
