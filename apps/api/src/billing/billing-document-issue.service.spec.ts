@@ -16,6 +16,7 @@ import type { SzamlazzAgentClient } from "../integrations/szamlazz/szamlazz-agen
 import type { SzamlazzAgentResponse } from "../integrations/szamlazz/szamlazz-agent-xml.js";
 import type { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-credential.provider.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
+import type { WebshopOrderInvoiceFact } from "./billing-document-issue.js";
 import type { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
 import type { BillingDocumentStockRepository } from "./billing-document-stock.repository.js";
 import { BillingDocumentIssueService } from "./billing-document-issue.service.js";
@@ -133,6 +134,12 @@ function setup(
       items: Array<{ id: string; quantity: string }>;
       billed: Array<{ contractItemId: string; quantity: string }>;
     };
+    /** The webshop order's other invoices (d31a66a3, S1), before / after the claim. */
+    webshopInvoices?: (afterClaim: boolean) => WebshopOrderInvoiceFact[];
+    /** The webshop transfer that paid the proforma (d31a66a3, S1); null: none (the default). */
+    transfer?: { amount: string; advance?: boolean } | null;
+    /** Számlázz.hu feed invoices of the order the OS did not issue (the Autokassza check, barracuda on #2884). */
+    foreign?: string[];
   } = {},
 ) {
   const calls = {
@@ -148,6 +155,7 @@ function setup(
     xml: [] as string[],
     paymentDaysFor: [] as string[],
     proformaFactsFor: [] as string[],
+    webshopAsked: [] as string[],
   };
   let current = {
     ...row(options.status, options.format),
@@ -182,6 +190,24 @@ function setup(
       return (
         options.contractFacts?.(calls.claim > 0) ?? { items: [], billed: [] }
       );
+    },
+    webshopOrderInvoices: async (orderId: string, excludeId: string) => {
+      calls.webshopAsked.push(`invoices ${orderId} without ${excludeId}`);
+      return options.webshopInvoices?.(calls.claim > 0) ?? [];
+    },
+    webshopForeignFeedInvoices: async (orderId: string, proformaId: string) => {
+      calls.webshopAsked.push(`feed ${orderId} ${proformaId}`);
+      return options.foreign ?? [];
+    },
+    webshopTransferFacts: async (orderId: string, proformaId: string) => {
+      calls.webshopAsked.push(`transfer ${orderId} ${proformaId}`);
+      return options.transfer
+        ? {
+            amount: d(options.transfer.amount),
+            currency: "HUF",
+            advance: options.transfer.advance ?? false,
+          }
+        : null;
     },
   } as unknown as BillingDocumentsRepository;
   const repository = {
@@ -271,6 +297,9 @@ const contractRow = {
 };
 const ONE_ITEM = [{ id: "ci-1", quantity: "3" }];
 
+// Kártya d31a66a3, S1: a webshop rendelés számlája
+const webshopRow = { sourceType: "WEBSHOP_ORDER", sourceId: "order_38" };
+
 describe("BillingDocumentIssueService", () => {
   /*
     CSAK A MARADÉK (feladat d510). MI PIROSÍT: egy szerződés-tétel túlszámlázása
@@ -350,6 +379,138 @@ describe("BillingDocumentIssueService", () => {
     });
     await issue(service).catch(() => undefined);
     assert.deepEqual(calls.excluded[0], ["doc-1", "adv-1"]);
+  });
+
+  /*
+    EGY WEBSHOP RENDELÉS EGYSZER (kártya d31a66a3, S1). MI PIROSÍT: egy második „teljes” bizonylat eljut a Számlázz.hu-ig; a
+    foglalás előtti őr foglal; a foglalás után kiderülő verseny (egy közben foglalt előleg) nem ISSUE_FAILED, vagy mégis hív; egy
+    nem webshop bizonylat is a webshop rendelést kérdezi.
+  */
+  it("WEBSHOP-OVERBILL: an invoice beside the order's advance is refused before the claim, by its number", async () => {
+    const { service, calls } = setup({
+      over: webshopRow,
+      webshopInvoices: () => [
+        {
+          documentType: "ADVANCE_INVOICE",
+          status: "ISSUED",
+          number: "E-ACR-9",
+          cancelled: false,
+        },
+      ],
+    });
+    await assert.rejects(
+      issue(service),
+      (error: unknown) =>
+        error instanceof ConflictException && /E-ACR-9/.test(error.message),
+    );
+    assert.deepEqual([calls.claim, calls.generate], [0, 0]);
+    assert.deepEqual(calls.webshopAsked, ["invoices order_38 without doc-1"]);
+  });
+
+  it("WEBSHOP-RACE: an advance claimed meanwhile shows up after the claim: ISSUE_FAILED, no call", async () => {
+    const { service, calls } = setup({
+      over: webshopRow,
+      webshopInvoices: (afterClaim) =>
+        afterClaim
+          ? [
+              {
+                documentType: "ADVANCE_INVOICE",
+                status: "ISSUING",
+                number: null,
+                cancelled: false,
+              },
+            ]
+          : [],
+    });
+    await assert.rejects(issue(service), ConflictException);
+    assert.deepEqual([calls.claim, calls.generate], [1, 0]);
+    assert.match(calls.failed[0] ?? "", /előlegszámla \(kiállítás alatt\)/);
+  });
+
+  it("WEBSHOP-PAID: the transfer-paid invoice goes out paid, with the proforma's number, due on its issue day", async () => {
+    const { service, calls } = setup({
+      over: {
+        ...webshopRow,
+        proformaInvoice: { id: "p-38", invoiceNumber: "D-ACR-12" },
+      },
+      transfer: { amount: "1270" },
+    });
+    assert.equal((await issue(service)).status, "ISSUED");
+    const xml = calls.xml[0] ?? "";
+    assert.match(xml, /<dijbekeroSzamlaszam>D-ACR-12<\/dijbekeroSzamlaszam>/);
+    assert.match(xml, /<fizetve>true<\/fizetve>/);
+    assert.match(
+      xml,
+      new RegExp(`<fizetesiHataridoDatum>${budapestDayKey(new Date())}<`),
+    );
+    assert.ok(calls.webshopAsked.includes("transfer order_38 p-38"));
+  });
+
+  /*
+    A SZERKESZTŐBŐL KIÁLLÍTOTT WEBSHOP-SZÁMLA (barracuda a #2884-en, CHANGES A). A rendelés oldalának őrzői a vázlat mentésekor
+    futnak; ugyanaz a vázlat a Számlázás szerkesztőjéből a közös kiállításon át is kimehet. MI PIROSÍT: egy szerkesztett (más
+    bruttójú) számla kimegy, fizetve vagy anélkül; egy nem OS-es Számlázz.hu-számla mellé kimegy; egy előleg-beérkezésre teljes
+    számla megy ki; beérkezés nélkül megáll, vagy egy nem webshop bizonylat a webshopot kérdezi.
+  */
+  const linkedWebshop = {
+    ...webshopRow,
+    proformaInvoice: { id: "p-38", invoiceNumber: "D-ACR-12" },
+  };
+
+  it("WEBSHOP-EDITOR-AMOUNT: a gross that is not the transfer is refused before the claim, paid or not", async () => {
+    for (const amount of ["1300", "1200"]) {
+      const { service, calls } = setup({
+        over: linkedWebshop,
+        transfer: { amount },
+      });
+      await assert.rejects(
+        issue(service),
+        (error: unknown) =>
+          error instanceof ConflictException &&
+          /nem egyezik a rendelés beérkezett utalásával/.test(error.message),
+      );
+      assert.deepEqual([calls.claim, calls.generate], [0, 0], amount);
+    }
+  });
+
+  it("WEBSHOP-EDITOR-FOREIGN: a Számlázz.hu invoice the OS did not issue stops it, by its number", async () => {
+    const { service, calls } = setup({
+      over: linkedWebshop,
+      transfer: { amount: "1270" },
+      foreign: ["E-ACR-77"],
+    });
+    await assert.rejects(
+      issue(service),
+      (error: unknown) =>
+        error instanceof ConflictException && /E-ACR-77/.test(error.message),
+    );
+    assert.deepEqual([calls.claim, calls.generate], [0, 0]);
+    assert.ok(calls.webshopAsked.includes("feed order_38 p-38"));
+  });
+
+  it("WEBSHOP-EDITOR-ADVANCE: an advance transfer gets no whole invoice", async () => {
+    const { service, calls } = setup({
+      over: linkedWebshop,
+      transfer: { amount: "1270", advance: true },
+    });
+    await assert.rejects(
+      issue(service),
+      (error: unknown) =>
+        error instanceof ConflictException && /előleg/.test(error.message),
+    );
+    assert.deepEqual([calls.claim, calls.generate], [0, 0]);
+  });
+
+  it("WEBSHOP-UNPAID: without a transfer for the proforma it goes out as before, unpaid; a contract invoice never asks", async () => {
+    const { service, calls } = setup({ over: linkedWebshop, transfer: null });
+    assert.equal((await issue(service)).status, "ISSUED");
+    assert.doesNotMatch(calls.xml[0] ?? "", /fizetve/);
+    const contract = setup({
+      over: contractRow,
+      contractFacts: () => ({ items: ONE_ITEM, billed: [] }),
+    });
+    await issue(contract.service);
+    assert.deepEqual(contract.calls.webshopAsked, []);
   });
 
   it("CONTRACT-OK: within the remainder the invoice goes out", async () => {

@@ -14,6 +14,7 @@ import {
   shippingOf,
   stepsOf,
   TRANSFER_INVOICE_STEP,
+  TRANSFER_PARCEL_WAIT,
   toDetail,
   transferSwitchOf,
 } from "./webshop-order-detail.rules.js";
@@ -188,6 +189,44 @@ describe("the detail", () => {
     assert.equal(result.bankTransfer, true);
     assert.equal(result.steps[1]!.detail, TRANSFER_INVOICE_STEP);
     assert.equal(detail().steps[1]!.detail, "Számla kiállítása");
+  });
+
+  /*
+    A BEÉRKEZETT TELJES UTALÁS UTÁN A SZÁMLA KIÁLLÍTHATÓ (d31a66a3, S1). MI PIROSÍT: a lépés a beérkezés után is az utalásra vár, vagy
+    egy előleg-beérkezés után már kiállítást kínál (arra nem a teljes számla jár).
+  */
+  it("a prepaid order's invoice step stops waiting once the whole transfer is in, not after an advance", () => {
+    const receipt = (advance: boolean) =>
+      toDetail({
+        order: order({
+          payment_collections: [
+            {
+              payment_sessions: [
+                { provider_id: "pp_acropora_transfer", status: "pending" },
+              ],
+            },
+          ],
+        } as unknown as Partial<MedusaOrderDetailRow>),
+        status: status("confirmed"),
+        facts: NO_FACTS,
+        customerOrderCount: 1,
+        relatedDisplayId: 39,
+        now: NOW,
+        transferReceipt: {
+          source: "MANUAL",
+          receivedOn: "2026-10-03",
+          reference: "UT-38",
+          amount: "18900.0000",
+          currency: "HUF",
+          recordedBy: null,
+          advance,
+        },
+      });
+    assert.equal(receipt(false).steps[1]!.detail, "Számla kiállítása");
+    // the parcel now waits for the invoice, not for the transfer
+    assert.equal(receipt(false).steps[2]!.detail, "Előbb állítsd ki a számlát");
+    assert.equal(receipt(true).steps[1]!.detail, TRANSFER_INVOICE_STEP);
+    assert.equal(receipt(true).steps[2]!.detail, TRANSFER_PARCEL_WAIT);
   });
 
   /*
@@ -577,8 +616,8 @@ describe("the processing bar", () => {
       "closed:todo",
     ]);
     assert.equal(steps[1]!.detail, TRANSFER_INVOICE_STEP);
-    assert.equal(steps[1]!.detail, "A Számlázz.hu állítja ki a kifizetéskor");
-    assert.equal(steps[2]!.detail, "A számla a díjbekérő kifizetése után jön");
+    assert.equal(steps[1]!.detail, "Kiállítható az utalás beérkezése után");
+    assert.equal(steps[2]!.detail, "A számla az utalás beérkezése után jön");
     assert.ok(
       steps.every((step) => !/kiállítása|állítsd ki/.test(step.detail)),
     );

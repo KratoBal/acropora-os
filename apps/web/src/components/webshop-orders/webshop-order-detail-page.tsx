@@ -848,11 +848,17 @@ function InvoiceCard({
   ) : null;
   const waiting = NOT_INVOICEABLE.includes(order.status.code);
   const external = order.externalInvoice;
+  const transferWait =
+    !invoice && order.bankTransfer && !external
+      ? transferInvoiceWait(order.transferReceipt)
+      : null;
   return (
     <Card title="Számla">
       <div className="space-y-3">
-        {!invoice && order.bankTransfer ? (
+        {!invoice && order.bankTransfer && external ? (
           <ExternalInvoiceField external={external} />
+        ) : transferWait ? (
+          <p className="text-sm text-pilot-grey-700">{transferWait}</p>
         ) : invoice?.status === "ISSUED" ? (
           <>
             <Field
@@ -1467,18 +1473,25 @@ const EXTERNAL_LINK_TEXT: Record<
  * kifizetik a dijbekerot”). Ezért itt nincs kiállítás-gomb: a kifizetett
  * díjbekérőből készült számla a kimenő továbbítással jön be, és ide kötődik.
  */
+/**
+ * WHY A PREPAID ORDER HAS NO INVOICE BUTTON YET (card d31a66a3, S1): the OS issues it once the transfer is recorded, for the
+ * whole order only. `null`: the transfer is in and was not an advance, so the card offers the invoice as on any order.
+ */
+function transferInvoiceWait(
+  receipt: WebshopOrderDetail["transferReceipt"],
+): string | null {
+  if (!receipt)
+    return "A számla az utalás beérkezése után állítható ki: előbb rögzítsd a beérkezést a Fizetés kártyán.";
+  if (receipt.advance)
+    return "Előleg érkezett: erre a rendelésre előlegszámla és végszámla jár, ezeket az adatlap még nem állítja ki.";
+  return null;
+}
+
 function ExternalInvoiceField({
   external,
 }: {
-  external: WebshopOrderDetail["externalInvoice"];
+  external: NonNullable<WebshopOrderDetail["externalInvoice"]>;
 }) {
-  if (!external)
-    return (
-      <p className="text-sm text-pilot-grey-700">
-        A számlát a Számlázz.hu állítja ki, amikor a díjbekérőt kifizetik; ide
-        magától bekerül.
-      </p>
-    );
   return (
     <>
       <Field

@@ -8,6 +8,12 @@ import {
 import { prisma, Prisma } from "@acropora/database";
 import type { PartnerTaxHint } from "@acropora/types";
 
+import { foreignFeedInvoicesOf } from "../orders/webshop-orders/webshop-foreign-feed-invoices.js";
+import { WEBSHOP_ADVANCE_TAG } from "../orders/webshop-orders/webshop-order-invoice.rules.js";
+import type {
+  WebshopOrderInvoiceFact,
+  WebshopTransferFacts,
+} from "./billing-document-issue.js";
 import type { NormalizedBillingDraft } from "./billing-document-draft.js";
 import { quoteBasisFrom, type QuoteBasis } from "./billing-final-lines.js";
 import {
@@ -384,6 +390,102 @@ export class BillingDocumentsRepository {
    * A DÍJBEKÉRŐ FIZETÉSI TÉNYEI A FEEDBŐL (kártya 00926d89): a kifizetett összeg, a bruttó, a pénznem és a sztornó jele. `null`: nincs
    * feed-sora. A döntést (teljes fedezet-e) NEM ez hozza: azt `advancePaidByProforma` az előlegszámla saját bruttójával veti össze.
    */
+  /**
+   * THE OTHER INVOICES OF A WEBSHOP ORDER (card d31a66a3, S1): its issued or issuing invoice, advance and final invoice besides
+   * `excludeId`, with whether each is cancelled (an issued OS storno, or the Számlázz.hu twin cancelled on the site). The
+   * over-invoicing rule (`webshopOverbillingProblem`) decides from these.
+   */
+  async webshopOrderInvoices(
+    orderId: string,
+    excludeId: string,
+  ): Promise<WebshopOrderInvoiceFact[]> {
+    const rows = await this.database.invoice.findMany({
+      where: {
+        sourceType: "WEBSHOP_ORDER",
+        sourceId: orderId,
+        id: { not: excludeId },
+        documentType: { in: ["INVOICE", "ADVANCE_INVOICE", "FINAL_INVOICE"] },
+        status: { in: ["ISSUED", "ISSUING"] },
+      },
+      select: {
+        documentType: true,
+        status: true,
+        invoiceNumber: true,
+        correctionInvoices: {
+          where: { documentType: "STORNO", status: "ISSUED" },
+          select: { id: true },
+        },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    const numbers = rows.flatMap((row) =>
+      row.invoiceNumber ? [row.invoiceNumber] : [],
+    );
+    const siteCancelled = numbers.length
+      ? new Set(
+          (
+            await this.database.externalBillingDocument.findMany({
+              where: { documentNumber: { in: numbers }, cancelled: true },
+              select: { documentNumber: true },
+            })
+          ).map((doc) => doc.documentNumber),
+        )
+      : new Set<string>();
+    return rows.map((row) => ({
+      documentType: row.documentType as WebshopOrderInvoiceFact["documentType"],
+      status: row.status as WebshopOrderInvoiceFact["status"],
+      number: row.invoiceNumber,
+      cancelled:
+        row.correctionInvoices.length > 0 ||
+        (row.invoiceNumber !== null && siteCancelled.has(row.invoiceNumber)),
+    }));
+  }
+
+  /**
+   * THE WEBSHOP TRANSFER THAT PAID A PROFORMA (card d31a66a3, S1): the order's recorded transfer receipt, when it paid this very
+   * proforma, with the proforma's advance mark. `null`: no transfer recorded for the order, or it paid another proforma.
+   */
+  async webshopTransferFacts(
+    orderId: string,
+    proformaId: string,
+  ): Promise<WebshopTransferFacts | null> {
+    const receipt = await this.database.webshopTransferReceipt.findUnique({
+      where: { orderId },
+      select: { proformaId: true, amount: true, currency: true },
+    });
+    if (!receipt || receipt.proformaId !== proformaId) return null;
+    const proforma = await this.database.invoice.findUnique({
+      where: { id: proformaId },
+      select: { tags: true },
+    });
+    return {
+      amount: receipt.amount,
+      currency: receipt.currency,
+      advance: proforma?.tags.includes(WEBSHOP_ADVANCE_TAG) ?? false,
+    };
+  }
+
+  /**
+   * THE AUTOKASSZA CHECK ON THE SHARED ISSUE (barracuda on #2884): the same query the order page runs
+   * (`foreignFeedInvoicesOf`), for a webshop invoice draft issued from the billing editor. The proforma's number, reference
+   * and day come from the proforma row; a proforma without a number has nothing in the feed to compare with.
+   */
+  async webshopForeignFeedInvoices(
+    orderId: string,
+    proformaId: string,
+  ): Promise<string[]> {
+    const proforma = await this.database.invoice.findUnique({
+      where: { id: proformaId },
+      select: { invoiceNumber: true, reference: true, createdAt: true },
+    });
+    if (!proforma?.invoiceNumber) return [];
+    return foreignFeedInvoicesOf(this.database, orderId, {
+      number: proforma.invoiceNumber,
+      reference: proforma.reference,
+      issuedOn: proforma.createdAt,
+    });
+  }
+
   async proformaPaymentFacts(documentNumber: string): Promise<{
     paidAmount: Prisma.Decimal;
     grossAmount: Prisma.Decimal;

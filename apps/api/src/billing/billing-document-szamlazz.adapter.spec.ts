@@ -441,11 +441,15 @@ describe("an advance invoice from a paid proforma", () => {
     );
   });
 
-  it("an unpaid proforma, an invoice, or an advance without a proforma number changes nothing", () => {
+  it("an unpaid proforma, a final invoice, or an advance without a proforma number changes nothing", () => {
     for (const document of [
       { ...paidAdvance, proformaPaid: false },
       { ...paidAdvance, proformaPaid: undefined },
-      { ...paidAdvance, documentType: "INVOICE" as const },
+      {
+        ...paidAdvance,
+        documentType: "FINAL_INVOICE" as const,
+        advanceNumber: "E-CRPR-3",
+      },
       { ...paidAdvance, proformaNumber: null },
     ]) {
       const result = input(document);
@@ -458,6 +462,56 @@ describe("an advance invoice from a paid proforma", () => {
       assert.doesNotMatch(
         buildSzamlazzAgentInvoiceXml(result),
         /fizetve/,
+        JSON.stringify(document),
+      );
+    }
+  });
+});
+
+/*
+  A BEÉRKEZETT ELŐRE UTALÁS SZÁMLÁJA (kártya d31a66a3, S1): a webshop rendelés számlája a díjbekérő számával, kifizetve megy ki, és a
+  határidő a kiállítás napja, ugyanúgy, mint a kifizetett díjbekérő előlegszámláján. Eddig egy számla sosem kaphatta meg (a fenti
+  esetek között állt); a változás szándékos. Hogy KI mondja ki a „kifizetve”-t, azt `proformaPaidOf` dönti el (csak a webshop
+  rendelés rögzített beérkezése), itt csak az, hogy a számla viselheti. MI PIROSÍT: a jelző kimarad, rossz helyre kerül, vagy a
+  díjbekérő száma nélkül is megjön.
+*/
+describe("an invoice settling a paid proforma", () => {
+  const paidInvoice: Partial<BillingDocumentForIssue> = {
+    documentType: "INVOICE",
+    proformaNumber: "D-ACR-12",
+    proformaPaid: true,
+    issueDate: "2026-11-25",
+  };
+  const input = (document: Partial<BillingDocumentForIssue>) =>
+    toSzamlazzAgentInput(
+      { ...base, ...document },
+      { agentKey: "test-key", previewOnly: false },
+    );
+
+  it("goes paid, with the proforma's number, fizetve in its XSD place, due on its issue day", () => {
+    const result = input(paidInvoice);
+    assert.equal(result.paid, true);
+    assert.equal(result.paymentDueDate, "2026-11-25");
+    const xml = buildSzamlazzAgentInvoiceXml(result);
+    assertXsdOrder(
+      children(xml, "fejlec"),
+      FEJLEC_ORDER,
+      "paid invoice fejlec",
+    );
+    assert.match(xml, /<dijbekeroSzamlaszam>D-ACR-12<\/dijbekeroSzamlaszam>/);
+    assert.match(xml, /<fizetve>true<\/fizetve>/);
+  });
+
+  it("without the proforma's number, or not paid, it goes as before", () => {
+    for (const document of [
+      { ...paidInvoice, proformaNumber: null },
+      { ...paidInvoice, proformaPaid: false },
+    ]) {
+      const result = input(document);
+      assert.equal(result.paid, undefined, JSON.stringify(document));
+      assert.equal(
+        result.paymentDueDate,
+        "2026-10-08",
         JSON.stringify(document),
       );
     }

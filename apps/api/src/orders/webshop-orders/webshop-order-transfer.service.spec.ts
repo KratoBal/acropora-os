@@ -105,6 +105,7 @@ function setup(
                     amount: "4800.0000",
                     currency: "HUF",
                     recordedBy: "Teszt Elek",
+                    advance: false,
                   },
                 ],
               ]

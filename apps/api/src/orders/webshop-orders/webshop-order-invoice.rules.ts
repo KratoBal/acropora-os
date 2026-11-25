@@ -529,6 +529,11 @@ export function invoiceDraftOf(
     now: Date;
     /** A hűségpont sorának alakja (kártya e62a1a64); alap `discount` (Balázs döntése), lásd `creditLinesOf`. */
     loyaltyShape?: LoyaltyInvoiceShape;
+    /**
+     * ÉÉÉÉ-HH-NN: the day the prepaid transfer came in (card d31a66a3, S1). The invoice of a paid transfer is fulfilled
+     * and due on that day: the money is in, nothing is left to pay.
+     */
+    paidOn?: string;
   },
 ): InvoiceDraftResult {
   const currency = (order.currency_code ?? "huf").toUpperCase();
@@ -613,17 +618,19 @@ export function invoiceDraftOf(
       documentType: "INVOICE",
       invoiceFormat: "ELECTRONIC",
       customerId: input.customerId,
-      fulfillmentDate: today,
+      fulfillmentDate: input.paidOn ?? today,
       // A HATÁRIDŐ (Balázs, 2026-11-11 12:07 és 12:10 UTC): bankkártyás (Stripe) rendelésnél a Számlázás gombra a Stripe levonja az
       // összeget, és a számla kelte, a teljesítés napja ÉS a fizetési határidő UGYANAZ a nap: a kiállítás napja (ahogy eddig). Minden
       // más fizetési módnál (előreutalás, utánvét ...) a kiállítás napja + 8 nap, a vevő saját napjaitól függetlenül. A nap Budapest
       // szerint számít, mint a díjbekérőnél.
+      // A paid transfer's invoice (S1) is due the day the money came in.
       dueDate:
-        paymentMethod === CARD_PAYMENT_METHOD
+        input.paidOn ??
+        (paymentMethod === CARD_PAYMENT_METHOD
           ? today
           : budapestDayKey(
               startOfBudapestDay(input.now, WEBSHOP_INVOICE_DUE_DAYS),
-            ),
+            )),
       paymentMethod,
       currency,
       language: "hu",

@@ -153,6 +153,11 @@ export interface WebshopTransferReceipt {
   currency: string;
   /** Kézi rögzítésnél ki (a megjelenítendő név); párosításnál `null`. */
   recordedBy: string | null;
+  /**
+   * The transfer paid an advance proforma (card d31a66a3): part of the order is paid, and the order's invoice is not the
+   * whole-order invoice. False for a whole-order proforma, which the OS invoices once the transfer is in (S1).
+   */
+  advance: boolean;
 }
 
 /**

@@ -2924,6 +2924,7 @@ describe("the proforma on the Fizetés card", () => {
       amount: "20840.0000",
       currency: "HUF",
       recordedBy: "Teszt Elek",
+      advance: false,
       ...over,
     },
   });
@@ -3100,12 +3101,36 @@ describe("the proforma on the Fizetés card", () => {
     },
   });
 
-  it("before the Számlázz.hu invoice the Számla card offers no OS invoice", async () => {
+  /*
+    AZ OS ÁLLÍTJA KI, A BEÉRKEZÉS UTÁN (d31a66a3, S1; az Autokassza ki van kapcsolva). MI PIROSÍT: beérkezés nélkül vagy előleg-
+    beérkezésre kiállítás-gombot ad, vagy nem mondja meg, mire vár; a beérkezett teljes utalás után nincs gomb.
+  */
+  it("before the transfer is in, the Számla card offers no invoice and says what it waits for", async () => {
     api.detail.mockResolvedValue(issued());
     render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
     const invoiceCard = await screen.findByRole("region", { name: "Számla" });
-    expect(invoiceCard.textContent).toContain("a Számlázz.hu állítja ki");
+    expect(invoiceCard.textContent).toContain(
+      "az utalás beérkezése után állítható ki",
+    );
     expect(within(invoiceCard).queryByRole("button")).toBeNull();
+  });
+
+  it("an advance transfer gets no whole-order invoice button", async () => {
+    api.detail.mockResolvedValue(paid({ advance: true }));
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const invoiceCard = await screen.findByRole("region", { name: "Számla" });
+    expect(invoiceCard.textContent).toContain("Előleg érkezett");
+    expect(within(invoiceCard).queryByRole("button")).toBeNull();
+  });
+
+  it("the whole transfer in, the Számla card offers the invoice", async () => {
+    api.detail.mockResolvedValue(paid());
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const invoiceCard = await screen.findByRole("region", { name: "Számla" });
+    expect(
+      within(invoiceCard).getByRole("button", { name: "Számla kiállítása" }),
+    ).toBeTruthy();
+    expect(invoiceCard.textContent).not.toContain("beérkezése után");
   });
 
   it("the Számlázz.hu invoice shows with its link, and paid by it says Kifizetve", async () => {

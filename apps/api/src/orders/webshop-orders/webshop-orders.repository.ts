@@ -17,6 +17,7 @@ import {
   tagsWithAdvance,
   type OrderTaxKey,
 } from "./webshop-order-invoice.rules.js";
+import { foreignFeedInvoicesOf } from "./webshop-foreign-feed-invoices.js";
 import { shortageCountsOf } from "./webshop-orders.rules.js";
 
 import {
@@ -516,6 +517,18 @@ export class WebshopOrdersRepository {
         })
       : [];
     const names = new Map(users.map((user) => [user.id, user.displayName]));
+    // the paid proforma's own mark says whether the transfer was an advance (`WEBSHOP_ADVANCE_TAG`, as `receiptProformaIsAdvance`)
+    const proformas = rows.length
+      ? await prisma.invoice.findMany({
+          where: { id: { in: rows.map((row) => row.proformaId) } },
+          select: { id: true, tags: true },
+        })
+      : [];
+    const advance = new Set(
+      proformas
+        .filter((row) => row.tags.includes(WEBSHOP_ADVANCE_TAG))
+        .map((row) => row.id),
+    );
     return new Map(
       rows.map((row) => [
         row.orderId,
@@ -528,9 +541,69 @@ export class WebshopOrdersRepository {
           recordedBy: row.recordedByUserId
             ? (names.get(row.recordedByUserId) ?? null)
             : null,
+          advance: advance.has(row.proformaId),
         },
       ]),
     );
+  }
+
+  /**
+   * The proforma the order's recorded transfer paid, with what the Autokassza check needs of it (`null`: no transfer
+   * recorded). The day is the proforma's creation, the same day `externalInvoices` links from.
+   */
+  async transferReceiptProforma(orderId: string): Promise<{
+    id: string;
+    number: string | null;
+    reference: string | null;
+    issuedOn: Date;
+  } | null> {
+    const row = await prisma.webshopTransferReceipt.findUnique({
+      where: { orderId },
+      select: { proformaId: true },
+    });
+    if (!row) return null;
+    const proforma = await prisma.invoice.findUnique({
+      where: { id: row.proformaId },
+      select: { invoiceNumber: true, reference: true, createdAt: true },
+    });
+    return proforma
+      ? {
+          id: row.proformaId,
+          number: proforma.invoiceNumber,
+          reference: proforma.reference,
+          issuedOn: proforma.createdAt,
+        }
+      : null;
+  }
+
+  /**
+   * THE ORDER INVOICE DRAFT NAMES THE PROFORMA IT SETTLES (card d31a66a3, S1): Számlázz.hu gets its number
+   * (`dijbekeroSzamlaszam`) and takes the proforma as settled. Only on a draft, as `markProformaAdvance`; answers whether it
+   * wrote, since a write moves the draft's `updatedAt`, which the issue checks.
+   */
+  async linkInvoiceProforma(
+    invoiceId: string,
+    proformaId: string,
+  ): Promise<boolean> {
+    const row = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { proformaInvoiceId: true, status: true },
+    });
+    if (!row || row.status !== "DRAFT" || row.proformaInvoiceId === proformaId)
+      return false;
+    await prisma.invoice.update({
+      where: { id: invoiceId },
+      data: { proformaInvoiceId: proformaId },
+    });
+    return true;
+  }
+
+  /** The Autokassza check's input for this order (`foreignFeedInvoicesOf`, shared with the billing issue). */
+  foreignFeedInvoices(
+    orderId: string,
+    proforma: { number: string; reference: string | null; issuedOn: Date },
+  ): Promise<string[]> {
+    return foreignFeedInvoicesOf(prisma, orderId, proforma);
   }
 
   /**

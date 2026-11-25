@@ -328,7 +328,7 @@ describe("WebshopOrderParcelService", () => {
     await assert.rejects(service.create("order_38", undefined, USER), {
       status: 409,
       message:
-        "Előre utalásnál a számlát a Számlázz.hu állítja ki a díjbekérő kifizetésekor; a csomag utána adható fel.",
+        "Előre utalásnál a számla az utalás beérkezése után állítható ki; a csomag utána adható fel.",
     });
     assert.equal(created.length, 0);
   });
