@@ -252,6 +252,9 @@ describe("PilotSupplierEditorPage", () => {
 
     expect(await screen.findByText("Bio labor")).toBeTruthy();
     expect(screen.getByLabelText("Helyszín kódja")).toBeTruthy();
+    // one concept, one word (acrobot, 2026-11-25): the card is "Helyszínek", not "Alegységek"
+    expect(screen.getByRole("heading", { name: "Helyszínek" })).toBeTruthy();
+    expect(screen.queryByText(/[Aa]legység/)).toBeNull();
   });
 
   /**

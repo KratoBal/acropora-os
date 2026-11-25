@@ -80,6 +80,11 @@ describe("UserVisibleUnits", () => {
     );
 
     expect(await listaSora("BIO - Biotóp")).toBeTruthy();
+    // one concept, one word (acrobot, 2026-11-25): "Látható helyszínek", not "Látható alegységek"
+    expect(
+      screen.getByRole("heading", { name: "Látható helyszínek" }),
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/[Aa]legység/);
   });
 
   /**
