@@ -1062,6 +1062,7 @@ export type {
   SimplePayReportDetail,
   SimplePayReportListResponse,
   SimplePayReportStatus,
+  SimplePayReportSortField,
   SimplePayReportSummary,
   SimplePayReportUploadResult,
   SimplePayResolutionSource,
@@ -1070,6 +1071,7 @@ export type {
   SimplePaySyncStatus,
   SimplePayTransactionLine,
 } from "./integrations/simplepay-settlement.js";
+export { SIMPLEPAY_REPORT_SORT_FIELDS } from "./integrations/simplepay-settlement.js";
 export type {
   StripeLineError,
   StripeLineStatus,

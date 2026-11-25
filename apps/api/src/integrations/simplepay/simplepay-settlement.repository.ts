@@ -8,12 +8,15 @@ import type {
   SimplePayLineError,
   SimplePayReportDetail,
   SimplePayReportListResponse,
+  SimplePayReportSortField,
   SimplePayReportSummary,
   SimplePayTransactionLine,
 } from "@acropora/types";
 
+import { listOrderBy, type SortDirection } from "../../common/list-sort.js";
 import { externalDocumentType } from "../../billing/billing-document-list.js";
 import type { SimplePayReport } from "./simplepay-report.parser.js";
+import { REPORT_SORT } from "./simplepay-report-sort.js";
 import type {
   SimplePayLineResolution,
   SimplePayOrderCandidate,
@@ -445,13 +448,15 @@ export class SimplePaySettlementRepository {
     status?: "COMPLETED" | "NEEDS_REVIEW";
     page: number;
     pageSize: number;
+    sort?: SimplePayReportSortField;
+    direction?: SortDirection;
   }): Promise<SimplePayReportListResponse> {
     const where = query.status ? { status: query.status } : {};
     const [total, reports] = await Promise.all([
       prisma.simplePayReport.count({ where }),
       prisma.simplePayReport.findMany({
         where,
-        orderBy: [{ reportDate: "desc" }, { createdAt: "desc" }],
+        orderBy: listOrderBy(REPORT_SORT, query.sort, query.direction),
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
         select: {

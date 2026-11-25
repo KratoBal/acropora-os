@@ -86,6 +86,21 @@ export interface SimplePayReportDetail extends SimplePayReportSummary {
   lines: SimplePayTransactionLine[];
 }
 
+/**
+ * A SIMPLEPAY-KIMUTATÁSOK LISTÁJÁNAK RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4). A lista lapozott, ezért a rendezés a
+ * szerveren történik. Az "Időszak" oszlop a kimutatás NAPJA (`reportDate`) szerint rendez: a kijelzett időszak a levél törzséből jön,
+ * ha van, és heti, nem átfedő időszakoknál a két sorrend egyezik. A kimutatás napja üres is lehet (levélből jött, a fájlnévben nincs
+ * nap): az üres érték MINDKÉT irányban a végén áll. A "Párosítva" (két számláló hányadosa) és az "Állapot" nem rendezhető.
+ */
+export const SIMPLEPAY_REPORT_SORT_FIELDS = [
+  "reportDate",
+  "amountTotal",
+  "commissionTotal",
+  "netTotal",
+] as const;
+export type SimplePayReportSortField =
+  (typeof SIMPLEPAY_REPORT_SORT_FIELDS)[number];
+
 export interface SimplePayReportListResponse {
   items: SimplePayReportSummary[];
   pagination: {
