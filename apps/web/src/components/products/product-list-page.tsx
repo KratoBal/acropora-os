@@ -425,23 +425,23 @@ export function ProductListPage() {
               >
                 {product.name}
               </span>
-              <span className={`mt-0.5 block text-xs ${origin.className}`}>
-                {origin.label}
+              {/*
+                AZ SKU ITT ÁLL, NEM KÜLÖN OSZLOPBAN (picasso képernyő-leltára, 2026-11-25, f0b70dbd): 1440-nél a
+                fix szélességű oszlopok 1060 px-et vittek el, és a név oszlopa egy karakterre szűkült. Az SKU a név
+                alatt, az eredet mellett ugyanúgy kereshető és olvasható, a név pedig megkapja a helyét.
+              */}
+              <span className="mt-0.5 flex min-w-0 gap-1.5 text-xs">
+                <span className="truncate text-pilot-grey-600">
+                  {product.primarySku ?? "—"}
+                </span>
+                <span className={`shrink-0 ${origin.className}`}>
+                  {origin.label}
+                </span>
               </span>
             </div>
           </div>
         );
       },
-    },
-    {
-      id: "sku",
-      header: "SKU",
-      width: "128px",
-      cell: (product) => (
-        <span className="block truncate text-[13px] text-pilot-grey-600">
-          {product.primarySku ?? "—"}
-        </span>
-      ),
     },
     {
       id: "gross",
@@ -772,6 +772,8 @@ export function ProductListPage() {
           <PilotDataTable
             columns={columns}
             rows={data.items}
+            // below this the table scrolls instead of squeezing the name column (it has no fixed width)
+            minWidth={1160}
             rowKey={(product) => product.id}
             onRowActivate={openDetail}
           />
