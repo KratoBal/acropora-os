@@ -153,6 +153,8 @@ export const worksheetSummaryInclude = {
       status: true,
       subject: true,
       grossAmount: true,
+      // the partner overview's "aláírásra vár" (card 28f31715): sent for signature, as the partner's sheet detail gates
+      sentForSignatureAt: true,
       // a megjelenített állapothoz (Új vagy Folyamatban): van-e már tétel
       _count: { select: { lines: true } },
       // the list's labour hours: only the three inputs of the shared rule
@@ -444,6 +446,7 @@ export function toWorksheetListItem(
     departmentPath: departmentPaths?.get(row.department.id) ?? null,
     subject: current.subject,
     status: current.status,
+    sentForSignature: current.sentForSignatureAt !== null,
     lineCount: current._count.lines,
     version: current.version,
     versionCount: row._count.versions,

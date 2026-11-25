@@ -24,6 +24,10 @@ import { CompletionCertificatesService } from "./completion-certificates.service
   // A repository exportálva: a karbantartási piszkozat-számla
   // (maintenance-invoice) a MÁR meglévő, tesztelt `detail()` lekérdezést
   // hasznja a vevő/tétel adatok gyűjtésére, nem másolja le a select-et.
-  exports: [CompletionCertificatesRepository],
+  // the portal service too: the partner overview (card 28f31715) counts from the partner's own list
+  exports: [
+    CompletionCertificatesRepository,
+    CompletionCertificatesPortalService,
+  ],
 })
 export class CompletionCertificatesModule {}

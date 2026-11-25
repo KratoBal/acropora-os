@@ -81,6 +81,7 @@ import { MessagesModule } from "./messages/messages.module.js";
 import { ContractsModule } from "./contracts/contracts.module.js";
 import { MaintenanceOrdersModule } from "./maintenance-orders/maintenance-orders.module.js";
 import { CompletionCertificatesModule } from "./completion-certificates/completion-certificates.module.js";
+import { PartnerOverviewModule } from "./partner-overview/partner-overview.module.js";
 import { MaintenancePackageModule } from "./maintenance-package/maintenance-package.module.js";
 import { BillingModule } from "./billing/billing.module.js";
 import { MissingInvoicesModule } from "./missing-invoices/missing-invoices.module.js";
@@ -163,6 +164,7 @@ import { OperationsLogModule } from "./operations-log/operations-log.module.js";
     ContractsModule,
     MaintenanceOrdersModule,
     CompletionCertificatesModule,
+    PartnerOverviewModule,
     MaintenancePackageModule,
     BillingModule,
     CashRegisterModule,

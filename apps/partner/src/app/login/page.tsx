@@ -15,7 +15,7 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!loading && user) router.replace("/hibajegyek");
+    if (!loading && user) router.replace("/attekintes");
   }, [loading, router, user]);
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -23,7 +23,7 @@ export default function LoginPage() {
     setError(null);
     try {
       await login(email, password);
-      router.replace("/hibajegyek");
+      router.replace("/attekintes");
     } catch (cause) {
       setError(
         cause instanceof Error

@@ -25,5 +25,7 @@ import { MaintenanceOrdersService } from "./maintenance-orders.service.js";
     MaintenanceOrdersService,
     MaintenanceOrdersPortalService,
   ],
+  // the partner overview (card 28f31715) counts from the partner's own list, with its upload right
+  exports: [MaintenanceOrdersRepository, MaintenanceOrdersPortalService],
 })
 export class MaintenanceOrdersModule {}
