@@ -708,6 +708,20 @@ export interface WorksheetCopyResult {
   )[];
 }
 
+/**
+ * A MUNKALAPOK LISTÁJÁNAK RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4). A lista lapozott, ezért a rendezés a szerveren
+ * történik. CSAK KÉT OSZLOP rendezhető: a partner neve (a partner táblából) és a megnyitás napja. A többi nem tárolt mező a lapon:
+ * a "Munkalap" fő sora a TÁRGY, ami a legutolsó VERZIÓN áll (egy sok-az-egyhez kapcsolat mezője szerint az adatbázis nem rendez, és a
+ * szám, ami alatta áll, nem az, ami a fő sorban látszik), az "Állapot" szintén a legutolsó verzió, a "Felelős" több ember, a "Munkaóra"
+ * a tételek összege. Az alap sorrend az utolsó módosítás ideje.
+ */
+export const WORKSHEET_LIST_SORT_FIELDS = [
+  "customerName",
+  "createdAt",
+] as const;
+export type WorksheetListSortField =
+  (typeof WORKSHEET_LIST_SORT_FIELDS)[number];
+
 export interface WorksheetListResponse {
   items: WorksheetListItem[];
   pagination: {

@@ -1187,6 +1187,7 @@ export {
   preferSignedSheet,
   WORKSHEET_DEPARTMENT_CODE_PATTERN,
   WORKSHEET_ISSUED_SHEET_TYPES,
+  WORKSHEET_LIST_SORT_FIELDS,
   WORKSHEET_PARTNER_CODE_PATTERN,
   WORKSHEET_SEQUENCE_MIN_DIGITS,
 } from "./worksheet-management.js";
@@ -1217,6 +1218,7 @@ export type {
   WorksheetLineKindValue,
   WorksheetListItem,
   WorksheetListResponse,
+  WorksheetListSortField,
   WorksheetChainLink,
   WorksheetCopyResult,
   WorksheetSelectablePartner,

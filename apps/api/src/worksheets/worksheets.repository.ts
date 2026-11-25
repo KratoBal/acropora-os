@@ -19,6 +19,7 @@ import { randomUUID } from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
+import { listOrderBy } from "../common/list-sort.js";
 import { assetsOutsideDepartment } from "../common/assets-in-department.js";
 import { unitPathFor, unitPathsFor } from "../common/unit-path-lookup.js";
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
@@ -52,6 +53,7 @@ import type {
 } from "./worksheet-content.js";
 import { hiddenRowsWhere } from "../common/hidden-rows.js";
 import type { WorksheetSignerSource } from "./worksheet-signer.js";
+import { WORKSHEET_LIST_SORT } from "./worksheet-list-sort.js";
 import { signedSheetTypeFor } from "./worksheet-signed-sheet.js";
 import { attachableWorksheetFilters } from "./attachable-worksheets.js";
 import {
@@ -994,7 +996,7 @@ export class WorksheetsRepository extends Repository {
       this.database.worksheet.findMany({
         where,
         include: worksheetSummaryInclude,
-        orderBy: { updatedAt: "desc" },
+        orderBy: listOrderBy(WORKSHEET_LIST_SORT, query.sort, query.direction),
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),

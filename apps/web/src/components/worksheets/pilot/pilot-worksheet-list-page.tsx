@@ -29,6 +29,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { worksheetsApi } from "@/lib/api/worksheets";
+import { sortFromParams, useUrlSort } from "@/lib/navigation/use-url-sort";
 import {
   BULK_SELECTION_MAX,
   bulkSummary,
@@ -236,6 +237,7 @@ export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
   },
   {
     id: "customer",
+    sortable: true,
     header: "Partner / helyszín",
     width: "220px",
     cell: (worksheet) => (
@@ -281,6 +283,7 @@ export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
   },
   {
     id: "createdAt",
+    sortable: true,
     // a megnyitás (létrehozás) napja, budapesti naptári nap (kártya a785e580, Luca 2026-11-19)
     header: "Megnyitva",
     width: "110px",
@@ -344,6 +347,33 @@ const JOB_KIND_FILTERS: readonly { label: string; value: string }[] = [
   { label: "Karbantartási", value: "MAINTENANCE" },
 ];
 
+/** A lista rendezhető oszlopai: a táblázat oszlop-azonosítója -> a szerver rendezési mezeje (`WORKSHEET_LIST_SORT_FIELDS`). Csak kettő van; az indok a típusnál áll. */
+export const WORKSHEET_SORT_COLUMNS = {
+  customer: "customerName",
+  createdAt: "createdAt",
+} as const;
+
+/**
+ * A kérés az oldal URL-jéből. Az oldal az URL paramétereit továbbadja az API-nak, ezért a rendezés CSAK akkor marad benne, ha ismert
+ * mezőre és érvényes irányra szól: egy régi vagy kézzel írt link ne törje el a listát 400-zal.
+ */
+export function worksheetListQuery(params: URLSearchParams): URLSearchParams {
+  const value = new URLSearchParams(params.toString());
+  value.delete("sort");
+  value.delete("direction");
+  const sort = sortFromParams(params, WORKSHEET_SORT_COLUMNS);
+  if (sort) {
+    value.set(
+      "sort",
+      WORKSHEET_SORT_COLUMNS[sort.id as keyof typeof WORKSHEET_SORT_COLUMNS],
+    );
+    value.set("direction", sort.direction);
+  }
+  if (!value.has("page")) value.set("page", "1");
+  if (!value.has("pageSize")) value.set("pageSize", "25");
+  return value;
+}
+
 export function PilotWorksheetListPage() {
   const { session } = useAuth();
   const router = useRouter();
@@ -388,12 +418,8 @@ export function PilotWorksheetListPage() {
   const includeHidden = params.get("includeHidden") === "true";
   const activeJobKind = params.get("jobKind") ?? "";
 
-  const query = useMemo(() => {
-    const value = new URLSearchParams(params.toString());
-    if (!value.has("page")) value.set("page", "1");
-    if (!value.has("pageSize")) value.set("pageSize", "25");
-    return value;
-  }, [params]);
+  const { sort, onSort } = useUrlSort(WORKSHEET_SORT_COLUMNS);
+  const query = useMemo(() => worksheetListQuery(params), [params]);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -959,6 +985,8 @@ export function PilotWorksheetListPage() {
         <PilotCard className="overflow-hidden">
           <PilotDataTable
             columns={columns}
+            sort={sort}
+            onSort={onSort}
             rows={data.items}
             rowKey={(worksheet) => worksheet.id}
             rowTestId="worksheet-row"
