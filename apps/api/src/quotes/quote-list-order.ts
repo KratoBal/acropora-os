@@ -1,10 +1,15 @@
 import type { Prisma } from "@acropora/database";
 
+import {
+  listOrderBy,
+  type ListSortSpec,
+  type SortDirection,
+} from "../common/list-sort.js";
+
 /**
  * AZ ÁRAJÁNLAT-LISTA RENDEZÉSE (Luca kérése, kártya 7e5d3658, és Balázs kérése, kártya 2f6369a4: "az oszlop nevére kattintva a
- * rendezés"). A lista lapozott, ezért a rendezés SZERVEROLDALI: a kliens csak az aktuális lapot tudná sorba tenni. A mező FEHÉR
- * LISTÁRÓL jön (a kérés szövege nem kerül az `orderBy`-ba), és minden rendezés végén az `id` a döntetlen feloldó, hogy két
- * azonos értékű sor lapozáskor ne cserélgesse a helyét. Alapérték, ahogy eddig: legutóbb módosított elöl.
+ * rendezés"). A lista lapozott, ezért a rendezés SZERVEROLDALI; a közös minta (`common/list-sort.ts`) fehér listát, alapértéket és
+ * `id` döntetlen-feloldót ad. Alapérték, ahogy eddig: legutóbb módosított elöl.
  */
 export const QUOTE_SORT_FIELDS = [
   "createdAt",
@@ -13,13 +18,23 @@ export const QUOTE_SORT_FIELDS = [
   "updatedAt",
 ] as const;
 export type QuoteSortField = (typeof QUOTE_SORT_FIELDS)[number];
-export type QuoteSortDirection = "asc" | "desc";
+export type QuoteSortDirection = SortDirection;
+
+const SPEC: ListSortSpec<QuoteSortField, Prisma.QuoteOrderByWithRelationInput> =
+  {
+    fields: {
+      createdAt: (direction) => ({ createdAt: direction }),
+      quoteNumber: (direction) => ({ quoteNumber: direction }),
+      status: (direction) => ({ status: direction }),
+      updatedAt: (direction) => ({ updatedAt: direction }),
+    },
+    fallback: [{ updatedAt: "desc" }, { id: "desc" }],
+    tieBreaker: (direction) => ({ id: direction }),
+  };
 
 export function quoteListOrderBy(filter: {
   sort?: QuoteSortField;
   direction?: QuoteSortDirection;
 }): Prisma.QuoteOrderByWithRelationInput[] {
-  const field: QuoteSortField = filter.sort ?? "updatedAt";
-  const direction: QuoteSortDirection = filter.direction ?? "desc";
-  return [{ [field]: direction }, { id: direction }];
+  return listOrderBy(SPEC, filter.sort, filter.direction);
 }
