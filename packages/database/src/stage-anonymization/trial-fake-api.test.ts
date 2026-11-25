@@ -98,7 +98,11 @@ export async function startFakeApi(): Promise<FakeApi> {
     ],
     ["POST /service/jobs", 201, { id: "job-1", jobNumber: "HJ-2026-001" }],
     ["GET /service/jobs/job-1", 200, { id: "job-1", status: "NEW" }],
-    ["POST /service/jobs/job-1/move", 201, { id: "job-1", status: "TRIAGED" }],
+    [
+      "POST /service/jobs/job-1/move",
+      201,
+      { id: "job-1", status: "IN_PROGRESS" },
+    ],
     ["GET /health", 200, { application: "ok" }],
   ];
   const server: Server = createServer(async (request, response) => {
