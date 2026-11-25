@@ -1,3 +1,16 @@
+/**
+ * A PARTNEREK LISTÁJÁNAK RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4). A lista lapozott, ezért a rendezés a szerveren
+ * történik. Az ügyintéző üres is lehet: a kiválasztott rendezésben az üres érték MINDKÉT irányban a végén áll. Nem rendezhető: az
+ * "Elérhetőség" (e-mail és telefon egy cellában) és a "Státusz" (a kijelzett felirat nem tárolt mező sorrendje). Az alap sorrend a név.
+ */
+export const SUPPLIER_LIST_SORT_FIELDS = [
+  "code",
+  "name",
+  "country",
+  "contactPersonName",
+] as const;
+export type SupplierListSortField = (typeof SUPPLIER_LIST_SORT_FIELDS)[number];
+
 export interface SupplierSummary {
   id: string;
   code: string;

@@ -815,11 +815,13 @@ export type {
 export type {
   CreateSupplierInput,
   SupplierListResponse,
+  SupplierListSortField,
   PartnerDeletionPlan,
   PartnerReferenceSummary,
   SupplierSummary,
   UpdateSupplierInput,
 } from "./supplier-management.js";
+export { SUPPLIER_LIST_SORT_FIELDS } from "./supplier-management.js";
 export type {
   CreatePurchaseInvoiceInput,
   CreatePurchaseInvoiceLineInput,

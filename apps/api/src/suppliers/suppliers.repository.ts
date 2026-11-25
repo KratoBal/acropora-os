@@ -14,6 +14,7 @@ import {
   scopeOwnWhereForAndBranch,
   type PartnerScope,
 } from "../auth/partner-scope.util.js";
+import { listOrderBy } from "../common/list-sort.js";
 import { generateCode } from "../common/code-generator.util.js";
 import {
   retryOnTakenCode,
@@ -24,6 +25,7 @@ import type {
   UpdateWorksheetDepartmentDto,
 } from "../worksheets/dto/worksheet.dto.js";
 import { partnerCodeChange } from "./partner-code-change.js";
+import { SUPPLIER_LIST_SORT } from "./supplier-list-sort.js";
 import {
   assertPartnerCodeNeverNumbered,
   assertPartnerCodeUnlocked,
@@ -388,7 +390,7 @@ export class SuppliersRepository extends Repository {
     const [suppliers, totalItems] = await Promise.all([
       prisma.supplier.findMany({
         where,
-        orderBy: [{ name: "asc" }, { id: "asc" }],
+        orderBy: listOrderBy(SUPPLIER_LIST_SORT, query.sort, query.direction),
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),

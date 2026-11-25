@@ -1,3 +1,7 @@
+import {
+  SUPPLIER_LIST_SORT_FIELDS,
+  type SupplierListSortField,
+} from "@acropora/types";
 import { Type } from "class-transformer";
 import {
   IsBoolean,
@@ -122,4 +126,7 @@ export class SupplierListQueryDto {
   @IsIn(["SUPPLIER", "SERVICE"]) @IsOptional() kind?: "SUPPLIER" | "SERVICE";
   @IsIn(["ACTIVE", "INACTIVE", "ALL"]) @IsOptional() status:
     "ACTIVE" | "INACTIVE" | "ALL" = "ACTIVE";
+  /** The sort column and direction (whitelist: `SUPPLIER_LIST_SORT_FIELDS`); without them the name, ascending. */
+  @IsIn(SUPPLIER_LIST_SORT_FIELDS) @IsOptional() sort?: SupplierListSortField;
+  @IsIn(["asc", "desc"]) @IsOptional() direction?: "asc" | "desc";
 }
