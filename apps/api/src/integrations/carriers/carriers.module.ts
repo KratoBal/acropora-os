@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { carrierClientFor } from "./carrier-client.factory.js";
+import { CarrierModeStartupLog } from "./carrier-mode-startup.log.js";
 import type { CarrierCode } from "./carrier.types.js";
 import { WebshopParcelRepository } from "./webshop-parcel.repository.js";
 import {
@@ -16,6 +17,8 @@ import {
   providers: [
     WebshopParcelRepository,
     WebshopParcelService,
+    // one line at start-up: which mode the switch gives (the clients still read it at each call)
+    CarrierModeStartupLog,
     // a kapcsolot (FOXPOST_API_MODE / GLS_API_MODE) hivaskor olvassa, nem indulaskor
     {
       provide: CARRIER_CLIENTS,
