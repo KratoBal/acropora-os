@@ -958,12 +958,13 @@ describe("PilotServiceJobDetailPage -- a régi lapról áthozott őrök", () => 
   });
 
   describe("a lezárt hibajegy kiküldése", () => {
+    // a lezárt jegy a partnernek 2026-11-25 óta Lezárva (kártya 7f23785c, 4. szelet): a kiküldés a tárolt COMPLETED-en áll
     async function ablakotNyit() {
       api.detail.mockResolvedValue(
         detail({
           status: "COMPLETED",
-          partnerStatus: "COMPLETED",
-          partnerStatusLabel: "Elkészült",
+          partnerStatus: "CLOSED",
+          partnerStatusLabel: "Lezárva",
           allowedSteps: [],
         }),
       );
@@ -979,6 +980,29 @@ describe("PilotServiceJobDetailPage -- a régi lapról áthozott őrök", () => 
       );
       return ablak;
     }
+    /*
+      NEGATÍV KONTROLL: az Elkészült (aláírásra váró, kész lapú IN_PROGRESS) jegy a partnernek COMPLETED, de még nincs lezárva: a csomag
+      és a kiküldés nem kínálható. A 4. szeletig a kapu a partner COMPLETED-jén állt, és ezen a jegyen megjelent volna.
+    */
+    it("az Elkészült, de le nem zárt jegyen nincs csomag és kiküldés", async () => {
+      api.detail.mockResolvedValue(
+        detail({
+          status: "IN_PROGRESS",
+          partnerStatus: "COMPLETED",
+          partnerStatusLabel: "Elkészült",
+          allowedSteps: ["COMPLETED"],
+        }),
+      );
+      render(<PilotServiceJobDetailPage jobId="job-1" />);
+      await screen.findByText("Negyedéves ellenőrzés");
+      expect(
+        screen.queryByRole("button", { name: /Csomag letöltése/ }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Küldés e-mailben" }),
+      ).toBeNull();
+    });
+
     const kuld = (ablak: HTMLElement) => {
       fireEvent.change(within(ablak).getByLabelText("Üzenet"), {
         target: { value: "Köszönjük." },

@@ -762,7 +762,8 @@ export function PilotServiceJobDetailPage({
                   partner
                 />
               )}
-              {!maintenance && job.partnerStatus === "COMPLETED" ? (
+              {/* a lezárt jegy csomagja: a tárolt COMPLETED, nem a partner szava (a partner Elkészültje 2026-11-25 óta még aláírásra vár) */}
+              {!maintenance && job.status === "COMPLETED" ? (
                 <div className="flex flex-wrap gap-2">
                   <PilotButton
                     variant="secondary"

@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { serviceJobWorksheetLabel } from "@acropora/types";
+import {
+  PARTNER_STATUS_LABELS,
+  partnerClosedReasonLabel,
+  serviceJobWorksheetLabel,
+} from "@acropora/types";
 import {
   Icon,
   PilotBadge,
@@ -224,21 +228,37 @@ export function TicketDetail({
                 <PilotBadge
                   variant={ticket.maintenanceDone ? "success" : "blue"}
                 >
-                  {ticket.maintenanceDone ? "Kész" : "Folyamatban"}
+                  {ticket.maintenanceDone
+                    ? PARTNER_STATUS_LABELS.CLOSED
+                    : "Folyamatban"}
                 </PilotBadge>
               ) : (
-                <PilotBadge
-                  variant={partnerStatusBadgeVariant(ticket.partnerStatus)}
-                >
-                  {ticket.partnerStatusLabel}
-                </PilotBadge>
+                <>
+                  <PilotBadge
+                    variant={partnerStatusBadgeVariant(ticket.partnerStatus)}
+                  >
+                    {ticket.partnerStatusLabel}
+                  </PilotBadge>
+                  {/* a meghiúsult lezárt jegy második sora (kártya 7f23785c, 4. szelet; acrobot 61894): a felirat Lezárva marad */}
+                  {ticket.partnerClosedReason ? (
+                    <span className="text-xs text-pilot-grey-600">
+                      {partnerClosedReasonLabel[ticket.partnerClosedReason]}
+                    </span>
+                  ) : null}
+                </>
               )}
               <span className="text-xs text-pilot-grey-400">
                 {ticket.departmentPath?.join(" / ") ?? "Helyszín nincs megadva"}
               </span>
             </div>
           </div>
-          {!maintenance && ticket.partnerStatus === "COMPLETED" ? (
+          {/*
+            A CSOMAG A TELJESÜLT, LEZÁRT JEGYÉ (kártya 7f23785c, 4. szelet): a lezárt jegy 2026-11-25 óta Lezárva, és a meghiúsultat a
+            kimenetel különbözteti meg. A partner Elkészültje még aláírásra vagy átadásra vár: ott a csomag még nem teljes.
+          */}
+          {!maintenance &&
+          ticket.partnerStatus === "CLOSED" &&
+          !ticket.partnerClosedReason ? (
             <PilotButton
               variant="secondary"
               disabled={downloading}
@@ -434,9 +454,11 @@ export function TicketDetail({
                 value={
                   maintenance
                     ? ticket.maintenanceDone
-                      ? "Kész"
+                      ? PARTNER_STATUS_LABELS.CLOSED
                       : "Folyamatban"
-                    : ticket.partnerStatusLabel
+                    : ticket.partnerClosedReason
+                      ? `${ticket.partnerStatusLabel} · ${partnerClosedReasonLabel[ticket.partnerClosedReason]}`
+                      : ticket.partnerStatusLabel
                 }
               />
             </div>

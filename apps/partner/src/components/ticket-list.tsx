@@ -10,6 +10,10 @@ import {
   partnerStatusBadgeVariant,
   serviceToneClass,
 } from "@acropora/ui";
+import {
+  PARTNER_STATUS_LABELS,
+  partnerClosedReasonLabel,
+} from "@acropora/types";
 
 import { partnerApi } from "@/lib/api";
 import { ticketScopeTotal } from "@/lib/ticket-scope-counts";
@@ -260,16 +264,30 @@ export function TicketList({ kind = "REPAIR" }: { kind?: TicketKind }) {
                       <PilotBadge
                         variant={ticket.maintenanceDone ? "success" : "blue"}
                       >
-                        {ticket.maintenanceDone ? "Kész" : "Folyamatban"}
+                        {ticket.maintenanceDone
+                          ? PARTNER_STATUS_LABELS.CLOSED
+                          : "Folyamatban"}
                       </PilotBadge>
                     ) : (
-                      <PilotBadge
-                        variant={partnerStatusBadgeVariant(
-                          ticket.partnerStatus,
-                        )}
-                      >
-                        {ticket.partnerStatusLabel}
-                      </PilotBadge>
+                      <>
+                        <PilotBadge
+                          variant={partnerStatusBadgeVariant(
+                            ticket.partnerStatus,
+                          )}
+                        >
+                          {ticket.partnerStatusLabel}
+                        </PilotBadge>
+                        {/* a meghiúsult lezárt jegy második sora (kártya 7f23785c, 4. szelet) */}
+                        {ticket.partnerClosedReason ? (
+                          <p className="mt-1 text-xs text-pilot-grey-500">
+                            {
+                              partnerClosedReasonLabel[
+                                ticket.partnerClosedReason
+                              ]
+                            }
+                          </p>
+                        ) : null}
+                      </>
                     )}
                   </td>
                   <td className="whitespace-nowrap px-5 py-3 text-pilot-grey-500 max-md:inline-block max-md:p-0 max-md:pt-2 max-md:text-xs">
