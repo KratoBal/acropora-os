@@ -14,6 +14,7 @@ import {
   bankMatchOf,
   filterIncoming,
   incomingListResponse,
+  sortIncoming,
   pairingOfRow,
   incomingPaymentOf,
   mailboxOnlyPaidItems,
@@ -853,6 +854,88 @@ describe("incomingListResponse", () => {
         },
       ],
     );
+  });
+});
+
+/*
+  A BEJÖVŐ LISTA RENDEZÉSE (Balázs kérése, kártya 2f6369a4). MI PIROSÍT: ha a számszerű összeg szövegként rendeződik ("250" az
+  "1000" után); ha a számlaszám számai nem számként ("N-2" a "N-10" előtt); ha az ékezetes szállítónév a Z után áll; ha az üres összeg
+  az elejére kerülne; ha az egyenlő értékű sorok felcserélődnek; ha a rendezés a lapozás UTÁN fut (a lap csak a saját sorait
+  rendezné); ha a mező nem a fehér listáról jöhet; ha rendezés nélkül az eddigi sorrend változik.
+*/
+describe("sortIncoming", () => {
+  const rows = [
+    item({
+      id: "a",
+      documentNumber: "N-10",
+      supplierName: "Zita Bt.",
+      issueDate: "2026-09-02",
+      grossAmount: "1000",
+    }),
+    item({
+      id: "b",
+      documentNumber: "N-2",
+      supplierName: "Ábel Kft.",
+      issueDate: "2026-09-03",
+      grossAmount: "250",
+    }),
+    item({
+      id: "c",
+      documentNumber: "N-1",
+      supplierName: "Béla Kft.",
+      issueDate: "2026-09-01",
+      grossAmount: null,
+    }),
+    item({
+      id: "d",
+      documentNumber: "N-3",
+      supplierName: "Béla Kft.",
+      issueDate: "2026-09-03",
+      grossAmount: "250",
+    }),
+  ];
+  const ids = (list: readonly { id: string }[]) =>
+    list.map((x) => x.id).join("");
+
+  it("keeps the given order without a sort", () => {
+    assert.equal(ids(sortIncoming(rows, undefined, undefined)), "abcd");
+  });
+
+  it("sorts the amounts as numbers, an empty amount last in both directions", () => {
+    assert.equal(ids(sortIncoming(rows, "grossAmount", "asc")), "bdac");
+    assert.equal(ids(sortIncoming(rows, "grossAmount", "desc")), "abdc");
+  });
+
+  it("sorts the invoice numbers with their numbers as numbers", () => {
+    assert.equal(ids(sortIncoming(rows, "documentNumber", "asc")), "cbda");
+  });
+
+  it("sorts the supplier names by the Hungarian alphabet, the accented letter with its plain one", () => {
+    assert.equal(ids(sortIncoming(rows, "supplierName", "asc")), "bcda");
+  });
+
+  it("sorts by the issue date, equal values keeping their order", () => {
+    assert.equal(ids(sortIncoming(rows, "issueDate", "asc")), "cabd");
+    assert.equal(ids(sortIncoming(rows, "issueDate", "desc")), "bdac");
+  });
+
+  it("a bare sort without a direction is ascending, and a field outside the whitelist changes nothing", () => {
+    assert.equal(ids(sortIncoming(rows, "grossAmount", undefined)), "bdac");
+    assert.equal(ids(sortIncoming(rows, "password" as never, "asc")), "abcd");
+  });
+
+  it("sorts BEFORE the paging: the first page holds the largest amounts of ALL rows", () => {
+    const response = incomingListResponse(rows, {
+      page: 1,
+      pageSize: 2,
+      sort: "grossAmount",
+      direction: "desc",
+    });
+    assert.deepEqual(
+      response.items.map((x) => x.id),
+      ["a", "b"],
+    );
+    assert.equal(response.pagination.totalItems, 4);
   });
 });
 

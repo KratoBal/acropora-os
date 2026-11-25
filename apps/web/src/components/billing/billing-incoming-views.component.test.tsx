@@ -376,6 +376,61 @@ describe("the incoming list", () => {
     );
   });
 
+  /* A bejövő lista rendezése (Balázs kérése, kártya 2f6369a4): az oszlop nevére kattintva, szerveroldalon, az URL-ben. */
+  it("a rendezés az URL-ből a kérésbe megy, és a fejlécre kattintva asc, desc, alap körbe jár, oldalnullázással", async () => {
+    urlNavigation.reset(
+      "/penzugy/szamlazas",
+      "nezet=bejovo&oldal=3&sort=grossAmount&direction=desc",
+    );
+    render(<BillingDocumentListPage />);
+    await waitFor(() => expect(api.incomingList).toHaveBeenCalled());
+    expect(lastIncomingQuery()).toMatchObject({
+      sort: "grossAmount",
+      direction: "desc",
+    });
+    const totals = await screen.findByRole("columnheader", {
+      name: /Összegek/,
+    });
+    expect(totals).toHaveAttribute("aria-sort", "descending");
+
+    // a harmadik kattintás visszaadja az alapot (a kulcsok törlődnek), és az oldal is az elsőre áll
+    fireEvent.click(within(totals).getByRole("button"));
+    await waitFor(() => expect(lastIncomingQuery()).not.toHaveProperty("sort"));
+    expect(lastIncomingQuery()).not.toHaveProperty("direction");
+    expect(lastIncomingQuery().page).toBe("1");
+
+    // egy MÁSIK oszlop (Szállító) növekvőben indul
+    fireEvent.click(
+      within(
+        await screen.findByRole("columnheader", { name: /Szállító/ }),
+      ).getByRole("button"),
+    );
+    await waitFor(() =>
+      expect(lastIncomingQuery()).toMatchObject({
+        sort: "supplierName",
+        direction: "asc",
+      }),
+    );
+  });
+
+  it("csak a négy adat-oszlop rendezhető: a Fizetés, a Deviza és az Állapot / bank nem", async () => {
+    urlNavigation.reset("/penzugy/szamlazas", "nezet=bejovo");
+    render(<BillingDocumentListPage />);
+    await waitFor(() => expect(api.incomingList).toHaveBeenCalled());
+    for (const name of [/Számla/, /Szállító/, /Dátumok/, /Összegek/])
+      expect(
+        within(await screen.findByRole("columnheader", { name })).getAllByRole(
+          "button",
+        ),
+      ).toHaveLength(1);
+    for (const name of [/Fizetés/, /Deviza/, /Állapot \/ bank/])
+      expect(
+        within(await screen.findByRole("columnheader", { name })).queryByRole(
+          "button",
+        ),
+      ).toBeNull();
+  });
+
   it("the filters go to the request from the URL: a month as its first and last day, on the fulfillment date", async () => {
     urlNavigation.reset(
       "/penzugy/szamlazas",

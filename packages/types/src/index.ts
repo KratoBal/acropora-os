@@ -1478,6 +1478,7 @@ export {
   INCOMING_NOT_TO_PAIR_REASON_LABELS,
   INCOMING_PAYMENT_STATE_LABELS,
   INCOMING_PAYMENT_STATES,
+  INCOMING_SORT_FIELDS,
   INCOMING_READING_FIELD_LABELS,
   INCOMING_READING_FIELDS,
   INCOMING_READING_REQUIRED,
@@ -1502,6 +1503,7 @@ export type {
   IncomingReviewState,
   IncomingDocumentOrigin,
   IncomingDocumentListQuery,
+  IncomingSortField,
   IncomingDocumentListResponse,
   IncomingPaymentState,
   ReceiptsResponse,
@@ -2532,6 +2534,10 @@ export type {
   ProbablyNotTransferItem,
 } from "./due-invoices.js";
 export {
+  PARTNER_NEWS_FIRST_VISIT_DAYS,
+  PARTNER_NEWS_LABELS,
+  partnerNewsOf,
+  partnerNewsSince,
   PARTNER_TODO_ITEMS,
   PARTNER_TODO_LABELS,
   certificateAwaitsSignedCopy,
@@ -2541,6 +2547,8 @@ export {
   worksheetAwaitsPartnerSignature,
 } from "./partner-overview.js";
 export type {
+  PartnerNewsGroup,
+  PartnerSeenArea,
   PartnerOverview,
   PartnerTodoGroup,
   PartnerTodoItem,

@@ -52,3 +52,24 @@ describe("az áttekintés bekötése", () => {
     assert.match(lap, /href=\{todo\.listHref\}/);
   });
 });
+
+// PR 2 (Újdonságok): a két lista megnyitása a látogatás, az áttekintés megmutatja az újakat
+describe("az újdonságok bekötése", () => {
+  it("a hibajegy- és a munkalap-lista megnyitáskor rögzíti a látogatást", () => {
+    assert.match(
+      kod("components", "ticket-list.tsx"),
+      /partnerApi\.markSeen\("TICKETS"\)/,
+    );
+    assert.match(
+      kod("components", "worksheet-list.tsx"),
+      /partnerApi\.markSeen\("WORKSHEETS"\)/,
+    );
+    assert.match(kod("lib", "api.ts"), /"\/service\/partner-overview\/seen"/);
+  });
+
+  it("az áttekintés megmutatja az újdonságokat, és a teljes lista linkjét", () => {
+    const lap = kod("components", "partner-overview.tsx");
+    assert.match(lap, /data\?\.news\?\.length/);
+    assert.match(lap, /href=\{news\.listHref\}/);
+  });
+});

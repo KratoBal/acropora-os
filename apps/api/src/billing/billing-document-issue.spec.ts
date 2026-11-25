@@ -10,6 +10,7 @@ import {
   vatRateText,
 } from "./billing-document-issue.js";
 import { toSzamlazzAgentInput } from "./billing-document-szamlazz.adapter.js";
+import { finalLineOfQuoteItem } from "./billing-final-lines.js";
 import type { BillingDocumentRow } from "./billing-documents.repository.js";
 
 const d = (value: string) => new Prisma.Decimal(value);
@@ -313,6 +314,40 @@ describe("buildIssueInput", () => {
       );
     }
     assert.equal(code(row({ lines: [] })), "BILLING_ISSUE_NO_LINES");
+    // L5 (c37ea343): an item line with no unit is refused, it no longer goes as "db"; the message names the line
+    for (const unit of [null, "", "  "]) {
+      const refused = buildIssueInput(row({ lines: [line({ unit })] }));
+      assert.equal(
+        refused.ok ? "OK" : refused.code,
+        "BILLING_ISSUE_LINE_NO_UNIT",
+        JSON.stringify(unit),
+      );
+      assert.match(
+        refused.ok ? "" : refused.message,
+        /Tropic Marin Pro-Reef 25 kg/,
+      );
+    }
+    // a discount line is no item: its unit may stay empty
+    assert.equal(
+      code(
+        row({
+          lines: [
+            line({}),
+            line({
+              id: "line-2",
+              position: 1,
+              kind: "DISCOUNT",
+              parentLineId: "line-1",
+              unit: null,
+              unitNet: d("-100"),
+              quantity: d("1"),
+              discountPercent: d("5"),
+            }),
+          ],
+        }),
+      ),
+      "OK",
+    );
     assert.equal(
       code(row({ fulfillmentDate: null })),
       "BILLING_ISSUE_NO_FULFILLMENT_DATE",
@@ -448,5 +483,104 @@ describe("vatRateText", () => {
     assert.equal(vatRateText("5.50"), "5.5");
     assert.equal(vatRateText("0.00"), "0");
     assert.equal(vatRateText("18"), "18");
+  });
+});
+
+/*
+  A FORRÁS-SORTÓL A SZÁMLÁZZ.HU TÉTELIG (barracuda számla-sor söprése, L8; kártya c37ea343): eddig egyetlen spec sem vitt valódi
+  forrás-sort az XML tételig, és a közös csőben a mennyiség, az egység és az egységár sehol nem volt állítva. MI PIROSÍT: a tétel
+  mennyisége, egysége, nettó egységára vagy ÁFA-kulcsa az XML-ben nem a forrás-soré (például egy sorösszeg "1 db" alakban, egy
+  elveszett tizedes, egy "db"-re cserélt egység); az árajánlat tétele a végszámlán nem a saját alakjában megy.
+*/
+describe("a forrás-sortól az XML tételig (L8)", () => {
+  /** Az XML tételei: a négy tag, ahogy a Számlázz.hu-ra megy. */
+  const tetelek = (xml: string) =>
+    [...xml.matchAll(/<tetel>([\s\S]*?)<\/tetel>/g)].map((m) => {
+      const tag = (name: string) =>
+        m[1]!.match(new RegExp(`<${name}>([^<]*)</${name}>`))?.[1] ?? null;
+      return {
+        mennyiseg: tag("mennyiseg"),
+        mennyisegiEgyseg: tag("mennyisegiEgyseg"),
+        nettoEgysegar: tag("nettoEgysegar"),
+        afakulcs: tag("afakulcs"),
+      };
+    });
+  const xmlOf = (value: BillingDocumentRow) => {
+    const input = buildIssueInput(value);
+    assert.ok(input.ok, input.ok ? "" : input.message);
+    return buildSzamlazzAgentInvoiceXml(
+      toSzamlazzAgentInput(input.document, {
+        agentKey: "k",
+        previewOnly: true,
+      }),
+    );
+  };
+
+  it("a kézi tétel-sor: a mennyiség (több mint 1), az egység (nem db), a tört egységár és a kulcs változatlanul", () => {
+    const xml = xmlOf(
+      row({
+        lines: [
+          line({
+            quantity: d("2.500000"),
+            unit: "óra",
+            unitNet: d("12000.5000"),
+            vatRatePercent: d("27.00"),
+            netAmount: d("30001.2500"),
+            vatAmount: d("8100.3375"),
+            grossAmount: d("38101.5875"),
+          }),
+        ],
+      }),
+    );
+    assert.deepEqual(tetelek(xml), [
+      {
+        mennyiseg: "2.5",
+        mennyisegiEgyseg: "óra",
+        nettoEgysegar: "12000.5",
+        afakulcs: "27",
+      },
+    ]);
+  });
+
+  it("az árajánlat tétele a végszámlán: a mennyiség, az egység, az egységár és a kulcs az ajánlaté (az előleget a Számlázz.hu vonja le)", () => {
+    const draft = finalLineOfQuoteItem({
+      name: "Negyedéves karbantartás",
+      quantity: d("3"),
+      unit: "alkalom",
+      unitNetPrice: d("4500.25"),
+      vatRatePercent: d("5"),
+    });
+    const xml = xmlOf(
+      row({
+        documentType: "FINAL_INVOICE",
+        referencedInvoice: {
+          id: "a-1",
+          documentType: "ADVANCE_INVOICE",
+          invoiceNumber: "E-ELO-1",
+          grossAmount: d("1270"),
+        },
+        lines: [
+          line({
+            description: draft.description,
+            quantity: d(draft.quantity),
+            unit: draft.unit,
+            unitNet: d(draft.unitNet),
+            vatRatePercent: d(draft.vatRatePercent),
+            netAmount: d("13500.7500"),
+            vatAmount: d("675.0375"),
+            grossAmount: d("14175.7875"),
+            comment: null,
+          }),
+        ],
+      }),
+    );
+    assert.deepEqual(tetelek(xml), [
+      {
+        mennyiseg: "3",
+        mennyisegiEgyseg: "alkalom",
+        nettoEgysegar: "4500.25",
+        afakulcs: "5",
+      },
+    ]);
   });
 });

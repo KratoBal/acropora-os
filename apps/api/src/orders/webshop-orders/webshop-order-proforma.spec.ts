@@ -136,6 +136,11 @@ function setup(over: {
   const confirmations: unknown[] = [];
   const sendTos: unknown[] = [];
   const marks: string[] = [];
+  /** The `updatedAt` each issue was given: a mark write moves the draft's, and the issue checks it. */
+  const issuedAt: string[] = [];
+  let marked = false;
+  let fresh = "u1";
+  let totals: unknown;
   const service = new WebshopOrderInvoiceService(
     {
       source: async () => ({
@@ -167,8 +172,13 @@ function setup(over: {
         );
       },
       customerByKey: async () => "cust_1",
-      markProformaAdvance: async (id: string, advance: boolean) =>
-        void marks.push(`${id} ${advance}`),
+      markProformaAdvance: async (id: string, advance: boolean) => {
+        marks.push(`${id} ${advance}`);
+        if (advance === marked) return false;
+        marked = advance;
+        fresh = `marked ${marks.length}`;
+        return true;
+      },
       customerBuyer: async () => ({
         name: "Teszt Elek",
         taxNumber: null,
@@ -185,7 +195,7 @@ function setup(over: {
         return {
           id: "doc_1",
           updatedAt: "u1",
-          totals: totalsOf(input),
+          totals: (totals = totalsOf(input)),
         } as BillingDocumentDetail;
       },
       update: async (id: string, input: Record<string, unknown>) => {
@@ -194,13 +204,14 @@ function setup(over: {
         return {
           id,
           updatedAt: "u2",
-          totals: totalsOf(input),
+          totals: (totals = totalsOf(input)),
         } as BillingDocumentDetail;
       },
       detail: async (id: string) =>
         ({
           id,
-          updatedAt: "u1",
+          updatedAt: fresh,
+          totals,
           emailStatus: over.emailStatus ?? null,
         }) as BillingDocumentDetail,
     } as never,
@@ -221,13 +232,14 @@ function setup(over: {
       },
       issue: async (
         id: string,
-        _updatedAt: string,
+        updatedAt: string,
         _user: unknown,
         confirmation: unknown,
         _now: unknown,
         sendTo: unknown,
       ) => {
         calls.push(`issue ${id}`);
+        issuedAt.push(updatedAt);
         confirmations.push(confirmation);
         sendTos.push(sendTo);
         proforma = {
@@ -271,6 +283,7 @@ function setup(over: {
     confirmations,
     sendTos,
     marks,
+    issuedAt,
   };
 }
 
@@ -720,6 +733,34 @@ describe("the advance proforma", () => {
     await service.proformaSummary("order_55", USER, NOW, { amount: "2000" });
     await service.proformaSummary("order_55", USER, NOW);
     assert.deepEqual(marks, ["doc_1 true", "doc_1 false"]);
+  });
+
+  // the #2844 regression (acrobot 61414): the mark wrote after the draft's save, and the issue got the stale `updatedAt` -> 409
+  it("an advance first send issues with the draft's `updatedAt` after the mark wrote; a whole-order send keeps the saved one", async () => {
+    const advance = setup({});
+    const gross = "2000";
+    await advance.service.sendProforma(
+      "order_55",
+      USER,
+      NOW,
+      CONFIRMED,
+      { amount: gross },
+      gross,
+    );
+    assert.deepEqual(advance.marks, ["doc_1 true"]);
+    assert.deepEqual(advance.issuedAt, ["marked 1"]);
+
+    const whole = setup({});
+    await whole.service.sendProforma(
+      "order_55",
+      USER,
+      NOW,
+      CONFIRMED,
+      undefined,
+      "4800",
+    );
+    assert.deepEqual(whole.marks, ["doc_1 false"]);
+    assert.deepEqual(whole.issuedAt, ["u1"]);
   });
 
   it("a window opened for an advance and a send that comes without it issues nothing; a first send without the amount neither", async () => {

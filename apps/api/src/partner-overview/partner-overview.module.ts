@@ -7,6 +7,7 @@ import { WorksheetsModule } from "../worksheets/worksheets.module.js";
 
 import { PartnerOverviewController } from "./partner-overview.controller.js";
 import { PartnerOverviewService } from "./partner-overview.service.js";
+import { PartnerSeenRepository } from "./partner-seen.repository.js";
 
 @Module({
   imports: [
@@ -16,6 +17,6 @@ import { PartnerOverviewService } from "./partner-overview.service.js";
     MaintenanceOrdersModule,
   ],
   controllers: [PartnerOverviewController],
-  providers: [PartnerOverviewService],
+  providers: [PartnerOverviewService, PartnerSeenRepository],
 })
 export class PartnerOverviewModule {}

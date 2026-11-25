@@ -97,6 +97,11 @@ export function TicketList({ kind = "REPAIR" }: { kind?: TicketKind }) {
     void load();
   }, [load]);
 
+  // a lista megnyitása (kártya 28f31715, PR 2): az áttekintés Újdonságai ettől számolnak; a jegy és a karbantartás egy terület
+  useEffect(() => {
+    partnerApi.markSeen("TICKETS").catch(() => undefined);
+  }, []);
+
   return (
     <PilotThemeRoot className="flex min-h-screen flex-col bg-pilot-grey-50">
       <div className="flex items-center justify-between border-b border-pilot-grey-100 bg-white px-8 py-5">
