@@ -1076,6 +1076,15 @@ export interface MedusaUrlRedirectList {
   redirects: MedusaUrlRedirect[];
 }
 
+/** A webshop válasza az átállításra (commerce #905). */
+export type MedusaTransferSwitch = {
+  switched: boolean;
+  from: string | null;
+  amount: number;
+  collection_id: string | null;
+  removed_cod_fee: boolean;
+};
+
 export interface MedusaAdminClient {
   /**
    * Keresés külső azonosítóra, a TÖRÖLTEKKEL együtt.
@@ -1227,6 +1236,11 @@ export interface MedusaAdminClient {
     orderId: string,
     notifyCustomer: boolean,
   ): Promise<MedusaStatusNotification>;
+  /** Átállítás előre utalásra (kártya d31a66a3, commerce #905); `actor`: aki megnyomta. */
+  switchToTransfer(
+    orderId: string,
+    actor: string,
+  ): Promise<MedusaTransferSwitch>;
   /**
    * A rendelés címének frissítése a webshop beépített útján
    * (`POST /admin/orders/:id`, `billing_address` vagy `shipping_address`).
@@ -2483,6 +2497,21 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     return this.request(
       `/admin/order-payment/${encodeURIComponent(orderId)}/transfer-receipt`,
       { method: "POST", body: JSON.stringify(receipt) },
+    );
+  }
+
+  /**
+   * ÁTÁLLÍTÁS ELŐRE UTALÁSRA (kártya d31a66a3, commerce #905): a webshop a kártyás zárolást feloldja, az utánvét-díjat leveszi,
+   * és a rendelés végösszegére átutalásos fizetést nyit. Kifizetett, úton levő vagy lezárt rendelésre, vegyes kosár párjára 409,
+   * magyar mondattal; a második hívás `switched: false`.
+   */
+  async switchToTransfer(
+    orderId: string,
+    actor: string,
+  ): Promise<MedusaTransferSwitch> {
+    return this.request<MedusaTransferSwitch>(
+      `/admin/order-payment/${encodeURIComponent(orderId)}/switch-to-transfer`,
+      { method: "POST", body: JSON.stringify({ actor }) },
     );
   }
 

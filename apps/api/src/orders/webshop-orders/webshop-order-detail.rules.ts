@@ -36,6 +36,7 @@ import {
   paymentMethodLabel,
   paymentStateOf,
   type WebshopOrderFacts,
+  primaryPaymentCollection,
 } from "./webshop-orders.rules.js";
 
 /**
@@ -183,7 +184,7 @@ export function paymentOf(
   collections: MedusaOrderDetailRow["payment_collections"],
   total: number,
 ): WebshopOrderDetail["payment"] {
-  const collection = collections[0];
+  const collection = primaryPaymentCollection(collections);
   if (!collection) return null;
   const payment = collection.payments?.[0];
   // a függő fizetésnek csak munkamenete van (lásd orderPaymentProviderId)
@@ -482,6 +483,39 @@ export function manualRefundOf(
 }
 
 /** A webshop fizetéseinek vissza nem térített, rögzített összege; `null`: nem olvasható (nincs fizetési gyűjtemény). */
+/**
+ * ÁTÁLLÍTHATÓ-E ELŐRE UTALÁSRA (kártya d31a66a3). A webshop maga is elutasítja, amit nem lehet (kifizetett, úton levő vagy lezárt
+ * rendelés, vegyes kosár párja, ismeretlen mód); itt a gomb már előtte megmondja, miért nincs. A kiállított számla mellett nem
+ * állítunk át: a díjbekérő és a számla ugyanarra a rendelésre két különböző fizetést mondana.
+ */
+export function transferSwitchOf(input: {
+  bankTransfer: boolean;
+  status: WebshopOrderStatus | null;
+  paymentMethod: string | null;
+  paymentState: string | null;
+  invoice: unknown;
+  related: boolean;
+}): { allowed: boolean; reason: string | null } {
+  const reason = input.bankTransfer
+    ? "A rendelés már előre utalásos."
+    : input.status === "out_for_delivery" ||
+        input.status === "closed" ||
+        input.status === "closed_unsuccessfully"
+      ? "A rendelés már úton van vagy lezárult."
+      : input.related
+        ? "Vegyes kosár rendelése (élő állat és kiszállítandó tétel két rendelésben): most nem állítható át."
+        : input.invoice
+          ? "A rendelésen már van számla."
+          : input.paymentState === "CAPTURED" ||
+              input.paymentState === "PARTIALLY_REFUNDED" ||
+              input.paymentState === "REFUNDED"
+            ? "A rendelést már kifizették."
+            : !input.paymentMethod
+              ? "A rendelés fizetési módja nem ismert."
+              : null;
+  return { allowed: reason === null, reason };
+}
+
 export function outstandingCapturedOf(
   collections: MedusaOrderDetailRow["payment_collections"] | undefined,
 ): number | null {
@@ -531,8 +565,9 @@ export function toDetail(input: {
   const delivery = addressOf(order.shipping_address);
   const related = relatedOf(order.metadata);
   const bankTransfer =
-    orderPaymentProviderId(order.payment_collections?.[0]) ===
-    BANK_TRANSFER_PROVIDER_ID;
+    orderPaymentProviderId(
+      primaryPaymentCollection(order.payment_collections),
+    ) === BANK_TRANSFER_PROVIDER_ID;
   return {
     id: order.id,
     displayId: order.display_id,
@@ -632,6 +667,14 @@ export function toDetail(input: {
       });
       return { allowed: reason === null, reason };
     })(),
+    transferSwitch: transferSwitchOf({
+      bankTransfer,
+      status: code,
+      paymentMethod: payment?.method ?? null,
+      paymentState: payment?.state ?? null,
+      invoice: facts.invoice,
+      related: !!related,
+    }),
     split: input.split ?? { from: null, into: [] },
     steps: stepsOf(
       code,

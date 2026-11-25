@@ -227,6 +227,17 @@ export class WebshopOrdersController {
     return this.payments.releaseHold(id, body.notifyCustomer ?? true, user);
   }
 
+  /** „Átállítás előre utalásra” (kártya d31a66a3): előleghez, a vevő beleegyezése után. */
+  @Post(":id/payment/switch-to-transfer")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  switchToTransfer(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.payments.switchToTransfer(id, user);
+  }
+
   /** „Fizetési link küldése”: a rendelés mostani végösszegére. */
   @Post(":id/payment/link")
   @HttpCode(200)

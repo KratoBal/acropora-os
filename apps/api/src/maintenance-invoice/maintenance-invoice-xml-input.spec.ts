@@ -339,7 +339,60 @@ describe("a megrendeléses TIG sora a számlán", () => {
     );
   });
 
-  it("a szervizes sor (egység nélkül) változatlanul 1 db", () => {
+  it("a szervizes sor több alkalommal a valódi mennyiséggel és egységárral megy (TI-2026-003)", () => {
+    const [sor] = sorok([
+      {
+        description: "Akvárium karbantartás",
+        quantity: D(2),
+        unitNet: D("450000"),
+        vatRatePercent: D(27),
+      },
+    ]);
+    assert.deepEqual(
+      [sor!.name, sor!.quantity, sor!.unit, sor!.netUnitPrice, sor!.netAmount],
+      ["Akvárium karbantartás", 2, "alkalom", 450000, 900000],
+    );
+  });
+
+  it("minden egység nélküli sor, amelynek a mennyisége nem 1, a valódi mennyiséggel megy", () => {
+    for (const [quantity, unitNet] of [
+      ["2", "450000"],
+      ["3", "15000"],
+      ["12", "8500"],
+      ["0.5", "20000"],
+    ] as const) {
+      const [sor] = sorok([
+        {
+          description: "Karbantartás",
+          quantity: D(quantity),
+          unitNet: D(unitNet),
+          vatRatePercent: D(27),
+        },
+      ]);
+      assert.deepEqual(
+        [sor!.quantity, sor!.unit, sor!.netUnitPrice],
+        [Number(quantity), "alkalom", Number(unitNet)],
+        `${quantity} × ${unitNet}`,
+      );
+    }
+  });
+
+  it("egység nélküli, nem pontos szorzatnál 1 db a sorösszeggel, az alkalom a névben", () => {
+    const [sor] = sorok([
+      {
+        description: "Karbantartás",
+        quantity: D("3"),
+        unitNet: D("3333.3333"),
+        vatRatePercent: D(27),
+      },
+    ]);
+    assert.deepEqual(
+      [sor!.name, sor!.quantity, sor!.unit, sor!.netUnitPrice, sor!.netAmount],
+      ["Karbantartás, 3 alkalom", 1, "db", 10000, 10000],
+    );
+  });
+
+  it("a szervizes sor (egység nélkül, 1 mennyiséggel) változatlanul 1 db", () => {
     const [sor] = sorok([
       {
         description: "Akvárium karbantartás",

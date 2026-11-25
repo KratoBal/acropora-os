@@ -33,6 +33,7 @@ import {
 import {
   COD_PROVIDER_ID,
   orderPaymentProviderId,
+  primaryPaymentCollection,
 } from "./webshop-orders.rules.js";
 
 /**
@@ -284,7 +285,9 @@ const CARD_PAYMENT_METHOD = "Bankkártya";
 export function invoicePaymentMethodOf(order: MedusaOrderDetailRow): string {
   // az utánvétnek csak munkamenete van a leadáskor: a rekordra várva a
   // számlán „Átutalás” állt volna (mérve a stage-en, 2026-10-06)
-  const provider = orderPaymentProviderId(order.payment_collections?.[0]);
+  const provider = orderPaymentProviderId(
+    primaryPaymentCollection(order.payment_collections),
+  );
   if (provider === "pp_stripe_stripe") return CARD_PAYMENT_METHOD;
   if (provider === COD_PROVIDER_ID) return "Utánvét";
   return "Átutalás";

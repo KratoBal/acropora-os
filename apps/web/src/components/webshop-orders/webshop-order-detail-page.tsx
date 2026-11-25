@@ -606,6 +606,16 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setNow(Date.now());
     return statusMailText(result.mail);
   };
+  const switchToTransfer = async () => {
+    const result = await webshopOrdersApi.switchToTransfer(token, id);
+    setOrder(result.order);
+    setNow(Date.now());
+    setMailNotice(
+      result.switched
+        ? `Átállítva előre utalásra${result.removedCodFee ? ", az utánvét-díj lekerült" : ""}. Most küldheted a díjbekérőt.`
+        : "A rendelés már előre utalásos volt.",
+    );
+  };
   const settleManualRefund = async (note: string) => {
     const result = await webshopOrdersApi.settleManualRefund(token, id, note);
     setOrder(result);
@@ -715,6 +725,7 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           canSendProforma={canSendProforma}
           canRecordTransfer={canRecordTransfer}
           onSendProforma={sendProforma}
+          onSwitchToTransfer={switchToTransfer}
           onProformaSummary={proformaSummary}
           onRecordTransfer={recordTransfer}
           onSyncTransferToShop={syncTransferToShop}
@@ -994,6 +1005,114 @@ const PROFORMA_MAIL: Record<string, string> = {
  * kiállítás alatti és az elutasított díjbekérő nem kap gombot: ott a
  * Számlázásban kell megnézni, mi történt.
  */
+/**
+ * ÁTÁLLÍTÁS ELŐRE UTALÁSRA (kártya d31a66a3; Balázs, 2026-11-25 10:19 UTC): a vevő bármilyen móddal rendelt; nagy értékű
+ * terméknél felhívjuk, és ha beleegyezik az előlegbe, itt állítjuk át, utána a díjbekérő a szokott helyén jelenik meg. A
+ * megerősítés megmondja, mi történik a mostani fizetéssel. Ha most nem állítható át, az ok áll a gomb helyén.
+ */
+function TransferSwitchSection({
+  order,
+  onSwitch,
+}: {
+  order: WebshopOrderDetail;
+  onSwitch: () => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const method = order.payment?.method ?? null;
+  const effect =
+    method === "Stripe"
+      ? "A kártyán zárolt összeget feloldjuk, kártyáról nem vonunk le semmit."
+      : method === "Utánvét"
+        ? "Az utánvét kezelési díja lekerül a rendelésről."
+        : "A mostani fizetési mód megszűnik.";
+  if (!order.transferSwitch.allowed)
+    return order.transferSwitch.reason ? (
+      <p
+        className="mt-3 text-xs text-pilot-grey-500"
+        data-testid="transfer-switch-reason"
+      >
+        Előre utalásra átállítás: {order.transferSwitch.reason}
+      </p>
+    ) : null;
+  return (
+    <div className="mt-3 space-y-2" data-testid="transfer-switch">
+      <p className="text-sm text-pilot-grey-700">
+        Előleget kérünk? Ha a vevő beleegyezett, a rendelés átállítható előre
+        utalásra, és utána díjbekérő küldhető.
+      </p>
+      <PilotButton
+        size="regular"
+        variant="secondary"
+        onClick={() => setOpen(true)}
+      >
+        Átállítás előre utalásra
+      </PilotButton>
+      {open ? (
+        <PilotDialog
+          open
+          onClose={busy ? () => undefined : () => setOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Átállítás előre utalásra"
+            className="space-y-4 p-5"
+          >
+            <h2 className="text-base font-semibold text-pilot-grey-900">
+              Átállítás előre utalásra
+            </h2>
+            <p className="text-sm text-pilot-grey-700">
+              {effect} A rendelés végösszegére előre utalásos fizetés nyílik; a
+              díjbekérőt utána te küldöd. A vevő most nem kap levelet.
+            </p>
+            {error ? (
+              <p
+                role="alert"
+                className="rounded-lg bg-pilot-red-50 p-3 text-sm text-pilot-red-700"
+              >
+                {error}
+              </p>
+            ) : null}
+            <div className="flex justify-end gap-2">
+              <PilotButton
+                size="regular"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => setOpen(false)}
+              >
+                Mégse
+              </PilotButton>
+              <PilotButton
+                size="regular"
+                variant="primary"
+                disabled={busy}
+                onClick={() => {
+                  setBusy(true);
+                  setError(null);
+                  void onSwitch()
+                    .then(() => setOpen(false))
+                    .catch((cause: unknown) =>
+                      setError(
+                        cause instanceof Error
+                          ? cause.message
+                          : "Az átállítás nem sikerült.",
+                      ),
+                    )
+                    .finally(() => setBusy(false));
+                }}
+              >
+                Átállítás
+              </PilotButton>
+            </div>
+          </div>
+        </PilotDialog>
+      ) : null}
+    </div>
+  );
+}
+
 function ProformaSection({
   order,
   now,
@@ -2227,6 +2346,7 @@ function OrderBody({
   canSendProforma,
   canRecordTransfer,
   onSendProforma,
+  onSwitchToTransfer,
   onProformaSummary,
   onRecordTransfer,
   onSyncTransferToShop,
@@ -2269,6 +2389,8 @@ function OrderBody({
     confirmation?: BillingIssueConfirmation,
     advance?: ProformaAdvanceSend,
   ) => Promise<void>;
+  /** Átállítás előre utalásra (kártya d31a66a3). */
+  onSwitchToTransfer: () => Promise<void>;
   onProformaSummary: (
     advance?: WebshopProformaAdvance,
   ) => Promise<WebshopProformaSummary>;
@@ -2862,6 +2984,12 @@ function OrderBody({
                 A webshop nem rögzített fizetést ehhez a rendeléshez.
               </p>
             )}
+            {!order.bankTransfer && canManage ? (
+              <TransferSwitchSection
+                order={order}
+                onSwitch={onSwitchToTransfer}
+              />
+            ) : null}
             {order.bankTransfer ? (
               <ProformaSection
                 order={order}

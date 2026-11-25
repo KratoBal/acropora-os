@@ -15,6 +15,7 @@ import {
   stepsOf,
   TRANSFER_INVOICE_STEP,
   toDetail,
+  transferSwitchOf,
 } from "./webshop-order-detail.rules.js";
 import { NO_FACTS } from "./webshop-orders.rules.js";
 
@@ -187,6 +188,129 @@ describe("the detail", () => {
     assert.equal(result.bankTransfer, true);
     assert.equal(result.steps[1]!.detail, TRANSFER_INVOICE_STEP);
     assert.equal(detail().steps[1]!.detail, "Számla kiállítása");
+  });
+
+  /*
+    ÁTÁLLÍTÁS ELŐRE UTALÁSRA (kártya d31a66a3). MI PIROSÍT: egy átállított rendelés az első, lemondott utánvétes gyűjtőjét olvassa
+    (nem látszik előre utalásosnak, a díjbekérő gomb meg sem jelenik, a mód "Utánvét" marad); egy feloldott kártya-zárolás
+    (minden gyűjtő lemondva) elveszti a módját; a gomb olyankor is kínálja magát, amikor a webshop elutasítaná.
+  */
+  it("a switched order reads its open transfer collection: bank transfer, the method, and no switch offered", () => {
+    const result = detail({
+      payment_collections: [
+        {
+          status: "canceled",
+          payments: [],
+          payment_sessions: [
+            { provider_id: "pp_acropora_cod", status: "pending_authorization" },
+          ],
+        },
+        {
+          status: "not_paid",
+          payments: [],
+          payment_sessions: [
+            {
+              provider_id: "pp_acropora_transfer",
+              status: "pending_authorization",
+            },
+          ],
+        },
+      ],
+    } as unknown as Partial<MedusaOrderDetailRow>);
+    assert.equal(result.bankTransfer, true);
+    assert.equal(result.payment?.method, "Előre utalás");
+    assert.deepEqual(result.transferSwitch, {
+      allowed: false,
+      reason: "A rendelés már előre utalásos.",
+    });
+    // a released card hold: every collection canceled, the first stands
+    const released = detail({
+      payment_collections: [
+        {
+          status: "canceled",
+          payments: [{ provider_id: "pp_stripe_stripe", data: { id: "pi_1" } }],
+          payment_sessions: [
+            { provider_id: "pp_stripe_stripe", status: "canceled" },
+          ],
+        },
+      ],
+    } as unknown as Partial<MedusaOrderDetailRow>);
+    assert.equal(released.payment?.method, "Stripe");
+  });
+
+  /*
+    A FIZETÉSI LINKES RENDELÉS (barracuda, #2835 review): a feloldott kártya-zárolás gyűjtője lemondva, a link gyűjtője kifizetve.
+    Eddig az első (lemondott) gyűjtőt olvastuk, és a rendelés "lemondott" fizetésűnek látszott; MI PIROSÍT: ha a rendelés megint
+    az első gyűjtőt olvassa, az állapot CANCELED, a PaymentIntent a zárolásé, és az átállítás a kifizetett rendelésen is kínálja magát.
+  */
+  it("a payment-link order reads the paid link collection, not the released hold, and refuses the switch as paid", () => {
+    const result = detail({
+      // a single order: the fixture's pickup pair would refuse the switch for its own reason
+      metadata: {},
+      payment_collections: [
+        {
+          status: "canceled",
+          amount: 26390,
+          authorized_amount: 26390,
+          captured_amount: 0,
+          refunded_amount: 0,
+          payments: [
+            { provider_id: "pp_stripe_stripe", data: { id: "pi_hold" } },
+          ],
+          payment_sessions: [
+            { provider_id: "pp_stripe_stripe", status: "canceled" },
+          ],
+        },
+        {
+          status: "completed",
+          amount: 26390,
+          authorized_amount: 26390,
+          captured_amount: 26390,
+          refunded_amount: 0,
+          payments: [
+            { provider_id: "pp_stripe_stripe", data: { id: "pi_link" } },
+          ],
+          payment_sessions: [
+            { provider_id: "pp_stripe_stripe", status: "authorized" },
+          ],
+        },
+      ],
+    } as unknown as Partial<MedusaOrderDetailRow>);
+    assert.equal(result.payment?.method, "Stripe");
+    assert.equal(result.payment?.state, "CAPTURED");
+    assert.equal(result.payment?.captured, 26390);
+    assert.equal(result.payment?.stripePaymentIntentId, "pi_link");
+    assert.equal(result.bankTransfer, false);
+    assert.deepEqual(result.transferSwitch, {
+      allowed: false,
+      reason: "A rendelést már kifizették.",
+    });
+  });
+
+  it("the switch is offered on an open, unpaid, uninvoiced, single order with a known method, and says why not otherwise", () => {
+    const base: Parameters<typeof transferSwitchOf>[0] = {
+      bankTransfer: false,
+      status: "confirmed",
+      paymentMethod: "Utánvét",
+      paymentState: "AWAITING",
+      invoice: null,
+      related: false,
+    };
+    assert.deepEqual(transferSwitchOf(base), { allowed: true, reason: null });
+    const reasons: [Partial<typeof base>, RegExp][] = [
+      [{ bankTransfer: true }, /már előre utalásos/],
+      [{ status: "out_for_delivery" }, /úton van vagy lezárult/],
+      [{ status: "closed_unsuccessfully" }, /úton van vagy lezárult/],
+      [{ related: true }, /Vegyes kosár/],
+      [{ invoice: { number: "ACR-1" } }, /már van számla/],
+      [{ paymentState: "CAPTURED" }, /már kifizették/],
+      [{ paymentMethod: null }, /nem ismert/],
+    ];
+    for (const [over, reason] of reasons) {
+      const result = transferSwitchOf({ ...base, ...over });
+      assert.equal(result.allowed, false);
+      assert.match(result.reason ?? "", reason);
+    }
   });
 
   it("carries only the PaymentIntent id: no client_secret, no other provider data", () => {

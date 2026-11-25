@@ -29,6 +29,7 @@ const api = vi.hoisted(() => ({
   resendStatusMail: vi.fn(),
   editLine: vi.fn(),
   releaseHold: vi.fn(),
+  switchToTransfer: vi.fn(),
   settleManualRefund: vi.fn(),
   sendPaymentLink: vi.fn(),
   updateAddress: vi.fn(),
@@ -264,6 +265,7 @@ const detail: WebshopOrderDetail = {
     shipping: { allowed: true, reason: null },
   },
   lineEdit: { allowed: true, reason: null },
+  transferSwitch: { allowed: false, reason: null },
   splitEdit: { allowed: true, reason: null },
   split: { from: null, into: [] },
   steps: [
@@ -322,6 +324,7 @@ beforeEach(() => {
   api.resendStatusMail.mockReset();
   api.editLine.mockReset();
   api.releaseHold.mockReset();
+  api.switchToTransfer.mockReset();
   api.settleManualRefund.mockReset();
   api.sendPaymentLink.mockReset();
   api.updateAddress.mockReset();
@@ -1945,6 +1948,74 @@ describe("WebshopOrderDetailPage", () => {
     render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
     await screen.findByRole("region", { name: "Fizetés" });
     expect(screen.queryByTestId("manual-refund-notice")).toBeNull();
+  });
+
+  /*
+    ÁTÁLLÍTÁS ELŐRE UTALÁSRA (kártya d31a66a3). MI PIROSÍT: a gomb a megerősítés nélkül ír; a megerősítés nem mondja meg, mi lesz
+    a mostani fizetéssel (utánvétnél a díj); a válasz után nem a friss adatlap és nem a díjbekérő lépés látszik; ha most nem
+    állítható át, nem derül ki, miért.
+  */
+  it("Átállítás előre utalásra asks first, says what happens to cash on delivery, switches, and the proforma follows", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      payment: { ...detail.payment!, method: "Utánvét" },
+      transferSwitch: { allowed: true, reason: null },
+    });
+    api.switchToTransfer.mockResolvedValue({
+      order: {
+        ...detail,
+        bankTransfer: true,
+        transferSwitch: {
+          allowed: false,
+          reason: "A rendelés már előre utalásos.",
+        },
+      },
+      switched: true,
+      from: "COD",
+      removedCodFee: true,
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const pay = await screen.findByRole("region", { name: "Fizetés" });
+    fireEvent.click(
+      within(pay).getByRole("button", { name: "Átállítás előre utalásra" }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Átállítás előre utalásra",
+    });
+    expect(
+      within(dialog).getByText(/utánvét kezelési díja lekerül/),
+    ).toBeTruthy();
+    expect(api.switchToTransfer).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Átállítás" }));
+    await waitFor(() =>
+      expect(api.switchToTransfer).toHaveBeenCalledWith("token", "order_38"),
+    );
+    expect(
+      (
+        await screen.findAllByText(
+          /Átállítva előre utalásra, az utánvét-díj lekerült/,
+        )
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(within(pay).queryByTestId("transfer-switch")).toBeNull();
+  });
+
+  it("when the switch is not possible, the reason stands in place of the button", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      transferSwitch: {
+        allowed: false,
+        reason: "A rendelésen már van számla.",
+      },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const pay = await screen.findByRole("region", { name: "Fizetés" });
+    expect(
+      within(pay).getByTestId("transfer-switch-reason").textContent,
+    ).toMatch(/már van számla/);
+    expect(
+      within(pay).queryByRole("button", { name: "Átállítás előre utalásra" }),
+    ).toBeNull();
   });
 
   it("warns from the 5th day, and Csúszik a szállítás asks first, then releases with the notify choice", async () => {

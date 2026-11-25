@@ -34,6 +34,7 @@ import type {
   WebshopPickupPointSearch,
   WebshopTransferReceiptInput,
   WebshopOrderTaxCheck,
+  WebshopOrderTransferSwitchResult,
 } from "@acropora/types";
 import { API_PREFIX } from "./api-prefix";
 import { pdfBlob } from "./billing-documents";
@@ -132,6 +133,14 @@ export const webshopOrdersApi = {
     return apiRequest<WebshopVariantOption[]>(
       `/webshop-orders/${encodeURIComponent(id)}/replacement-variants?${new URLSearchParams({ q: query })}`,
       token,
+    );
+  },
+  /** „Átállítás előre utalásra” (kártya d31a66a3): előleghez, a vevő beleegyezése után; a „ki” a szerveren a bejelentkezett felhasználó. */
+  switchToTransfer(token: string, id: string) {
+    return apiRequest<WebshopOrderTransferSwitchResult>(
+      `/webshop-orders/${encodeURIComponent(id)}/payment/switch-to-transfer`,
+      token,
+      { method: "POST", body: JSON.stringify({}) },
     );
   },
   /** „Csúszik a szállítás”: a kártyás zárolás feloldása, levél a vevőnek. */

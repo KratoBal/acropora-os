@@ -234,6 +234,24 @@ export class WebshopOrdersRepository {
     });
   }
 
+  /** Átállítás előre utalásra (kártya d31a66a3): ki nyomta, honnan, lekerült-e az utánvét-díj. */
+  async recordTransferSwitch(input: {
+    userId: string;
+    orderId: string;
+    from: string | null;
+    removedCodFee: boolean;
+  }): Promise<void> {
+    await prisma.auditLog.create({
+      data: {
+        userId: input.userId,
+        action: "webshop-order.switched-to-transfer",
+        entityType: "WebshopOrder",
+        entityId: input.orderId,
+        metadata: { from: input.from, removedCodFee: input.removedCodFee },
+      },
+    });
+  }
+
   /** A státuszlevél újraküldése: ki kérte, és mi lett a sorsa. */
   async recordStatusMailResent(input: {
     userId: string;
