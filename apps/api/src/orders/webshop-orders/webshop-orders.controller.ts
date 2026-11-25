@@ -47,7 +47,9 @@ import { WebshopOrderInvoiceService } from "./webshop-order-invoice.service.js";
 import { WebshopOrderTaxCheckService } from "./webshop-order-tax-check.service.js";
 import {
   WebshopOrderInvoiceIssueDto,
+  WebshopProformaAdvanceDto,
   WebshopProformaSendDto,
+  proformaAdvanceOf,
 } from "./dto/webshop-order-invoice-issue.dto.js";
 import { WebshopOrderParcelService } from "./webshop-order-parcel.service.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
@@ -456,6 +458,8 @@ export class WebshopOrdersController {
             fingerprint: input.fingerprint,
           }
         : undefined,
+      proformaAdvanceOf(input),
+      input?.grossAmount,
     );
   }
 
@@ -473,9 +477,15 @@ export class WebshopOrdersController {
   )
   proformaSummary(
     @Param("id") id: string,
+    @Body() input: WebshopProformaAdvanceDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.invoices.proformaSummary(id, user);
+    return this.invoices.proformaSummary(
+      id,
+      user,
+      new Date(),
+      proformaAdvanceOf(input),
+    );
   }
 
   /**

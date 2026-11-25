@@ -94,6 +94,8 @@ const PROFORMA_SUMMARY = {
   ...INVOICE_SUMMARY,
   documentId: "doc_p1",
   buyerEmail: "rendeles@example.hu",
+  grossAmount: "20840.0000",
+  advance: false,
 };
 const PROFORMA_CONFIRMED = {
   issueDate: PROFORMA_SUMMARY.issueDate,
@@ -2714,6 +2716,65 @@ describe("the proforma on the Fizetés card", () => {
         .getByRole("link", { name: "Megnyitás a Számlázásban" })
         .getAttribute("href"),
     ).toBe("/penzugy/szamlazas/doc_p1");
+  });
+
+  /*
+    THE ADVANCE PROFORMA (card d31a66a3, 2a). WHAT TURNS IT RED: the window is opened for the whole order although an advance was
+    typed; the send does not carry the advance and the amount the window showed; the window or the issued proforma does not say
+    it asks for an advance.
+  */
+  it("an advance: the typed forints go to the window, the window says the amount, and the send carries both back", async () => {
+    api.detail.mockResolvedValue(transfer);
+    api.proformaSummary.mockResolvedValue({
+      ...PROFORMA_SUMMARY,
+      grossAmount: "10000.0000",
+      advance: true,
+    });
+    api.sendProforma.mockResolvedValue(issued({ grossAmount: "10000.0000" }));
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const payment = await card();
+    fireEvent.change(within(payment).getByLabelText("A díjbekérő összege"), {
+      target: { value: "AMOUNT" },
+    });
+    fireEvent.change(within(payment).getByTestId("proforma-advance-value"), {
+      target: { value: "10000" },
+    });
+    fireEvent.click(
+      within(payment).getByRole("button", { name: "Díjbekérő kiküldése" }),
+    );
+    const confirm = await screen.findByRole("dialog", {
+      name: "Díjbekérő kiküldése",
+    });
+    await within(confirm).findByText(PROFORMA_SUMMARY.buyerName);
+    expect(api.proformaSummary).toHaveBeenCalledWith("token", "order_38", {
+      amount: "10000",
+    });
+    expect(confirm.textContent).toMatch(/Összege: 10\s000\sFt \(előleg\)/);
+    fireEvent.click(
+      within(confirm).getByRole("button", { name: "Díjbekérő kiküldése" }),
+    );
+    expect(await within(payment).findByText("TESZT-D-1")).toBeTruthy();
+    expect(api.sendProforma).toHaveBeenCalledWith(
+      "token",
+      "order_38",
+      PROFORMA_CONFIRMED,
+      { advance: { amount: "10000" }, grossAmount: "10000.0000" },
+    );
+    expect(within(payment).getByTestId("proforma-amount").textContent).toMatch(
+      /\(előleg\)$/,
+    );
+  });
+
+  it("the whole order's proforma is no advance, and the choice is gone once it is issued", async () => {
+    api.detail.mockResolvedValue({
+      ...issued({ grossAmount: String(detail.totals.total) }),
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const payment = await card();
+    expect(
+      within(payment).getByTestId("proforma-amount").textContent,
+    ).not.toContain("előleg");
+    expect(within(payment).queryByLabelText("A díjbekérő összege")).toBeNull();
   });
 
   it("once sent, the button resends the same one; an expired one is marked and can be resent", async () => {

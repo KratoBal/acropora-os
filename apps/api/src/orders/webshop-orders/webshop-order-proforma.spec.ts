@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type {
-  AuthenticatedUser,
-  BillingDocumentDetail,
-  WebshopOrderDetail,
+import {
+  szamlazzDocumentTotals,
+  szamlazzLineAmounts,
+  type AuthenticatedUser,
+  type BillingDocumentDetail,
+  type WebshopOrderDetail,
 } from "@acropora/types";
 
 import type { MedusaOrderDetailRow } from "../../integrations/medusa/medusa-admin.client.js";
@@ -86,6 +88,24 @@ const order = (
 
 type Row = { id: string; status: string; number: string | null };
 
+/** The saved draft's total as the billing reads it (each line to the forint), from the lines the service wrote. */
+const totalsOf = (input: Record<string, unknown>) => ({
+  grossAmount: szamlazzDocumentTotals(
+    (
+      input.lines as {
+        quantity: string;
+        unitNet: string;
+        vatRatePercent: string;
+      }[]
+    ).map((line) => {
+      const amounts = szamlazzLineAmounts({ ...line, currency: "HUF" });
+      assert.ok(amounts.ok);
+      return amounts;
+    }),
+    "HUF",
+  ).grossAmount,
+});
+
 /** What the confirmation window showed and the person confirmed (card 7ba97e0d follow-up): the first send needs it. */
 const CONFIRMED = {
   issueDate: "2026-10-06",
@@ -162,11 +182,17 @@ function setup(over: {
         return {
           id: "doc_1",
           updatedAt: "u1",
+          totals: totalsOf(input),
         } as BillingDocumentDetail;
       },
-      update: async (id: string) => {
+      update: async (id: string, input: Record<string, unknown>) => {
+        drafts.push(input);
         calls.push(`update ${id}`);
-        return { id, updatedAt: "u2" } as BillingDocumentDetail;
+        return {
+          id,
+          updatedAt: "u2",
+          totals: totalsOf(input),
+        } as BillingDocumentDetail;
       },
       detail: async (id: string) =>
         ({
@@ -510,5 +536,74 @@ describe("the proforma's confirmation window", () => {
       await status(service.proformaSummary("order_55", USER, NOW)),
       409,
     );
+  });
+});
+
+/*
+  THE ADVANCE PROFORMA (card d31a66a3, 2a). WHAT TURNS IT RED: the window does not say the amount the proforma asks for; the send
+  issues an advance other than the one the window showed (another amount typed, or none shown); an advance that is the whole
+  total or more is issued.
+*/
+describe("the advance proforma", () => {
+  it("the window shows the amount asked for: the advance's, or the whole order's without one", async () => {
+    const advance = setup({});
+    const summary = await advance.service.proformaSummary(
+      "order_55",
+      USER,
+      NOW,
+      { amount: "2000" },
+    );
+    assert.equal(Number(summary.grossAmount), 2000);
+    assert.equal(summary.advance, true);
+    assert.deepEqual(
+      (advance.drafts[0]!.lines as { description: string }[]).map(
+        (line) => line.description,
+      ),
+      ["Előleg: webshop rendelés #55"],
+    );
+    const whole = setup({});
+    const plain = await whole.service.proformaSummary("order_55", USER, NOW);
+    assert.equal(Number(plain.grossAmount), 4800);
+    assert.equal(plain.advance, false);
+  });
+
+  it("the first send issues the advance the window showed; another amount, or none shown, issues nothing", async () => {
+    const shown = setup({});
+    await shown.service.sendProforma(
+      "order_55",
+      USER,
+      NOW,
+      CONFIRMED,
+      { percent: "40" },
+      "1920",
+    );
+    assert.ok(shown.calls.includes("issue doc_1"));
+
+    for (const gross of ["4800", undefined]) {
+      const other = setup({});
+      assert.equal(
+        await status(
+          other.service.sendProforma(
+            "order_55",
+            USER,
+            NOW,
+            CONFIRMED,
+            { percent: "40" },
+            gross,
+          ),
+        ),
+        409,
+      );
+      assert.ok(!other.calls.some((c) => c.startsWith("issue")));
+    }
+  });
+
+  it("an advance that is the whole total or more makes no proforma, and says why", async () => {
+    const { service, calls } = setup({});
+    await assert.rejects(
+      service.proformaSummary("order_55", USER, NOW, { amount: "4800" }),
+      /nem lehet a rendelés végösszege/,
+    );
+    assert.ok(!calls.some((c) => c.startsWith("create")));
   });
 });

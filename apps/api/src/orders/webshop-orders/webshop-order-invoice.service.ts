@@ -17,6 +17,8 @@ import {
   type WebshopInvoiceConfirmation,
   type WebshopInvoiceIssueResult,
   type WebshopInvoiceSummary,
+  type WebshopProformaAdvance,
+  type WebshopProformaSummary,
   type WebshopOrderDetail,
   type WebshopOrderStatus,
 } from "@acropora/types";
@@ -38,6 +40,7 @@ import {
   newCustomerOf,
   orderTaxKeyOf,
   orderLanguageOf,
+  advanceProformaDraftOf,
   proformaDraftOf,
   proformaRefusal,
 } from "./webshop-order-invoice.rules.js";
@@ -106,9 +109,20 @@ export class WebshopOrderInvoiceService {
     user: AuthenticatedUser,
     now = new Date(),
     confirmation?: BillingIssueConfirmation,
+    /** An advance proforma (card d31a66a3, 2a): the same one the window was opened with. */
+    advance?: WebshopProformaAdvance,
+    /** The amount the window showed: an advance proforma's first send checks it. */
+    shownGross?: string,
   ): Promise<WebshopOrderDetail> {
     return this.serial(orderId, () =>
-      this.sendProformaNow(orderId, user, now, confirmation),
+      this.sendProformaNow(
+        orderId,
+        user,
+        now,
+        confirmation,
+        advance,
+        shownGross,
+      ),
     );
   }
 
@@ -121,9 +135,10 @@ export class WebshopOrderInvoiceService {
     orderId: string,
     user: AuthenticatedUser,
     now = new Date(),
-  ): Promise<WebshopInvoiceSummary> {
+    advance?: WebshopProformaAdvance,
+  ): Promise<WebshopProformaSummary> {
     return this.serial(orderId, async () => {
-      const prepared = await this.prepareProforma(orderId, user, now);
+      const prepared = await this.prepareProforma(orderId, user, now, advance);
       if (prepared.kind === "issued")
         throw new ConflictException(
           "A díjbekérő már ki van állítva: az újraküldés nem kér megerősítést.",
@@ -134,7 +149,13 @@ export class WebshopOrderInvoiceService {
         now,
         prepared.order.email?.trim() || null,
       );
-      return { ...summary, documentId: prepared.saved.id };
+      return {
+        ...summary,
+        documentId: prepared.saved.id,
+        // what the proforma asks for, so the window can say it (an advance's first send checks it back)
+        grossAmount: prepared.saved.totals.grossAmount,
+        advance: advance !== undefined,
+      };
     });
   }
 
@@ -146,6 +167,7 @@ export class WebshopOrderInvoiceService {
     orderId: string,
     user: AuthenticatedUser,
     now: Date,
+    advance?: WebshopProformaAdvance,
   ): Promise<
     | { kind: "issued"; order: MedusaOrderDetailRow }
     | {
@@ -206,11 +228,19 @@ export class WebshopOrderInvoiceService {
       throw new ConflictException("A rendelés OS-partnere nem található.");
     const mismatch = buyerMismatch(order, buyer);
     if (mismatch) throw new ConflictException(mismatch);
-    const draft = proformaDraftOf(order, {
-      customerId,
-      now,
-      loyaltyShape: loyaltyInvoiceShapeOf(),
-    });
+    // an advance proforma asks for part of the total (card d31a66a3, 2a); without one, the whole order as before
+    const draft = advance
+      ? advanceProformaDraftOf(order, {
+          customerId,
+          now,
+          loyaltyShape: loyaltyInvoiceShapeOf(),
+          advance,
+        })
+      : proformaDraftOf(order, {
+          customerId,
+          now,
+          loyaltyShape: loyaltyInvoiceShapeOf(),
+        });
     if (!draft.ok) throw new UnprocessableEntityException(draft.message);
     const saved: BillingDocumentDetail = proforma
       ? await this.documents.update(
@@ -231,14 +261,29 @@ export class WebshopOrderInvoiceService {
     user: AuthenticatedUser,
     now: Date,
     confirmation?: BillingIssueConfirmation,
+    advance?: WebshopProformaAdvance,
+    shownGross?: string,
   ): Promise<WebshopOrderDetail> {
-    const prepared = await this.prepareProforma(orderId, user, now);
+    const prepared = await this.prepareProforma(orderId, user, now, advance);
     const { order } = prepared;
     if (prepared.kind === "draft") {
       // a new proforma is made only through the window (a resend needs none): the route's one caller is the page
       if (!confirmation)
         throw new BadRequestException(
           "A díjbekérő kiállítása előtt nyisd meg a megerősítést.",
+        );
+      /*
+        THE AMOUNT THE WINDOW SHOWED IS THE AMOUNT ISSUED (card d31a66a3, 2a): the window's digest covers the buyer and the dates,
+        not the lines, and an advance proforma's lines come from what the person typed. A send with another advance (or the
+        order changed meanwhile) stops here instead of issuing what was not shown.
+      */
+      if (
+        advance &&
+        (shownGross === undefined ||
+          Number(shownGross) !== Number(prepared.saved.totals.grossAmount))
+      )
+        throw new ConflictException(
+          "Az előleg-díjbekérő összege nem az, amit a megerősítés mutatott. Nyisd meg újra a megerősítést.",
         );
       // what the window showed is what the proforma carries (the shared issuer re-checks the digest and the dates)
       await this.issuing.issue(
