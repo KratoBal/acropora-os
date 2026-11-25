@@ -273,6 +273,8 @@ export class MaintenanceInvoiceRepository {
     lines: readonly {
       description: string;
       quantity: Prisma.Decimal;
+      /** The unit as sent to Számlázz.hu (the certificate's, or "alkalom" for an old line without one). */
+      unit: string;
       unitNet: Prisma.Decimal;
       vatRatePercent: Prisma.Decimal;
       netAmount: Prisma.Decimal;
@@ -304,7 +306,7 @@ export class MaintenanceInvoiceRepository {
           create: input.lines.map((line) => ({
             description: line.description,
             quantity: line.quantity,
-            unit: "db",
+            unit: line.unit,
             unitNet: line.unitNet,
             vatRatePercent: line.vatRatePercent,
             netAmount: line.netAmount,

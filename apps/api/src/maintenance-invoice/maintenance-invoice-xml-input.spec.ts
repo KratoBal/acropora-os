@@ -138,14 +138,17 @@ describe("maintenanceInvoiceXmlInputFrom", () => {
     );
   });
 
-  it("rounds each line to whole forints, and satisfies unitPrice * quantity(1) = netAmount exactly", () => {
+  it("rounds the LINE TOTAL to whole forints and sends the TIG's real quantity and unit price (acrobot 61289)", () => {
     const { xmlInput } = maintenanceInvoiceXmlInputFrom(baseCertificate);
     const item = xmlInput.items[0]!;
-    // 3 * 233333.3333 = 699999.9999 -> kerekítve 700000
+    // 3 * 233333.3333 = 699999.9999 -> a sorösszeg kerekítve 700000; a mennyiség és az egységár a TIG-é, nem "1 db a sorösszeggel"
     assert.equal(item.netAmount, 700000);
-    assert.equal(item.quantity, 1);
-    assert.equal(item.netUnitPrice, item.netAmount);
-    assert.equal(item.netUnitPrice * item.quantity, item.netAmount);
+    assert.equal(item.quantity, 3);
+    assert.equal(item.netUnitPrice, 233333.3333);
+    // a kerekítési különbség látszik, és fél forintnál kisebb (a TIG-en is ugyanígy áll)
+    assert.ok(
+      Math.abs(item.netUnitPrice * item.quantity - item.netAmount) < 0.5,
+    );
     assert.equal(item.netAmount + item.vatAmount, item.grossAmount);
   });
 
@@ -297,7 +300,7 @@ describe("maintenanceInvoiceXmlInputFrom", () => {
 /**
  * A MEGRENDELÉSES TIG SORA A SZÁMLÁN (Megrendelések S3, acrobot 42206, B). MI
  * PIROSÍT: ha a pontosan szorozható sor nem a valódi mennyiséggel és egységgel
- * megy; ha a nem pontos sor nem "1 db" a sorösszeggel, a mennyiséggel a nevében;
+ * megy; ha a nem pontos sor mégis "1 db" a sorösszeggel lenne (barracuda L1, acrobot 61289);
  * ha a szervizes (egység nélküli) sor alakja megváltozik; ha bármelyik sornál
  * az egységár × mennyiség nem a nettó.
  */
@@ -323,7 +326,7 @@ describe("a megrendeléses TIG sora a számlán", () => {
     );
   });
 
-  it("nem pontos szorzatnál 1 db a sorösszeggel, a mennyiség a névben", () => {
+  it("nem pontos szorzatnál is a valódi mennyiség, egység és egységár megy, a sorösszeg a kerekített", () => {
     const [sor] = sorok([
       {
         description: "Üvegtisztítás",
@@ -335,7 +338,7 @@ describe("a megrendeléses TIG sora a számlán", () => {
     ]);
     assert.deepEqual(
       [sor!.name, sor!.quantity, sor!.unit, sor!.netUnitPrice, sor!.netAmount],
-      ["Üvegtisztítás, 3 m2", 1, "db", 10000, 10000],
+      ["Üvegtisztítás", 3, "m2", 3333.3333, 10000],
     );
   });
 
@@ -377,7 +380,7 @@ describe("a megrendeléses TIG sora a számlán", () => {
     }
   });
 
-  it("egység nélküli, nem pontos szorzatnál 1 db a sorösszeggel, az alkalom a névben", () => {
+  it("egység nélküli, nem pontos szorzatnál is a valódi mennyiség és egységár megy, alkalom egységgel", () => {
     const [sor] = sorok([
       {
         description: "Karbantartás",
@@ -388,11 +391,11 @@ describe("a megrendeléses TIG sora a számlán", () => {
     ]);
     assert.deepEqual(
       [sor!.name, sor!.quantity, sor!.unit, sor!.netUnitPrice, sor!.netAmount],
-      ["Karbantartás, 3 alkalom", 1, "db", 10000, 10000],
+      ["Karbantartás", 3, "alkalom", 3333.3333, 10000],
     );
   });
 
-  it("a szervizes sor (egység nélkül, 1 mennyiséggel) változatlanul 1 db", () => {
+  it('a szervizes sor (egység nélkül, 1 mennyiséggel) is "1 alkalom", ahogy az igazolás írja, nem "1 db" (barracuda L2)', () => {
     const [sor] = sorok([
       {
         description: "Akvárium karbantartás",
@@ -403,12 +406,12 @@ describe("a megrendeléses TIG sora a számlán", () => {
     ]);
     assert.deepEqual(
       [sor!.name, sor!.quantity, sor!.unit],
-      ["Akvárium karbantartás", 1, "db"],
+      ["Akvárium karbantartás", 1, "alkalom"],
     );
   });
 
-  it("minden sorban az egységár × mennyiség a nettó (a Számlázz.hu azonossága)", () => {
-    for (const sor of sorok([
+  it("minden sor a TIG sorának mása: mennyiség és egységár változatlan, a sorösszeg a kerekített, a különbség fél forint alatti", () => {
+    const forras = [
       {
         description: "A",
         quantity: D("2.5"),
@@ -436,12 +439,32 @@ describe("a megrendeléses TIG sora a számlán", () => {
         unitNet: D("15000.4"),
         vatRatePercent: D(27),
       },
-    ]))
+    ];
+    const kesz = sorok(forras);
+    kesz.forEach((sor, index) => {
+      const eredeti = forras[index]!;
+      assert.equal(sor.quantity, eredeti.quantity.toNumber(), sor.name);
+      assert.equal(sor.netUnitPrice, eredeti.unitNet.toNumber(), sor.name);
+      assert.equal(sor.unit, eredeti.quantityUnit ?? "alkalom", sor.name);
+      assert.ok(
+        D(sor.netUnitPrice)
+          .times(sor.quantity)
+          .minus(sor.netAmount)
+          .abs()
+          .lt("0.5"),
+        sor.name,
+      );
+    });
+    // a pontos szorzatú sorokon az azonosság pontosan áll
+    for (const sor of [kesz[0]!, kesz[2]!])
       assert.equal(
         D(sor.netUnitPrice).times(sor.quantity).toString(),
         D(sor.netAmount).toString(),
         sor.name,
       );
+    // a nem pontos szorzatú sor egész forintra kerekített összege: 7 x 1428.5714 = 9999.9998 -> 10000, 15000.4 -> 15000
+    assert.equal(kesz[1]!.netAmount, 10000);
+    assert.equal(kesz[3]!.netAmount, 15000);
   });
 
   it("a megjegyzés a forrásé, alapból a karbantartási mondat", () => {

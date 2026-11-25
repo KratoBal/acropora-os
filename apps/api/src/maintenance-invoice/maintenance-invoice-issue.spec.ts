@@ -84,6 +84,8 @@ function harness(options: {
   environment?: NodeJS.ProcessEnv;
   status?: Row["status"];
   grossOnDraft?: number;
+  /** The unit the draft's STORED lines carry (default: the unit the current mapping sends); "db" simulates a draft made before the shape rule. */
+  storedUnit?: string | null;
   response?: unknown;
   clientError?: Error;
   clientDelayMs?: number;
@@ -111,9 +113,23 @@ function harness(options: {
   };
   const sent: string[] = [];
   const stored = new Map<string, Uint8Array>();
+  // the draft's stored lines: the shape the preview was made with (barracuda L6/L7), here the certificate's own lines
+  const storedLines = () =>
+    ((options.certificate ?? certificate) as typeof certificate).items.map(
+      (item) => ({
+        description: item.description,
+        quantity: item.quantity,
+        unit:
+          options.storedUnit === undefined
+            ? ((item as { quantityUnit?: string | null }).quantityUnit ??
+              "alkalom")
+            : options.storedUnit,
+        unitNet: item.unitNet,
+      }),
+    );
   const repository = {
     partnerPaymentTerms: async () => options.partnerTerms ?? [],
-    invoiceById: async () => ({ ...row, lines: [] }),
+    invoiceById: async () => ({ ...row, lines: storedLines() }),
     claimForIssue: async () => {
       if (row.status !== "DRAFT") return false;
       row.status = "ISSUING";
@@ -134,7 +150,7 @@ function harness(options: {
       },
     ) => {
       Object.assign(row, { status: "ISSUED", syncError: null, ...issued });
-      return { ...row, lines: [] };
+      return { ...row, lines: storedLines() };
     },
     invoicePdfLookup: async () => ({
       id: row.id,
@@ -315,6 +331,32 @@ describe("MaintenanceInvoiceDraftService.issue", () => {
     await assert.rejects(() => service.issue("invoice-1"), ConflictException);
     assert.equal(sent.length, 0);
     assert.equal(row.status, "DRAFT");
+  });
+
+  /*
+    A SOR-ALAK ÖSSZEVETÉSE A KIÁLLÍTÁSKOR (barracuda L7, acrobot 61289, kártya 4a59885d). MI PIROSÍT: ha egy régi alakú (mennyiség,
+    egység vagy egységár más) piszkozat ugyanazzal az összeggel kiáll; ha a hibaüzenet nem az új piszkozatot kéri; ha a Számlázz.hu-t
+    ilyenkor mégis hívja, vagy a kiállítás foglalását elveszi; ha az egyező alakú piszkozat sem áll ki.
+  */
+  it("refuses a draft whose stored lines are of an older shape, before any claim or Számlázz.hu call", async () => {
+    const { service, row, sent } = harness({
+      environment: ON,
+      storedUnit: "db",
+    });
+    await assert.rejects(
+      () => service.issue("invoice-1"),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        /Töröld a piszkozatot, és készíts újat/.test(error.message),
+    );
+    assert.equal(sent.length, 0);
+    assert.equal(row.status, "DRAFT");
+  });
+
+  it("refuses a draft stored with no unit at all (an empty unit is not the sent unit)", async () => {
+    const { service, sent } = harness({ environment: ON, storedUnit: null });
+    await assert.rejects(() => service.issue("invoice-1"), ConflictException);
+    assert.equal(sent.length, 0);
   });
 
   it("issues for real: no preview flag in the request, the number and the REAL PDF on the row", async () => {

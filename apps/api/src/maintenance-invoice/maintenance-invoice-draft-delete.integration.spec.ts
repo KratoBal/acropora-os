@@ -25,6 +25,7 @@ const money = new Prisma.Decimal(1000);
 const line = {
   description: `${PREFIX}sor`,
   quantity: new Prisma.Decimal(2),
+  unit: "alkalom",
   unitNet: new Prisma.Decimal(500),
   vatRatePercent: new Prisma.Decimal(27),
   netAmount: money,

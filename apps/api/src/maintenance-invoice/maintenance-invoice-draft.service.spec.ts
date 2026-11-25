@@ -695,3 +695,79 @@ describe("MaintenanceInvoiceDraftService.pdfFor", () => {
     assert.equal(bytes.toString("utf8"), "stored-pdf-bytes");
   });
 });
+
+/*
+  A TÁROLT SZÁMLA-SOR A KIMENT TÉTEL (barracuda L6, acrobot 61289, kártya 4a59885d). MI PIROSÍT: ha a tárolt sor egysége "db"
+  marad (mint eddig, rögzítve), holott az XML "alkalom"-ot vagy az igazolás egységét küldte; ha a mennyiség vagy az egységár
+  nem a kiment tételé; ha a kiállítás ezért nem tudja összevetni, mit mutatott az előnézet (L7).
+*/
+describe("MaintenanceInvoiceDraftService.draftFor: a tárolt sorok a kiment tételek", () => {
+  const withItems = (items: unknown) =>
+    ({
+      ...baseCertificate,
+      items,
+    }) as unknown as typeof baseCertificate;
+
+  it("az egység nélküli, több alkalmas sor a tárolóban is 2 alkalom x 450 000, nem 1 db", async () => {
+    const { service: subject, created } = service({
+      certificate: withItems([
+        {
+          description: "Cápasuli középső medence",
+          quantity: new Prisma.Decimal(2),
+          unitNet: new Prisma.Decimal(450000),
+          vatRatePercent: new Prisma.Decimal(27),
+        },
+      ]),
+    });
+    await subject.draftFor("cert-1");
+    const [line] = (
+      created[0] as {
+        lines: {
+          quantity: Prisma.Decimal;
+          unit: string;
+          unitNet: Prisma.Decimal;
+        }[];
+      }
+    ).lines;
+    assert.deepEqual(
+      [line!.quantity.toString(), line!.unit, line!.unitNet.toString()],
+      ["2", "alkalom", "450000"],
+    );
+  });
+
+  it("a megrendeléses sor a saját egységével és a tört egységárral tárolódik, ahogy az XML-be ment", async () => {
+    const {
+      service: subject,
+      created,
+      sentXml,
+    } = service({
+      certificate: withItems([
+        {
+          description: "Üvegtisztítás",
+          quantity: new Prisma.Decimal(3),
+          unitNet: new Prisma.Decimal("3333.3333"),
+          vatRatePercent: new Prisma.Decimal(27),
+          quantityUnit: "m2",
+        },
+      ]),
+    });
+    await subject.draftFor("cert-1");
+    const [line] = (
+      created[0] as {
+        lines: {
+          quantity: Prisma.Decimal;
+          unit: string;
+          unitNet: Prisma.Decimal;
+        }[];
+      }
+    ).lines;
+    assert.deepEqual(
+      [line!.quantity.toString(), line!.unit, line!.unitNet.toString()],
+      ["3", "m2", "3333.3333"],
+    );
+    // és ugyanez ment a Számlázz.hu-nak
+    assert.match(sentXml[0]!, /<mennyiseg>3<\/mennyiseg>/);
+    assert.match(sentXml[0]!, /<mennyisegiEgyseg>m2<\/mennyisegiEgyseg>/);
+    assert.match(sentXml[0]!, /<nettoEgysegar>3333\.3333<\/nettoEgysegar>/);
+  });
+});

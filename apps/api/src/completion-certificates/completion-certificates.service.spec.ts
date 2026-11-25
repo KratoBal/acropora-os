@@ -297,6 +297,11 @@ describe("CompletionCertificatesService.issue", () => {
       items.map((item) => [String(item.quantity), String(item.unitNet)]),
       [["3", "200000"]],
     );
+    // a tárolt sor azt az egységet is tárolja, amit a PDF kiír, hogy a számla ebből vegye (barracuda L2, kártya 4a59885d)
+    assert.deepEqual(
+      items.map((item) => item.quantityUnit),
+      ["alkalom"],
+    );
   });
 
   it("megrendelőlap nélkül, tételsor vagy szerződés nélkül nem állít ki; megrendelőlap mellett az nyer", async () => {
