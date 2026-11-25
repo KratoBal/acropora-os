@@ -64,6 +64,36 @@ describe(
         5,
       );
     });
+    it("sorts the day's receipts on the server by the whitelisted column, either way, and keeps the old order without a sort", async () => {
+      const day = "2099-10-03";
+      const totals = async (
+        sort?: Parameters<typeof receiptList>[2],
+        direction?: "asc" | "desc",
+      ) =>
+        (await receiptList(day, 1, sort, direction)).items.map((item) =>
+          Number(item.total),
+        );
+      const asc = await totals("total", "asc");
+      const desc = await totals("total", "desc");
+      assert.equal(asc.length, 7);
+      assert.deepEqual(
+        asc,
+        [...asc].sort((a, b) => a - b),
+      );
+      assert.deepEqual(desc, [...asc].reverse());
+      const numbers = (
+        await receiptList(day, 1, "receiptNumber", "asc")
+      ).items.map((item) => item.receiptNumber);
+      assert.deepEqual(numbers, [...numbers].sort());
+      // without a sort: the time, newest first (as before)
+      const times = (await receiptList(day, 1)).items.map((item) =>
+        new Date(item.issuedAt).getTime(),
+      );
+      assert.deepEqual(
+        times,
+        [...times].sort((a, b) => b - a),
+      );
+    });
     it("uses all receipts in daily totals, exact payment means and lists lines", async () => {
       const result = await receiptList("2099-10-03", 1);
       assert.equal(result.total, 7);

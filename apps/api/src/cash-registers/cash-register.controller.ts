@@ -4,11 +4,46 @@ import {
   PERMISSIONS,
   type CashRegisterReceiptListResponse,
 } from "@acropora/types";
+import {
+  CASH_REGISTER_RECEIPT_SORT_FIELDS,
+  type CashRegisterReceiptSortField,
+} from "@acropora/types";
+import {
+  listOrderBy,
+  SORT_DIRECTIONS,
+  type ListSortSpec,
+  type SortDirection,
+} from "../common/list-sort.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { businessDay, netAmount, type Payment } from "./opg-receipts.js";
+/**
+ * A NYUGTA-LISTA RENDEZÉSE (Balázs kérése, kártya 2f6369a4): a lista egy nap nyugtáit mutatja, 50-esével lapozva, ezért a rendezés
+ * SZERVEROLDALI, a nap összes nyugtáján, nem csak az aktuális lapon. Fehér lista: kelt, végösszeg, nyugtaszám (az egy tábla közvetlen
+ * oszlopai); a döntetlen az azonosító ugyanabban az irányban. Rendezés nélkül az eddigi sorrend (kelt szerint csökkenő).
+ */
+const RECEIPT_SORT: ListSortSpec<
+  CashRegisterReceiptSortField,
+  Prisma.CashRegisterReceiptOrderByWithRelationInput
+> = {
+  fields: {
+    issuedAt: (d) => ({ issuedAt: d }),
+    total: (d) => ({ total: d }),
+    receiptNumber: (d) => ({ receiptNumber: d }),
+  },
+  fallback: [{ issuedAt: "desc" }, { id: "desc" }],
+  tieBreaker: (d) => ({ id: d }),
+};
+
+export const receiptListOrderBy = (
+  sort: CashRegisterReceiptSortField | undefined,
+  direction: SortDirection | undefined,
+) => listOrderBy(RECEIPT_SORT, sort, direction);
+
 export async function receiptList(
   day: string,
   page: number,
+  sort?: CashRegisterReceiptSortField,
+  direction?: SortDirection,
 ): Promise<CashRegisterReceiptListResponse> {
   const where = { businessDay: new Date(`${day}T00:00:00Z`) };
   const pageSize = 50;
@@ -16,7 +51,7 @@ export async function receiptList(
     [
       prisma.cashRegisterReceipt.findMany({
         where,
-        orderBy: [{ issuedAt: "desc" }, { id: "desc" }],
+        orderBy: receiptListOrderBy(sort, direction),
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {
@@ -102,7 +137,12 @@ export async function receiptList(
 @Controller("billing/cash-register-receipts")
 @RequirePermissions(PERMISSIONS.BILLING_VIEW)
 export class CashRegisterController {
-  @Get() list(@Query("day") rawDay?: string, @Query("page") rawPage?: string) {
+  @Get() list(
+    @Query("day") rawDay?: string,
+    @Query("page") rawPage?: string,
+    @Query("sort") rawSort?: string,
+    @Query("direction") rawDirection?: string,
+  ) {
     const day = rawDay ?? businessDay(new Date()),
       page = rawPage === undefined ? 1 : Number(rawPage);
     if (
@@ -114,6 +154,24 @@ export class CashRegisterController {
       page > 100000
     )
       throw new BadRequestException("Érvénytelen nap vagy oldalszám.");
-    return receiptList(day, page);
+    // a rendezés fehér listáról: ismeretlen mező vagy irány 400, nem csendes elhagyás
+    if (
+      rawSort !== undefined &&
+      !(CASH_REGISTER_RECEIPT_SORT_FIELDS as readonly string[]).includes(
+        rawSort,
+      )
+    )
+      throw new BadRequestException("Érvénytelen rendezési mező.");
+    if (
+      rawDirection !== undefined &&
+      !(SORT_DIRECTIONS as readonly string[]).includes(rawDirection)
+    )
+      throw new BadRequestException("Érvénytelen rendezési irány.");
+    return receiptList(
+      day,
+      page,
+      rawSort as CashRegisterReceiptSortField | undefined,
+      rawDirection as SortDirection | undefined,
+    );
   }
 }

@@ -14,6 +14,7 @@ import type {
 import { useCallback, useEffect, useState } from "react";
 
 import { billingDocumentsApi } from "@/lib/api/billing-documents";
+import { useUrlSort } from "@/lib/navigation/use-url-sort";
 
 const COLUMNS = [
   "Nyugtaszám",
@@ -158,6 +159,7 @@ export const RECEIPT_COLUMNS: PilotTableColumn<Receipt>[] = [
   {
     id: "number",
     header: "Nyugtaszám / AP",
+    sortable: true,
     cell: (r) => (
       <details>
         <summary className="cursor-pointer font-medium">
@@ -178,6 +180,7 @@ export const RECEIPT_COLUMNS: PilotTableColumn<Receipt>[] = [
     id: "issuedAt",
     header: "Kelt",
     width: "160px",
+    sortable: true,
     nowrap: true,
     cell: (r) =>
       new Intl.DateTimeFormat("hu-HU", {
@@ -196,6 +199,7 @@ export const RECEIPT_COLUMNS: PilotTableColumn<Receipt>[] = [
     id: "total",
     header: "Végösszeg",
     width: "140px",
+    sortable: true,
     nowrap: true,
     cell: (r) => <span className="font-medium">{amount(r.total)}</span>,
   },
@@ -216,7 +220,18 @@ export const RECEIPT_COLUMNS: PilotTableColumn<Receipt>[] = [
   },
 ];
 
+/**
+ * A RENDEZHETŐ OSZLOPOK (Balázs kérése, kártya 2f6369a4): a tábla oszlop-azonosítója -> a szerver mezője. A nyugta-lista egy nap nyugtáit
+ * lapozza, ezért a rendezés a szerveren fut (a nap összes nyugtáján); a fizetési mód és az állapot számolt, azok nem rendezhetők.
+ */
+export const RECEIPT_SORT_COLUMNS = {
+  number: "receiptNumber",
+  issuedAt: "issuedAt",
+  total: "total",
+} as const;
+
 function CashRegisterReceiptsView({ token }: { token: string }) {
+  const { sort, onSort, apiSort } = useUrlSort(RECEIPT_SORT_COLUMNS);
   const [day, setDay] = useState(() =>
     new Intl.DateTimeFormat("en-CA", {
       timeZone: "Europe/Budapest",
@@ -229,12 +244,17 @@ function CashRegisterReceiptsView({ token }: { token: string }) {
     [data, setData] = useState<CashRegisterReceiptListResponse | null>(null),
     [error, setError] = useState<string | null>(null),
     [retry, setRetry] = useState(0);
+  // a rendezés váltása az 1. oldalra áll (a 3. oldalon állva az új sorrend 3. oldala nem az, amit a felhasználó várna)
+  const sortKey = apiSort ? `${apiSort.sort}:${apiSort.direction}` : "";
+  useEffect(() => {
+    setPage(1);
+  }, [sortKey]);
   useEffect(() => {
     const controller = new AbortController();
     setData(null);
     setError(null);
     void billingDocumentsApi
-      .cashRegisterReceipts(token, day, page, controller.signal)
+      .cashRegisterReceipts(token, day, page, controller.signal, apiSort)
       .then((result) => {
         if (!controller.signal.aborted) setData(result);
       })
@@ -247,7 +267,7 @@ function CashRegisterReceiptsView({ token }: { token: string }) {
           );
       });
     return () => controller.abort();
-  }, [token, day, page, retry]);
+  }, [token, day, page, retry, apiSort]);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -349,6 +369,8 @@ function CashRegisterReceiptsView({ token }: { token: string }) {
               rowKey={(r) => r.id}
               rowTestId="receipt-row"
               minWidth={RECEIPT_TABLE_MIN_WIDTH}
+              sort={sort}
+              onSort={onSort}
             />
             {data.items.length === 0 && (
               <p className="px-5 py-14 text-center text-pilot-grey-600">

@@ -64,6 +64,18 @@ export interface BillingDocumentListQuery {
 }
 
 /**
+ * A NYUGTA-LISTA RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4): a lista egy nap nyugtáit mutatja, 50-esével lapozva, ezért a rendezés
+ * szerveroldali, az egy tábla közvetlen oszlopaira (a fizetési mód és az állapot számolt, azok nem). Az alap: kelt szerint csökkenő.
+ */
+export const CASH_REGISTER_RECEIPT_SORT_FIELDS = [
+  "issuedAt",
+  "total",
+  "receiptNumber",
+] as const;
+export type CashRegisterReceiptSortField =
+  (typeof CASH_REGISTER_RECEIPT_SORT_FIELDS)[number];
+
+/**
  * A KIMENŐ LISTA RENDEZHETŐ OSZLOPAI (Balázs kérése, kártya 2f6369a4): a lista KÉT forrásból áll össze (a saját `Invoice` és a Számlázz.hu
  * feedje), mindkettő az adatbázisban rendez, és az összefésülés ugyanazzal a szabállyal fésül. Ezért csak olyan mező szerepelhet itt, ami
  * MINDKÉT táblában ugyanaz a szám vagy nap: a kiállítás napja, a határidő és a bruttó összeg. A szöveges oszlopok (vevő, bizonylatszám,

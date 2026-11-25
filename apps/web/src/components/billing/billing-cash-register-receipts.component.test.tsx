@@ -1,7 +1,20 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CashRegisterReceiptListResponse } from "@acropora/types";
+import { urlNavigation } from "@/test/url-navigation";
 import { BillingReceiptsView } from "./billing-receipts-view";
+
+// a rendezés az URL-ben áll (`useUrlSort`): a közös, élő URL-hamisító
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/url-navigation")).nextNavigationModule,
+);
 const api = vi.hoisted(() => ({
   cashRegisterReceipts: vi.fn(),
   receipts: vi.fn(),
@@ -52,6 +65,7 @@ const data: CashRegisterReceiptListResponse = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  urlNavigation.reset("/penzugy/szamlazas");
   api.cashRegisterReceipts.mockResolvedValue(data);
   api.receipts.mockResolvedValue({ received: 3, items: [] });
 });
@@ -75,6 +89,7 @@ describe("cash-register receipts view", () => {
         "2026-10-03",
         1,
         expect.any(AbortSignal),
+        null,
       ),
     );
     fireEvent.click(screen.getByRole("button", { name: "Számlázz.hu" }));
@@ -104,5 +119,66 @@ describe("cash-register receipts view", () => {
     expect(screen.getByText("Sztornó")).toBeInTheDocument();
     expect(screen.getByText("Visszáru")).toBeInTheDocument();
     expect(screen.getByText(/Hibakód: OPG_FILE_GAP/)).toBeInTheDocument();
+  });
+
+  /* A nyugta-lista rendezése (Balázs kérése, kártya 2f6369a4): szerveroldali, az URL-ben, a nap összes nyugtáján. */
+  it("a rendezés az URL-ből a kérésbe megy, és a fejlécre kattintva asc, desc, alap körbe jár, az 1. oldalra állva", async () => {
+    urlNavigation.reset("/penzugy/szamlazas", "sort=total&direction=desc");
+    render(<BillingReceiptsView token="test" />);
+    await waitFor(() =>
+      expect(api.cashRegisterReceipts).toHaveBeenLastCalledWith(
+        "test",
+        expect.any(String),
+        1,
+        expect.any(AbortSignal),
+        { sort: "total", direction: "desc" },
+      ),
+    );
+    const total = await screen.findByRole("columnheader", {
+      name: /Végösszeg/,
+    });
+    expect(total).toHaveAttribute("aria-sort", "descending");
+    // a harmadik kattintás az alap: a kulcsok törlődnek, a kérés rendezés nélkül megy
+    fireEvent.click(within(total).getByRole("button"));
+    await waitFor(() =>
+      expect(api.cashRegisterReceipts).toHaveBeenLastCalledWith(
+        "test",
+        expect.any(String),
+        1,
+        expect.any(AbortSignal),
+        null,
+      ),
+    );
+    // egy másik oszlop (Kelt) növekvőben indul
+    fireEvent.click(
+      within(
+        await screen.findByRole("columnheader", { name: /Kelt/ }),
+      ).getByRole("button"),
+    );
+    await waitFor(() =>
+      expect(api.cashRegisterReceipts).toHaveBeenLastCalledWith(
+        "test",
+        expect.any(String),
+        1,
+        expect.any(AbortSignal),
+        { sort: "issuedAt", direction: "asc" },
+      ),
+    );
+  });
+
+  it("csak a Nyugtaszám, a Kelt és a Végösszeg rendezhető: a Fizetési mód és az Állapot (számolt) nem", async () => {
+    render(<BillingReceiptsView token="test" />);
+    for (const name of [/Nyugtaszám/, /Kelt/, /Végösszeg/])
+      expect(
+        within(await screen.findByRole("columnheader", { name })).getAllByRole(
+          "button",
+        ),
+      ).toBeTruthy();
+    for (const name of [/Fizetési mód/, /Állapot/])
+      expect(
+        within(await screen.findByRole("columnheader", { name })).queryByRole(
+          "button",
+        ),
+      ).toBeNull();
   });
 });
