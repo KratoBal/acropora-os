@@ -63,6 +63,18 @@ export class ServiceJobsController {
   }
 
   /**
+   * A LISTA SZŰRŐ-LEHETŐSÉGEI (partnerek, helyszínek): KONKRÉT ÚT, A `:id` ELÉ.
+   */
+  @Get("facets")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  listFacets(
+    @Query() query: ServiceJobListQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.listFacets(query, user);
+  }
+
+  /**
    * A LATHATOSAGI HOZZARENDELESEK -- KONKRET UT, A `:id` ELE.
    *
    * A `:id` mintat a `visibility` szo kulonben elnyelne, es a hibajegy-reszletlap
