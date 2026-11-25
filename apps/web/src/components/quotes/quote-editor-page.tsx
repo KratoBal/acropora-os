@@ -56,6 +56,7 @@ import {
   itemLineAmounts,
 } from "./quote-gross-price";
 import { QUOTES_PATH } from "./quote-list-page";
+import { quoteMailState, QuoteSendDrawer } from "./quote-send";
 import { canEditQuoteTitle, QuoteTitleEditor } from "./quote-title-editor";
 
 type Item = QuoteInternalBlock["items"][number];
@@ -77,6 +78,23 @@ const ADDABLE: ReadonlyArray<QuoteBlockKindValue> = [
   "PAGE_BREAK",
 ];
 const EMPTY = JSON.stringify(EMPTY_QUOTE_RICH_TEXT);
+
+/**
+ * A MENTÉS ÁLLAPOTA A FEJLÉCBEN (Balázs 2026-11-25, card b22949e8): egy összesítő a blokkok és a fizetési ütemezés mentetlen állapotából,
+ * hogy ne kelljen végigmenni a lapon. A szám UGYANAZ, amit az elhagyáskori figyelmeztetés ("N mentetlen rész") mond: egy forrás
+ * (`dirtyBlocks`). `role="status"`, hogy a felolvasó is szóljon, ha megváltozik.
+ */
+export function QuoteSaveStatus({ unsaved }: { unsaved: number }) {
+  return (
+    <span role="status" aria-live="polite">
+      {unsaved > 0 ? (
+        <PilotBadge variant="amber">{unsaved} mentetlen rész</PilotBadge>
+      ) : (
+        <PilotBadge variant="success">Minden mentve</PilotBadge>
+      )}
+    </span>
+  );
+}
 
 /** A szerkeszthető verzió: az egyetlen DRAFT, ha van. */
 export function draftVersion(
@@ -101,6 +119,7 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
   const canManage = Boolean(
     user && hasPermission(user, PERMISSIONS.QUOTES_MANAGE),
   );
+  const canSend = Boolean(user && hasPermission(user, PERMISSIONS.QUOTES_SEND));
   const canCosts = Boolean(
     user && hasPermission(user, PERMISSIONS.QUOTES_COSTS_VIEW),
   );
@@ -110,6 +129,7 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
 
   const [quote, setQuote] = useState<QuoteDetailDto | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
+  const [sending, setSending] = useState(false);
   const [costing, setCosting] = useState<QuoteCostingDto | null>(null);
   const [snippets, setSnippets] = useState<QuoteSnippetDto[]>([]);
   const [snippetId, setSnippetId] = useState("");
@@ -277,39 +297,83 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
     return <Alert variant="danger" title="Hiba történt" description={error} />;
   if (!quote) return <Skeleton className="h-64 w-full" />;
 
+  // THE HEADER'S SAVED INDICATOR AND SEND BUTTON (Balázs 2026-11-25, card b22949e8): the same rule as the detail page's button
+  const mail = quoteMailState(quote, canSend);
+  const unsaved = dirtyBlocks.size;
   const header = (
-    <PilotPageHeader
-      eyebrow="Pénzügy / Árajánlatok"
-      title={`${quote.quoteNumber} · ${quote.title}`}
-      description="Szerkeszd az ügyfélnek látható ajánlati dokumentumot blokkokból, miközben a belső kalkuláció külön marad."
-      actions={
-        <div className="flex flex-wrap gap-3">
-          {canEditQuoteTitle(quote, canManage) ? (
+    <>
+      <PilotPageHeader
+        eyebrow="Pénzügy / Árajánlatok"
+        title={`${quote.quoteNumber} · ${quote.title}`}
+        description="Szerkeszd az ügyfélnek látható ajánlati dokumentumot blokkokból, miközben a belső kalkuláció külön marad."
+        actions={
+          <div className="flex flex-wrap items-center gap-3">
+            {version && canManage ? (
+              <QuoteSaveStatus unsaved={unsaved} />
+            ) : null}
+            {mail.canMail && mail.sendable ? (
+              <>
+                <PilotButton
+                  variant="secondary"
+                  size="regular"
+                  disabled={unsaved > 0 || busy}
+                  aria-describedby="quote-send-note"
+                  onClick={() => setSending(true)}
+                >
+                  {mail.label}
+                </PilotButton>
+                {/* said out loud, not in a tooltip on a grey button: why it is grey, or WHICH version goes out */}
+                <span
+                  id="quote-send-note"
+                  className="text-xs text-pilot-grey-600"
+                >
+                  {unsaved > 0
+                    ? "Előbb mentsd a mentetlen részeket."
+                    : `A publikált v${mail.sendable.versionNumber} megy ki, nem a szerkesztett piszkozat.`}
+                </span>
+              </>
+            ) : null}
+            {canEditQuoteTitle(quote, canManage) ? (
+              <PilotButton
+                variant="secondary"
+                size="regular"
+                onClick={() => setEditingTitle(true)}
+              >
+                Cím szerkesztése
+              </PilotButton>
+            ) : null}
             <PilotButton
               variant="secondary"
               size="regular"
-              onClick={() => setEditingTitle(true)}
+              onClick={() => go(`${QUOTES_PATH}/${quote.id}`)}
             >
-              Cím szerkesztése
+              Ajánlat adatlapja
             </PilotButton>
-          ) : null}
-          <PilotButton
-            variant="secondary"
-            size="regular"
-            onClick={() => go(`${QUOTES_PATH}/${quote.id}`)}
-          >
-            Ajánlat adatlapja
-          </PilotButton>
-          <PilotButton
-            variant="secondary"
-            size="regular"
-            onClick={() => go(`${QUOTES_PATH}/${quote.id}/pdf`)}
-          >
-            PDF előnézet
-          </PilotButton>
-        </div>
-      }
-    />
+            <PilotButton
+              variant="secondary"
+              size="regular"
+              onClick={() => go(`${QUOTES_PATH}/${quote.id}/pdf`)}
+            >
+              PDF előnézet
+            </PilotButton>
+          </div>
+        }
+      />
+      {/* mounted only while it is open: a closed drawer keeps its content in the page, and this page already has a title and a dirty-count to find by text */}
+      {sending ? (
+        <QuoteSendDrawer
+          token={token}
+          quote={quote}
+          version={mail.sendable}
+          open
+          onClose={() => setSending(false)}
+          onDone={(next) => {
+            saved(next);
+            setSending(false);
+          }}
+        />
+      ) : null}
+    </>
   );
 
   if (!version || !canManage)
