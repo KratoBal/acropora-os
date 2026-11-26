@@ -218,19 +218,35 @@ export function variantLabel(
   if (!v) return null;
   return `${v.product.name}${v.name ? ` · ${v.name}` : ""} (${v.sku})`;
 }
-/** Offered and optional net totals of a version, exact (P1). */
+/**
+ * Offered and optional net totals of a version, exact (P1), and their GROSS totals as the PDF counts them (Luca 2026-11-26, card
+ * 7337010c: the editor's internal costing shows the gross beside the net): each line at its own VAT rate, summed unrounded, rounded once
+ * by `quoteMoneyFixed` (the PDF's and the quote list's rule), so a mixed-rate quote's gross is the PDF's to the unit.
+ */
 function netTotals(v: QuoteRow["versions"][number]) {
   let offered = new Prisma.Decimal(0);
   let optional = new Prisma.Decimal(0);
+  let offeredGross = new Prisma.Decimal(0);
+  let optionalGross = new Prisma.Decimal(0);
   for (const b of v.blocks)
     for (const i of b.items) {
       const line = i.quantity.times(i.unitNetPrice);
-      if (i.isOptional) optional = optional.plus(line);
-      else offered = offered.plus(line);
+      const gross = line.times(
+        new Prisma.Decimal(1).plus(i.vatRatePercent.dividedBy(100)),
+      );
+      if (i.isOptional) {
+        optional = optional.plus(line);
+        optionalGross = optionalGross.plus(gross);
+      } else {
+        offered = offered.plus(line);
+        offeredGross = offeredGross.plus(gross);
+      }
     }
   return {
     netTotal: offered.toDecimalPlaces(4).toFixed(4),
     optionalNetTotal: optional.toDecimalPlaces(4).toFixed(4),
+    grossTotal: quoteMoneyFixed(offeredGross, v.currency),
+    optionalGrossTotal: quoteMoneyFixed(optionalGross, v.currency),
   };
 }
 function internalVersionDto(

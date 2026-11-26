@@ -665,13 +665,24 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
                 </p>
                 {costing ? (
                   <>
+                    {/* the gross under the net (Luca 2026-11-26, card 7337010c): the server's, rounded the PDF's way, so a price-sensitive quote needs no sum in the head and no PDF */}
                     <Fact
                       label="Eladási ár (nettó)"
                       value={formatQuoteMoney(costing.totals.net, v.currency)}
+                      detail={
+                        v.grossTotal
+                          ? `bruttó ${formatQuoteMoney(v.grossTotal, v.currency)}`
+                          : null
+                      }
                     />
                     <Fact
                       label="Kiválasztott opciók"
                       value={formatQuoteMoney(v.optionalNetTotal, v.currency)}
+                      detail={
+                        v.optionalGrossTotal
+                          ? `bruttó ${formatQuoteMoney(v.optionalGrossTotal, v.currency)}`
+                          : null
+                      }
                     />
                     <Fact
                       label="Becsült beszerzés"
@@ -1159,11 +1170,21 @@ function ItemGrossLines({
   );
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+function Fact({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  /** a second line under the value (the gross under a net amount) */
+  detail?: string | null;
+}) {
   return (
     <div>
       <p className="text-xs text-pilot-grey-600">{label}</p>
       <p className="mt-1 font-semibold text-pilot-grey-900">{value}</p>
+      {detail ? <p className="text-xs text-pilot-grey-600">{detail}</p> : null}
     </div>
   );
 }

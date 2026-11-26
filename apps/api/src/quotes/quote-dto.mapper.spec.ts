@@ -588,6 +588,48 @@ test("P1: the detail carries the names and the offered/optional net totals, exac
   // 2.000001 * 100000.1234 = 200000.3468001234 -> 4 places; the option apart
   assert.equal(dto.versions[0]!.netTotal, "200000.3468");
   assert.equal(dto.versions[0]!.optionalNetTotal, "0.9999");
+  // the gross beside them (card 7337010c): 200000.3468001234 * 1.27 = 254000.44..., rounded once; the option 0.9999 * 1.27 = 1.27
+  assert.equal(dto.versions[0]!.grossTotal, "254000");
+  assert.equal(dto.versions[0]!.optionalGrossTotal, "1");
+});
+
+/*
+  THE INTERNAL COSTING'S GROSS IS THE PDF'S (Luca 2026-11-26, card 7337010c). What turns this red: a gross counted at one rate for the
+  whole quote, a gross rounded per line (or per rate) instead of once, the options counted into the offered gross or left out of their own.
+*/
+test("the internal detail's gross totals are the PDF's: offered and optional apart, each line at its own rate", () => {
+  const row = quoteFixture();
+  const block = row.versions[0]!.blocks[0]!;
+  const template = block.items[0]!;
+  block.items = (
+    [
+      ["3", "333.3333", "5", false],
+      ["1", "1234.5678", "0", false],
+      ["2", "1500", "27", false],
+      ["1", "50000", "27", false],
+      ["2", "1000.5", "5", true],
+      ["1", "999.99", "27", true],
+    ] as const
+  ).map(([quantity, unitNetPrice, rate, isOptional], position) => ({
+    ...template,
+    id: position === 0 ? template.id : `line-${position}`,
+    position,
+    quantity: new Prisma.Decimal(quantity),
+    unitNetPrice: new Prisma.Decimal(unitNetPrice),
+    vatRatePercent: new Prisma.Decimal(rate),
+    isOptional,
+  }));
+  const version = internalQuoteDto(row).versions[0]!;
+  const pdf = quoteTotals([{ items: block.items }] as never);
+  assert.equal(version.grossTotal, quoteMoneyFixed(pdf.gross, "HUF"));
+  assert.equal(
+    version.optionalGrossTotal,
+    quoteMoneyFixed(pdf.optionalGross, "HUF"),
+  );
+  // 1049.999895 + 1234.5678 + 3810 + 63500 = 69594.567695 -> 69595
+  assert.equal(version.grossTotal, "69595");
+  // 2101.05 + 1269.9873 = 3371.0373 -> 3371
+  assert.equal(version.optionalGrossTotal, "3371");
 });
 
 test("P1: a linked variant is named on the internal detail only", () => {

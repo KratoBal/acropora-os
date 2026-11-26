@@ -134,6 +134,12 @@ export interface QuoteInternalVersion extends Omit<
   netTotal: string;
   /** the optional lines' net total, shown apart (P1) */
   optionalNetTotal: string;
+  /**
+   * the offered and the optional lines' GROSS totals as the PDF counts them (each line's own VAT rate, summed unrounded, rounded once:
+   * forint whole, other currencies two places). Optional: an older answer has none (Luca 2026-11-26, card 7337010c, the internal costing).
+   */
+  grossTotal?: string;
+  optionalGrossTotal?: string;
   blocks: QuoteInternalBlock[];
   /** the internal BOM, without cost fields unless `quotes.costs.view` */
   bomItems: QuoteBomLineDto[];
