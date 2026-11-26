@@ -249,6 +249,14 @@ const HU_WROTE_LINE = /^.{3,200}\s(?:írta|ezt írta):\s*$/i;
 
 function isHungarianReplyHeader(lines: string[], index: number): boolean {
   const trimmed = lines[index]!.trim();
+  // THE HEADER WRAPPED BY THE CLIENT (barracuda, #2993): the first line carries Gmail's "időpontban", the second the address and "ezt írta:". The
+  // cut belongs to the FIRST line, or its half stays in the report text.
+  if (
+    /\sidőpontban(?:\s|$)/i.test(trimmed) &&
+    !/(?:írta|ezt írta):\s*$/i.test(trimmed) &&
+    /^\S.{0,200}(?:írta|ezt írta):\s*$/i.test((lines[index + 1] ?? "").trim())
+  )
+    return true;
   if (!HU_WROTE_LINE.test(trimmed)) return false;
   if (/\sidőpontban\s/i.test(trimmed)) return true;
   const next = lines
