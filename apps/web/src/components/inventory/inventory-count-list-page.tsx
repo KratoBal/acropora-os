@@ -155,12 +155,13 @@ export const countColumns = (
     cell: (count) => (
       <PilotButton
         variant="ghost"
+        aria-label="Megnyitás"
         onClick={(event) => {
           event.stopPropagation();
           open(`/raktar/${count.id}`);
         }}
       >
-        Megnyitás
+        <span aria-hidden="true">→</span>
       </PilotButton>
     ),
   },
@@ -276,22 +277,21 @@ export function InventoryCountListPage() {
         }
       />
 
-      <PilotCard className="p-4">
-        <div className="max-w-xs">
-          <PilotSelect
-            aria-label="Állapot szűrő"
-            value={status}
-            onChange={(next) =>
-              update({ status: next === "all" ? null : next, page: null })
-            }
-          >
-            <option value="all">Minden állapot</option>
-            <option value="DRAFT">Piszkozat</option>
-            <option value="UPLOADED">Feltöltve</option>
-            <option value="CORRECTED">Korrigálva</option>
-          </PilotSelect>
-        </div>
-      </PilotCard>
+      {/* A SZŰRŐ NEM KÜLÖN KÁRTYA (Picasso 3.19): egyetlen legördülő egy teljes kártyát foglalt */}
+      <div className="max-w-xs">
+        <PilotSelect
+          aria-label="Állapot szűrő"
+          value={status}
+          onChange={(next) =>
+            update({ status: next === "all" ? null : next, page: null })
+          }
+        >
+          <option value="all">Minden állapot</option>
+          <option value="DRAFT">Piszkozat</option>
+          <option value="UPLOADED">Feltöltve</option>
+          <option value="CORRECTED">Korrigálva</option>
+        </PilotSelect>
+      </div>
 
       {error ? (
         <Alert
@@ -321,14 +321,6 @@ export function InventoryCountListPage() {
 
       {data && data.items.length > 0 ? (
         <PilotCard className="overflow-hidden">
-          <div className="flex justify-end px-5 py-3">
-            <Pagination
-              position="top"
-              page={data.pagination.page}
-              totalPages={data.pagination.totalPages}
-              onPageChange={setPage}
-            />
-          </div>
           <PilotDataTable
             columns={countColumns(router.push)}
             sort={sort}

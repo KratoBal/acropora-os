@@ -118,6 +118,23 @@ describe("InventoryCountListPage -- állapot az URL-ben", () => {
     expect(urlNavigation.push.mock.calls).toEqual([["/raktar/count-1"]]);
   });
 
+  // Picasso 3.19: the row's end said "Megnyitás" in words (elsewhere an arrow or the whole row), two pagers around the table, and one select in a full card
+  it("a sor vége nyíl (a gomb neve marad Megnyitás), egy lapozó van, és a szűrő nem külön kártya", async () => {
+    render(<InventoryCountListPage />);
+    await screen.findByText("LELT-2026-001");
+    const row = screen.getAllByTestId("inventory-count-row")[0]!;
+    const open = within(row).getByRole("button", { name: "Megnyitás" });
+    expect(open.textContent).toBe("→");
+    expect(
+      screen.queryByRole("navigation", { name: "Lapozás, felül" }),
+    ).toBeNull();
+    // the filter select sits in no card: its nearest card-like ancestor is the page root
+    const filter = screen.getByLabelText("Állapot szűrő");
+    expect(
+      filter.closest("[class*='rounded-2xl'], [class*='shadow']"),
+    ).toBeNull();
+  });
+
   it("a rögzített oszlopok összege belefér a tábla minimumába", () => {
     const sum = countColumns(() => undefined).reduce(
       (acc, c) => acc + Number(/^(\d+)px$/.exec(c.width ?? "")?.[1]),

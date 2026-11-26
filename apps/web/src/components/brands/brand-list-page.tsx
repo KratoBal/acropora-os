@@ -215,7 +215,6 @@ export function BrandListPage() {
           </div>
         }
       />
-      {canRunCatalogActions ? <CatalogActionsPanel token={token} /> : null}
       {error ? (
         <Alert
           variant="danger"
@@ -275,14 +274,6 @@ export function BrandListPage() {
           </PilotCard>
           {data.items.length ? (
             <PilotCard className="overflow-x-auto">
-              <div className="flex justify-end px-3 py-2">
-                <Pagination
-                  position="top"
-                  page={data.pagination.page}
-                  totalPages={data.pagination.totalPages}
-                  onPageChange={goToPage}
-                />
-              </div>
               <PilotDataTable
                 columns={columns}
                 sort={sort}
@@ -320,6 +311,20 @@ export function BrandListPage() {
             onPageChange={goToPage}
           />
         </>
+      ) : null}
+      {/*
+        A KARBANTARTÓ MŰVELETEK A LISTA ALATT ÁLLNAK, ÖSSZECSUKVA (Picasso 3.19): a "Katalógus-műveletek" panel 500 px magas volt a lista fölött (öt Próba / Végrehajtás pár hosszú belső
+        szavakkal), az adatlista a görgetés alá csúszott. A karbantartás ritka, az adat a lap dolga: a panel megmarad, de nyitni kell. A lista egy lapozót kap (az alsót): kettő zaj volt.
+      */}
+      {canRunCatalogActions ? (
+        <details className="rounded-xl border border-pilot-grey-200 bg-white">
+          <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-dusk-800">
+            Karbantartó műveletek (katalógus)
+          </summary>
+          <div className="p-2">
+            <CatalogActionsPanel token={token} />
+          </div>
+        </details>
       ) : null}
     </div>
   );
