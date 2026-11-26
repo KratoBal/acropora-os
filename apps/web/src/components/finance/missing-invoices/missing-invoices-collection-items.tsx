@@ -166,6 +166,10 @@ export function CollectionItemsSection({ token }: { token: string }) {
     },
   ];
 
+  const noneJudged =
+    data !== null &&
+    Object.values(data.counts).reduce((sum, count) => sum + count, 0) === 0;
+
   return (
     <section aria-label="A gyűjtő ítéletei" className="space-y-3">
       <header>
@@ -178,31 +182,35 @@ export function CollectionItemsSection({ token }: { token: string }) {
           legutóbbiak vannak elöl.
         </p>
       </header>
-      <div
-        role="group"
-        aria-label="Ítélet szerint"
-        className="flex flex-wrap gap-2"
-      >
-        <PilotButton
-          size="action"
-          variant={verdict === "" ? "primary" : "secondary"}
-          aria-pressed={verdict === ""}
-          onClick={() => setVerdict("")}
+      {/* NO ROW OF (0) PILLS (Picasso 3.25): before the collector has judged any file, every filter counted nothing; the row
+          comes when there is something to filter */}
+      {noneJudged ? null : (
+        <div
+          role="group"
+          aria-label="Ítélet szerint"
+          className="flex flex-wrap gap-2"
         >
-          Mind
-        </PilotButton>
-        {INVOICE_COLLECTION_ITEM_VERDICTS.map((name) => (
           <PilotButton
-            key={name}
             size="action"
-            variant={verdict === name ? "primary" : "secondary"}
-            aria-pressed={verdict === name}
-            onClick={() => setVerdict(name)}
+            variant={verdict === "" ? "primary" : "secondary"}
+            aria-pressed={verdict === ""}
+            onClick={() => setVerdict("")}
           >
-            {`${VERDICT_LABELS[name]} (${data?.counts[name] ?? "…"})`}
+            Mind
           </PilotButton>
-        ))}
-      </div>
+          {INVOICE_COLLECTION_ITEM_VERDICTS.map((name) => (
+            <PilotButton
+              key={name}
+              size="action"
+              variant={verdict === name ? "primary" : "secondary"}
+              aria-pressed={verdict === name}
+              onClick={() => setVerdict(name)}
+            >
+              {`${VERDICT_LABELS[name]} (${data?.counts[name] ?? "…"})`}
+            </PilotButton>
+          ))}
+        </div>
+      )}
       {error ? (
         <Alert
           variant="danger"
@@ -212,6 +220,10 @@ export function CollectionItemsSection({ token }: { token: string }) {
       ) : data === null ? (
         <p role="status" className="text-sm text-pilot-grey-500">
           Betöltés…
+        </p>
+      ) : noneJudged ? (
+        <p className="text-sm text-pilot-grey-500">
+          A gyűjtő még egy fájlról sem döntött.
         </p>
       ) : data.items.length === 0 ? (
         <p className="text-sm text-pilot-grey-500">Nincs ilyen ítéletű fájl.</p>

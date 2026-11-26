@@ -41,16 +41,19 @@ export function SettlementSyncStrip({
       >
         {active ? "Aktív" : "Kikapcsolva"}
       </span>
-      <div
+      {/* ONE LINE, NOT TWO (Picasso 3.22): the switched-off name and its reason stood as two paragraphs, a tall warm band on
+          every visit; the name now leads the sentence */}
+      <p
         className={`text-xs ${
           active ? "text-pilot-aqua-700" : "text-pilot-accent-warm-text"
         }`}
       >
         {title ? (
-          <p className="font-semibold text-pilot-grey-900">{title}</p>
+          <span className="font-semibold text-pilot-grey-900">{title}</span>
         ) : null}
-        <p>{text}</p>
-      </div>
+        {title ? ". " : null}
+        {text}
+      </p>
     </section>
   );
 }
