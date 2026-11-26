@@ -6,6 +6,7 @@ import type {
   DocumentStore,
 } from "../service-assets/document-store/document-store.js";
 import {
+  pdfInputOf,
   QuotePublishService,
   versionContentHash,
 } from "./quote-publish.service.js";
@@ -185,6 +186,66 @@ describe("the version fingerprint and a replacement", () => {
     assert.equal(
       versionContentHash(first as never),
       versionContentHash(renamed as never),
+    );
+  });
+});
+
+/*
+  KIVÁLTOTT TÉTEL a PDF bemenetén (card 2540d9d4): a közzétételkor a PDF megkapja, melyik tétel melyiket váltja ki, és a kiváltott NEVÉT.
+  MI PIROSÍT: ha a bemenet nem viszi a kiváltást (a PDF "kiegészítés"-t írna, és az "együtt" összeg a kiváltottat is hozzáadná); ha a név más
+  tételé; ha egy kiváltás nélküli tételen mező jelenik meg.
+*/
+describe("the PDF input and a replacement", () => {
+  const tree = () =>
+    ({
+      quote: { quoteNumber: "AJ-1", title: "Cím" },
+      versionNumber: 1,
+      validUntil: new Date("2026-12-31T00:00:00Z"),
+      currency: "HUF",
+      priceDisplay: "NET",
+      customerSnapshot: null,
+      milestones: [],
+      blocks: [
+        {
+          kind: "SECTION",
+          title: "Blokk",
+          content: null,
+          keepWithNext: false,
+          startOnNewPage: false,
+          items: [
+            {
+              id: "a",
+              name: "Régi szűrő",
+              replacesItemId: null,
+              isOptional: false,
+            },
+            {
+              id: "o",
+              name: "Új szűrő",
+              replacesItemId: "a",
+              isOptional: true,
+            },
+          ].map((i) => ({
+            ...i,
+            description: null,
+            quantity: { toString: () => "1" },
+            unit: "db",
+            unitNetPrice: { toString: () => "1000" },
+            vatRatePercent: { toString: () => "27" },
+          })),
+        },
+      ],
+    }) as never;
+
+  it("carries the refs and the replaced line's name", () => {
+    const items = pdfInputOf(tree(), new Date("2026-11-26T00:00:00Z"))
+      .blocks[0]!.items;
+    assert.deepEqual(
+      items.map((i) => [i.ref, i.replacesRef ?? null, i.replacesName ?? null]),
+      [
+        ["a", null, null],
+        ["o", "a", "Régi szűrő"],
+      ],
     );
   });
 });
