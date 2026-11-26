@@ -112,11 +112,12 @@ export function WorksheetEntries({
   };
 
   /*
-    AZ ÜRES, NEM SZERKESZTHETŐ KÁRTYA EGY SOR (kártya 7f23785c környéke, picasso R6, acrobot 62415): egy lezárt lapon a nulla elemű Bejegyzések és
-    Anyagigények doboza együtt 400 px volt, és semmit nem mondott. Ahol nincs mit tenni vele (nincs írási jog, nincs bejegyzés, nincs hiba), a
-    kártya helyett egy sor áll: kimondja, hogy nincs, és nem foglal helyet. Szerkeszthető lapon a kártya marad (ott a Bejegyzés gomb van benne).
+    AZ ÜRES, NEM SZERKESZTHETŐ KÁRTYA EGY SOR (picasso R6, acrobot 62415): egy lezárt lapon a nulla elemű Bejegyzések és Anyagigények doboza együtt
+    400 px volt, és semmit nem mondott. Ahol nincs mit tenni vele (nincs írási jog, a betöltött lista üres), a kártya helyett egy sor áll: kimondja,
+    hogy nincs, és nem foglal helyet. Betöltési hibánál a lista nem töltődik be (`entries` marad `null`), tehát a hiba a kártyán látszik; a
+    szerkeszthető lapon a kártya marad (ott a Bejegyzés gomb van benne).
   */
-  if (entries && entries.length === 0 && !canWrite && !error)
+  if (entries && entries.length === 0 && !canWrite)
     return (
       <p
         className="px-1 text-sm text-pilot-grey-500"

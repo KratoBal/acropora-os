@@ -223,7 +223,7 @@ export function WorksheetMaterialRequests({
   };
 
   // az üres, nem szerkeszthető kártya egy sor (picasso R6, acrobot 62415): lásd `worksheet-entries.tsx`
-  if (requests && requests.length === 0 && !canWrite && !error && !notice)
+  if (requests && requests.length === 0 && !canWrite)
     return (
       <p
         className="px-1 text-sm text-pilot-grey-500"
