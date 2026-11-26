@@ -433,6 +433,14 @@ export function prismaDemoStore(db: typeof prisma): DemoStore {
         await tx.quoteEvent.deleteMany({
           where: { quoteId: { in: quoteIds } },
         });
+        // a tételek egymásra mutathatnak (kiváltott tétel, Restrict): előbb elengedjük
+        await tx.quoteItem.updateMany({
+          where: {
+            versionId: { in: versionIds },
+            replacesItemId: { not: null },
+          },
+          data: { replacesItemId: null },
+        });
         await tx.quoteItem.deleteMany({
           where: { versionId: { in: versionIds } },
         });

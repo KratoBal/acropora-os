@@ -7,6 +7,11 @@ import { describe, expect, it, vi } from "vitest";
 import { mainNavigation, navigationItems } from "../navigation";
 import { SETTINGS_AREAS, SettingsOverviewPage } from "./settings-overview-page";
 
+// the pages draw PilotThemeRoot since Picasso 3.16, and its font is a build-time asset
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub", variable: "pilot-inter" }),
+}));
+
 const auth = vi.hoisted(() => ({
   role: "OWNER" as "OWNER" | "SALES",
   // a szerver által kiszolgált menü: a `quotes` kapcsoló akkor áll, ha egy rá váró menüpont megjött
@@ -132,6 +137,21 @@ describe("beállítások gyűjtőoldal", () => {
    * Ez nem esztetikai allitas: egy ketszer kiirt nev azt sugallja, hogy KET
    * kulonbozo dologrol van szo.
    */
+  /*
+    A KÁRTYÁK KIEGYENSÚLYOZOTT OSZLOPOKBAN, A PILOT KÉSZLETTEL (Picasso 3.16, kártya f0b70dbd). MI PIROSÍT: a régi kétoszlopos rács
+    vissza (egy sor minden kártyája a legmagasabbhoz nyúlt, az egy-linkes fele üresen állt); egy kártya, ami két oszlopra törhet.
+  */
+  it("a területek kiegyensúlyozott oszlopokban, minden kártya egyben", () => {
+    auth.role = "OWNER";
+    const { container } = render(<SettingsOverviewPage />);
+    const first = screen.getAllByRole("heading", { level: 2 })[1]!;
+    const card = first.closest("[class*='break-inside-avoid']");
+    expect(card).not.toBeNull();
+    const columns = card!.parentElement!;
+    expect(columns.className).toContain("sm:columns-2");
+    expect(container.innerHTML).not.toContain("sm:grid-cols-2");
+  });
+
   it("egy-linkes területnél a nevet nem írja ki kétszer", () => {
     auth.role = "OWNER";
     render(<SettingsOverviewPage />);

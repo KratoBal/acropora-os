@@ -19,16 +19,20 @@ import {
 /**
  * CATALOGUE DATA-QUALITY QUEUE (Figma 394:394 filters, 394:407 table).
  *
- * Renders only the rows it is given: it counts nothing it does not see, and
- * shows no catalogue-wide total (that needs a server-side summary, §11). The
- * KPI cards are left out until they are designed and backed (§9).
+ * Renders only the rows it is given: it counts nothing it does not see. The
+ * catalogue-wide counts come from the server's summary (Picasso 3.27), one on
+ * each filter; until the first answer there is none. The KPI cards are left
+ * out until they are designed and backed (§9).
  */
 export function JevQualityFilters({
   value,
   onChange,
+  counts = null,
 }: {
   value: QueueFilter;
   onChange: (next: QueueFilter) => void;
+  /** the server's count per filter (`summary`); null before the first answer */
+  counts?: Record<QueueFilter, number> | null;
 }) {
   return (
     <div
@@ -46,6 +50,11 @@ export function JevQualityFilters({
         >
           <JevPill tone={value === filter ? "accent" : "neutral"}>
             {QUEUE_FILTER_LABEL[filter]}
+            {counts ? (
+              <span className="ml-1.5 tabular-nums opacity-70">
+                {counts[filter]}
+              </span>
+            ) : null}
           </JevPill>
         </button>
       ))}

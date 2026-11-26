@@ -90,6 +90,11 @@ export class QuoteLifecycleService {
       await tx.quoteBomItem.deleteMany({
         where: { versionId: { in: versionIds } },
       });
+      // KIVÁLTOTT TÉTEL: a tételek egymásra mutathatnak (Restrict): előbb elengedjük, utána törlődhetnek egy lépésben
+      await tx.quoteItem.updateMany({
+        where: { versionId: { in: versionIds }, replacesItemId: { not: null } },
+        data: { replacesItemId: null },
+      });
       await tx.quoteItem.deleteMany({
         where: { versionId: { in: versionIds } },
       });

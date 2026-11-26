@@ -1,4 +1,5 @@
-import { UserEditorPage } from "@/components/users/user-editor-page";
+import { UserCreatePage } from "@/components/users/user-create-page";
+
 export default function NewUserPage() {
-  return <UserEditorPage />;
+  return <UserCreatePage />;
 }

@@ -6,6 +6,7 @@ import {
   PilotButton,
   PilotDrawer,
   PilotFormField,
+  PilotSelect,
   PilotInput,
 } from "@acropora/ui";
 import { RichTextEditor } from "@acropora/ui/rich-text-editor";
@@ -86,6 +87,7 @@ export function QuoteItemDrawer({
   item,
   costing,
   bomCount = 0,
+  lines = [],
   onSaved,
 }: {
   open: boolean;
@@ -101,6 +103,8 @@ export function QuoteItemDrawer({
   costing: QuoteCostingLineDto | null;
   /** a meglévő tétel BOM-sorainak száma: önállóra váltáskor a váltás ezeket törli, megerősítés után */
   bomCount?: number;
+  /** a piszkozat összes tétele: az opcionális tétel ezek közül választhatja ki, melyiket váltja ki */
+  lines?: ReadonlyArray<Item>;
   onSaved: (quote: QuoteDetailDto) => void;
 }) {
   const [name, setName] = useState("");
@@ -130,6 +134,8 @@ export function QuoteItemDrawer({
   const [priceBase, setPriceBase] = useState<"net" | "gross">("net");
   const [vat, setVat] = useState("27");
   const [optional, setOptional] = useState(false);
+  /** KIVÁLTOTT TÉTEL: annak a (nem opcionális) tételnek az azonosítója, amelynek a helyére ez az opcionális tétel lép; üres: kiegészítés */
+  const [replaces, setReplaces] = useState("");
   const [saving, setSaving] = useState(false);
   // BOM -> ÖNÁLLÓ (Luca): a váltás a BOM-sorokat is viszi, de csak kimondott megerősítés után
   const [confirmDrop, setConfirmDrop] = useState(false);
@@ -166,6 +172,7 @@ export function QuoteItemDrawer({
     pickedNow.current = item?.variantId ?? null;
     setVat(item?.vatRatePercent ?? "27");
     setOptional(item?.isOptional ?? false);
+    setReplaces(item?.replacesItemId ?? "");
   }, [item, open]);
 
   netNow.current = unitNetPrice;
@@ -244,6 +251,16 @@ export function QuoteItemDrawer({
     vat.trim() &&
     (source !== "PRODUCT" || variant);
 
+  // KIVÁLTHATÓ TÉTELEK: nem opcionálisak, nem ez a tétel, és még nem váltja ki őket másik opcionális tétel
+  const replaceCandidates = lines.filter(
+    (line) =>
+      !line.isOptional &&
+      line.id !== item?.id &&
+      !lines.some(
+        (other) => other.replacesItemId === line.id && other.id !== item?.id,
+      ),
+  );
+
   const save = async (dropBomItems = false) => {
     setSaving(true);
     setError(null);
@@ -263,6 +280,7 @@ export function QuoteItemDrawer({
       unitNetPrice: unitNetPrice.trim(),
       vatRatePercent: vat.trim(),
       isOptional: optional,
+      replacesItemId: optional && replaces ? replaces : null,
       ...(dropBomItems ? { dropBomItems: true } : {}),
     };
     try {
@@ -463,7 +481,10 @@ export function QuoteItemDrawer({
           <input
             type="checkbox"
             checked={optional}
-            onChange={(event) => setOptional(event.target.checked)}
+            onChange={(event) => {
+              setOptional(event.target.checked);
+              if (!event.target.checked) setReplaces("");
+            }}
           />
           <span>
             <span className="block text-sm font-semibold">
@@ -474,6 +495,26 @@ export function QuoteItemDrawer({
             </span>
           </span>
         </label>
+        {optional ? (
+          <PilotFormField
+            label="Kiváltott tétel"
+            help="Ha az ügyfél ezt az opcionális tételt választja, a kiváltott tétel kiesik az összegből, és ez lép a helyére. Üresen az opcionális tétel kiegészítés: hozzáadódik."
+          >
+            <PilotSelect
+              chevron
+              aria-label="Kiváltott tétel"
+              value={replaces}
+              onChange={setReplaces}
+            >
+              <option value="">Nincs (kiegészítés)</option>
+              {replaceCandidates.map((line) => (
+                <option key={line.id} value={line.id}>
+                  {line.name}
+                </option>
+              ))}
+            </PilotSelect>
+          </PilotFormField>
+        ) : null}
       </div>
       <ConfirmDialog
         open={confirmDrop}

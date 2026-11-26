@@ -18,6 +18,11 @@ import {
 } from "./settings-overview-page";
 import { WebshopSettingsPage } from "./webshop-settings-page";
 
+// the pages draw PilotThemeRoot since Picasso 3.16, and its font is a build-time asset
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub", variable: "pilot-inter" }),
+}));
+
 /*
   THE WEBSHOP SETTINGS PAGE (Balázs, 2026-10-26 13:05 UTC, msg
   1564263673932026020; acrobot's decision). WHAT TURNS RED: a card links to a

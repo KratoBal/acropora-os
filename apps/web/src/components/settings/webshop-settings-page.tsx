@@ -1,6 +1,8 @@
 "use client";
 
-import { PageHeader } from "@acropora/ui";
+import { PilotPageHeader } from "@acropora/ui";
+
+import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 
 import {
   SettingsAreaGrid,
@@ -16,12 +18,12 @@ import {
  */
 export function WebshopSettingsPage() {
   return (
-    <div className="space-y-6">
-      <PageHeader
+    <PilotThemeRoot className="space-y-6">
+      <PilotPageHeader
         title="Webshop beállítások"
         description="A webshop kapcsolatai, szinkronja, levelei és kezdőlapja egy helyen."
       />
       <SettingsAreaGrid areas={WEBSHOP_SETTINGS_AREAS} />
-    </div>
+    </PilotThemeRoot>
   );
 }

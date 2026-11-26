@@ -175,6 +175,7 @@ export async function copyVersionContent(
   targetVersionId: string,
 ) {
   const itemIds = new Map<string, string>();
+  const replacements: Array<[newItemId: string, oldReplacedId: string]> = [];
   for (const block of full.blocks) {
     const newBlock = await tx.quoteBlock.create({
       data: {
@@ -208,8 +209,16 @@ export async function copyVersionContent(
         select: { id: true },
       });
       itemIds.set(item.id, newItem.id);
+      if (item.replacesItemId)
+        replacements.push([newItem.id, item.replacesItemId]);
     }
   }
+  // KIVÁLTOTT TÉTEL: a kiváltott sor azonosítója az ÚJ verzióban (mind létrejött, mielőtt ide érünk)
+  for (const [newItemId, oldReplacedId] of replacements)
+    await tx.quoteItem.update({
+      where: { id: newItemId },
+      data: { replacesItemId: itemIds.get(oldReplacedId)! },
+    });
   for (const bom of full.bomItems)
     await tx.quoteBomItem.create({
       data: {
@@ -458,6 +467,14 @@ export class QuoteVersionEditor {
       });
       if (!block) throw new NotFoundException("A blokk nem található.");
       const itemIds = block.items.map((i) => i.id);
+      // KIVÁLTOTT TÉTEL: a blokk tételei között és más blokkból hozzájuk kötött kiváltások elengedve (a kulcs Restrict)
+      await tx.quoteItem.updateMany({
+        where: {
+          versionId,
+          OR: [{ id: { in: itemIds } }, { replacesItemId: { in: itemIds } }],
+        },
+        data: { replacesItemId: null },
+      });
       await tx.quoteBomItem.deleteMany({
         where: { quoteItemId: { in: itemIds } },
       });
@@ -546,6 +563,51 @@ export class QuoteVersionEditor {
     };
   }
 
+  /**
+   * KIVÁLTOTT TÉTEL (Luca 2026-11-26, card 2540d9d4): a tárolandó `replacesItemId`, a szabályok ellenőrzésével. Csak OPCIONÁLIS tétel válthat
+   * ki, ugyanazon a verzión belül, egy NEM opcionális tételt, és egy tételt legfeljebb egy opcionális vált ki (a DB egyedi indexe és a CHECK
+   * ugyanezt védi, de itt érthető üzenet jön, nem kulcshiba). Üres vagy null: kiegészítés.
+   */
+  private async replacesColumn(
+    tx: Tx,
+    versionId: string,
+    selfId: string | null,
+    isOptional: boolean,
+    wanted: string | null | undefined,
+  ): Promise<string | null> {
+    const target = wanted?.trim() || null;
+    if (!target) return null;
+    if (!isOptional)
+      throw new BadRequestException(
+        "Csak opcionális tétel válthat ki másik tételt.",
+      );
+    if (target === selfId)
+      throw new BadRequestException("A tétel nem válthatja ki saját magát.");
+    const replaced = await tx.quoteItem.findFirst({
+      where: { id: target, versionId },
+      select: { isOptional: true },
+    });
+    if (!replaced)
+      throw new BadRequestException(
+        "A kiváltott tétel nem található ebben a verzióban.",
+      );
+    if (replaced.isOptional)
+      throw new BadRequestException("Opcionális tételt nem lehet kiváltani.");
+    const other = await tx.quoteItem.findFirst({
+      where: {
+        replacesItemId: target,
+        versionId,
+        ...(selfId ? { NOT: { id: selfId } } : {}),
+      },
+      select: { name: true },
+    });
+    if (other)
+      throw new ConflictException(
+        `Ezt a tételt már kiváltja egy másik opcionális tétel (${other.name}).`,
+      );
+    return target;
+  }
+
   private async activeVariant(tx: Tx, variantId: string) {
     const variant = await tx.productVariant.findUnique({
       where: { id: variantId },
@@ -584,12 +646,20 @@ export class QuoteVersionEditor {
       if (!ITEM_KINDS.has(block.kind))
         throw new BadRequestException("Ebbe a blokkba nem kerülhet tétel.");
       if (columns.variantId) await this.activeVariant(tx, columns.variantId);
+      const replacesItemId = await this.replacesColumn(
+        tx,
+        versionId,
+        null,
+        columns.isOptional,
+        input.replacesItemId,
+      );
       const created = await tx.quoteItem.create({
         data: {
           versionId,
           blockId,
           position: -(block.items.length + 1000),
           ...columns,
+          replacesItemId,
         },
         select: { id: true },
       });
@@ -671,8 +741,33 @@ export class QuoteVersionEditor {
         });
       if (merged.variantId && merged.variantId !== item.variantId)
         await this.activeVariant(tx, merged.variantId);
+      // KIVÁLTOTT TÉTEL: a most kiváltott tétel nem lehet opcionális; az opcionális jelölés visszavétele a kiváltást is megszünteti
+      if (merged.isOptional && !item.isOptional) {
+        const replacer = await tx.quoteItem.findFirst({
+          where: { replacesItemId: itemId, versionId },
+          select: { name: true },
+        });
+        if (replacer)
+          throw new ConflictException(
+            `Ezt a tételt egy opcionális tétel váltja ki (${replacer.name}), ezért maga nem lehet opcionális. Előbb szüntesd meg a kiváltást.`,
+          );
+      }
+      const replacesItemId = await this.replacesColumn(
+        tx,
+        versionId,
+        itemId,
+        merged.isOptional,
+        patch.replacesItemId !== undefined
+          ? patch.replacesItemId
+          : merged.isOptional
+            ? item.replacesItemId
+            : null,
+      );
       // source and variant in ONE write: the identity CHECK sees them together
-      await tx.quoteItem.update({ where: { id: itemId }, data: merged });
+      await tx.quoteItem.update({
+        where: { id: itemId },
+        data: { ...merged, replacesItemId },
+      });
       await this.followProductBom(tx, item, merged);
       await audit(tx, user.id, "quote.item_updated", "QuoteItem", itemId, {
         versionId,
@@ -762,6 +857,11 @@ export class QuoteVersionEditor {
         select: { blockId: true },
       });
       if (!item) throw new NotFoundException("A tétel nem található.");
+      // KIVÁLTOTT TÉTEL: ha ezt a tételt egy opcionális váltotta ki, az opcionális kiegészítés lesz (a kulcs Restrict, előbb elengedjük)
+      const released = await tx.quoteItem.updateMany({
+        where: { replacesItemId: itemId, versionId },
+        data: { replacesItemId: null },
+      });
       await tx.quoteBomItem.deleteMany({ where: { quoteItemId: itemId } });
       await tx.quoteItem.delete({ where: { id: itemId } });
       const rest = await tx.quoteItem.findMany({
@@ -776,6 +876,7 @@ export class QuoteVersionEditor {
       );
       await audit(tx, user.id, "quote.item_deleted", "QuoteItem", itemId, {
         versionId,
+        ...(released.count ? { releasedReplacements: released.count } : {}),
       });
     });
   }
