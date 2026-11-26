@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, Card, Skeleton } from "@acropora/ui";
+import { Alert, PilotButton, PilotCard, Skeleton } from "@acropora/ui";
 import {
   areaLevel,
   areaLevels,
@@ -119,9 +119,9 @@ export function UserPermissionTable({
     return <Alert variant="danger" title="Jogosultságok" description={error} />;
   if (!overview)
     return (
-      <Card className="p-6">
+      <PilotCard className="p-6">
         <Skeleton className="h-64" />
-      </Card>
+      </PilotCard>
     );
 
   const readOnly = isMachineRole(overview.role);
@@ -142,16 +142,16 @@ export function UserPermissionTable({
   };
 
   return (
-    <Card className="space-y-4 p-6">
+    <PilotCard className="space-y-4 p-6">
       <div>
         <h2 className="font-semibold">Jogosultságok</h2>
-        <p className="mt-1 text-xs text-dusk-500">
+        <p className="mt-1 text-xs text-pilot-grey-600">
           A szerepkör sablonja az alapértelmezés; ettől felhasználónként el
           lehet térni. Az eltérő sor kiemelve áll. A módosítás a felhasználó
           következő kérésénél érvényes, újra belépnie nem kell.
         </p>
         {readOnly ? (
-          <p className="mt-2 text-sm text-dusk-700">
+          <p className="mt-2 text-sm text-pilot-grey-800">
             Gépi fiók: a jogai a feladatához tartoznak, nem módosíthatók.
           </p>
         ) : null}
@@ -159,7 +159,7 @@ export function UserPermissionTable({
 
       <table className="w-full border-collapse text-sm max-md:block">
         <thead className="max-md:sr-only">
-          <tr className="border-b border-dusk-100 text-left text-xs uppercase tracking-wide text-dusk-500">
+          <tr className="border-b border-pilot-grey-100 text-left text-xs uppercase tracking-wide text-pilot-grey-600">
             <th className="py-2 pr-3 font-medium">Terület</th>
             <th className="py-2 pr-3 font-medium">Szint</th>
             <th className="py-2 font-medium">Sablon</th>
@@ -195,29 +195,29 @@ export function UserPermissionTable({
 
       {!readOnly ? (
         <div className="flex flex-wrap justify-end gap-2">
-          <Button
+          <PilotButton
             variant="secondary"
             disabled={saving}
             onClick={() => setDesired(new Set(template))}
           >
             Vissza a sablonra
-          </Button>
-          <Button
+          </PilotButton>
+          <PilotButton
             variant="secondary"
             disabled={saving || !dirty}
             onClick={() => setDesired(new Set(effectiveNow))}
           >
             Elvetés
-          </Button>
-          <Button
+          </PilotButton>
+          <PilotButton
             disabled={saving || !dirty || problem !== null}
             onClick={() => void save()}
           >
             {saving ? "Mentés…" : "Jogosultságok mentése"}
-          </Button>
+          </PilotButton>
         </div>
       ) : null}
-    </Card>
+    </PilotCard>
   );
 }
 
@@ -243,10 +243,10 @@ function AreaRows({
   return (
     <>
       <tr
-        className={`border-b border-dusk-50 ${PHONE_ROW} ${differs ? "bg-amber-50" : ""}`}
+        className={`border-b border-pilot-grey-50 ${PHONE_ROW} ${differs ? "bg-amber-50" : ""}`}
         data-testid={`terulet-${area.key}`}
       >
-        <td className="py-2 pr-3 font-medium text-dusk-800 max-md:w-full max-md:p-0">
+        <td className="py-2 pr-3 font-medium text-pilot-grey-900 max-md:w-full max-md:p-0">
           {area.label}
           {ownerOnly ? <OwnerOnlyMark /> : null}
           {differs ? (
@@ -259,7 +259,7 @@ function AreaRows({
           <div
             role="radiogroup"
             aria-label={`${area.label} szintje`}
-            className="inline-flex overflow-hidden rounded-md ring-1 ring-dusk-200"
+            className="inline-flex overflow-hidden rounded-md ring-1 ring-pilot-grey-200"
           >
             {areaLevels(area).map((option) => (
               <button
@@ -271,8 +271,8 @@ function AreaRows({
                 onClick={() => onChange(withAreaLevel(area, desired, option))}
                 className={`px-2.5 py-1 text-xs ${
                   level === option
-                    ? "bg-dusk-800 text-white"
-                    : "bg-white text-dusk-600 hover:bg-dusk-50"
+                    ? "bg-pilot-grey-900 text-white"
+                    : "bg-white text-pilot-grey-600 hover:bg-pilot-grey-50"
                 } disabled:cursor-not-allowed`}
               >
                 {LEVEL_LABEL[option]}
@@ -282,7 +282,7 @@ function AreaRows({
         </td>
         <td
           data-label="Sablon"
-          className={`py-2 text-xs text-dusk-400 ${PHONE_TEMPLATE_CELL}`}
+          className={`py-2 text-xs text-pilot-grey-400 ${PHONE_TEMPLATE_CELL}`}
         >
           {LEVEL_LABEL[templateLevel]}
         </td>
@@ -293,10 +293,10 @@ function AreaRows({
         return (
           <tr
             key={extra.permission}
-            className={`border-b border-dusk-50 ${PHONE_ROW} ${extraDiffers ? "bg-amber-50" : ""}`}
+            className={`border-b border-pilot-grey-50 ${PHONE_ROW} ${extraDiffers ? "bg-amber-50" : ""}`}
           >
             <td
-              className="py-1.5 pl-5 pr-3 text-dusk-600 max-md:w-full max-md:p-0 max-md:pl-4"
+              className="py-1.5 pl-5 pr-3 text-pilot-grey-600 max-md:w-full max-md:p-0 max-md:pl-4"
               colSpan={2}
             >
               <label className="flex items-center gap-2">
@@ -322,7 +322,7 @@ function AreaRows({
             </td>
             <td
               data-label="Sablon"
-              className={`py-1.5 text-xs text-dusk-400 ${PHONE_TEMPLATE_CELL}`}
+              className={`py-1.5 text-xs text-pilot-grey-400 ${PHONE_TEMPLATE_CELL}`}
             >
               {template.has(extra.permission) ? "Igen" : "Nem"}
             </td>
@@ -337,7 +337,7 @@ function OwnerOnlyMark() {
   return (
     <span
       title="Ezt a jogot csak tulajdonos adhatja meg."
-      className="ml-2 rounded bg-dusk-100 px-1.5 py-0.5 text-[11px] text-dusk-600"
+      className="ml-2 rounded bg-pilot-grey-100 px-1.5 py-0.5 text-[11px] text-pilot-grey-600"
     >
       csak tulajdonos
     </span>
