@@ -120,29 +120,37 @@ function setup(
     balance?: { amount: string; receivedOn?: string };
     /** The advance invoice's gross (S4), alapból 4800.00. */
     advanceGross?: string;
+    /** The advance invoice's and the drafts' lines (barracuda N3b), alapból one 27% line each (4800 and 18900 gross). */
+    advanceLines?: { vatRatePercent: string; unitNet: string }[];
+    draftLines?: { vatRatePercent: string; unitNet: string }[];
+    /** Medusa's own order state (barracuda N3a). */
+    orderStatus?: string;
   } = {},
 ) {
   const calls: string[] = [];
   const orders = {
     source: async () => {
       calls.push("source");
+      const order = over.provider
+        ? {
+            ...ORDER,
+            payment_collections: [
+              {
+                payments: [],
+                payment_sessions: [
+                  {
+                    provider_id: over.provider,
+                    status: "pending_authorization",
+                  },
+                ],
+              },
+            ],
+          }
+        : (over.orderOverride ?? ORDER);
       return {
-        order: over.provider
-          ? {
-              ...ORDER,
-              payment_collections: [
-                {
-                  payments: [],
-                  payment_sessions: [
-                    {
-                      provider_id: over.provider,
-                      status: "pending_authorization",
-                    },
-                  ],
-                },
-              ],
-            }
-          : (over.orderOverride ?? ORDER),
+        order: over.orderStatus
+          ? { ...order, status: over.orderStatus }
+          : order,
         status: {
           status: over.status ?? "confirmed",
         } as MedusaOrderBusinessStatus,
@@ -255,11 +263,22 @@ function setup(
       return { id: "cust_new" };
     },
   } as unknown as CustomersRepository;
+  const line = (l: { vatRatePercent: string; unitNet: string }) => ({
+    kind: "ITEM",
+    quantity: "1",
+    unitNet: l.unitNet,
+    netAmount: l.unitNet,
+    vatRatePercent: l.vatRatePercent,
+  });
   const doc = (id: string) =>
     ({
       id,
       updatedAt: "2026-10-05T12:00:01.000Z",
       currency: "HUF",
+      lines: (id.startsWith("adv-")
+        ? (over.advanceLines ?? [{ vatRatePercent: "27", unitNet: "3779.53" }])
+        : (over.draftLines ?? [{ vatRatePercent: "27", unitNet: "14881.89" }])
+      ).map(line),
       totals: {
         netAmount: "14882.00",
         vatAmount: "4018.00",
@@ -1155,6 +1174,41 @@ describe("the final invoice on the balance (S4)", () => {
         /fizetendője .*14100\.00 HUF/.test(error.message) &&
         /hátralék 14000\.00 HUF/.test(error.message) &&
         /eltérés 100\.00 HUF/.test(error.message),
+    );
+    assert.ok(!calls.some((call) => call.startsWith("summary")));
+  });
+
+  // barracuda N3a: a cancelled order gets no final invoice, whichever way it was cancelled
+  it("a cancelled or unsuccessfully closed order gets no final invoice, and nothing is made", async () => {
+    for (const over of [
+      { orderStatus: "canceled" },
+      { status: "closed_unsuccessfully" },
+    ]) {
+      const { service, calls } = setup({ ...ready, ...over });
+      await assert.rejects(
+        service.finalSummary("order_38", USER, NOW),
+        /(le van mondva|sikertelenül lezárt).*végszámla nem állítható ki/,
+        JSON.stringify(over),
+      );
+      assert.ok(!calls.some((call) => call.startsWith("final from")));
+    }
+  });
+
+  // barracuda N3b: the order edited after the advance; the advance's 5% part has no 5% item left on the final invoice
+  it("an advance rate the final invoice does not cover stops before the window, naming the rate and both amounts", async () => {
+    const { service, calls } = setup({
+      ...ready,
+      // the advance: about 3000 at 27% and 1800 at 5%; the final: 18900 at 27% only
+      advanceLines: [
+        { vatRatePercent: "27", unitNet: "2362.20" },
+        { vatRatePercent: "5", unitNet: "1714.29" },
+      ],
+    });
+    await assert.rejects(
+      service.finalSummary("order_38", USER, NOW),
+      (error: Error) =>
+        /előleg 5%-os része 1800\.00 HUF/.test(error.message) &&
+        /5%-os tételei csak 0\.00 HUF/.test(error.message),
     );
     assert.ok(!calls.some((call) => call.startsWith("summary")));
   });
