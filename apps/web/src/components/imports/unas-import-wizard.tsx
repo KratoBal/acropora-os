@@ -277,7 +277,7 @@ export function UnasImportWizard() {
                 vagy válaszd ki a számítógépedről
               </p>
               <label className="mt-5">
-                <span className="inline-flex h-9 cursor-pointer items-center rounded-lg bg-dusk-900 px-4 text-sm font-semibold text-white">
+                <span className="inline-flex h-9 cursor-pointer items-center rounded-lg bg-pilot-aqua-700 px-4 text-sm font-semibold text-white hover:bg-pilot-aqua-800">
                   Fájl kiválasztása
                 </span>
                 <input
@@ -482,7 +482,7 @@ export function UnasImportWizard() {
               ) ? (
                 <Link
                   href={`/admin/imports/unas/${encodeURIComponent(report.batchId)}/review`}
-                  className="inline-flex h-9 items-center rounded-lg bg-brand-700 px-4 text-sm font-semibold text-white hover:bg-brand-800"
+                  className="inline-flex h-9 items-center rounded-lg bg-pilot-aqua-700 px-4 text-sm font-semibold text-white hover:bg-pilot-aqua-800"
                 >
                   Brandek ellenőrzése
                 </Link>

@@ -193,26 +193,26 @@ export function ContentListPage() {
           <div className="flex flex-wrap items-center gap-4">
             <Link
               href="/tartalom/eredmenyek"
-              className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
+              className="text-sm font-medium text-pilot-aqua-700 underline-offset-4 hover:underline"
             >
               Eredmények →
             </Link>
             <Link
               href="/tartalom/naptar"
-              className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
+              className="text-sm font-medium text-pilot-aqua-700 underline-offset-4 hover:underline"
             >
               Naptár →
             </Link>
             <Link
               href="/tartalom/oktatoanyagok"
-              className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
+              className="text-sm font-medium text-pilot-aqua-700 underline-offset-4 hover:underline"
             >
               Oktatóanyagok →
             </Link>
             {canCreate ? (
               <Link
                 href="/tartalom/uj"
-                className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
+                className="text-sm font-medium text-pilot-aqua-700 underline-offset-4 hover:underline"
               >
                 Új tétel felvitele →
               </Link>

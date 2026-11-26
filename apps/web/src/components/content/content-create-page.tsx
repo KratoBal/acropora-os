@@ -156,7 +156,7 @@ export function ContentCreatePage() {
               onClick={() => setMode(option.mode)}
               className={
                 selected
-                  ? "rounded-lg border-2 border-brand-600 bg-brand-50 p-4 text-left"
+                  ? "rounded-lg border-2 border-pilot-aqua-600 bg-pilot-aqua-50 p-4 text-left"
                   : "rounded-lg border border-dusk-200 bg-white p-4 text-left hover:border-dusk-300"
               }
             >

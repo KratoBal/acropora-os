@@ -341,13 +341,13 @@ export function ContentCalendarPage() {
           <div className="flex flex-wrap items-center gap-4">
             <Link
               href="/tartalom"
-              className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
+              className="text-sm font-medium text-pilot-aqua-700 underline-offset-4 hover:underline"
             >
               ← Tartalom
             </Link>
             <Link
               href="/tartalom/naptar/sablon"
-              className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
+              className="text-sm font-medium text-pilot-aqua-700 underline-offset-4 hover:underline"
             >
               Sablon →
             </Link>
@@ -558,7 +558,7 @@ export function ContentCalendarPage() {
                         {list.length > shown.length ? (
                           <button
                             type="button"
-                            className="text-xs text-brand-700 hover:underline"
+                            className="text-xs text-pilot-aqua-700 hover:underline"
                             onClick={() => {
                               update({ nezet: null, nap: day });
                             }}

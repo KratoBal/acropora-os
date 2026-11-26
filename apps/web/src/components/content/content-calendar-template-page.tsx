@@ -122,7 +122,7 @@ export function ContentCalendarTemplatePage() {
         actions={
           <Link
             href="/tartalom/naptar"
-            className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
+            className="text-sm font-medium text-pilot-aqua-700 underline-offset-4 hover:underline"
           >
             ← Naptár
           </Link>
