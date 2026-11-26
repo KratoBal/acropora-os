@@ -5,13 +5,15 @@ import {
 } from "@/components/pilot/pilot-back-link";
 import {
   Alert,
-  Badge,
-  Button,
-  Card,
-  FormField,
-  Input,
-  PageHeader,
-  Select,
+  PilotBadge,
+  PilotButton,
+  PilotCard,
+  PilotField,
+  PilotFieldPair,
+  PilotFormCard,
+  PilotInput,
+  PilotPageHeader,
+  PilotSelect,
   ServiceListTabs,
   Skeleton,
 } from "@acropora/ui";
@@ -26,10 +28,10 @@ import {
   SERVICE_CAPABILITIES,
   type ServiceCapabilityValue,
 } from "@acropora/types";
-import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo } from "@/components/navigation-history";
+import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { allNavigationPages } from "@/components/navigation";
 import { ApiError } from "@/lib/api/client";
 import { usersApi } from "@/lib/api/users";
@@ -58,36 +60,17 @@ const allNavigationItems = allNavigationPages;
  * A KÖTELEZŐ ÉS A NEM KÖTELEZŐ MEZŐ JELÖLÉSE (Picasso 3.20): ugyanaz a két jel, mint a Bérlés, az új hibajegy és a munkalap űrlapján: a kötelező mező címkéje után piros csillag (a felolvasónak
  * "kötelező"), a nem kötelezőé után szürkén "(nem kötelező)". A név és az e-mail kötelezősége a szerver szabálya (CreateUserDto); az új fiók jelszava a kliens saját szabálya (legalább 8 karakter, lásd a mentést), a szerver DTO-ban a jelszó nem kötelező. Ez a felirat csak kimondja őket.
  */
-function Requirement({ kind }: { kind: "required" | "optional" }) {
-  return kind === "required" ? (
-    <>
-      <span aria-hidden="true" className="text-red-600">
-        {" *"}
-      </span>
-      <span className="sr-only"> (kötelező)</span>
-    </>
-  ) : (
-    <span className="ml-1.5 text-xs font-normal text-dusk-400">
-      (nem kötelező)
-    </span>
-  );
-}
-
-/**
- * A MEGLÉVŐ FELHASZNÁLÓ LAPJA NÉGY FÜLÖN, FÜLENKÉNT EGY MENTÉSSEL (picasso leltár 3.23, acrobot döntése 2026-11-26). Eddig egy 4977 px-es
- * görgetés volt négy mentés gombbal (Változások mentése, Munkarend mentése, Jogosultságok mentése, Jelszó mentése), és nem derült ki,
- * melyik gomb mit ment. A fülek a meglévő szakaszokat osztják szét, a mentések nem változnak:
- *   Adatok       az űrlap (név, e-mail, szerep, partner, értesítések) és az elérhető menüpontok -> Változások mentése
- *   Jogosultságok a látható helyszínek és a felhasználónkénti jogok                             -> Jogosultságok mentése
- *   Munkarend    a heti munkarend (csak ha a szakasz megjelenne: jelenléti jog és saját kolléga) -> Munkarend mentése
- *   Biztonság    a jelszó, az audit és az inaktiválás                                         -> Jelszó mentése
- * A nem aktív fül REJTETT, nem lecsatolt: egy félbehagyott szerkesztés a fülváltás után is megvan. Új felhasználónál nincs fül.
- */
 type UserTab = "adatok" | "jogok" | "munkarend" | "biztonsag";
 
-export function UserEditorPage({ userId }: { userId?: string }) {
+/**
+ * A MEGLÉVŐ FELHASZNÁLÓ SZERKESZTŐJE, A PILOT KÉSZLETEN (Picasso 3.20, card f0b70dbd; acrobot 62858, 3.20-b slice 2). The new account
+ * has its own page since slice 1 (`UserCreatePage`, `/admin/users/new`): this one always edits a loaded account, so its new-account
+ * branch (the create call, the password field among the basics, the "Felhasználó létrehozása" button) is gone. The four tabs, their one
+ * save each, the notification and capability rules and the partner-role coupling are unchanged; the sections other files draw (the
+ * visible units, the permission table, the schedule) keep their own look.
+ */
+export function UserEditorPage({ userId }: { userId: string }) {
   const { session } = useAuth();
-  const router = useRouter();
   const backToList = useReturnTo("/admin/users");
   const [user, setUser] = useState<UserDetail | null>(null);
   /**
@@ -113,7 +96,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
    * napló), és nem kap ticket@ levélfogadást. Eddig csak adatbázis-úton volt állítható; az admin itt állítja, a mentés auditnaplóba megy.
    */
   const [isServiceAccount, setIsServiceAccount] = useState(false);
-  const [loading, setLoading] = useState(Boolean(userId));
+  const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<UserTab>("adatok");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,7 +107,6 @@ export function UserEditorPage({ userId }: { userId?: string }) {
   const [email, setEmail] = useState("");
   const [role, setRole] =
     useState<(typeof ROLE_OPTIONS)[number]["value"]>("VIEWER");
-  const [password, setPassword] = useState("");
   /**
    * MELYIK VEVO NEVEBEN LEP BE EZ A FIOK. Ures sztring = sajat kollega.
    *
@@ -183,52 +165,37 @@ export function UserEditorPage({ userId }: { userId?: string }) {
     );
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!user) return;
     if (!firstName.trim() || !lastName.trim()) {
       setError("A vezetéknév és a keresztnév kötelező.");
-      return;
-    }
-    if (!user && (!password || password.length < 8)) {
-      setError("A jelszónak legalább 8 karakter hosszúnak kell lennie.");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      if (user)
-        setUser(
-          await usersApi.update(token, user.id, {
-            firstName,
-            lastName,
-            nickname,
-            email,
-            role,
-            /**
-             * AZ URES MEZO `null`-KENT MEGY, NEM URES SZTRINGKENT. A szerver a
-             * `null` erteket olvassa a kotes megszunteteselnek; egy ures
-             * sztring egy nem letezo vevo azonositoja lenne, es a mentes
-             * "a megadott vevo nem talalhato" hibaval allna meg -- olyan
-             * hibaval, amit a felhasznalo nem tud ertelmezni, mert nem is
-             * valasztott vevot.
-             */
-            customerId: customerId || null,
-            notificationRoles,
-            serviceCapabilities,
-            // a partner-fiók nem lehet gépi fiók: a jelölő csak a saját kollégánál kapcsolható, partnernél hamis marad
-            isServiceAccount: customerId === "" ? isServiceAccount : false,
-            expectedUpdatedAt: user.updatedAt,
-          }),
-        );
-      else {
-        const created = await usersApi.create(token, {
+      setUser(
+        await usersApi.update(token, user.id, {
           firstName,
           lastName,
+          nickname,
           email,
           role,
-          password: password || undefined,
+          /**
+           * AZ URES MEZO `null`-KENT MEGY, NEM URES SZTRINGKENT. A szerver a
+           * `null` erteket olvassa a kotes megszunteteselnek; egy ures
+           * sztring egy nem letezo vevo azonositoja lenne, es a mentes
+           * "a megadott vevo nem talalhato" hibaval allna meg -- olyan
+           * hibaval, amit a felhasznalo nem tud ertelmezni, mert nem is
+           * valasztott vevot.
+           */
           customerId: customerId || null,
-        });
-        router.push(`/admin/users/${created.id}`);
-      }
+          notificationRoles,
+          serviceCapabilities,
+          // a partner-fiók nem lehet gépi fiók: a jelölő csak a saját kollégánál kapcsolható, partnernél hamis marad
+          isServiceAccount: customerId === "" ? isServiceAccount : false,
+          expectedUpdatedAt: user.updatedAt,
+        }),
+      );
     } catch (cause) {
       setError(
         cause instanceof ApiError && cause.status === 409
@@ -237,8 +204,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
             ? cause.message
             : "A mentés sikertelen.",
       );
-      if (cause instanceof ApiError && cause.status === 409 && userId)
-        await load();
+      if (cause instanceof ApiError && cause.status === 409) await load();
     } finally {
       setBusy(false);
     }
@@ -314,29 +280,38 @@ export function UserEditorPage({ userId }: { userId?: string }) {
       : []),
     { key: "biztonsag", label: "Biztonság" },
   ];
-  /** Egy fül tartalma: meglévő felhasználónál csak az aktív látszik, újnál minden (csak az Adatok van). */
-  const panel = (key: UserTab) =>
-    user
-      ? {
-          role: "tabpanel" as const,
-          "aria-label": tabs.find((t) => t.key === key)?.label,
-          hidden: tab !== key,
-        }
-      : {};
+  /** Egy fül tartalma: csak az aktív látszik. */
+  const panel = (key: UserTab) => ({
+    role: "tabpanel" as const,
+    "aria-label": tabs.find((t) => t.key === key)?.label,
+    hidden: tab !== key,
+  });
+  // a load failed: no form to fill, only the reason
+  if (!user)
+    return (
+      <PilotThemeRoot className="space-y-6">
+        <PilotBackLink href={backToList.href}>
+          {backLinkLabel(backToList, "Felhasználók")}
+        </PilotBackLink>
+        <Alert
+          variant="danger"
+          title="A felhasználó nem tölthető be"
+          description={error ?? "A felhasználó nem található."}
+        />
+      </PilotThemeRoot>
+    );
   return (
-    <div className="space-y-6">
+    <PilotThemeRoot className="space-y-6">
       <div>
         <PilotBackLink href={backToList.href}>
           {backLinkLabel(backToList, "Felhasználók")}
         </PilotBackLink>
-        <PageHeader
+        <PilotPageHeader
           // név nélküli (gépi, smoke) fióknál a cím üres h1 volt: a megjelenő név, végül az e-mail áll a helyén (a 3.23 utáni stage-kép)
           title={
-            user
-              ? `${user.lastName} ${user.firstName}`.trim() ||
-                user.displayName ||
-                user.email
-              : "Új felhasználó"
+            `${user.lastName} ${user.firstName}`.trim() ||
+            user.displayName ||
+            user.email
           }
           description="Név, e-mail, jelszó és szerepkör alapú jogosultságok."
         />
@@ -348,194 +323,115 @@ export function UserEditorPage({ userId }: { userId?: string }) {
           description={error}
         />
       ) : null}
-      {user ? (
-        <ServiceListTabs
-          variant="pill"
-          label="A felhasználó lapjai"
-          tabs={tabs}
-          active={tab}
-          onSelect={(key) => setTab(key as UserTab)}
-        />
-      ) : null}
-      <form className="space-y-6" onSubmit={submit} {...panel("adatok")}>
-        <Card className="p-6">
-          <h2 className="font-semibold">Alapadatok</h2>
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField
-              label={
-                <>
-                  Vezetéknév
-                  <Requirement kind="required" />
-                </>
-              }
-            >
-              <Input
+      <ServiceListTabs
+        variant="pill"
+        label="A felhasználó lapjai"
+        tabs={tabs}
+        active={tab}
+        onSelect={(key) => setTab(key as UserTab)}
+      />
+      <form
+        className="max-w-[760px] space-y-6"
+        onSubmit={submit}
+        {...panel("adatok")}
+      >
+        <PilotFormCard title="Alapadatok">
+          <PilotFieldPair>
+            <PilotField label="Vezetéknév" requirement="required">
+              <PilotInput
                 aria-label="Vezetéknév"
                 value={lastName}
-                onChange={(event) => setLastName(event.target.value)}
+                onChange={setLastName}
               />
-            </FormField>
-            <FormField
-              label={
-                <>
-                  Keresztnév
-                  <Requirement kind="required" />
-                </>
-              }
-            >
-              <Input
+            </PilotField>
+            <PilotField label="Keresztnév" requirement="required">
+              <PilotInput
                 aria-label="Keresztnév"
                 value={firstName}
-                onChange={(event) => setFirstName(event.target.value)}
+                onChange={setFirstName}
               />
-            </FormField>
-            <FormField
-              label={
-                <>
-                  Becenév
-                  <Requirement kind="optional" />
-                </>
-              }
-            >
-              <Input
+            </PilotField>
+          </PilotFieldPair>
+          <PilotFieldPair>
+            <PilotField label="Becenév" requirement="optional">
+              <PilotInput
                 aria-label="Becenév"
                 value={nickname}
                 placeholder="Ahogy a csapatban szólítjuk"
-                onChange={(event) => setNickname(event.target.value)}
+                onChange={setNickname}
               />
-            </FormField>
-            <FormField
-              label={
-                <>
-                  E-mail cím
-                  <Requirement kind="required" />
-                </>
-              }
-            >
-              <Input
+            </PilotField>
+            <PilotField label="E-mail cím" requirement="required">
+              <PilotInput
                 type="email"
                 aria-label="E-mail cím"
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={setEmail}
               />
-            </FormField>
-            {/* A JELSZÓ AZ E-MAIL MELLETT ÁLL, NEM A LAP VÉGÉN (Picasso 3.20): új fióknál kötelező, tehát a többi kötelező mezővel együtt kell látszania */}
-            {!user ? (
-              <FormField
-                label={
-                  <>
-                    Jelszó
-                    <Requirement kind="required" />
-                  </>
-                }
-              >
-                <Input
-                  type="password"
-                  aria-label="Jelszó"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Legalább 8 karakter"
-                />
-              </FormField>
-            ) : null}
-            <FormField label="Szerepkör">
-              <Select
-                aria-label="Szerepkör"
-                value={role}
-                onChange={(event) => setRole(event.target.value as typeof role)}
-              >
-                {availableRoleOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </FormField>
-            {isPartnerAccount ? (
-              <p className="text-xs text-dusk-500 sm:col-span-2">
-                A partnerhez kötött fiók szerepe szándékosan csak Partner
-                szerviz lehet: a saját hatókörében hibajegyeket, munkalapokat és
-                eszközöket kezelhet, de nem kap belső irányítópult-, feladat-,
-                partner- vagy akvárium-hozzáférést.
-              </p>
-            ) : null}
-          </div>
-          {/*
-            A PARTNER-KOTES KULON SORBAN, A TOBBI MEZO ALATT -- ES EZ NEM
-            ELRENDEZES.
-
-            Ez a mezo nem a felhasznalo egy tulajdonsaga, mint a beceneve: ez
-            HATOKORT AD. Aki kap egy vevot, az annak a vevonek a sorait latja,
-            es CSAK azokat; aki elveszti, az BELSOSSE valik es MINDENT lat. A
-            magyarazo mondat ezert all mellette, nem a sugoban.
-          */}
-          <div className="mt-4">
-            <FormField
-              label="Partnerhez kötött fiók"
-              description="Ha itt egy partnert választasz, a fiók csak annak a partnernek az adatait látja. Üresen a fiók saját kolléga."
+            </PilotField>
+          </PilotFieldPair>
+          <PilotField
+            label="Szerepkör"
+            requirement="optional"
+            help={
+              isPartnerAccount
+                ? "A partnerhez kötött fiók szerepe szándékosan csak Partner szerviz lehet: a saját hatókörében hibajegyeket, munkalapokat és eszközöket kezelhet, de nem kap belső irányítópult-, feladat-, partner- vagy akvárium-hozzáférést."
+                : undefined
+            }
+          >
+            <PilotSelect
+              aria-label="Szerepkör"
+              value={role}
+              onChange={(value) => setRole(value as typeof role)}
+              chevron
             >
-              <PartnerPicker
-                id="felhasznalo-vevo"
-                value={customerId}
-                emptyLabel="Nem partner: saját kolléga"
-                onPick={(partner) => {
-                  setCustomerId(partner.customerId);
-                  setRole("PARTNER_SERVICE");
-                }}
-                /**
-                 * A TORLES A SZEREPET IS VISSZAVESZI -- KULONBEN A FIOK
-                 * KOTES NELKULI PARTNER-SZEREPET KAPNA.
-                 *
-                 * Az `onPick` beallitja a szerepet; a `onClear` 2026-09-17-ig
-                 * CSAK a vevot vette vissza. Aki valasztott egy partnert,
-                 * aztan meggondolta magat, `PARTNER_SERVICE` szerepu, kotes
-                 * nelkuli fiokot mentett -- annak pedig a HATOKORE belsos
-                 * lenne (a `partnerScopeOf` kotes hianyaban `internal`-t ad),
-                 * vagyis MINDEN vevo szerviz-sorat latna.
-                 *
-                 * A `VIEWER` ugyanaz, amivel egy UJ fiok indul: a legszukebb
-                 * szerep. Nem talalgatunk helyette, es nem hagyunk ott egy
-                 * olyan szerepet, amihez mar nincs partner -- a valaszto
-                 * ilyenkor ujra a TELJES listat kinalja, tehat a szerep
-                 * tudatos valasztas marad.
-                 */
-                onClear={() => {
-                  setCustomerId("");
-                  setRole("VIEWER");
-                }}
-              />
-            </FormField>
-            <p className="pt-1 text-xs text-dusk-500">
-              Ettől függ, mit lát: egy vevőhöz kötött fiók csak annak a vevőnek
-              a sorait látja. Partner nélkül a fiók saját kollégáé, és mindent
-              lát. Egy fiók legfeljebb egy partnerhez tartozhat.
-            </p>
-          </div>
+              {availableRoleOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </PilotSelect>
+          </PilotField>
           {/*
-            AZ ERTESITESI SZEREPEK -- CSAK SAJAT KOLLEGANAL.
-
-            Balazs kerese, 2026-09-22: „a sajat felhasznaloinkhoz kell egy
-            checkbox ezzel a szereppel".
-
-            A VEVOHOZ KOTOTT FIOKNAL EL SEM JELENIK MEG, es ez nem dísz: a
-            hibajegy-felelos a MI oldalunk szerepe. Egy partner-fioknal
-            bejelolve azt jelentene, hogy a vevo ertesitest kap MINDEN masik
-            vevo bejelenteserol.
-
-            A LISTA A KOZOS CSOMAGBOL JON (`NOTIFICATION_ROLES`), a felirattal
-            egyutt: ugyanaz a nev kell a jelolonegyzet melle es barmely kesobbi
-            olvasohoz.
+            A PARTNER-KOTES: ez a mezo nem a felhasznalo egy tulajdonsaga, mint a beceneve: ez HATOKORT AD. Aki kap egy vevot, az annak a
+            vevonek a sorait latja, es CSAK azokat; aki elveszti, az BELSOSSE valik es MINDENT lat. A magyarazo mondat ezert all mellette.
+          */}
+          <PilotField
+            label="Partnerhez kötött fiók"
+            requirement="optional"
+            help="Ha itt egy partnert választasz, a fiók csak annak a partnernek az adatait látja. Üresen a fiók saját kolléga. Egy fiók legfeljebb egy partnerhez tartozhat."
+          >
+            <PartnerPicker
+              variant="pilot"
+              id="felhasznalo-vevo"
+              value={customerId}
+              emptyLabel="Nem partner: saját kolléga"
+              onPick={(partner) => {
+                setCustomerId(partner.customerId);
+                setRole("PARTNER_SERVICE");
+              }}
+              /**
+               * A TORLES A SZEREPET IS VISSZAVESZI -- KULONBEN A FIOK KOTES NELKULI PARTNER-SZEREPET KAPNA (2026-09-17): egy
+               * `PARTNER_SERVICE` szerepu, kotes nelkuli fiok hatokore belsos lenne (a `partnerScopeOf` kotes hianyaban `internal`-t ad),
+               * vagyis MINDEN vevo szerviz-sorat latna. A `VIEWER` a legszukebb szerep; a valaszto ilyenkor ujra a TELJES listat kinalja.
+               */
+              onClear={() => {
+                setCustomerId("");
+                setRole("VIEWER");
+              }}
+            />
+          </PilotField>
+          {/*
+            AZ ERTESITESI SZEREPEK -- CSAK SAJAT KOLLEGANAL (Balazs, 2026-09-22): a hibajegy-felelos a MI oldalunk szerepe; egy partner-fioknal
+            bejelolve a vevo ertesitest kapna MINDEN masik vevo bejelenteserol. A lista a kozos csomagbol jon (`NOTIFICATION_ROLES`).
           */}
           {customerId === "" ? (
-            <div className="mt-6">
-              <h2 className="text-sm font-semibold text-dusk-800">
+            <fieldset className="space-y-3">
+              <legend className="text-sm font-semibold text-pilot-grey-800">
                 Értesítések
-              </h2>
+              </legend>
               {NOTIFICATION_ROLES.map((szerep) => (
-                <label
-                  key={szerep.value}
-                  className="mt-3 flex items-start gap-3"
-                >
+                <label key={szerep.value} className="flex items-start gap-3">
                   <input
                     type="checkbox"
                     className="mt-1"
@@ -549,33 +445,20 @@ export function UserEditorPage({ userId }: { userId?: string }) {
                     }
                   />
                   <span>
-                    <span className="block text-sm font-medium text-dusk-800">
+                    <span className="block text-sm font-medium text-pilot-grey-900">
                       {szerep.label}
                     </span>
-                    <span className="block text-xs text-dusk-500">
+                    <span className="block text-xs text-pilot-grey-600">
                       {szerep.description}
                     </span>
                   </span>
                 </label>
               ))}
-            </div>
+            </fieldset>
           ) : null}
           {/*
-            A KEPESSEGEK -- KULON SZAKASZ, NEM AZ ERTESITESEK BOVITESE, ES
-            (2026-09-25-TOL) MAR NEM UGYANAZON A HATARON.
-
-            Balazs kifejezetten KET FUGGETLEN jelolot kert (2026-09-22
-            20:28:56 UTC, "Nem. Ket kulon jelolo legyen"): ugyanaz az
-            ember lehet mindkettő, csak egyik sem, vagy barmelyik egyedul.
-            Egy kozos lista ezt a fuggetlenseget nem tudna kifejezni.
-
-            A HATAR EDDIG UGYANAZ VOLT, MINT AZ ERTESITESEKNEL (csak sajat
-            kollеganal), MERT EDDIG EGYETLEN kepesseg letezett, es az a MI
-            oldalunk munkaja volt. Az AQUARIUM_ASSET_ASSIGN (emlek 1843,
-            1847) VISZONT KIFEJEZETTEN partner-fiokra valo -- lasd
-            `service-capabilities.ts` `audience` mezojenek fejlecet. A
-            szakasz ezert MOSTANTOL a fiok-fajtahoz illo kepessegeket
-            szuri, nem a teljes listat rejti el partnernel.
+            A KEPESSEGEK -- KULON SZAKASZ, a fiok-fajtahoz illo kepessegekkel (Balazs 2026-09-22: ket fuggetlen jelolo; 2026-09-25-tol a
+            partner-fiokra valo kepesseg is itt all, lasd `service-capabilities.ts` `audience` mezojet).
           */}
           {(() => {
             const kepessegek = SERVICE_CAPABILITIES.filter(
@@ -585,14 +468,14 @@ export function UserEditorPage({ userId }: { userId?: string }) {
             );
             if (kepessegek.length === 0) return null;
             return (
-              <div className="mt-6">
-                <h2 className="text-sm font-semibold text-dusk-800">
+              <fieldset className="space-y-3">
+                <legend className="text-sm font-semibold text-pilot-grey-800">
                   Képességek
-                </h2>
+                </legend>
                 {kepessegek.map((kepesseg) => (
                   <label
                     key={kepesseg.value}
-                    className="mt-3 flex items-start gap-3"
+                    className="flex items-start gap-3"
                   >
                     <input
                       type="checkbox"
@@ -607,23 +490,25 @@ export function UserEditorPage({ userId }: { userId?: string }) {
                       }
                     />
                     <span>
-                      <span className="block text-sm font-medium text-dusk-800">
+                      <span className="block text-sm font-medium text-pilot-grey-900">
                         {kepesseg.label}
                       </span>
-                      <span className="block text-xs text-dusk-500">
+                      <span className="block text-xs text-pilot-grey-600">
                         {kepesseg.description}
                       </span>
                     </span>
                   </label>
                 ))}
-              </div>
+              </fieldset>
             );
           })()}
-          {/* the marker is only for an existing, internal account (a new account starts as a person; a partner account is never a machine) */}
-          {user && customerId === "" ? (
-            <div className="mt-6">
-              <h2 className="text-sm font-semibold text-dusk-800">Gépi fiók</h2>
-              <label className="mt-3 flex items-start gap-3">
+          {/* the marker is only for an internal account (a partner account is never a machine) */}
+          {customerId === "" ? (
+            <fieldset className="space-y-3">
+              <legend className="text-sm font-semibold text-pilot-grey-800">
+                Gépi fiók
+              </legend>
+              <label className="flex items-start gap-3">
                 <input
                   type="checkbox"
                   className="mt-1"
@@ -633,147 +518,117 @@ export function UserEditorPage({ userId }: { userId?: string }) {
                   }
                 />
                 <span>
-                  <span className="block text-sm font-medium text-dusk-800">
+                  <span className="block text-sm font-medium text-pilot-grey-900">
                     Gépi / flotta fiók, nem ember
                   </span>
-                  <span className="block text-xs text-dusk-500">
+                  <span className="block text-xs text-pilot-grey-600">
                     Nem osztható ki felelősnek (munkalap, hibajegy, üzemeltetési
                     napló), és nem kap ticket@ levélfogadást. A már rá kiosztott
                     munka megmarad.
                   </span>
                 </span>
               </label>
-            </div>
+            </fieldset>
           ) : null}
-          {user ? (
-            <div className="mt-4 flex items-center gap-2">
-              <Badge variant={user.isActive ? "success" : "neutral"}>
-                {user.isActive ? "Aktív" : "Inaktív"}
-              </Badge>
-              <span className="text-xs text-dusk-500">
-                {user.hasPassword
-                  ? "Jelszó beállítva"
-                  : "Nincs beállított jelszó"}
-              </span>
-            </div>
-          ) : null}
-        </Card>
-        <Card className="p-6">
-          <h2 className="font-semibold">Elérhető menüpontok</h2>
-          <p className="mt-1 text-sm text-dusk-500">
+          <div className="flex items-center gap-2">
+            <PilotBadge variant={user.isActive ? "success" : "grey"}>
+              {user.isActive ? "Aktív" : "Inaktív"}
+            </PilotBadge>
+            <span className="text-xs text-pilot-grey-600">
+              {user.hasPassword
+                ? "Jelszó beállítva"
+                : "Nincs beállított jelszó"}
+            </span>
+          </div>
+        </PilotFormCard>
+        <PilotFormCard title="Elérhető menüpontok">
+          <p className="text-sm text-pilot-grey-600">
             A(z) {ROLE_LABELS[role]} szerepkör jelenleg ezekhez a menüpontokhoz
             biztosít hozzáférést.
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
             {accessibleItems.length ? (
               accessibleItems.map((item) => (
-                <Badge key={item.href}>{item.label}</Badge>
+                <PilotBadge key={item.href}>{item.label}</PilotBadge>
               ))
             ) : (
-              <span className="text-sm text-dusk-500">
+              <span className="text-sm text-pilot-grey-600">
                 Ehhez a szerepkörhöz nincs elérhető menüpont.
               </span>
             )}
           </div>
-        </Card>
+        </PilotFormCard>
         <div className="flex justify-end">
-          <Button type="submit" disabled={busy}>
-            {busy
-              ? userId
-                ? "Mentés…"
-                : "Létrehozás…"
-              : userId
-                ? "Változások mentése"
-                : "Felhasználó létrehozása"}
-          </Button>
+          <PilotButton type="submit" disabled={busy}>
+            {busy ? "Mentés…" : "Változások mentése"}
+          </PilotButton>
         </div>
       </form>
-      {/*
-        A LATHATOSAGI SZAKASZ CSAK MEGLEVO FELHASZNALONAL ALL, es ez nem
-        szepseghiba: a hozzarendeles a fiok AZONOSITOJAHOZ kotodik, ami a
-        felvitel elott meg nem letezik.
-      */}
       <div className="space-y-6" {...panel("jogok")}>
-        {user ? (
-          <UserVisibleUnits
-            userId={user.id}
-            role={user.role}
-            /* A KET KOTES KIZARJA EGYMAST (`User_at_most_one_partner_check`),
-             tehat ez harom allapot, nem negy. */
-            binding={
-              user.customerId
-                ? "customer"
-                : user.supplierId
-                  ? "supplier"
-                  : "internal"
-            }
-          />
-        ) : null}
+        <UserVisibleUnits
+          userId={user.id}
+          role={user.role}
+          /* A KET KOTES KIZARJA EGYMAST (`User_at_most_one_partner_check`), tehat ez harom allapot, nem negy. */
+          binding={
+            user.customerId
+              ? "customer"
+              : user.supplierId
+                ? "supplier"
+                : "internal"
+          }
+        />
         {/*
-        A FELHASZNÁLÓNKÉNTI JOGOK (3. lépés): csak meglévő felhasználónál, mert
-        az eltérés a fiók azonosítójához kötődik. A táblázat saját mentéssel
-        megy, a fenti űrlaptól függetlenül: a szerepkör változtatása után a
-        táblázat az ÚJ sablonhoz méri az eltéréseket, ezért előbb azt kell menteni.
-      */}
-        {user ? (
-          <UserPermissionTable
-            key={`${user.id}:${user.role}`}
-            userId={user.id}
-            customerId={user.customerId}
-            supplierId={user.supplierId ?? null}
-          />
-        ) : null}
+          A FELHASZNÁLÓNKÉNTI JOGOK: a táblázat saját mentéssel megy, a fenti űrlaptól függetlenül: a szerepkör változtatása után a táblázat
+          az ÚJ sablonhoz méri az eltéréseket, ezért előbb azt kell menteni.
+        */}
+        <UserPermissionTable
+          key={`${user.id}:${user.role}`}
+          userId={user.id}
+          customerId={user.customerId}
+          supplierId={user.supplierId ?? null}
+        />
       </div>
       {showScheduleTab ? (
         <div className="space-y-6" {...panel("munkarend")}>
-          {/*
-        THE WEEKLY SCHEDULE (os-jelenleti-iv, S1b): only on an existing account, for the same reason as above (the versions
-        hang on the account's id). The section hides itself without attendance.manage or for a partner or machine account.
-      */}
-          {user ? (
-            <UserAttendanceSchedule userId={user.id} role={user.role} />
-          ) : null}
+          {/* THE WEEKLY SCHEDULE (os-jelenleti-iv, S1b): the section hides itself without attendance.manage or for a partner or machine account. */}
+          <UserAttendanceSchedule userId={user.id} role={user.role} />
         </div>
       ) : null}
-      {user ? (
-        <div className="space-y-6" {...panel("biztonsag")}>
-          <Card className="p-6">
-            <h2 className="font-semibold">Jelszó módosítása</h2>
-            <p className="mt-1 text-sm text-dusk-500">
-              A jelenlegi jelszó nem jeleníthető meg. Az admin új jelszót
-              állíthat be a felhasználónak.
-            </p>
-            <div className="mt-4 flex gap-2">
-              <Input
-                type="password"
-                aria-label="Új jelszó"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-                placeholder="Legalább 8 karakter"
-              />
-              <Button
-                type="button"
-                disabled={passwordBusy || newPassword.length < 8}
-                onClick={() => void submitPassword()}
-              >
-                {passwordBusy ? "Mentés…" : "Jelszó mentése"}
-              </Button>
-            </div>
-            {passwordNotice ? (
-              <p className="mt-2 text-sm text-dusk-500">{passwordNotice}</p>
-            ) : null}
-          </Card>
-          <Card className="p-6">
-            <h2 className="font-semibold">Audit</h2>
-            <p className="mt-2 text-sm text-dusk-500">
-              Létrehozva: {new Date(user.createdAt).toLocaleString("hu-HU")} ·
-              Frissítve: {new Date(user.updatedAt).toLocaleString("hu-HU")}
-              {user.passwordUpdatedAt
-                ? ` · Jelszó frissítve: ${new Date(user.passwordUpdatedAt).toLocaleString("hu-HU")}`
-                : ""}
-            </p>
-            <Button
-              className="mt-4"
+      <div className="max-w-[760px] space-y-6" {...panel("biztonsag")}>
+        <PilotFormCard title="Jelszó módosítása">
+          <p className="text-sm text-pilot-grey-600">
+            A jelenlegi jelszó nem jeleníthető meg. Az admin új jelszót állíthat
+            be a felhasználónak.
+          </p>
+          <div className="flex gap-2">
+            <PilotInput
+              type="password"
+              aria-label="Új jelszó"
+              value={newPassword}
+              onChange={setNewPassword}
+              placeholder="Legalább 8 karakter"
+            />
+            <PilotButton
+              disabled={passwordBusy || newPassword.length < 8}
+              onClick={() => void submitPassword()}
+            >
+              {passwordBusy ? "Mentés…" : "Jelszó mentése"}
+            </PilotButton>
+          </div>
+          {passwordNotice ? (
+            <p className="text-sm text-pilot-grey-600">{passwordNotice}</p>
+          ) : null}
+        </PilotFormCard>
+        <PilotFormCard title="Audit">
+          <p className="text-sm text-pilot-grey-600">
+            Létrehozva: {new Date(user.createdAt).toLocaleString("hu-HU")} ·
+            Frissítve: {new Date(user.updatedAt).toLocaleString("hu-HU")}
+            {user.passwordUpdatedAt
+              ? ` · Jelszó frissítve: ${new Date(user.passwordUpdatedAt).toLocaleString("hu-HU")}`
+              : ""}
+          </p>
+          <div>
+            <PilotButton
               variant={user.isActive ? "danger" : "secondary"}
               disabled={isSelf}
               title={
@@ -784,43 +639,46 @@ export function UserEditorPage({ userId }: { userId?: string }) {
               }
             >
               {user.isActive ? "Inaktiválás" : "Aktiválás"}
-            </Button>
-          </Card>
-        </div>
-      ) : null}
+            </PilotButton>
+          </div>
+        </PilotFormCard>
+      </div>
       {confirmDeactivate ? (
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="deactivate-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-dusk-950/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-pilot-grey-900/40 p-4"
         >
-          <Card className="max-w-lg p-6">
-            <h2 id="deactivate-title" className="font-semibold">
+          <PilotCard className="max-w-lg p-6">
+            <h2
+              id="deactivate-title"
+              className="font-semibold text-pilot-grey-900"
+            >
               Felhasználó inaktiválása
             </h2>
-            <p className="mt-2 text-sm">
+            <p className="mt-2 text-sm text-pilot-grey-800">
               Az inaktivált felhasználó nem tud bejelentkezni, de a korábbi
               tevékenységei (audit, rendelések, mozgások) megmaradnak.
             </p>
             <div className="mt-5 flex justify-end gap-2">
-              <Button
+              <PilotButton
                 variant="secondary"
                 onClick={() => setConfirmDeactivate(false)}
               >
                 Mégse
-              </Button>
-              <Button
+              </PilotButton>
+              <PilotButton
                 variant="danger"
                 disabled={busy}
                 onClick={() => void toggleActive()}
               >
                 Inaktiválás megerősítése
-              </Button>
+              </PilotButton>
             </div>
-          </Card>
+          </PilotCard>
         </div>
       ) : null}
-    </div>
+    </PilotThemeRoot>
   );
 }
