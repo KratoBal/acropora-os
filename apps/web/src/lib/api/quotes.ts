@@ -308,6 +308,20 @@ export const quotesApi = {
       json("POST", { ids }),
     );
   },
+  /** A blokk tételeinek új sorrendje: a blokk MINDEN tételének azonosítója, a kívánt sorrendben (a szerver más listát elutasít). */
+  reorderItems(
+    token: string,
+    quoteId: string,
+    versionId: string,
+    blockId: string,
+    ids: string[],
+  ) {
+    return apiRequest<QuoteDetailDto>(
+      `/quotes/${id(quoteId)}/versions/${id(versionId)}/blocks/${id(blockId)}/items/reorder`,
+      token,
+      json("POST", { ids }),
+    );
+  },
   updateBlock(
     token: string,
     quoteId: string,

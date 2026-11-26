@@ -403,6 +403,20 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
     [ids[index], ids[target]] = [ids[target]!, ids[index]!];
     void write(() => quotesApi.reorderBlocks(token, quote.id, v.id, ids));
   };
+  /** A TÉTELEK SORRENDJE blokkonként, ugyanúgy fel-le, mint a blokkoké (Luca, 2026-11-26): a blokk minden tételének azonosítója az új sorrendben. */
+  const moveItem = (
+    block: QuoteInternalBlock,
+    index: number,
+    delta: number,
+  ) => {
+    const ids = block.items.map((item) => item.id);
+    const target = index + delta;
+    if (target < 0 || target >= ids.length) return;
+    [ids[index], ids[target]] = [ids[target]!, ids[index]!];
+    void write(() =>
+      quotesApi.reorderItems(token, quote.id, v.id, block.id, ids),
+    );
+  };
   const addBlock = (kind: QuoteBlockKindValue) =>
     void write(() =>
       quotesApi.addBlock(token, quote.id, v.id, {
@@ -512,6 +526,7 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
               }
               onAddItem={() => setItemDrawer({ blockId: block.id, item: null })}
               onEditItem={(item) => setItemDrawer({ blockId: null, item })}
+              onMoveItem={(index, delta) => moveItem(block, index, delta)}
               onBom={(item) => setBomItemId(item.id)}
               onDeleteItem={(item) =>
                 setAsking({
@@ -762,6 +777,7 @@ function BlockCard({
   onSave,
   onAddItem,
   onEditItem,
+  onMoveItem,
   onBom,
   onDeleteItem,
   bomCount,
@@ -780,6 +796,7 @@ function BlockCard({
   }) => Promise<boolean>;
   onAddItem: () => void;
   onEditItem: (item: Item) => void;
+  onMoveItem: (index: number, delta: number) => void;
   onBom: (item: Item) => void;
   onDeleteItem: (item: Item) => void;
   bomCount: (itemId: string) => number;
@@ -891,7 +908,7 @@ function BlockCard({
 
         {ITEM_KINDS.has(block.kind) ? (
           <div className="space-y-2">
-            {block.items.map((item) => (
+            {block.items.map((item, itemIndex) => (
               <div
                 key={item.id}
                 className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-pilot-grey-200 p-4"
@@ -918,6 +935,22 @@ function BlockCard({
                   </p>
                   <ItemGrossLines item={item} currency={currency} />
                   <div className="mt-2 flex flex-wrap justify-end gap-1">
+                    <PilotButton
+                      variant="ghost"
+                      aria-label={`${item.name}: feljebb`}
+                      disabled={busy || itemIndex === 0}
+                      onClick={() => onMoveItem(itemIndex, -1)}
+                    >
+                      ↑
+                    </PilotButton>
+                    <PilotButton
+                      variant="ghost"
+                      aria-label={`${item.name}: lejjebb`}
+                      disabled={busy || itemIndex === block.items.length - 1}
+                      onClick={() => onMoveItem(itemIndex, 1)}
+                    >
+                      ↓
+                    </PilotButton>
                     <PilotButton
                       variant="ghost"
                       aria-label={`${item.name}: szerkesztés`}
