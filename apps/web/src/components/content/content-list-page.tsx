@@ -1,14 +1,6 @@
 "use client";
 
-import {
-  Alert,
-  Badge,
-  Card,
-  EmptyState,
-  PageHeader,
-  Select,
-  Skeleton,
-} from "@acropora/ui";
+import { Alert, Badge, Card, PageHeader, Select, Skeleton } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -344,10 +336,13 @@ function ContentSection({
         {title} ({items.length})
       </h2>
       {items.length === 0 ? (
-        <EmptyState
-          title={empty}
-          description="Ha ez váratlan, töltsd újra az oldalt."
-        />
+        /* EGY SOR, NEM EGY DOBOZ (Picasso 3.26): az üres "Képre vár" 290 px magas keretet foglalt, miközben a valódi lista a görgetés alatt kezdődött */
+        <p role="status" className="text-sm text-pilot-grey-600">
+          {empty}
+          <span className="ml-1 text-xs text-pilot-grey-500">
+            Ha ez váratlan, töltsd újra az oldalt.
+          </span>
+        </p>
       ) : (
         <div className="space-y-2">
           {items.map((item) => (
