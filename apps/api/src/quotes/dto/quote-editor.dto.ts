@@ -89,6 +89,7 @@ export class QuoteItemPatchDto implements QuoteItemPatch {
   @IsOptional() @IsString() @Matches(DECIMAL) unitNetPrice?: string;
   @IsOptional() @IsString() @Matches(DECIMAL) vatRatePercent?: string;
   @IsOptional() @IsBoolean() isOptional?: boolean;
+  @IsOptional() @IsString() @MaxLength(100) replacesItemId?: string | null;
   /** see QuoteItemPatch.dropBomItems: the switch to STANDALONE takes the item's BOM lines with it */
   @IsOptional() @IsBoolean() dropBomItems?: boolean;
 }
@@ -102,6 +103,7 @@ export class QuoteItemDto implements QuoteItemInput {
   @IsString() @Matches(DECIMAL) unitNetPrice!: string;
   @IsString() @Matches(DECIMAL) vatRatePercent!: string;
   @IsOptional() @IsBoolean() isOptional?: boolean;
+  @IsOptional() @IsString() @MaxLength(100) replacesItemId?: string | null;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) position?: number;
 }
 

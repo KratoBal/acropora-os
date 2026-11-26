@@ -97,6 +97,7 @@ function fake(input: {
       create: (a: unknown) => note("quoteBomItem.create", a),
     },
     quoteItem: {
+      updateMany: (a: unknown) => note("quoteItem.updateMany", a),
       deleteMany: (a: unknown) => note("quoteItem.deleteMany", a),
       create: (a: unknown) => note("quoteItem.create", a),
     },
@@ -127,6 +128,8 @@ describe("deleteDraft", () => {
     assert.deepEqual(result, { id: "q1", quoteNumber: "AJ-2026-0042" });
     assert.deepEqual(writes, [
       "quoteBomItem.deleteMany",
+      // KIVÁLTOTT TÉTEL: a tételek egymásra mutathatnak (Restrict), előbb elengedjük, utána törlődnek
+      "quoteItem.updateMany",
       "quoteItem.deleteMany",
       "quoteBlock.deleteMany",
       "quotePaymentMilestone.deleteMany",

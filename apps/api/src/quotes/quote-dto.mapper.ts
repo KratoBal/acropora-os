@@ -281,6 +281,7 @@ function internalVersionDto(
         variantLabel: variantLabel(
           v.blocks[index]!.items[itemIndex]!.variant ?? null,
         ),
+        replacesItemId: v.blocks[index]!.items[itemIndex]!.replacesItemId,
       })),
     })),
   };

@@ -89,6 +89,10 @@ export function budapestToday(now = new Date()): string {
 
 /** What the customer sees, in a stable order: the fingerprint of a version. */
 export function versionContentHash(v: VersionTree): string {
+  // KIVÁLTOTT TÉTEL: a kiváltott sor helye (blokk.tétel sorszám), mert az azonosító verziónként más; csak ha van, hogy a régi tartalom lenyomata ne mozduljon
+  const slot = new Map<string, string>();
+  for (const [bi, b] of v.blocks.entries())
+    for (const [ii, i] of b.items.entries()) slot.set(i.id, `${bi}.${ii}`);
   const content = {
     // the title is printed on the PDF, so it is part of what the customer sees
     title: v.quote.title,
@@ -110,6 +114,9 @@ export function versionContentHash(v: VersionTree): string {
         unitNetPrice: i.unitNetPrice.toString(),
         vatRatePercent: i.vatRatePercent.toString(),
         isOptional: i.isOptional,
+        ...(i.replacesItemId
+          ? { replaces: slot.get(i.replacesItemId) ?? null }
+          : {}),
       })),
     })),
     milestones: v.milestones.map((m) => [m.label, m.percent.toString()]),

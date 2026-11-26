@@ -102,3 +102,153 @@ describe("tétel: BOM-ból önállóra váltás", () => {
     expect(api.updateItem.mock.calls[0]![4]).not.toHaveProperty("dropBomItems");
   });
 });
+
+/*
+  KIVÁLTOTT TÉTEL (Luca 2026-11-26, card 2540d9d4): az opcionális tétel űrlapján választható, melyik (nem opcionális) tételt váltja ki. MI PIROSÍT: ha
+  a választó nem opcionális tételnél is látszik; ha opcionális tételt, magát a tételt vagy egy másik opcionális által már kiváltott tételt kínál; ha a
+  mentés nem a kiválasztott azonosítót küldi (vagy üresnél nem null-t); ha az opcionális jelölés visszavétele után a kiváltás elküldődik.
+*/
+const line = (
+  id: string,
+  name: string,
+  over: Record<string, unknown> = {},
+) => ({
+  id,
+  position: 0,
+  name,
+  description: null,
+  quantity: "1",
+  unit: "db",
+  unitNetPrice: "1000",
+  vatRatePercent: "27",
+  isOptional: false,
+  replacesItemId: null,
+  source: "STANDALONE" as const,
+  variantId: null,
+  variantLabel: null,
+  ...over,
+});
+
+const LINES = [
+  line("a", "A régi szűrő"),
+  line("b", "B tartó"),
+  line("c", "C már kiváltott"),
+  line("o", "O egy opcionális"),
+  line("x", "X másik opcionális", { isOptional: true, replacesItemId: "c" }),
+  line("item-1", "Szűrő", { isOptional: true }),
+];
+
+function openReplacing(over: Record<string, unknown> = {}) {
+  render(
+    <QuoteItemDrawer
+      open
+      onClose={() => {}}
+      token="t"
+      quoteId="q-1"
+      versionId="v-1"
+      currency="HUF"
+      blockId={null}
+      item={line("item-1", "Szűrő", over) as never}
+      costing={null}
+      lines={LINES as never}
+      onSaved={() => {}}
+    />,
+  );
+}
+
+describe("tétel: kiváltott tétel", () => {
+  it("nem opcionális tételnél nincs választó, opcionálisnál van, és csak a kiváltható tételeket kínálja", () => {
+    openReplacing();
+    expect(screen.queryByLabelText("Kiváltott tétel")).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Opcionális tétel/ }));
+    const select = screen.getByLabelText(
+      "Kiváltott tétel",
+    ) as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual([
+      "Nincs (kiegészítés)",
+      "A régi szűrő",
+      "B tartó",
+      "O egy opcionális",
+    ]);
+    expect(select.value).toBe("");
+  });
+
+  it("a kiválasztott tétel azonosítóját menti", async () => {
+    openReplacing();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Opcionális tétel/ }));
+    fireEvent.change(screen.getByLabelText("Kiváltott tétel"), {
+      target: { value: "b" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Tétel mentése" }));
+    await waitFor(() => expect(api.updateItem).toHaveBeenCalledTimes(1));
+    expect(api.updateItem.mock.calls[0]![4]).toMatchObject({
+      isOptional: true,
+      replacesItemId: "b",
+    });
+  });
+
+  it("a Nincs (kiegészítés) választás null-t küld, és a korábbi kiváltást megszünteti", async () => {
+    openReplacing({ isOptional: true, replacesItemId: "a" });
+    fireEvent.change(screen.getByLabelText("Kiváltott tétel"), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Tétel mentése" }));
+    await waitFor(() => expect(api.updateItem).toHaveBeenCalledTimes(1));
+    expect(api.updateItem.mock.calls[0]![4]).toMatchObject({
+      isOptional: true,
+      replacesItemId: null,
+    });
+  });
+
+  it("a már kiváltó tétel a saját kiváltottját előre kijelölve és választhatóan mutatja", () => {
+    render(
+      <QuoteItemDrawer
+        open
+        onClose={() => {}}
+        token="t"
+        quoteId="q-1"
+        versionId="v-1"
+        currency="HUF"
+        blockId={null}
+        item={
+          line("x", "X másik opcionális", {
+            isOptional: true,
+            replacesItemId: "c",
+          }) as never
+        }
+        costing={null}
+        lines={LINES as never}
+        onSaved={() => {}}
+      />,
+    );
+    const select = screen.getByLabelText(
+      "Kiváltott tétel",
+    ) as HTMLSelectElement;
+    expect(select.value).toBe("c");
+    expect(Array.from(select.options).map((o) => o.textContent)).toContain(
+      "C már kiváltott",
+    );
+  });
+
+  it("az opcionális jelölés ki- és újrakapcsolása után a választó üres, nem a régi kiváltást mutatja", () => {
+    openReplacing({ isOptional: true, replacesItemId: "a" });
+    const box = screen.getByRole("checkbox", { name: /Opcionális tétel/ });
+    fireEvent.click(box);
+    fireEvent.click(box);
+    expect(
+      (screen.getByLabelText("Kiváltott tétel") as HTMLSelectElement).value,
+    ).toBe("");
+  });
+
+  it("az opcionális jelölés visszavétele után a kiváltás nem megy el", async () => {
+    openReplacing({ isOptional: true, replacesItemId: "a" });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Opcionális tétel/ }));
+    expect(screen.queryByLabelText("Kiváltott tétel")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Tétel mentése" }));
+    await waitFor(() => expect(api.updateItem).toHaveBeenCalledTimes(1));
+    expect(api.updateItem.mock.calls[0]![4]).toMatchObject({
+      isOptional: false,
+      replacesItemId: null,
+    });
+  });
+});
