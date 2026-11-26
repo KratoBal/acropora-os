@@ -129,3 +129,90 @@ describe("pairing the transfers to the proformas", () => {
     assert.equal(result.get("p2")!.kind, "review");
   });
 });
+
+/*
+  THE BALANCE AFTER AN ADVANCE (card d31a66a3, S5): its target is the advance proforma's number with the remaining amount. WHAT
+  TURNS RED: the advance's own transfer (manually recorded, so still free) makes every balance a review; a credit from before the
+  advance pays the balance; a credit without a booking day passes the day check; two equal halves (advance = balance) are told
+  apart by guess.
+*/
+describe("pairing the balance after an advance", () => {
+  const balance = (over: Partial<PairingProforma> = {}): PairingProforma => ({
+    ...proforma("balance:b", "D-ACR-2026-7", "8200.0000"),
+    since: "2026-11-20",
+    alreadyReceived: "4800.0000",
+    amountOf: "a hátraléké",
+    ...over,
+  });
+  const on = (day: string) => ({ bookingDate: day });
+
+  it("the advance's own transfer on the same number does not count, the balance's pairs", () => {
+    const decisions = pairTransfers(
+      [balance()],
+      [
+        credit("advance", "D-ACR-2026-7", "4800.00", on("2026-11-20")),
+        credit("rest", "D ACR 2026 7", "8200.00", on("2026-11-25")),
+      ],
+    );
+    assert.deepEqual(decisions.get("balance:b"), {
+      kind: "paired",
+      transactionId: "rest",
+    });
+  });
+
+  it("a credit booked before the advance, or without a booking day, does not pay the balance", () => {
+    const decisions = pairTransfers(
+      [balance()],
+      [
+        credit("before", "D-ACR-2026-7", "8200.00", on("2026-11-19")),
+        credit("undated", "D-ACR-2026-7", "8200.00"),
+      ],
+    );
+    assert.deepEqual(decisions.get("balance:b"), { kind: "none" });
+  });
+
+  it("a balance equal to the advance cannot be told from it: both credits go to review", () => {
+    const decisions = pairTransfers(
+      [balance({ grossAmount: "4800.0000" })],
+      [
+        credit("advance", "D-ACR-2026-7", "4800.00", on("2026-11-20")),
+        credit("rest", "D-ACR-2026-7", "4800.00", on("2026-11-25")),
+      ],
+    );
+    const decision = decisions.get("balance:b");
+    assert.equal(decision?.kind, "review");
+    assert.deepEqual(
+      decision?.kind === "review" ? decision.transactionIds : [],
+      ["advance", "rest"],
+    );
+  });
+
+  // barracuda on #2982: the advance recorded by hand leaves its own credit free; with an equal balance it must not pay it
+  it("a balance equal to the advance never pairs, even when the advance's own credit is the only one", () => {
+    const decision = pairTransfers(
+      [balance({ grossAmount: "4800.0000" })],
+      [credit("advance", "D-ACR-2026-7", "4800.00", on("2026-11-21"))],
+    ).get("balance:b");
+    assert.equal(decision?.kind, "review");
+    assert.deepEqual(
+      decision?.kind === "review" ? decision.transactionIds : [],
+      ["advance"],
+    );
+    assert.match(
+      decision?.kind === "review" ? decision.reason : "",
+      /Már beérkezett ugyanennyi \(4800 HUF\)/,
+    );
+  });
+
+  it("a different remaining amount goes to review with both amounts", () => {
+    const decision = pairTransfers(
+      [balance()],
+      [credit("rest", "D-ACR-2026-7", "8000.00", on("2026-11-25"))],
+    ).get("balance:b");
+    assert.equal(decision?.kind, "review");
+    assert.match(
+      decision?.kind === "review" ? decision.reason : "",
+      /összege 8000 HUF, a hátraléké 8200 HUF/,
+    );
+  });
+});

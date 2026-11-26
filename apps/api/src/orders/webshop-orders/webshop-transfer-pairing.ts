@@ -25,6 +25,21 @@ export interface PairingProforma {
   /** Bruttó, tizedesponttal (`"4800.0000"`). */
   readonly grossAmount: string;
   readonly currency: string;
+  /**
+   * The earliest booking day (`YYYY-MM-DD`) that can pay it (card d31a66a3, S5: the balance cannot come before the advance). Given:
+   * a credit without a booking day does not count.
+   */
+  readonly since?: string;
+  /**
+   * An amount already received on the same number (S5: the advance, whose proforma number the balance's transfer names too). A
+   * credit naming the number with exactly this amount is that earlier payment and does not count here, unless it is also this
+   * target's own amount: then no credit can be told from the earlier payment, and the target NEVER pairs, only goes to review,
+   * even with a single credit (barracuda on #2982: a hand-recorded advance leaves its own credit free, and it would pay the
+   * equal balance that has not come in).
+   */
+  readonly alreadyReceived?: string;
+  /** Whose amount the review reason names (default `a díjbekérőé`; S5's balance: `a hátraléké`). */
+  readonly amountOf?: string;
 }
 
 export interface PairingCredit {
@@ -34,6 +49,8 @@ export interface PairingCredit {
   readonly amount: string;
   readonly currency: string;
   readonly narrative: string;
+  /** `YYYY-MM-DD`; only a target with `since` reads it. */
+  readonly bookingDate?: string;
 }
 
 export type PairingDecision =
@@ -98,9 +115,18 @@ export function pairTransfers(
   const named = new Map<string, PairingCredit[]>();
   const claims = new Map<string, number>();
   for (const proforma of proformas) {
+    const earlier =
+      proforma.alreadyReceived !== undefined &&
+      cents(proforma.alreadyReceived) !== cents(proforma.grossAmount)
+        ? cents(proforma.alreadyReceived)
+        : null;
     const hits = incoming.filter(
       (credit) =>
         credit.currency.toUpperCase() === proforma.currency.toUpperCase() &&
+        (proforma.since === undefined ||
+          (credit.bookingDate !== undefined &&
+            credit.bookingDate >= proforma.since)) &&
+        (earlier === null || cents(credit.amount) !== earlier) &&
         narrativeNames(credit.narrative, proforma.number),
     );
     named.set(proforma.id, hits);
@@ -124,6 +150,17 @@ export function pairTransfers(
       });
       continue;
     }
+    if (
+      proforma.alreadyReceived !== undefined &&
+      cents(proforma.alreadyReceived) === cents(proforma.grossAmount)
+    ) {
+      decisions.set(proforma.id, {
+        kind: "review",
+        reason: `Már beérkezett ugyanennyi (${money(proforma.alreadyReceived, proforma.currency)}) erre a számra: az utalásból nem dönthető el, hogy ez az a befizetés vagy egy újabb, kézzel kell rögzíteni.`,
+        transactionIds: ids,
+      });
+      continue;
+    }
     const expected = cents(proforma.grossAmount);
     const exact = hits.filter(
       (hit) => expected !== null && cents(hit.amount) === expected,
@@ -140,7 +177,7 @@ export function pairTransfers(
       reason:
         hits.length > 1
           ? `${hits.length} utalás is erre a díjbekérőre hivatkozik: kézzel kell eldönteni, melyik a befizetés.`
-          : `Az utalás összege ${money(hits[0]!.amount, hits[0]!.currency)}, a díjbekérőé ${money(proforma.grossAmount, proforma.currency)}.`,
+          : `Az utalás összege ${money(hits[0]!.amount, hits[0]!.currency)}, ${proforma.amountOf ?? "a díjbekérőé"} ${money(proforma.grossAmount, proforma.currency)}.`,
       transactionIds: ids,
     });
   }

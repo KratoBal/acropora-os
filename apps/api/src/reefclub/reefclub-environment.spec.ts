@@ -170,6 +170,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "WEBSHOP_WITHDRAWAL_PULL_ENABLED",
   "WEBSHOP_WITHDRAWAL_PULL_INTERVAL_MINUTES",
   "WEBSHOP_WITHDRAWAL_PULL_STARTUP_DELAY_MINUTES",
+  // the webshop transfers' live bank pairing (card d31a66a3, S5): a three-way switch (off | observe | write), not a secret
+  "WEBSHOP_TRANSFER_PAIRING_MODE",
   // the guest invoice download's public API address (V1.1): an origin, not a secret (its SECRET twin is refused by the rule)
   "WEBSHOP_INVOICE_PUBLIC_BASE_URL",
   "WEB_URL",

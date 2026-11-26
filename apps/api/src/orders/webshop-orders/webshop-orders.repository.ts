@@ -785,6 +785,237 @@ export class WebshopOrdersRepository {
     }
   }
 
+  /**
+   * THE LIVE BANK PAIRING'S PROFORMAS (card d31a66a3, S5): per webshop order its latest proforma, when that one is issued, unpaid,
+   * numbered and priced, and the order has no receipt yet (whole order or advance alike; the receipt's kind is the proforma's own
+   * mark). An older proforma the order replaced is not a target: the manual button records to the latest too.
+   */
+  async pairingProformas(): Promise<
+    {
+      id: string;
+      orderId: string;
+      number: string;
+      grossAmount: Prisma.Decimal;
+      currency: string;
+      issuedAt: Date;
+    }[]
+  > {
+    const open = await prisma.invoice.findMany({
+      where: {
+        sourceType: "WEBSHOP_ORDER",
+        documentType: "PROFORMA",
+        status: "ISSUED",
+        isPaid: false,
+        invoiceNumber: { not: null },
+        grossAmount: { not: null },
+        sourceId: { not: null },
+      },
+      select: {
+        id: true,
+        sourceId: true,
+        invoiceNumber: true,
+        grossAmount: true,
+        currency: true,
+        createdAt: true,
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    if (!open.length) return [];
+    const orderIds = [...new Set(open.map((row) => row.sourceId!))];
+    const [latest, received] = await Promise.all([
+      this.proformas(orderIds),
+      prisma.webshopTransferReceipt.findMany({
+        where: { orderId: { in: orderIds } },
+        select: { orderId: true },
+      }),
+    ]);
+    const done = new Set(received.map((row) => row.orderId));
+    return open
+      .filter(
+        (row) =>
+          latest.get(row.sourceId!)?.id === row.id && !done.has(row.sourceId!),
+      )
+      .map((row) => ({
+        id: row.id,
+        orderId: row.sourceId!,
+        number: row.invoiceNumber!,
+        grossAmount: row.grossAmount!,
+        currency: row.currency,
+        issuedAt: row.createdAt,
+      }));
+  }
+
+  /**
+   * THE LIVE BANK PAIRING'S BALANCES (S5): the orders whose receipt paid an ADVANCE proforma and whose balance has not come in,
+   * with that proforma's number (the balance's transfer names it, as the advance's did) and the advance received.
+   */
+  async pairingBalances(): Promise<
+    {
+      orderId: string;
+      number: string;
+      advanceAmount: Prisma.Decimal;
+      advanceReceivedOn: string;
+      currency: string;
+    }[]
+  > {
+    const receipts = await prisma.webshopTransferReceipt.findMany({
+      where: { balance: { is: null } },
+      select: {
+        orderId: true,
+        proformaId: true,
+        amount: true,
+        receivedOn: true,
+        currency: true,
+      },
+      orderBy: { orderId: "asc" },
+    });
+    if (!receipts.length) return [];
+    const proformas = await prisma.invoice.findMany({
+      where: {
+        id: { in: receipts.map((row) => row.proformaId) },
+        tags: { has: WEBSHOP_ADVANCE_TAG },
+        invoiceNumber: { not: null },
+      },
+      select: { id: true, invoiceNumber: true },
+    });
+    const numbers = new Map(
+      proformas.map((row) => [row.id, row.invoiceNumber!]),
+    );
+    return receipts.flatMap((row) => {
+      const number = numbers.get(row.proformaId);
+      return number
+        ? [
+            {
+              orderId: row.orderId,
+              number,
+              advanceAmount: row.amount,
+              advanceReceivedOn: row.receivedOn.toISOString().slice(0, 10),
+              currency: row.currency,
+            },
+          ]
+        : [];
+    });
+  }
+
+  /**
+   * THE CREDITS THE LIVE PAIRING MAY USE (S5), from `since`: incoming, not marked as a duplicate, bound to no document
+   * (`BankTransactionMatch`), and recorded as no receipt in EITHER receipt table (barracuda 62377: one bank line pays one receipt).
+   */
+  async pairingCredits(since: Date): Promise<
+    {
+      id: string;
+      amount: Prisma.Decimal;
+      currency: string;
+      bookingDate: Date;
+      narrative: string;
+    }[]
+  > {
+    const [transfers, balances] = await Promise.all([
+      prisma.webshopTransferReceipt.findMany({
+        where: { bankTransactionId: { not: null } },
+        select: { bankTransactionId: true },
+      }),
+      prisma.webshopBalanceReceipt.findMany({
+        where: { bankTransactionId: { not: null } },
+        select: { bankTransactionId: true },
+      }),
+    ]);
+    const used = [...transfers, ...balances].map(
+      (row) => row.bankTransactionId!,
+    );
+    return prisma.bankTransaction.findMany({
+      where: {
+        direction: "CREDIT",
+        duplicateMarkedAt: null,
+        bookingDate: { gte: since },
+        matches: { none: {} },
+        ...(used.length ? { id: { notIn: used } } : {}),
+      },
+      select: {
+        id: true,
+        amount: true,
+        currency: true,
+        bookingDate: true,
+        narrative: true,
+      },
+      orderBy: [{ bookingDate: "asc" }, { id: "asc" }],
+    });
+  }
+
+  /**
+   * THE LIVE PAIRING'S ONE WRITE (S5): the order's receipt (`transfer`, to the paid proforma) or its balance (`balance`), from the
+   * bank line, and nothing else. In one transaction, under a lock on the bank line: the line must be bound to no document and
+   * recorded in neither receipt table (the cross-check, barracuda 62377), and the order's slot must be empty. A manual recording
+   * that won the race leaves the line free: `order-recorded`, nothing written. Only this path writes a bank line's id, always
+   * under its lock, so the line's own uniqueness cannot race; a unique violation here is the order's slot.
+   */
+  async recordPairedReceipt(
+    input: ({ kind: "transfer"; proformaId: string } | { kind: "balance" }) & {
+      orderId: string;
+      bankTransactionId: string;
+      reference: string;
+      receivedOn: string;
+      amount: Prisma.Decimal;
+      currency: string;
+    },
+  ): Promise<"recorded" | "credit-used" | "order-recorded"> {
+    const row = {
+      orderId: input.orderId,
+      source: "BANK_PAIRING" as const,
+      bankTransactionId: input.bankTransactionId,
+      reference: input.reference,
+      receivedOn: new Date(`${input.receivedOn}T00:00:00Z`),
+      amount: input.amount,
+      currency: input.currency,
+      recordedByUserId: null,
+    };
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`webshop-transfer-pairing:${input.bankTransactionId}`}, 0))`;
+        const bound =
+          (await tx.bankTransactionMatch.count({
+            where: { bankTransactionId: input.bankTransactionId },
+          })) +
+          (await tx.webshopTransferReceipt.count({
+            where: { bankTransactionId: input.bankTransactionId },
+          })) +
+          (await tx.webshopBalanceReceipt.count({
+            where: { bankTransactionId: input.bankTransactionId },
+          }));
+        if (bound > 0) return "credit-used" as const;
+        if (input.kind === "transfer") {
+          if (
+            await tx.webshopTransferReceipt.findUnique({
+              where: { orderId: input.orderId },
+              select: { orderId: true },
+            })
+          )
+            return "order-recorded" as const;
+          await tx.webshopTransferReceipt.create({
+            data: { ...row, proformaId: input.proformaId },
+          });
+        } else {
+          if (
+            await tx.webshopBalanceReceipt.findUnique({
+              where: { orderId: input.orderId },
+              select: { orderId: true },
+            })
+          )
+            return "order-recorded" as const;
+          await tx.webshopBalanceReceipt.create({ data: row });
+        }
+        return "recorded" as const;
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      )
+        return "order-recorded";
+      throw error;
+    }
+  }
+
   /** Akiknél a „Webshop befizetés-felelős” értesítési szerep be van jelölve. */
   async transferRecipients(): Promise<string[]> {
     const rows = await prisma.userNotificationRole.findMany({
