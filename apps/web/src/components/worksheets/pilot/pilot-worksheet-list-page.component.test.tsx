@@ -181,6 +181,54 @@ describe("PilotWorksheetListPage -- redesign", () => {
     );
   });
 
+  // picasso 3.9: the column mixes ticket (HJ-) and maintenance (KT-) numbers; the cell says which, from the job's kind, not its prefix
+  it("says above the number whether it is a ticket or a maintenance sheet, by the job's kind", async () => {
+    api.list.mockResolvedValue(
+      response([
+        row({
+          serviceJob: {
+            id: "job-1",
+            jobNumber: "HJ-2026-0142",
+            kind: "REPAIR",
+          },
+        }),
+        row({
+          id: "ws-2",
+          serviceJob: {
+            id: "job-2",
+            jobNumber: "KT-2026-0019",
+            kind: "MAINTENANCE",
+          },
+        }),
+        // an old maintenance sheet still carries an HJ number: the kind decides, not the prefix
+        row({
+          id: "ws-3",
+          serviceJob: {
+            id: "job-3",
+            jobNumber: "HJ-2026-0007",
+            kind: "MAINTENANCE",
+          },
+        }),
+      ]),
+    );
+    render(<PilotWorksheetListPage />);
+    await screen.findByRole("link", { name: "KT-2026-0019" });
+    const cells = screen
+      .getAllByTestId("worksheet-row")
+      .map(
+        (rowEl) =>
+          rowEl.querySelector("td[data-label='Jegy / lap']")?.textContent,
+      );
+    expect(cells).toEqual([
+      "HibajegyHJ-2026-0142",
+      "KarbantartásKT-2026-0019",
+      "KarbantartásHJ-2026-0007",
+    ]);
+    expect(
+      screen.getByRole("link", { name: "KT-2026-0019" }).getAttribute("href"),
+    ).toBe("/szerviz/karbantartas/job-2");
+  });
+
   // KEYBOARD: Enter on the service job link must not open the worksheet (the shared table's row
   // handler used to swallow it), Enter on the focused row itself opens it.
   it("Enter on the service job link does not open the worksheet, Enter on the row does", async () => {
