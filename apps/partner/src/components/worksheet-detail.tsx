@@ -16,10 +16,7 @@ import {
   pilotBadgeVariantForTone,
 } from "@acropora/ui";
 import {
-  worksheetDisplayStatus,
-  worksheetDisplayStatusLabel,
-  worksheetDisplayStatusTone,
-  worksheetStatusLabel,
+  partnerWorksheetVersionLabel,
   worksheetStatusTone,
   type WorksheetDetail as Munkalap,
   type WorksheetLineDetail,
@@ -29,6 +26,7 @@ import {
 import { partnerApi } from "@/lib/api";
 import { ticketHref } from "@/lib/ticket-kind";
 import { DocumentPanel } from "./document-panel";
+import { PartnerWorksheetStatus } from "./partner-worksheet-status";
 import { Message } from "./ticket-list";
 
 /**
@@ -203,19 +201,13 @@ export function WorksheetDetail({ id }: { id: string }) {
           <h1 className="flex-1 text-xl font-semibold text-pilot-grey-900">
             {current.subject}
           </h1>
-          <PilotBadge
-            variant={pilotBadgeVariantForTone(
-              worksheetDisplayStatusTone(
-                worksheetDisplayStatus(current.status, current.lines.length),
-              ),
-            )}
-          >
-            {
-              worksheetDisplayStatusLabel[
-                worksheetDisplayStatus(current.status, current.lines.length)
-              ]
-            }
-          </PilotBadge>
+          <div className="flex flex-col items-end gap-1">
+            <PartnerWorksheetStatus
+              status={current.status}
+              lineCount={current.lines.length}
+              inline
+            />
+          </div>
         </div>
         <p className="mt-1 text-sm text-pilot-grey-400">
           {worksheet.department.path?.join(" / ") ?? worksheet.department.name}
@@ -327,7 +319,7 @@ export function WorksheetDetail({ id }: { id: string }) {
                 <p className="text-sm italic text-pilot-grey-500">
                   {current.status === "AWAITING_SIGNATURE"
                     ? "Ez a munkalap még nem érkezett meg aláírásra. Amint kiküldjük, itt tudja aláírni."
-                    : `Ez a munkalap most nem írható alá (${worksheetStatusLabel[current.status].toLowerCase()}).`}
+                    : `Ez a munkalap most nem írható alá (${partnerWorksheetVersionLabel[current.status].toLowerCase()}).`}
                 </p>
               ) : (
                 <form className="flex flex-col gap-3" onSubmit={sign}>
@@ -663,7 +655,7 @@ function Verziok({ versions }: { versions: WorksheetVersionSummary[] }) {
                       worksheetStatusTone(version.status),
                     )}
                   >
-                    {worksheetStatusLabel[version.status]}
+                    {partnerWorksheetVersionLabel[version.status]}
                   </PilotBadge>
                 </td>
                 <td className="px-5 py-3 text-pilot-grey-600">
