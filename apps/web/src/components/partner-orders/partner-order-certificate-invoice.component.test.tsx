@@ -263,4 +263,27 @@ describe("PartnerOrderCertificateInvoice -- a piszkozat törlése (Luca kérése
       screen.getByRole("button", { name: "Kiállítás" }),
     ).toBeInTheDocument();
   });
+
+  // Picasso 3.29: the explanation of a disabled Kiállítás stood after Piszkozat törlése, so the reading order was Előnézet, Kiállítás, Törlés, explanation
+  it("the explanation of the disabled issue button stands right after it, before the delete button", async () => {
+    invoices.byCertificate.mockResolvedValue({
+      ...draftSummary,
+      issueEnabled: false,
+    });
+    render(
+      <PartnerOrderCertificateInvoice
+        certificateId="cert-1"
+        certificateNumber="TI-2026-008"
+        signed
+      />,
+    );
+    const issue = await screen.findByRole("button", { name: "Kiállítás" });
+    expect(issue).toBeDisabled();
+    const note = screen.getByText("A kiállítás még nincs bekapcsolva.");
+    const remove = screen.getByRole("button", { name: /Piszkozat törlése/ });
+    const follows = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(issue, note)).toBe(true);
+    expect(follows(note, remove)).toBe(true);
+  });
 });

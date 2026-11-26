@@ -204,6 +204,15 @@ export function PartnerOrderCertificateInvoice({
                 >
                   {issuing.busy ? "Kiállítás…" : "Kiállítás"}
                 </PilotButton>
+                {!invoice.issueEnabled ? (
+                  <span className="text-xs text-pilot-grey-500">
+                    A kiállítás még nincs bekapcsolva.
+                  </span>
+                ) : !canIssue ? (
+                  <span className="text-xs text-pilot-grey-500">
+                    A kiállításhoz pénzügyi jogosultság kell.
+                  </span>
+                ) : null}
                 <MaintenanceInvoiceDraftDelete
                   token={token}
                   invoiceId={invoice.id}
@@ -221,15 +230,6 @@ export function PartnerOrderCertificateInvoice({
                       .catch(() => undefined);
                   }}
                 />
-                {!invoice.issueEnabled ? (
-                  <span className="text-xs text-pilot-grey-500">
-                    A kiállítás még nincs bekapcsolva.
-                  </span>
-                ) : !canIssue ? (
-                  <span className="text-xs text-pilot-grey-500">
-                    A kiállításhoz pénzügyi jogosultság kell.
-                  </span>
-                ) : null}
               </>
             ) : null}
           </div>

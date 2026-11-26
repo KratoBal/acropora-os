@@ -640,6 +640,36 @@ describe("egy megrendelés", () => {
     expect(screen.getByText("Szűrő csere")).toBeInTheDocument();
   });
 
+  // Picasso 3.29: three ways back (a blue link, a breadcrumb-like eyebrow, the menu), blue links in a green system, seven equal Csatolás buttons
+  it("has one way back (a green link), no breadcrumb-like eyebrow, and green links", async () => {
+    render(<PartnerOrderDetailPage orderId="o1" />);
+    const back = await screen.findByRole("link", {
+      name: /Vissza a megrendelésekhez/,
+    });
+    expect(back.className).toContain("text-pilot-aqua-700");
+    expect(back.className).not.toContain("blue");
+    expect(screen.queryByText("Értékesítés / Megrendelések")).toBeNull();
+    const quoteLink = screen.getByRole("link", { name: /^AJ-/ });
+    expect(quoteLink.className).toContain("text-pilot-aqua-700");
+    expect(quoteLink.className).not.toContain("blue");
+  });
+
+  it("the Csatolás buttons are quiet and each names its step", async () => {
+    render(<PartnerOrderDetailPage orderId="o1" />);
+    await screen.findByText("Szűrő csere");
+    const buttons = screen.getAllByRole("button", { name: /^Csatolás: / });
+    expect(buttons.length).toBeGreaterThanOrEqual(6);
+    for (const button of buttons) {
+      expect(button.className).toContain("bg-transparent");
+      expect(button.className).not.toContain("ring-1");
+    }
+    expect(
+      screen.getByRole("button", {
+        name: "Csatolás: Aláírt teljesítésigazolás",
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("attaches a file to the chosen step", async () => {
     api.uploadDocument.mockResolvedValue({});
     render(<PartnerOrderDetailPage orderId="o1" />);
