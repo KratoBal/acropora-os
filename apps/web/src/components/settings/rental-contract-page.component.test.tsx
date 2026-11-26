@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { RentalSettings, Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -111,5 +117,39 @@ describe("RentalContractPage", () => {
         replacementAfterDays: null,
       }),
     );
+  });
+
+  /*
+    THE PREVIEW BESIDE THE RAW TEXT (Picasso 3.28, acrobot 62845). What turns this red: no preview; a heading, a kept line break or the
+    signature lines drawn differently from the PDF's blocks; a known place filled with an invented value instead of its own label; an
+    unknown place hidden instead of kept as typed.
+  */
+  it("previews the typed text as the PDF lays it out, places shown by their names", async () => {
+    render(<RentalContractPage />);
+    const text = await screen.findByLabelText("A szerződés szövege");
+    await answered(api.get);
+    fireEvent.change(text, {
+      target: {
+        value:
+          "## Felek\nBérlő: {{berlo_nev}}, {{kelt_hely}}\nmásodik sor\n\n[[alairas]]",
+      },
+    });
+    const preview = await screen.findByRole("region", {
+      name: "A szerződés előnézete",
+    });
+    expect(
+      within(preview).getByRole("heading", { name: "Felek" }),
+    ).toBeTruthy();
+    const place = within(preview).getByText("[A bérlő neve]");
+    expect(place.hasAttribute("data-place")).toBe(true);
+    // the unknown place stays as typed, as the PDF prints it
+    expect(preview.textContent).toContain("{{kelt_hely}}");
+    // the single line break is kept inside the paragraph
+    const paragraph = place.closest("p")!;
+    expect(paragraph.querySelectorAll("br")).toHaveLength(1);
+    expect(paragraph.textContent).toContain("második sor");
+    expect(
+      within(screen.getByTestId("preview-signatures")).getByText("Bérlő"),
+    ).toBeTruthy();
   });
 });
