@@ -860,6 +860,9 @@ export function PilotAssetCreatePage() {
                     onChange={(value) => {
                       setSelectedOwner(value);
                       setCustomerAddressId("");
+                      // a site belongs to one service partner: kept across an owner change it went out with another owner,
+                      // and since the field waits in place (PilotWaitingField) it was not even visible (barracuda review, #3067)
+                      setDepartmentId("");
                       setParentAssetId("");
                       setParentChoice(null);
                       setParentSearch("");
