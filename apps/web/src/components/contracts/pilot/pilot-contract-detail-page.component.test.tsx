@@ -1384,12 +1384,12 @@ describe("PilotContractDetailPage -- elmentetlen változás", () => {
     expect(screen.getByText("Minden változtatás el van mentve.")).toBeTruthy();
   });
 
-  it("a Vissza gomb elmentetlen változásnál a saját kérdésünket nyitja, és csak megerősítésre lép ki", async () => {
+  it("a Szerződések nyíl elmentetlen változásnál a saját kérdésünket nyitja, és csak megerősítésre lép ki", async () => {
     render(<PilotContractDetailPage contractId="contract-1" />);
     await addFilledItem();
     navigation.push.mockClear();
 
-    fireEvent.click(screen.getByText("← Vissza"));
+    fireEvent.click(screen.getByRole("link", { name: "Szerződések" }));
     expect(
       screen.getByText("Kilépsz a mentetlen változtatásokkal?"),
     ).toBeTruthy();
@@ -1399,10 +1399,10 @@ describe("PilotContractDetailPage -- elmentetlen változás", () => {
     expect(navigation.push).toHaveBeenCalledWith("/partnerek/szerzodesek");
   });
 
-  it("tiszta állapotban a Vissza gomb nem kérdez", async () => {
+  it("tiszta állapotban a Szerződések nyíl nem kérdez", async () => {
     render(<PilotContractDetailPage contractId="contract-1" />);
     await screen.findByLabelText("1. tétel leírása");
-    fireEvent.click(screen.getByText("← Vissza"));
+    fireEvent.click(screen.getByRole("link", { name: "Szerződések" }));
     expect(
       screen.queryByText("Kilépsz a mentetlen változtatásokkal?"),
     ).toBeNull();

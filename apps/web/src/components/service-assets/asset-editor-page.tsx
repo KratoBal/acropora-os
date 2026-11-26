@@ -34,7 +34,10 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import { ServiceBackLink } from "@/components/service/service-detail-chrome";
+import {
+  PilotBackLink,
+  backLinkLabel,
+} from "@/components/pilot/pilot-back-link";
 import { ServiceListHeader } from "@/components/service/service-list-chrome";
 import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { useReturnTo } from "@/components/navigation-history";
@@ -712,9 +715,9 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
   return (
     <div className="space-y-6">
       <ServiceOfflineNotice state={{ kind: "form" }} />
-      <ServiceBackLink href={backToList.href}>
-        {backToList.fromWithinApp ? "Vissza" : "Eszközök"}
-      </ServiceBackLink>
+      <PilotBackLink href={backToList.href} flush>
+        {backLinkLabel(backToList, "Eszközök")}
+      </PilotBackLink>
       {/* URLAP-FEJLEC: a prototipus a 29 pixeles cimet MODOSITOKENT
           (`.detail-head`) csak az adatlapokra teszi, az urlapokra nem. Az
           eyebrow itt azt mondja meg, MI EZ A LAP, nem azt, hol allunk. */}

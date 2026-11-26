@@ -2484,6 +2484,31 @@ describe("PDF előnézet és publikálás (569:363)", () => {
     );
   });
 
+  // egy alak a visszalépésre (Picasso R12): a nyíl a piszkozatnál a szerkesztőre, publikáltnál az adatlapra visz
+  it("a nyíl a piszkozatnál a szerkesztőre, publikált verziónál az adatlapra visz", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    const draft = render(<QuotePdfPage quoteId="q1" />);
+    expect(
+      (await screen.findByRole("link", { name: "Szerkesztő" })).getAttribute(
+        "href",
+      ),
+    ).toBe("/ajanlatok/q1/szerkesztes");
+    draft.unmount();
+
+    api.detail.mockResolvedValue(
+      quote([
+        version({ status: "PUBLISHED", publishedAt: "2026-10-08T08:00:00Z" }),
+      ]),
+    );
+    render(<QuotePdfPage quoteId="q1" />);
+    expect(
+      (await screen.findByRole("link", { name: "Ajánlat" })).getAttribute(
+        "href",
+      ),
+    ).toBe("/ajanlatok/q1");
+    expect(screen.queryByRole("link", { name: "Szerkesztő" })).toBeNull();
+  });
+
   it("publikált verziónál nincs publikáló gomb, a kért verzió PDF-je töltődik", async () => {
     navigation.search = new URLSearchParams("v=v1");
     api.detail.mockResolvedValue(
