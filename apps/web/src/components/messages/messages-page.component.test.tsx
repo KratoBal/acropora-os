@@ -133,6 +133,19 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("MessagesPage", () => {
+  // a telefonon a beszélgetés a lista helyén áll (ugyanaz az URL, query nélkül): a nyíl gomb, a kattintás a kijelölést törli
+  it("the arrow above an open conversation clears the selection and is a button, not a link", async () => {
+    nav.query = "c=c1";
+    render(<MessagesPage />);
+    await screen.findByRole("region", { name: "Beszélgetés: Kovács Anna" });
+    expect(screen.queryByRole("link", { name: "Beszélgetések" })).toBeNull();
+    // a nyíl csak telefonon látszik (lg:hidden): a teszt-ablak széles, ezért a rejtett elemek közt keressük
+    fireEvent.click(
+      screen.getByRole("button", { name: "Beszélgetések", hidden: true }),
+    );
+    expect(nav.replace).toHaveBeenCalledTimes(1);
+  });
+
   it("lists the conversation with the other person's name, the preview and the unread count", async () => {
     render(<MessagesPage />);
     expect(await screen.findByText("Kovács Anna")).toBeTruthy();

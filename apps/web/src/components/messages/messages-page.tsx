@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { PilotBackButton } from "@/components/pilot/pilot-back-link";
 import { messagesApi } from "@/lib/api/messages";
 
 import { ConversationRow, conversationName } from "./conversation-parts";
@@ -164,13 +165,11 @@ export function MessagesPage() {
 
         {selected && session ? (
           <div className="flex min-h-0 flex-1 flex-col gap-2">
-            <button
-              type="button"
-              className="self-start text-sm text-pilot-aqua-700 lg:hidden"
-              onClick={() => router.replace(pathname)}
-            >
-              ← Beszélgetések
-            </button>
+            <div className="lg:hidden">
+              <PilotBackButton flush onClick={() => router.replace(pathname)}>
+                Beszélgetések
+              </PilotBackButton>
+            </div>
             <ConversationView
               key={selected.id}
               token={token}

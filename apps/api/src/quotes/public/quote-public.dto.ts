@@ -7,10 +7,22 @@ import {
   MaxLength,
   MinLength,
 } from "class-validator";
-import type { PublicQuoteAcceptInput } from "@acropora/types";
+import type {
+  PublicQuoteAcceptInput,
+  PublicQuoteTotalInput,
+} from "@acropora/types";
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === "string" ? value.trim() : value;
+
+/** A végösszeg-kérés alakja: a kiválasztott opcionális tételek (a jelentést, hogy ennek a verziónak a tételei-e, a szolgáltatás őrzi). */
+export class PublicQuoteTotalBodyDto implements PublicQuoteTotalInput {
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsString({ each: true })
+  selectedOptionalItemIds?: string[];
+}
 
 /** The shape; the meaning (the link live, the options this version's) is the service's. */
 export class PublicQuoteAcceptDto implements PublicQuoteAcceptInput {

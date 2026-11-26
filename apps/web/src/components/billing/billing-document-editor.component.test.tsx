@@ -240,6 +240,12 @@ function addLine(description: string, quantity: string, unitNet: string) {
 }
 
 describe("BillingDocumentEditor", () => {
+  it("steps back to the invoice list with the shared arrow link", () => {
+    render(<BillingDocumentEditor />);
+    const back = screen.getByRole("link", { name: "Számlák" });
+    expect(back.getAttribute("href")).toBe("/penzugy/szamlazas");
+  });
+
   it("defaults: Számla, E-számla, the invoice title, summary and disabled issue button", () => {
     render(<BillingDocumentEditor />);
     expect(

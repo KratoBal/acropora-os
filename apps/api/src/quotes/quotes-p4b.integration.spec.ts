@@ -262,10 +262,12 @@ describe(
         Object.keys(page.body!).sort(),
         [
           "acceptedAt",
+          "acceptedNetTotal",
           "currency",
           "customerName",
           "items",
           "netTotal",
+          "netTotalWithOptionals",
           "optionalNetTotal",
           "priceDisplay",
           "quoteNumber",
@@ -277,11 +279,14 @@ describe(
         "PUBLIC-KEYS",
       );
       assert.deepEqual(Object.keys(page.body!.items[0]).sort(), [
+        "chosen",
         "id",
         "isOptional",
         "name",
         "netTotal",
         "quantity",
+        "replaced",
+        "replacesName",
         "unit",
         "unitNetPrice",
         "vatRatePercent",
@@ -290,6 +295,84 @@ describe(
       assert.deepEqual(
         page.body!.items.map((item: Json) => item.id),
         [null, q.optionalId],
+      );
+    });
+
+    /*
+      KIVÁLTOTT TÉTEL (card 2540d9d4): a nyilvános lap a szerver összegét mutatja. A fedőlap (opcionális, 30 000) az Akvárium (100 000) HELYÉRE lép.
+      MI PIROSÍT: ha a kiváltott tétel benne marad az összegben; ha a lap nem nevezi meg, mit vált ki az opció; ha a kiválasztás-összeg érvénytelen
+      azonosítóra (nem opcionális, ismeretlen, dupla) nem 400; ha az elfogadott nézet nem húzza át a kiváltottat és nem az elfogadott összeget adja.
+    */
+    it("the page names what an option replaces, and the server totals a selection without the replaced line", async () => {
+      const q = await linked("P4b replace");
+      await prisma.quoteItem.update({
+        where: { id: q.optionalId },
+        data: { unitNetPrice: "30000", replacesItemId: q.offeredId },
+      });
+      const page = await request(`/public/quotes/${q.token}`);
+      assert.equal(page.status, 200);
+      assert.deepEqual(
+        page.body!.items.map((item: Json) => item.replacesName),
+        [null, "Akvárium"],
+      );
+      assert.equal(page.body!.netTotal, "100000.00");
+      // 100000 + 30000 would be the sum; the replaced line is out
+      assert.equal(page.body!.netTotalWithOptionals, "30000.00");
+      assert.equal(page.body!.acceptedNetTotal, null);
+      const none = await request(`/public/quotes/${q.token}/total`, "POST", {
+        selectedOptionalItemIds: [],
+      });
+      assert.deepEqual(none.body, { netTotal: "100000.00", replacedItems: [] });
+      const chosen = await request(`/public/quotes/${q.token}/total`, "POST", {
+        selectedOptionalItemIds: [q.optionalId],
+      });
+      assert.equal(chosen.status, 200, JSON.stringify(chosen.body));
+      assert.deepEqual(chosen.body, {
+        netTotal: "30000.00",
+        replacedItems: [0],
+      });
+      for (const bad of [
+        [q.offeredId],
+        ["no-such-item"],
+        [q.optionalId, q.optionalId],
+      ]) {
+        const res = await request(`/public/quotes/${q.token}/total`, "POST", {
+          selectedOptionalItemIds: bad,
+        });
+        assert.equal(res.status, 400, JSON.stringify(bad));
+      }
+      const unknown = await request(
+        `/public/quotes/${"z".repeat(43)}/total`,
+        "POST",
+        { selectedOptionalItemIds: [] },
+      );
+      assert.equal(unknown.status, 404);
+    });
+
+    it("an accepted replacing option shows the replaced line struck and the accepted total", async () => {
+      const q = await linked("P4b replace accepted");
+      await prisma.quoteItem.update({
+        where: { id: q.optionalId },
+        data: { unitNetPrice: "30000", replacesItemId: q.offeredId },
+      });
+      const accepted = await request(
+        `/public/quotes/${q.token}/accept`,
+        "POST",
+        {
+          name: "Teszt Vevő",
+          selectedOptionalItemIds: [q.optionalId],
+          requestId: randomUUID(),
+        },
+      );
+      assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
+      assert.equal(accepted.body!.state, "ACCEPTED");
+      assert.equal(accepted.body!.acceptedNetTotal, "30000.00");
+      assert.deepEqual(
+        accepted.body!.items.map((item: Json) => [item.replaced, item.chosen]),
+        [
+          [true, false],
+          [false, true],
+        ],
       );
     });
 

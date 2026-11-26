@@ -15,6 +15,10 @@ const router = vi.hoisted(() => ({ push: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
+// the editor draws PilotThemeRoot since Picasso 3.20 slice 2, and its font is a build-time asset
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub", variable: "pilot-inter" }),
+}));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));
@@ -132,6 +136,10 @@ vi.mock("./user-permission-table", async () => {
   }
   return { UserPermissionTable };
 });
+// the visible units have their own test, and the real one fetches: here it would go to the network for every loaded account
+vi.mock("./user-visible-units", () => ({
+  UserVisibleUnits: () => <p>Látható egységek</p>,
+}));
 // a munkarendnek is saját tesztje van; itt csak az számít, melyik fülön áll a mentése
 vi.mock("./user-attendance-schedule", () => ({
   UserAttendanceSchedule: () => (
@@ -163,10 +171,36 @@ const session: Session = {
   },
 };
 
+/** An internal account (no partner), loaded: since slice 2 the editor always edits a loaded account (the new one has UserCreatePage). */
+const internalUser = {
+  id: "u1",
+  firstName: "Anna",
+  lastName: "Kiss",
+  displayName: "Kiss Anna",
+  nickname: null,
+  email: "anna@acropora.local",
+  role: "VIEWER",
+  isActive: true,
+  hasPassword: true,
+  createdAt: "2026-11-01T10:00:00.000Z",
+  updatedAt: "2026-11-25T10:00:00.000Z",
+  notificationRoles: [],
+  serviceCapabilities: [],
+  isServiceAccount: false,
+  customerId: null,
+  supplierId: null,
+};
+const renderLoaded = async () => {
+  vi.mocked(usersApi.detail).mockResolvedValue(internalUser as never);
+  render(<UserEditorPage userId="u1" />);
+  await screen.findByLabelText("Vezetéknév");
+};
+
 describe("UserEditorPage partner szerepköre", () => {
   beforeEach(() => {
     auth.session = session;
     router.push.mockReset();
+    vi.mocked(usersApi.detail).mockReset();
   });
 
   /**
@@ -183,7 +217,7 @@ describe("UserEditorPage partner szerepköre", () => {
    * olyan lapon is zold lenne, ahol a doboz SOHA nem jelenik meg.
    */
   it("az értesítési jelölőnégyzet csak saját kollégánál jelenik meg", async () => {
-    render(<UserEditorPage />);
+    await renderLoaded();
 
     expect(
       screen.getByRole("checkbox", { name: /Hibajegy-felelős/ }),
@@ -208,7 +242,7 @@ describe("UserEditorPage partner szerepköre", () => {
    * KULON allapot.
    */
   it("a két értesítési szerep egymástól függetlenül kapcsolható", async () => {
-    render(<UserEditorPage />);
+    await renderLoaded();
 
     const hibajegy = screen.getByRole("checkbox", {
       name: /Hibajegy-felelős/,
@@ -246,7 +280,7 @@ describe("UserEditorPage partner szerepköre", () => {
    * ágú kontrollal együtt.
    */
   it("a belsős képesség (audience: internal) csak saját kollégánál jelenik meg", async () => {
-    render(<UserEditorPage />);
+    await renderLoaded();
 
     expect(
       screen.getByRole("checkbox", { name: /Anyag beérkezésének jelölése/ }),
@@ -277,7 +311,7 @@ describe("UserEditorPage partner szerepköre", () => {
    * indul.
    */
   it("a partner-képesség (audience: partner) csak partner-fióknál jelenik meg", async () => {
-    render(<UserEditorPage />);
+    await renderLoaded();
 
     expect(
       screen.queryByRole("checkbox", {
@@ -305,7 +339,7 @@ describe("UserEditorPage partner szerepköre", () => {
    * bejelolese a masikat is bejelolne, vagy a levetele elvinne a masikat is.
    */
   it("a képesség jelölése nem hat az értesítési szerepekre, és fordítva", async () => {
-    render(<UserEditorPage />);
+    await renderLoaded();
 
     const anyagigenyErtesules = screen.getByRole("checkbox", {
       name: /Anyagigény-felelős/,
@@ -328,7 +362,7 @@ describe("UserEditorPage partner szerepköre", () => {
   });
 
   it("vevő kiválasztásakor csak a Partner szerviz szerepet kínálja és megmagyarázza", async () => {
-    render(<UserEditorPage />);
+    await renderLoaded();
 
     fireEvent.click(screen.getByRole("button", { name: "Vevő kiválasztása" }));
 
@@ -357,7 +391,7 @@ describe("UserEditorPage partner szerepköre", () => {
    * valasztas SEM allitja at a szerepet.
    */
   it("a vevő törlése a szerepkört is visszaveszi", async () => {
-    render(<UserEditorPage />);
+    await renderLoaded();
     const role = screen.getByLabelText("Szerepkör") as HTMLSelectElement;
 
     fireEvent.click(screen.getByRole("button", { name: "Vevő kiválasztása" }));
@@ -407,13 +441,6 @@ describe("UserEditorPage gépi fiók jelölő", () => {
     router.push.mockReset();
     vi.mocked(usersApi.detail).mockReset();
     vi.mocked(usersApi.update).mockReset();
-  });
-
-  it("egy új fióknál nincs kapcsoló", () => {
-    render(<UserEditorPage />);
-    expect(
-      screen.queryByRole("checkbox", { name: /Gépi \/ flotta fiók/ }),
-    ).toBeNull();
   });
 
   it("a betöltött jelölőt mutatja, és a bejelölés a mentésben elmegy", async () => {
@@ -475,7 +502,7 @@ describe("UserEditorPage gépi fiók jelölő", () => {
   });
 });
 
-describe("UserEditorPage új és meglévő fiók űrlapja (Picasso 3.20)", () => {
+describe("UserEditorPage meglévő fiók űrlapja (Picasso 3.20)", () => {
   const existing = {
     id: "u9",
     firstName: "Béla",
@@ -501,16 +528,6 @@ describe("UserEditorPage új és meglévő fiók űrlapja (Picasso 3.20)", () =>
     vi.mocked(usersApi.detail).mockReset();
   });
 
-  it("új fióknál a gomb a létrehozást mondja, nem a változások mentését", () => {
-    render(<UserEditorPage />);
-    expect(
-      screen.getByRole("button", { name: "Felhasználó létrehozása" }),
-    ).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "Változások mentése" }),
-    ).toBeNull();
-  });
-
   it("meglévő fióknál a gomb a változások mentését mondja", async () => {
     vi.mocked(usersApi.detail).mockResolvedValue(existing as never);
     render(<UserEditorPage userId="u9" />);
@@ -522,9 +539,11 @@ describe("UserEditorPage új és meglévő fiók űrlapja (Picasso 3.20)", () =>
     ).toBeNull();
   });
 
-  it("a kötelező mezők csillagot kapnak (a felolvasónak kötelező), a becenév nem kötelező; a jelszó is kötelező új fióknál", () => {
-    render(<UserEditorPage />);
-    for (const name of ["Vezetéknév", "Keresztnév", "E-mail cím", "Jelszó"]) {
+  it("a kötelező mezők csillagot kapnak (a felolvasónak kötelező), a becenév nem kötelező", async () => {
+    vi.mocked(usersApi.detail).mockResolvedValue(existing as never);
+    render(<UserEditorPage userId="u9" />);
+    await screen.findByRole("button", { name: "Változások mentése" });
+    for (const name of ["Vezetéknév", "Keresztnév", "E-mail cím"]) {
       const label = screen.getByText(name, { selector: "label" });
       expect(label.textContent, name).toContain("*");
       expect(label.textContent, name).toContain("(kötelező)");
@@ -534,19 +553,15 @@ describe("UserEditorPage új és meglévő fiók űrlapja (Picasso 3.20)", () =>
     expect(nick.textContent).not.toContain("*");
   });
 
-  it("a jelszó az e-mail mellett áll, nem a lap végén", () => {
-    render(<UserEditorPage />);
-    const email = screen.getByLabelText("E-mail cím");
-    const password = screen.getByLabelText("Jelszó");
-    const role = screen.getByLabelText("Szerepkör");
-    // dokumentum-sorrend: e-mail, jelszó, szerepkör
+  // Picasso 3.20 slice 2: the editor is on the pilot set (PilotThemeRoot), and it has no new-account branch any more
+  it("a szerkesztő a pilot készleten áll, és nincs benne létrehozó ág", async () => {
+    vi.mocked(usersApi.detail).mockResolvedValue(existing as never);
+    const { container } = render(<UserEditorPage userId="u9" />);
+    await screen.findByRole("button", { name: "Változások mentése" });
+    expect(container.querySelector(".pilot-inter-stub")).not.toBeNull();
     expect(
-      email.compareDocumentPosition(password) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      password.compareDocumentPosition(role) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+      screen.queryByRole("button", { name: "Felhasználó létrehozása" }),
+    ).toBeNull();
   });
 
   it("meglévő fióknál nincs jelszó mező az alapadatok között", async () => {
@@ -556,8 +571,10 @@ describe("UserEditorPage új és meglévő fiók űrlapja (Picasso 3.20)", () =>
     expect(screen.queryByLabelText("Jelszó")).toBeNull();
   });
 
-  it("a partner-kötés felirata érthető, és megmondja, mit jelent", () => {
-    render(<UserEditorPage />);
+  it("a partner-kötés felirata érthető, és megmondja, mit jelent", async () => {
+    vi.mocked(usersApi.detail).mockResolvedValue(existing as never);
+    render(<UserEditorPage userId="u9" />);
+    await screen.findByRole("button", { name: "Változások mentése" });
     expect(screen.getByText("Partnerhez kötött fiók")).toBeTruthy();
     expect(
       screen.getByText(/csak annak a partnernek az adatait látja/),
@@ -658,19 +675,12 @@ describe("UserEditorPage fülei", () => {
     ).toBeInTheDocument();
   });
 
-  it("a Munkarend fül csak ott áll, ahol a szakasz megjelenne, és egy új felhasználónál nincs fül", async () => {
+  it("a Munkarend fül csak ott áll, ahol a szakasz megjelenne", async () => {
     vi.mocked(usersApi.detail).mockResolvedValue(existing("VIEWER") as never);
-    const first = render(<UserEditorPage userId="u1" />);
+    render(<UserEditorPage userId="u1" />);
     const tablist = await screen.findByRole("tablist");
     expect(
       within(tablist).queryByRole("tab", { name: "Munkarend" }),
     ).toBeNull();
-    first.unmount();
-
-    render(<UserEditorPage />);
-    expect(screen.queryByRole("tablist")).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Felhasználó létrehozása" }),
-    ).toBeInTheDocument();
   });
 });

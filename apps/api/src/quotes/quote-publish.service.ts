@@ -168,6 +168,14 @@ export function pdfInputOf(v: VersionTree, creationDate: Date): QuotePdfInput {
         unitNetPrice: i.unitNetPrice,
         vatRatePercent: i.vatRatePercent,
         isOptional: i.isOptional,
+        // KIVÁLTOTT TÉTEL: a PDF a kiváltott tétel nevét írja ki, és az "együtt" összegből elhagyja
+        ref: i.id,
+        replacesRef: i.replacesItemId,
+        replacesName: i.replacesItemId
+          ? (v.blocks
+              .flatMap((block) => block.items)
+              .find((other) => other.id === i.replacesItemId)?.name ?? null)
+          : null,
       })),
     })),
     milestones: v.milestones.map((m) => ({
