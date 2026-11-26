@@ -7,6 +7,14 @@ import { ReefClubRateLimits } from "./reefclub-rate-limits.js";
 import { ReefClubRunOutController } from "./reefclub-runout.controller.js";
 import { REEFCLUB_PUBLIC_KEY, type ReefClubRequest } from "./reefclub.guard.js";
 
+/**
+ * A FIXED INSTANT IN THE MIDDLE OF THE LIMITER'S WINDOW. `IpRateLimiter` counts in wall-clock windows (a minute, ten minutes), so a
+ * test that counts up to the limit and then expects the 429 failed when its calls crossed a window boundary: the count reset and the
+ * last call passed (CI, 2026-11-26, #3068: "Missing expected rejection" on the 121st link request). Frozen through the test context,
+ * restored after the test.
+ */
+const MID_WINDOW = Date.UTC(2026, 10, 26, 12, 4, 30);
+
 /*
   THE RUN-OUT REMINDER'S ROUTES (ReefClub V3.2, slice 3b). WHAT TURNS THIS RED: the account taken from anywhere but the session; a
   named refusal of the service answered as a success, or without its code; a missing product answered as anything but a 404 with
@@ -145,7 +153,8 @@ describe("the run-out reminder routes", () => {
     assert.deepEqual(calls[0], ["unsubscribeByKey", "k"]);
   });
 
-  it("the turn-on is limited per account and the unsubscribe per address", async () => {
+  it("the turn-on is limited per account and the unsubscribe per address", async (t) => {
+    t.mock.method(Date, "now", () => MID_WINDOW);
     const { controller, limits } = setup({
       enable: async () => ({ outcome: "ENABLED", id: "r1" }),
       unsubscribeByKey: async () => ({ outcome: "UNSUBSCRIBED" }),
