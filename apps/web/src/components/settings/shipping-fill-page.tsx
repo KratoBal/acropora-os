@@ -98,6 +98,7 @@ export function ShippingFillPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        eyebrow="Beállítások"
         title="Szállítási jelzők feltöltése"
         description="Egyszeri feltöltés a UNAS-ból: minden UNAS-os termék megkapja a szállítási jelzőit, UNAS forrással. A kézzel állított jelzőhöz nem nyúl. Előbb próba, utána írás."
       />

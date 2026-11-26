@@ -190,6 +190,7 @@ export function UnitsOfMeasurePage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        eyebrow="Beállítások"
         title="Mértékegységek"
         description="A karbantartott mértékegység-lista. A kivezetett egység kiesik a választóból, a meglévő értékek mellett viszont olvasható marad."
       />

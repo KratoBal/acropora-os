@@ -32,6 +32,26 @@ function parseStatus(value: unknown): UnasStockSyncOutboxStatus | undefined {
     : undefined;
 }
 
+/** A lap mérete: alapból 50, legfeljebb 200 (a régi viselkedés). */
+export function parseLimit(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0
+    ? Math.min(parsed, 200)
+    : 50;
+}
+
+/**
+ * A LAPOZÁS KEZDETE (Picasso 3.27, acrobot 62278): a lista eddig csak a legutóbbi `limit` sort adta. Az `offset` nem negatív egész; ami nem az (hiányzik, szöveg, tört, negatív), nulla, vagyis az
+ * első oldal, nem hiba: egy régi vagy kézzel írt cím ne törje el a listát. A felső korlát megakadályozza, hogy egy óriási érték a szerverre nagy `skip`-et terheljen.
+ */
+export const MAX_OUTBOX_OFFSET = 1_000_000;
+export function parseOffset(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0
+    ? Math.min(parsed, MAX_OUTBOX_OFFSET)
+    : 0;
+}
+
 @Controller("integrations/unas/stock-sync/outbox")
 export class UnasStockSyncOutboxController {
   constructor(
@@ -57,14 +77,15 @@ export class UnasStockSyncOutboxController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.INVENTORY_VIEW)
-  list(@Query("status") status: unknown, @Query("limit") limit: unknown) {
-    const parsedLimit = Number(limit);
+  list(
+    @Query("status") status: unknown,
+    @Query("limit") limit: unknown,
+    @Query("offset") offset: unknown,
+  ) {
     return this.repository.list({
       status: parseStatus(status),
-      limit:
-        Number.isSafeInteger(parsedLimit) && parsedLimit > 0
-          ? Math.min(parsedLimit, 200)
-          : 50,
+      limit: parseLimit(limit),
+      offset: parseOffset(offset),
     });
   }
 

@@ -3,6 +3,7 @@
 import {
   Alert,
   ConfirmDialog,
+  Icon,
   PilotBadge,
   PilotButton,
   PilotCard,
@@ -30,6 +31,7 @@ import {
   type OperationsTaskTemplateDto,
   type OperationsTaskTemplateInput,
 } from "@acropora/types";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -347,49 +349,52 @@ export function OperationsTemplateEditorPage({
 
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
-      <PilotPageHeader
-        eyebrow="Beállítások / Üzemeltetési napló"
-        title={template ? `Sablon · ${template.name}` : "Új sablon"}
-        description="A sablon mondja meg, mit kell rögzíteni egy üzemeltetési feladathoz. A mezők kód nélkül épülnek fel."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <PilotButton
-              variant="ghost"
-              onClick={() => router.push(OPERATIONS_TEMPLATES_PATH)}
-            >
-              Vissza a sablonokhoz
-            </PilotButton>
-            {template ? (
-              template.isActive ? (
-                <PilotButton
-                  variant="secondary"
-                  size="regular"
-                  disabled={busy}
-                  onClick={() => setRetiring(true)}
-                >
-                  Kivezetés
-                </PilotButton>
-              ) : (
-                <PilotButton
-                  variant="secondary"
-                  size="regular"
-                  disabled={busy || !ready}
-                  onClick={() => void setActive(true)}
-                >
-                  Visszaállítás
-                </PilotButton>
-              )
-            ) : null}
-            <PilotButton
-              size="regular"
-              disabled={!ready || busy || readOnly}
-              onClick={() => void save()}
-            >
-              Sablon mentése
-            </PilotButton>
-          </div>
-        }
-      />
+      {/* a visszalépés a közös bal felső "‹" nyíl, nem egy gomb a jobb felső sarokban (picasso leltár 3.24, R12) */}
+      <div>
+        <Link
+          href={OPERATIONS_TEMPLATES_PATH}
+          className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
+        >
+          <Icon name="chevron-left" size={12} /> Üzemeltetési napló sablonjai
+        </Link>
+        <PilotPageHeader
+          eyebrow="Beállítások / Üzemeltetési napló"
+          title={template ? `Sablon · ${template.name}` : "Új sablon"}
+          description="A sablon mondja meg, mit kell rögzíteni egy üzemeltetési feladathoz. A mezők kód nélkül épülnek fel."
+          actions={
+            <div className="flex flex-wrap gap-2">
+              {template ? (
+                template.isActive ? (
+                  <PilotButton
+                    variant="secondary"
+                    size="regular"
+                    disabled={busy}
+                    onClick={() => setRetiring(true)}
+                  >
+                    Kivezetés
+                  </PilotButton>
+                ) : (
+                  <PilotButton
+                    variant="secondary"
+                    size="regular"
+                    disabled={busy || !ready}
+                    onClick={() => void setActive(true)}
+                  >
+                    Visszaállítás
+                  </PilotButton>
+                )
+              ) : null}
+              <PilotButton
+                size="regular"
+                disabled={!ready || busy || readOnly}
+                onClick={() => void save()}
+              >
+                Sablon mentése
+              </PilotButton>
+            </div>
+          }
+        />
+      </div>
 
       {error ? (
         <Alert variant="danger" title="Hiba történt" description={error} />

@@ -511,7 +511,10 @@ export function ProductDoseEffectsCard({
       ) : null}
 
       <p className="text-xs">
-        <Link href="/products/adag-lista" className="text-brand-600 underline">
+        <Link
+          href="/products/adag-lista"
+          className="text-pilot-aqua-700 underline"
+        >
           Az összes adag-hatás sor, ellenőrzésre várók
         </Link>
       </p>

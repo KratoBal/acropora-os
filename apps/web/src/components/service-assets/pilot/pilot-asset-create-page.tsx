@@ -1,6 +1,15 @@
 "use client";
 
-import { Alert, Icon, PageHeader, PAGE_GUTTER_X } from "@acropora/ui";
+import {
+  Alert,
+  Icon,
+  PageHeader,
+  PAGE_GUTTER_X,
+  PilotField,
+  PilotFormActions,
+  PilotFormCard,
+  PilotFormLayout,
+} from "@acropora/ui";
 import {
   assetLabelCreateProblem,
   hasPermission,
@@ -59,9 +68,6 @@ import {
 } from "../use-parent-asset-options";
 import {
   PilotButton,
-  PilotCard,
-  PilotCardHeader,
-  PilotFormField,
   PilotInput,
   PilotSelect,
   PilotThemeRoot,
@@ -254,6 +260,7 @@ export function PilotAssetCreatePage() {
   }, [javaslat, kategoriaErintve]);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const owner = owners.find(
@@ -410,13 +417,33 @@ export function PilotAssetCreatePage() {
       />
     );
 
-  const missing: string[] = [];
-  if (!name.trim()) missing.push("Eszköz neve");
-  if (!owner) missing.push("Partner");
-  if (owner?.type === "SUPPLIER" && !departmentId) missing.push("Helyszín");
+  // a hiányzó kötelező mezők és a dobozuk (ide görget a halvány mentés gomb), a közös űrlap-váz szerint (leltár 3.21)
+  const missingFields: { label: string; fieldId: string }[] = [];
+  if (!name.trim())
+    missingFields.push({ label: "Eszköz neve", fieldId: "eszkoz-nev-mezo" });
+  if (!owner)
+    missingFields.push({ label: "Partner", fieldId: "eszkoz-partner-mezo" });
+  if (owner?.type === "SUPPLIER" && !departmentId)
+    missingFields.push({ label: "Helyszín", fieldId: "eszkoz-helyszin-mezo" });
+  const missing = missingFields.map((field) => field.label);
+  const errorOf = (label: string, sentence: string) =>
+    showErrors && missing.includes(label) ? sentence : null;
+  const onSubmitClick = () => {
+    if (busy || loadingOptions) return;
+    if (missing.length === 0) {
+      void submit();
+      return;
+    }
+    setShowErrors(true);
+    const box = document.getElementById(missingFields[0]!.fieldId);
+    box?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    box
+      ?.querySelector<HTMLElement>("input, select, textarea, button")
+      ?.focus({ preventScroll: true });
+  };
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
+  const submit = async (event?: FormEvent) => {
+    event?.preventDefault();
     if (!owner || !name.trim()) {
       setError("A partner és az eszköz neve kötelező.");
       return;
@@ -539,544 +566,561 @@ export function PilotAssetCreatePage() {
         />
       </div>
 
-      <div className={`flex max-w-3xl flex-col gap-5 ${PAGE_GUTTER_X} py-6`}>
-        <ServiceOfflineNotice state={{ kind: "form" }} pilot />
-        {error ? (
-          <Alert
-            variant="danger"
-            title="A művelet nem sikerült"
-            description={error}
-          />
-        ) : null}
-
-        <form className="flex flex-col gap-5" onSubmit={submit} onBlur={rogzit}>
-          <PilotCard>
-            <PilotCardHeader title="Azonosítás" />
-            <div className="grid grid-cols-1 gap-x-6 gap-y-5 p-5 md:grid-cols-2">
-              <PilotFormField label="Eszköz neve" required>
-                <PilotInput
-                  value={name}
-                  onChange={setName}
-                  placeholder="pl. Fóka felnyomó szivattyú"
-                  aria-label="Eszköz neve"
-                />
-              </PilotFormField>
-              <PilotFormField
-                label="Matrica kódja"
-                help="Az előre nyomtatott matricáról, egy betű és négy szám (például V2196). Elhagyható, és utólag ezen a lapon is pótolható."
-              >
-                <PilotInput
-                  value={labelCode}
-                  onChange={setLabelCode}
-                  placeholder="V2196"
-                  aria-label="Matrica kódja"
-                />
-              </PilotFormField>
-              <PilotFormField label="Partner belső kódja">
-                <PilotInput
-                  value={partnerInternalCode}
-                  onChange={setPartnerInternalCode}
-                  aria-label="Partner belső kódja"
-                />
-              </PilotFormField>
-              <PilotFormField label="Sorozatszám">
-                <PilotInput
-                  value={serialNumber}
-                  onChange={setSerialNumber}
-                  aria-label="Sorozatszám"
-                />
-              </PilotFormField>
-            </div>
-          </PilotCard>
-
-          <PilotCard>
-            <PilotCardHeader title="Eszköz adatai" />
-            <div className="grid grid-cols-1 gap-x-6 gap-y-5 p-5 md:grid-cols-2">
-              <PilotFormField label="Kategória">
-                <PilotSelect
-                  value={categoryId}
-                  onChange={(ertek) => {
-                    setKategoriaErintve(true);
-                    setCategoryId(ertek);
-                  }}
-                  aria-label="Kategória"
-                >
-                  <option value="">Nincs megadva</option>
-                  {categories.map((kategoria) => (
-                    <option key={kategoria.id} value={kategoria.id}>
-                      {kategoria.name}
-                    </option>
-                  ))}
-                </PilotSelect>
-                {!kategoriaErintve &&
-                elotoltott &&
-                categoryId === elotoltott ? (
-                  <p className="mt-1 text-xs text-dusk-500">
-                    Javasolt kategória. Ellenőrizd, mielőtt mented.
-                  </p>
-                ) : null}
-              </PilotFormField>
-              <PilotFormField label="Funkció">
-                <PilotSelect
-                  value={functionId}
-                  onChange={setFunctionId}
-                  aria-label="Funkció"
-                >
-                  <option value="">Nincs megadva</option>
-                  {functions.map((funkcio) => (
-                    <option key={funkcio.id} value={funkcio.id}>
-                      {funkcio.name}
-                    </option>
-                  ))}
-                </PilotSelect>
-              </PilotFormField>
-              <PilotFormField label="Gyártó">
-                <PilotInput
-                  value={manufacturer}
-                  onChange={setManufacturer}
-                  aria-label="Gyártó"
-                />
-              </PilotFormField>
-              <PilotFormField label="Modell">
-                <PilotInput
-                  value={model}
-                  onChange={setModel}
-                  aria-label="Modell"
-                />
-              </PilotFormField>
-              <PilotFormField
-                label="Teljesítmény"
-                help="Tizedesvesszővel is írható (például 0,5)."
-              >
-                <div className="flex gap-2">
-                  <PilotInput
-                    value={performance}
-                    onChange={setPerformance}
-                    inputMode="decimal"
-                    placeholder="pl. 500"
-                    aria-label="Teljesítmény"
+      <div className={`${PAGE_GUTTER_X} py-6`}>
+        {/* az Enter is a gombsor útját járja (hiány a mezőnél, betöltés alatt semmi), nem a submit-et közvetlenül (barracuda, #2968) */}
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmitClick();
+          }}
+          onBlur={rogzit}
+        >
+          <PilotFormLayout
+            top={
+              <>
+                <ServiceOfflineNotice state={{ kind: "form" }} pilot />
+                {error ? (
+                  <Alert
+                    variant="danger"
+                    title="A művelet nem sikerült"
+                    description={error}
                   />
-                  {/* 160 px, nyíllal: a 112 px-es választó az első opciót ("Nincs megadva") "Nincs m"-re vágta. */}
+                ) : null}
+              </>
+            }
+            afterText="Mentés után megnyílik az eszköz adatlapja: ott kap matricát, ha most nem adtál meg, ott vehető fel munkalapra vagy hibajegyre, és ott látszik a karbantartási előzménye."
+            actions={
+              <PilotFormActions
+                missing={missing}
+                busy={busy}
+                submitLabel="Eszköz létrehozása"
+                busyLabel="Mentés…"
+                onCancel={() => router.push(backToList.href)}
+                onSubmit={onSubmitClick}
+              />
+            }
+          >
+            <PilotFormCard title="Melyik eszköz?">
+              <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+                <PilotField
+                  id="eszkoz-nev-mezo"
+                  requirement="required"
+                  label="Eszköz neve"
+                  error={errorOf("Eszköz neve", "Add meg az eszköz nevét.")}
+                >
+                  <PilotInput
+                    value={name}
+                    onChange={setName}
+                    placeholder="pl. Fóka felnyomó szivattyú"
+                    aria-label="Eszköz neve"
+                  />
+                </PilotField>
+                <PilotField
+                  requirement="optional"
+                  label="Matrica kódja"
+                  help="Az előre nyomtatott matricáról, egy betű és négy szám (például V2196). Elhagyható, és utólag ezen a lapon is pótolható."
+                >
+                  <PilotInput
+                    value={labelCode}
+                    onChange={setLabelCode}
+                    placeholder="V2196"
+                    aria-label="Matrica kódja"
+                  />
+                </PilotField>
+                <PilotField requirement="optional" label="Partner belső kódja">
+                  <PilotInput
+                    value={partnerInternalCode}
+                    onChange={setPartnerInternalCode}
+                    aria-label="Partner belső kódja"
+                  />
+                </PilotField>
+                <PilotField requirement="optional" label="Sorozatszám">
+                  <PilotInput
+                    value={serialNumber}
+                    onChange={setSerialNumber}
+                    aria-label="Sorozatszám"
+                  />
+                </PilotField>
+              </div>
+            </PilotFormCard>
+
+            <PilotFormCard title="Milyen eszköz?">
+              <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+                <PilotField requirement="optional" label="Kategória">
                   <PilotSelect
-                    chevron
-                    className="w-40 shrink-0"
-                    value={performanceUnitId}
-                    onChange={setPerformanceUnitId}
-                    aria-label="Mértékegység"
+                    value={categoryId}
+                    onChange={(ertek) => {
+                      setKategoriaErintve(true);
+                      setCategoryId(ertek);
+                    }}
+                    aria-label="Kategória"
                   >
                     <option value="">Nincs megadva</option>
-                    {performanceUnitOptions(performanceUnits, undefined).map(
-                      (unit) => (
-                        <option key={unit.id} value={unit.id}>
-                          {unit.code}
+                    {categories.map((kategoria) => (
+                      <option key={kategoria.id} value={kategoria.id}>
+                        {kategoria.name}
+                      </option>
+                    ))}
+                  </PilotSelect>
+                  {!kategoriaErintve &&
+                  elotoltott &&
+                  categoryId === elotoltott ? (
+                    <p className="mt-1 text-xs text-dusk-500">
+                      Javasolt kategória. Ellenőrizd, mielőtt mented.
+                    </p>
+                  ) : null}
+                </PilotField>
+                <PilotField requirement="optional" label="Funkció">
+                  <PilotSelect
+                    value={functionId}
+                    onChange={setFunctionId}
+                    aria-label="Funkció"
+                  >
+                    <option value="">Nincs megadva</option>
+                    {functions.map((funkcio) => (
+                      <option key={funkcio.id} value={funkcio.id}>
+                        {funkcio.name}
+                      </option>
+                    ))}
+                  </PilotSelect>
+                </PilotField>
+                <PilotField requirement="optional" label="Gyártó">
+                  <PilotInput
+                    value={manufacturer}
+                    onChange={setManufacturer}
+                    aria-label="Gyártó"
+                  />
+                </PilotField>
+                <PilotField requirement="optional" label="Modell">
+                  <PilotInput
+                    value={model}
+                    onChange={setModel}
+                    aria-label="Modell"
+                  />
+                </PilotField>
+                <PilotField
+                  requirement="optional"
+                  label="Teljesítmény"
+                  help="Tizedesvesszővel is írható (például 0,5)."
+                >
+                  <div className="flex gap-2">
+                    <PilotInput
+                      value={performance}
+                      onChange={setPerformance}
+                      inputMode="decimal"
+                      placeholder="pl. 500"
+                      aria-label="Teljesítmény"
+                    />
+                    {/* 160 px, nyíllal: a 112 px-es választó az első opciót ("Nincs megadva") "Nincs m"-re vágta. */}
+                    <PilotSelect
+                      chevron
+                      className="w-40 shrink-0"
+                      value={performanceUnitId}
+                      onChange={setPerformanceUnitId}
+                      aria-label="Mértékegység"
+                    >
+                      <option value="">Nincs megadva</option>
+                      {performanceUnitOptions(performanceUnits, undefined).map(
+                        (unit) => (
+                          <option key={unit.id} value={unit.id}>
+                            {unit.code}
+                          </option>
+                        ),
+                      )}
+                    </PilotSelect>
+                  </div>
+                  {performanceUnitsFailed ? (
+                    <p className="text-xs text-pilot-grey-400">
+                      A mértékegységek most nem tölthetők be. Ez NEM azt
+                      jelenti, hogy nincs mértékegység: a mező üresen hagyható,
+                      a többi adat menthető.
+                    </p>
+                  ) : null}
+                </PilotField>
+                <PilotField requirement="optional" label="FP / Elektromos">
+                  <PilotInput
+                    value={electricalCode}
+                    onChange={setElectricalCode}
+                    aria-label="FP / Elektromos"
+                  />
+                </PilotField>
+                <PilotField
+                  requirement="optional"
+                  label="Térfogat"
+                  help="m³-ben. Tizedesvesszővel is írható (például 0,5)."
+                >
+                  <PilotInput
+                    value={volume}
+                    onChange={setVolume}
+                    inputMode="decimal"
+                    placeholder="pl. 1.5"
+                    aria-label="Térfogat"
+                  />
+                </PilotField>
+                <PilotField
+                  requirement="optional"
+                  label="Áramfelvétel"
+                  help="A-ben. Két motor esetén per jellel (például 6,15/5,5)."
+                >
+                  <AssetUnitAdornment
+                    unit={
+                      assetUnitApplies(currentDraw)
+                        ? ASSET_CURRENT_DRAW_UNIT
+                        : undefined
+                    }
+                    className="text-sm text-pilot-grey-500"
+                  >
+                    <PilotInput
+                      value={currentDraw}
+                      onChange={setCurrentDraw}
+                      placeholder="pl. 6,15/5,5"
+                      aria-label="Áramfelvétel"
+                    />
+                  </AssetUnitAdornment>
+                </PilotField>
+                <PilotField
+                  requirement="optional"
+                  label="Fogyasztás (eredeti bejegyzés)"
+                  help="kW-ban, változatlanul. Két motor esetén per jellel (például 6,15/5,5)."
+                >
+                  <AssetUnitAdornment
+                    unit={
+                      assetUnitApplies(powerConsumptionRaw, {
+                        onlyPlainNumber: true,
+                      })
+                        ? ASSET_POWER_CONSUMPTION_UNIT
+                        : undefined
+                    }
+                    className="text-sm text-pilot-grey-500"
+                  >
+                    <PilotInput
+                      value={powerConsumptionRaw}
+                      onChange={setPowerConsumptionRaw}
+                      placeholder="pl. 6,15/5,5"
+                      aria-label="Fogyasztás (eredeti bejegyzés)"
+                    />
+                  </AssetUnitAdornment>
+                </PilotField>
+                <PilotField requirement="optional" label="Bekötés">
+                  <PilotSelect
+                    value={phaseConnection}
+                    onChange={(value) =>
+                      setPhaseConnection(value as AssetPhaseConnection | "")
+                    }
+                    aria-label="Bekötés"
+                  >
+                    <option value="">Nincs megadva</option>
+                    {Object.entries(assetPhaseConnectionLabel).map(
+                      ([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
                         </option>
                       ),
                     )}
                   </PilotSelect>
-                </div>
-                {performanceUnitsFailed ? (
-                  <p className="text-xs text-pilot-grey-400">
-                    A mértékegységek most nem tölthetők be. Ez NEM azt jelenti,
-                    hogy nincs mértékegység: a mező üresen hagyható, a többi
-                    adat menthető.
-                  </p>
-                ) : null}
-              </PilotFormField>
-              <PilotFormField label="FP / Elektromos">
-                <PilotInput
-                  value={electricalCode}
-                  onChange={setElectricalCode}
-                  aria-label="FP / Elektromos"
-                />
-              </PilotFormField>
-              <PilotFormField
-                label="Térfogat"
-                help="m³-ben. Tizedesvesszővel is írható (például 0,5)."
-              >
-                <PilotInput
-                  value={volume}
-                  onChange={setVolume}
-                  inputMode="decimal"
-                  placeholder="pl. 1.5"
-                  aria-label="Térfogat"
-                />
-              </PilotFormField>
-              <PilotFormField
-                label="Áramfelvétel"
-                help="A-ben. Két motor esetén per jellel (például 6,15/5,5)."
-              >
-                <AssetUnitAdornment
-                  unit={
-                    assetUnitApplies(currentDraw)
-                      ? ASSET_CURRENT_DRAW_UNIT
-                      : undefined
-                  }
-                  className="text-sm text-pilot-grey-500"
-                >
-                  <PilotInput
-                    value={currentDraw}
-                    onChange={setCurrentDraw}
-                    placeholder="pl. 6,15/5,5"
-                    aria-label="Áramfelvétel"
+                </PilotField>
+                <PilotField requirement="optional" label="Kritikusság">
+                  <PilotSelect
+                    value={criticality}
+                    onChange={(value) =>
+                      setCriticality(value as AssetCriticality)
+                    }
+                    aria-label="Kritikusság"
+                  >
+                    {Object.entries(assetCriticalityLabel).map(
+                      ([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ),
+                    )}
+                  </PilotSelect>
+                </PilotField>
+              </div>
+              <div className="px-5 pb-5">
+                <PilotField requirement="optional" label="Leírás">
+                  <textarea
+                    rows={4}
+                    aria-label="Leírás"
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    className="w-full resize-none rounded-md px-3 py-2 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
                   />
-                </AssetUnitAdornment>
-              </PilotFormField>
-              <PilotFormField
-                label="Fogyasztás (eredeti bejegyzés)"
-                help="kW-ban, változatlanul. Két motor esetén per jellel (például 6,15/5,5)."
-              >
-                <AssetUnitAdornment
-                  unit={
-                    assetUnitApplies(powerConsumptionRaw, {
-                      onlyPlainNumber: true,
-                    })
-                      ? ASSET_POWER_CONSUMPTION_UNIT
-                      : undefined
-                  }
-                  className="text-sm text-pilot-grey-500"
-                >
-                  <PilotInput
-                    value={powerConsumptionRaw}
-                    onChange={setPowerConsumptionRaw}
-                    placeholder="pl. 6,15/5,5"
-                    aria-label="Fogyasztás (eredeti bejegyzés)"
-                  />
-                </AssetUnitAdornment>
-              </PilotFormField>
-              <PilotFormField label="Bekötés">
-                <PilotSelect
-                  value={phaseConnection}
-                  onChange={(value) =>
-                    setPhaseConnection(value as AssetPhaseConnection | "")
-                  }
-                  aria-label="Bekötés"
-                >
-                  <option value="">Nincs megadva</option>
-                  {Object.entries(assetPhaseConnectionLabel).map(
-                    ([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ),
-                  )}
-                </PilotSelect>
-              </PilotFormField>
-              <PilotFormField label="Kritikusság">
-                <PilotSelect
-                  value={criticality}
-                  onChange={(value) =>
-                    setCriticality(value as AssetCriticality)
-                  }
-                  aria-label="Kritikusság"
-                >
-                  {Object.entries(assetCriticalityLabel).map(
-                    ([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ),
-                  )}
-                </PilotSelect>
-              </PilotFormField>
-            </div>
-            <div className="px-5 pb-5">
-              <PilotFormField label="Leírás">
-                <textarea
-                  rows={4}
-                  aria-label="Leírás"
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  className="w-full resize-none rounded-md px-3 py-2 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
-                />
-              </PilotFormField>
-            </div>
-          </PilotCard>
+                </PilotField>
+              </div>
+            </PilotFormCard>
 
-          <PilotCard>
-            <PilotCardHeader title="Hozzárendelés" />
-            <div className="grid grid-cols-1 gap-x-6 gap-y-5 p-5 md:grid-cols-2">
-              <PilotFormField label="Partner" required>
-                <PilotSelect
-                  value={selectedOwner}
-                  disabled={loadingOptions}
-                  onChange={(value) => {
-                    setSelectedOwner(value);
-                    setCustomerAddressId("");
-                    setParentAssetId("");
-                    setParentChoice(null);
-                    setParentSearch("");
-                    setAquariumId("");
-                  }}
-                  aria-label="Partner"
+            <PilotFormCard title="Kié és hol áll?">
+              <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+                <PilotField
+                  id="eszkoz-partner-mezo"
+                  requirement="required"
+                  label="Partner"
+                  error={errorOf("Partner", "Válassz partnert.")}
                 >
-                  <option value="">Válassz partnert…</option>
-                  {owners.map((item) => (
-                    <option
-                      key={ownerKey(item.type, item.id)}
-                      value={ownerKey(item.type, item.id)}
-                    >
-                      {item.type === "CUSTOMER" ? "Vevő" : "Partner"} ·{" "}
-                      {item.displayName} ({item.code})
-                      {item.outsideServiceScope
-                        ? " · jelenlegi tulajdonos, nem szerviz partner"
-                        : ""}
-                    </option>
-                  ))}
-                </PilotSelect>
-              </PilotFormField>
-              <PilotFormField label="Vevő címe">
-                <PilotSelect
-                  value={customerAddressId}
-                  disabled={!owner || owner.type !== "CUSTOMER"}
-                  onChange={setCustomerAddressId}
-                  aria-label="Vevő címe"
-                >
-                  <option value="">Nincs pontosítva</option>
-                  {addresses.map((address) => (
-                    <option key={address.id} value={address.id}>
-                      {address.name ? `${address.name} – ` : ""}
-                      {address.formatted}
-                    </option>
-                  ))}
-                </PilotSelect>
-              </PilotFormField>
-              {/*
+                  <PilotSelect
+                    value={selectedOwner}
+                    disabled={loadingOptions}
+                    onChange={(value) => {
+                      setSelectedOwner(value);
+                      setCustomerAddressId("");
+                      setParentAssetId("");
+                      setParentChoice(null);
+                      setParentSearch("");
+                      setAquariumId("");
+                    }}
+                    aria-label="Partner"
+                  >
+                    <option value="">Válassz partnert…</option>
+                    {owners.map((item) => (
+                      <option
+                        key={ownerKey(item.type, item.id)}
+                        value={ownerKey(item.type, item.id)}
+                      >
+                        {item.type === "CUSTOMER" ? "Vevő" : "Partner"} ·{" "}
+                        {item.displayName} ({item.code})
+                        {item.outsideServiceScope
+                          ? " · jelenlegi tulajdonos, nem szerviz partner"
+                          : ""}
+                      </option>
+                    ))}
+                  </PilotSelect>
+                </PilotField>
+                <PilotField requirement="optional" label="Vevő címe">
+                  <PilotSelect
+                    value={customerAddressId}
+                    disabled={!owner || owner.type !== "CUSTOMER"}
+                    onChange={setCustomerAddressId}
+                    aria-label="Vevő címe"
+                  >
+                    <option value="">Nincs pontosítva</option>
+                    {addresses.map((address) => (
+                      <option key={address.id} value={address.id}>
+                        {address.name ? `${address.name} – ` : ""}
+                        {address.formatted}
+                      </option>
+                    ))}
+                  </PilotSelect>
+                </PilotField>
+                {/*
                 CSAK VEVŐ TULAJDONOSNÁL LÁTSZIK, NEM CSAK LETILTVA -- a
                 szerver szerviz partnernél egyáltalán nem fogadja el az
                 akváriumot (`validateReferences`), tehát egy letiltott, de
                 látható mező itt félrevezetne.
               */}
-              {owner?.type === "CUSTOMER" ? (
-                <PilotFormField label="Akvárium (opcionális)">
+                {owner?.type === "CUSTOMER" ? (
+                  <PilotField requirement="optional" label="Akvárium">
+                    <PilotSelect
+                      value={aquariumId}
+                      onChange={setAquariumId}
+                      aria-label="Akvárium"
+                    >
+                      <option value="">Nincs akváriumhoz kötve</option>
+                      {aquariums.map((aquarium) => (
+                        <option key={aquarium.id} value={aquarium.id}>
+                          {aquarium.name} ({aquarium.aquariumNumber})
+                        </option>
+                      ))}
+                    </PilotSelect>
+                  </PilotField>
+                ) : null}
+                <PilotField
+                  id="eszkoz-helyszin-mezo"
+                  label="Helyszín"
+                  requirement={
+                    owner?.type === "SUPPLIER" ? "required" : "optional"
+                  }
+                  error={errorOf(
+                    "Helyszín",
+                    "Szerviz partner eszközéhez válassz helyszínt.",
+                  )}
+                  help="A partner helyszíne, ahol az eszköz áll. Ugyanaz a lista, amit a partner adatlapján Helyszínek néven szerkesztesz."
+                >
                   <PilotSelect
-                    value={aquariumId}
-                    onChange={setAquariumId}
-                    aria-label="Akvárium"
+                    value={departmentId}
+                    disabled={!owner || owner.type !== "SUPPLIER"}
+                    onChange={setDepartmentId}
+                    aria-label="Helyszín"
                   >
-                    <option value="">Nincs akváriumhoz kötve</option>
-                    {aquariums.map((aquarium) => (
-                      <option key={aquarium.id} value={aquarium.id}>
-                        {aquarium.name} ({aquarium.aquariumNumber})
+                    <option value="">Nincs pontosítva</option>
+                    {units.map((unit) => (
+                      <option key={unit.id} value={unit.id}>
+                        {unit.label}
+                        {unit.isActive ? "" : " · archivált"}
                       </option>
                     ))}
                   </PilotSelect>
-                </PilotFormField>
-              ) : null}
-              <PilotFormField
-                label={
-                  owner?.type === "SUPPLIER"
-                    ? "Helyszín (kötelező)"
-                    : "Helyszín"
-                }
-                required={owner?.type === "SUPPLIER"}
-                help="A partner helyszíne, ahol az eszköz áll. Ugyanaz a lista, amit a partner adatlapján Helyszínek néven szerkesztesz."
-              >
-                <PilotSelect
-                  value={departmentId}
-                  disabled={!owner || owner.type !== "SUPPLIER"}
-                  onChange={setDepartmentId}
-                  aria-label="Helyszín"
-                >
-                  <option value="">Nincs pontosítva</option>
-                  {units.map((unit) => (
-                    <option key={unit.id} value={unit.id}>
-                      {unit.label}
-                      {unit.isActive ? "" : " · archivált"}
-                    </option>
-                  ))}
-                </PilotSelect>
-              </PilotFormField>
-              <PilotFormField label="Típus">
-                <PilotSelect
-                  value={kind}
-                  onChange={(value) => setKind(value as AssetKind)}
-                  aria-label="Eszköztípus"
-                >
-                  {Object.entries(assetKindLabel).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </PilotSelect>
-              </PilotFormField>
-              <PilotFormField label="Státusz">
-                <PilotSelect
-                  value={status}
-                  onChange={(value) => setStatus(value as AssetStatus)}
-                  aria-label="Eszköz státusza"
-                >
-                  {Object.entries(assetStatusLabel).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </PilotSelect>
-              </PilotFormField>
-              <PilotFormField
-                label="Szülőeszköz (opcionális)"
-                className="md:col-span-2"
-              >
-                <div className="space-y-2">
-                  <PilotInput
-                    value={parentSearch}
-                    disabled={!owner}
-                    onChange={setParentSearch}
-                    placeholder="Keresés név, kód vagy matrica szerint…"
-                    aria-label="Szülőeszköz keresése"
-                  />
+                </PilotField>
+                <PilotField requirement="optional" label="Típus">
                   <PilotSelect
-                    value={parentAssetId}
-                    disabled={!owner}
-                    onChange={(value) => {
-                      setParentAssetId(value);
-                      setParentChoice(
-                        parentAssets.find((asset) => asset.id === value) ??
-                          null,
-                      );
-                    }}
-                    aria-label="Szülőeszköz"
+                    value={kind}
+                    onChange={(value) => setKind(value as AssetKind)}
+                    aria-label="Eszköztípus"
                   >
-                    <option value="">Önálló / főegység</option>
-                    {parentChoice &&
-                    !parentAssets.some(
-                      (asset) => asset.id === parentChoice.id,
+                    {Object.entries(assetKindLabel).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </PilotSelect>
+                </PilotField>
+                <PilotField requirement="optional" label="Státusz">
+                  <PilotSelect
+                    value={status}
+                    onChange={(value) => setStatus(value as AssetStatus)}
+                    aria-label="Eszköz státusza"
+                  >
+                    {Object.entries(assetStatusLabel).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </PilotSelect>
+                </PilotField>
+                <PilotField
+                  requirement="optional"
+                  label="Szülőeszköz"
+                  className="md:col-span-2"
+                >
+                  <div className="space-y-2">
+                    <PilotInput
+                      value={parentSearch}
+                      disabled={!owner}
+                      onChange={setParentSearch}
+                      placeholder="Keresés név, kód vagy matrica szerint…"
+                      aria-label="Szülőeszköz keresése"
+                    />
+                    <PilotSelect
+                      value={parentAssetId}
+                      disabled={!owner}
+                      onChange={(value) => {
+                        setParentAssetId(value);
+                        setParentChoice(
+                          parentAssets.find((asset) => asset.id === value) ??
+                            null,
+                        );
+                      }}
+                      aria-label="Szülőeszköz"
+                    >
+                      <option value="">Önálló / főegység</option>
+                      {parentChoice &&
+                      !parentAssets.some(
+                        (asset) => asset.id === parentChoice.id,
+                      ) ? (
+                        <option value={parentChoice.id}>
+                          {parentChoice.name} ({parentChoice.assetNumber})
+                        </option>
+                      ) : null}
+                      {parentAssets.map((asset) => (
+                        <option key={asset.id} value={asset.id}>
+                          {asset.name} ({asset.assetNumber})
+                        </option>
+                      ))}
+                    </PilotSelect>
+                    {parentAssetTruncation(
+                      parentAssets.length,
+                      parentAssetTotal,
                     ) ? (
-                      <option value={parentChoice.id}>
-                        {parentChoice.name} ({parentChoice.assetNumber})
-                      </option>
+                      <p className="text-xs text-pilot-grey-500">
+                        {parentAssetTruncation(
+                          parentAssets.length,
+                          parentAssetTotal,
+                        )}
+                      </p>
                     ) : null}
-                    {parentAssets.map((asset) => (
-                      <option key={asset.id} value={asset.id}>
-                        {asset.name} ({asset.assetNumber})
-                      </option>
-                    ))}
-                  </PilotSelect>
-                  {parentAssetTruncation(
-                    parentAssets.length,
-                    parentAssetTotal,
-                  ) ? (
-                    <p className="text-xs text-pilot-grey-500">
-                      {parentAssetTruncation(
-                        parentAssets.length,
-                        parentAssetTotal,
-                      )}
-                    </p>
-                  ) : null}
-                </div>
-              </PilotFormField>
-            </div>
-          </PilotCard>
+                  </div>
+                </PilotField>
+              </div>
+            </PilotFormCard>
 
-          <PilotCard>
-            <PilotCardHeader title="Karbantartás" />
-            <div className="grid grid-cols-1 gap-x-6 gap-y-5 p-5 md:grid-cols-2 xl:grid-cols-4">
-              <PilotFormField label="Telepítés dátuma">
-                <PilotInput
-                  type="date"
-                  value={installedAt}
-                  onChange={setInstalledAt}
-                  aria-label="Telepítés dátuma"
-                />
-              </PilotFormField>
-              <PilotFormField label="Garancia lejárata">
-                <PilotInput
-                  type="date"
-                  value={warrantyExpiresAt}
-                  onChange={setWarrantyExpiresAt}
-                  aria-label="Garancia lejárata"
-                />
-              </PilotFormField>
-              <PilotFormField label="Intervallum (nap)">
-                <PilotInput
-                  type="number"
-                  min={1}
-                  max={3650}
-                  value={serviceIntervalDays}
-                  onChange={setServiceIntervalDays}
-                  placeholder="pl. 30"
-                  aria-label="Karbantartási intervallum"
-                />
-              </PilotFormField>
-              <PilotFormField label="Következő karbantartás">
-                <PilotInput
-                  type="date"
-                  value={nextServiceAt}
-                  onChange={setNextServiceAt}
-                  aria-label="Következő karbantartás"
-                />
-              </PilotFormField>
-            </div>
-            <div className="px-5 pb-5">
-              <PilotFormField label="Belső megjegyzés">
-                <textarea
-                  rows={3}
-                  aria-label="Belső megjegyzés"
-                  value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
-                  className="w-full resize-none rounded-md px-3 py-2 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
-                />
-              </PilotFormField>
-            </div>
-          </PilotCard>
+            <PilotFormCard title="Mikor kell karbantartani?">
+              <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2 xl:grid-cols-4">
+                <PilotField requirement="optional" label="Telepítés dátuma">
+                  <PilotInput
+                    type="date"
+                    value={installedAt}
+                    onChange={setInstalledAt}
+                    aria-label="Telepítés dátuma"
+                  />
+                </PilotField>
+                <PilotField requirement="optional" label="Garancia lejárata">
+                  <PilotInput
+                    type="date"
+                    value={warrantyExpiresAt}
+                    onChange={setWarrantyExpiresAt}
+                    aria-label="Garancia lejárata"
+                  />
+                </PilotField>
+                <PilotField requirement="optional" label="Intervallum (nap)">
+                  <PilotInput
+                    type="number"
+                    min={1}
+                    max={3650}
+                    value={serviceIntervalDays}
+                    onChange={setServiceIntervalDays}
+                    placeholder="pl. 30"
+                    aria-label="Karbantartási intervallum"
+                  />
+                </PilotField>
+                <PilotField
+                  requirement="optional"
+                  label="Következő karbantartás"
+                >
+                  <PilotInput
+                    type="date"
+                    value={nextServiceAt}
+                    onChange={setNextServiceAt}
+                    aria-label="Következő karbantartás"
+                  />
+                </PilotField>
+              </div>
+              <div className="px-5 pb-5">
+                <PilotField requirement="optional" label="Belső megjegyzés">
+                  <textarea
+                    rows={3}
+                    aria-label="Belső megjegyzés"
+                    value={notes}
+                    onChange={(event) => setNotes(event.target.value)}
+                    className="w-full resize-none rounded-md px-3 py-2 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                  />
+                </PilotField>
+              </div>
+            </PilotFormCard>
 
-          {nameDuplicates && nameDuplicates.length > 0 ? (
-            <Alert
-              variant="info"
-              title="Már létezik ilyen nevű eszköz"
-              action={
-                <div className="flex shrink-0 gap-2">
-                  <PilotButton
-                    variant="secondary"
-                    onClick={() => setNameDuplicates(null)}
-                    disabled={busy}
-                  >
-                    Mégsem
-                  </PilotButton>
-                  <PilotButton
-                    variant="primary"
-                    onClick={confirmDespiteDuplicateName}
-                    disabled={busy}
-                  >
-                    Mentés mégis
-                  </PilotButton>
-                </div>
-              }
-            >
-              <ul className="list-disc space-y-0.5 pl-4">
-                {nameDuplicates.map((item) => (
-                  <li key={item.id}>
-                    {item.owner.displayName}
-                    {item.unit ? ` (${item.unit.path.join(" / ")})` : ""}
-                  </li>
-                ))}
-              </ul>
-            </Alert>
-          ) : null}
-
-          {/* A GOMBSOR A KÖZÖS ŰRLAP-MINTA SZERINT (Picasso 3.20; acrobot 62278): bal oldalt a hiányzó mezők, jobb oldalt a Mégse és a mentés, mint a hibajegy, a munkalap és a karbantartás űrlapján */}
-          <div className="flex flex-col gap-3 pb-8 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-h-5 sm:flex-1">
-              {missing.length > 0 ? (
-                <p className="text-xs text-pilot-grey-400">
-                  Kötelező: {missing.join(", ")}
-                </p>
-              ) : null}
-            </div>
-            <div className="flex items-center gap-4 sm:justify-end">
-              <Link href={backToList.href}>
-                <PilotButton variant="secondary" disabled={busy}>
-                  Mégse
-                </PilotButton>
-              </Link>
-              <PilotButton
-                type="submit"
-                variant="primary"
-                disabled={busy || loadingOptions || missing.length > 0}
+            {nameDuplicates && nameDuplicates.length > 0 ? (
+              <Alert
+                variant="info"
+                title="Már létezik ilyen nevű eszköz"
+                action={
+                  <div className="flex shrink-0 gap-2">
+                    <PilotButton
+                      variant="secondary"
+                      onClick={() => setNameDuplicates(null)}
+                      disabled={busy}
+                    >
+                      Mégse
+                    </PilotButton>
+                    <PilotButton
+                      variant="primary"
+                      onClick={confirmDespiteDuplicateName}
+                      disabled={busy}
+                    >
+                      Mentés mégis
+                    </PilotButton>
+                  </div>
+                }
               >
-                {busy ? "Mentés…" : "Eszköz létrehozása"}
-              </PilotButton>
-            </div>
-          </div>
+                <ul className="list-disc space-y-0.5 pl-4">
+                  {nameDuplicates.map((item) => (
+                    <li key={item.id}>
+                      {item.owner.displayName}
+                      {item.unit ? ` (${item.unit.path.join(" / ")})` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </Alert>
+            ) : null}
+          </PilotFormLayout>
         </form>
       </div>
     </PilotThemeRoot>

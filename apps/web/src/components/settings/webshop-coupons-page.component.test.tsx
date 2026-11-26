@@ -132,6 +132,21 @@ describe("WebshopCouponsPage", () => {
     expect(await screen.findByText("Kikapcsolva")).toBeTruthy();
   });
 
+  // Picasso 3.25: the state was plain text with its opposite as a full button beside it
+  it("the state is a badge, and the row action is the quiet button", async () => {
+    render(createElement(WebshopCouponsPage));
+    const action = await screen.findByRole("button", {
+      name: "TAVASZ10: kikapcsolás",
+    });
+    expect(action.className).toContain("bg-transparent");
+    expect(action.className).not.toContain("ring-1");
+    const badge = screen.getAllByText("Aktív")[0]!;
+    expect(badge.className).toMatch(/rounded/);
+    expect(badge.closest("td")).not.toBeNull();
+    // the state word and the action word are not the same kind of element
+    expect(badge.tagName).not.toBe("BUTTON");
+  });
+
   it("without the settings permission there is neither list nor form", async () => {
     auth.role = "WAREHOUSE";
     render(createElement(WebshopCouponsPage));

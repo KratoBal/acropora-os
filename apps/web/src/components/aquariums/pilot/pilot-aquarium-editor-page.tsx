@@ -11,11 +11,13 @@ import {
   AQUARIUM_MEASUREMENT_TARGET_RANGE,
   hasPermission,
   PERMISSIONS,
+  type AquariumDetail,
   type AquariumEquipment,
   type AquariumEquipmentKind,
   type AquariumMaintainer,
   type AquariumOwnershipType,
   type CreateAquariumEquipmentInput,
+  type UpdateAquariumInput,
   type WaterBodyType,
   type WaterType,
   type WorksheetDepartmentSummary,
@@ -25,6 +27,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { UnsavedChangesGuard } from "@/components/common/unsaved-changes-guard";
 import { ApiError } from "@/lib/api/client";
 import { aquariumsApi } from "@/lib/api/aquariums";
 import { worksheetsApi } from "@/lib/api/worksheets";
@@ -38,6 +41,14 @@ import {
   WATER_TYPE_LABEL,
 } from "../aquarium-labels";
 import { ReefClubCodePanel } from "../reefclub-code-panel";
+import {
+  equipmentChanges,
+  equipmentInput,
+  isLocalEquipment,
+  LOCAL_EQUIPMENT_PREFIX,
+  pendingParts,
+  sameMaintainers,
+} from "./aquarium-pending-changes";
 import { PilotAquariumWaterValues } from "./pilot-aquarium-water-values";
 import {
   draftFromDefaults,
@@ -134,13 +145,19 @@ export function PilotAquariumEditorPage({
   const [pendingRemoval, setPendingRemoval] =
     useState<AquariumEquipment | null>(null);
   const [maintainers, setMaintainers] = useState<AquariumMaintainer[]>([]);
+  // a legutóbb MENTETT berendezés- és karbantartó-lista: ehhez képest vár valami mentésre (aquarium-pending-changes.ts)
+  const [savedEquipment, setSavedEquipment] = useState<AquariumEquipment[]>([]);
+  const [savedMaintainers, setSavedMaintainers] = useState<
+    AquariumMaintainer[]
+  >([]);
+  // a mentéskor elküldött mezők (JSON): a "Mentve." addig áll, amíg a mezők ugyanezek
+  const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [customerEmail, setCustomerEmail] = useState<string | undefined>(
     undefined,
   );
   const [selectableMaintainers, setSelectableMaintainers] = useState<
     AquariumMaintainer[]
   >([]);
-  const [maintainersBusy, setMaintainersBusy] = useState(false);
   const [targetsDraft, setTargetsDraft] = useState<TargetRangeDraft>({});
   const [targetsTouched, setTargetsTouched] = useState(false);
 
@@ -186,7 +203,9 @@ export function PilotAquariumEditorPage({
         setStartedAt(detail.startedAt ? detail.startedAt.slice(0, 10) : "");
         setNotes(detail.notes ?? "");
         setEquipment(detail.equipment);
+        setSavedEquipment(detail.equipment);
         setMaintainers(detail.maintainers);
+        setSavedMaintainers(detail.maintainers);
         setCustomerEmail(detail.customerEmail);
         setExpectedUpdatedAt(detail.updatedAt);
         setTargetsDraft(draftFromTargets(detail.targets));
@@ -282,6 +301,32 @@ export function PilotAquariumEditorPage({
     }
   }, [lengthCm, widthCm, heightCm, volumeIsManual]);
 
+  /** Az akvárium mezői, ahogy a Mentés (és az Új akvárium létrehozása) elküldi. */
+  function currentPayload() {
+    return {
+      ownershipType,
+      customerId:
+        ownershipType === "CUSTOMER" ? customerSelection.customerId : undefined,
+      newCustomer:
+        ownershipType === "CUSTOMER"
+          ? customerSelection.newCustomer
+          : undefined,
+      departmentId:
+        ownershipType === "CUSTOMER" && departmentId ? departmentId : undefined,
+      name,
+      waterBodyType,
+      lengthCm: lengthCm ? Number(lengthCm) : undefined,
+      widthCm: widthCm ? Number(widthCm) : undefined,
+      heightCm: heightCm ? Number(heightCm) : undefined,
+      systemVolumeLiters: volumeLiters ? Number(volumeLiters) : undefined,
+      systemVolumeIsManual: volumeIsManual,
+      waterType: waterType || undefined,
+      startedAt: startedAt || undefined,
+      notes: notes || undefined,
+      targets: targetsPayload(targetsDraft),
+    };
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (hasInvalidRow(targetsDraft)) {
@@ -292,59 +337,15 @@ export function PilotAquariumEditorPage({
     }
     setBusy(true);
     setError(null);
+    setSavedNotice(null);
     try {
-      const basePayload = {
-        ownershipType,
-        customerId:
-          ownershipType === "CUSTOMER"
-            ? customerSelection.customerId
-            : undefined,
-        newCustomer:
-          ownershipType === "CUSTOMER"
-            ? customerSelection.newCustomer
-            : undefined,
-        departmentId:
-          ownershipType === "CUSTOMER" && departmentId
-            ? departmentId
-            : undefined,
-        name,
-        waterBodyType,
-        lengthCm: lengthCm ? Number(lengthCm) : undefined,
-        widthCm: widthCm ? Number(widthCm) : undefined,
-        heightCm: heightCm ? Number(heightCm) : undefined,
-        systemVolumeLiters: volumeLiters ? Number(volumeLiters) : undefined,
-        systemVolumeIsManual: volumeIsManual,
-        waterType: waterType || undefined,
-        startedAt: startedAt || undefined,
-        notes: notes || undefined,
-        targets: targetsPayload(targetsDraft),
-      };
+      const basePayload = currentPayload();
       if (isEdit) {
-        const updated = await aquariumsApi.update(token, aquariumId!, {
-          ...basePayload,
-          expectedUpdatedAt,
-        });
-        router.push(`/akvariumok/${updated.id}`);
+        await saveEdit(basePayload);
       } else {
         const created = await aquariumsApi.create(token, {
           ...basePayload,
-          equipment: equipment.map(
-            ({
-              kind,
-              manufacturer,
-              model,
-              quantity,
-              channelCount,
-              notes: eqNotes,
-            }) => ({
-              kind,
-              manufacturer,
-              model,
-              quantity,
-              channelCount,
-              notes: eqNotes,
-            }),
-          ),
+          equipment: equipment.map(equipmentInput),
         });
         router.push(`/akvariumok/${created.id}`);
       }
@@ -357,93 +358,109 @@ export function PilotAquariumEditorPage({
     }
   }
 
-  async function addEquipmentRow() {
-    if (!aquariumId) {
-      setEquipment((current) => [
-        ...current,
-        {
-          id: `helyi-${current.length}-${Date.now()}`,
-          ...newEquipment,
-          quantity: newEquipment.quantity ?? 1,
-        },
-      ]);
-      setNewEquipment(EMPTY_NEW_EQUIPMENT);
-      return;
-    }
-    setBusy(true);
-    setError(null);
+  /**
+   * A SZERKESZTÉS MENTÉSE, EGY GOMBBAL (leltár 3.22): előbb az akvárium mezői (ez viszi az ütközés-ellenőrzést, `expectedUpdatedAt`),
+   * aztán a törölt és a felvett berendezések, végül a karbantartók, ha változtak. Minden lépés a friss adatlapot adja vissza; a végén
+   * abból áll a lap (a valódi berendezés-azonosítókkal és az új `updatedAt`-tel, hogy a következő Mentés ne ütközzön önmagával).
+   *
+   * HA KÖZBEN ELAKAD: ami lement, az mentett marad (a lap a legutolsó visszakapott adatlapból áll), ami nem, az a lapon vár, és a
+   * következő Mentés csak azt küldi el. Egy már felvitt helyi sor ezért nem kerül fel kétszer.
+   */
+  async function saveEdit(
+    basePayload: Omit<UpdateAquariumInput, "expectedUpdatedAt">,
+  ) {
+    const { remove, add } = equipmentChanges(savedEquipment, equipment);
+    const maintainersChanged = !sameMaintainers(savedMaintainers, maintainers);
+    let detail: AquariumDetail | null = null;
+    const removed = new Set<string>();
+    const added = new Set<string>();
     try {
-      const updated = await aquariumsApi.addEquipment(
-        token,
-        aquariumId,
-        newEquipment,
-      );
-      setEquipment(updated.equipment);
-      setNewEquipment(EMPTY_NEW_EQUIPMENT);
+      detail = await aquariumsApi.update(token, aquariumId!, {
+        ...basePayload,
+        expectedUpdatedAt,
+      });
+      for (const id of remove) {
+        detail = await aquariumsApi.removeEquipment(token, aquariumId!, id);
+        removed.add(id);
+      }
+      for (const row of add) {
+        detail = await aquariumsApi.addEquipment(
+          token,
+          aquariumId!,
+          equipmentInput(row),
+        );
+        added.add(row.id);
+      }
+      if (maintainersChanged)
+        detail = await aquariumsApi.setMaintainers(
+          token,
+          aquariumId!,
+          maintainers.map((m) => m.userId),
+        );
+      setEquipment(detail.equipment);
+      setMaintainers(detail.maintainers);
+      setSavedNotice(JSON.stringify(basePayload));
     } catch (cause) {
-      setError(
-        cause instanceof ApiError
-          ? cause.message
-          : "A berendezés nem vihető fel.",
-      );
+      if (detail) {
+        const stillToRemove = new Set(remove.filter((id) => !removed.has(id)));
+        setEquipment((current) => [
+          ...detail!.equipment.filter((row) => !stillToRemove.has(row.id)),
+          ...current.filter(
+            (row) => isLocalEquipment(row) && !added.has(row.id),
+          ),
+        ]);
+        setError(
+          `A mentés félúton elakadt: ${
+            cause instanceof ApiError ? cause.message : "ismeretlen hiba"
+          }. Ami eddig lement, mentve maradt; a többi a lapon vár, és a Mentés újra elküldi.`,
+        );
+        return;
+      }
+      throw cause;
     } finally {
-      setBusy(false);
+      if (detail) {
+        setSavedEquipment(detail.equipment);
+        setSavedMaintainers(detail.maintainers);
+        setExpectedUpdatedAt(detail.updatedAt);
+      }
     }
   }
 
-  async function removeEquipmentRow(equipmentId: string) {
-    if (!aquariumId) {
-      setEquipment((current) =>
-        current.filter((row) => row.id !== equipmentId),
-      );
-      setPendingRemoval(null);
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      const updated = await aquariumsApi.removeEquipment(
-        token,
-        aquariumId,
-        equipmentId,
-      );
-      setEquipment(updated.equipment);
-    } catch (cause) {
-      setError(
-        cause instanceof ApiError
-          ? cause.message
-          : "A berendezés nem törölhető.",
-      );
-    } finally {
-      setBusy(false);
-      setPendingRemoval(null);
-    }
+  /** A berendezés a lapon kerül fel (helyi azonosítóval); a szerverre a Mentéssel megy, újnál és szerkesztésnél is. */
+  function addEquipmentRow() {
+    setEquipment((current) => [
+      ...current,
+      {
+        id: `${LOCAL_EQUIPMENT_PREFIX}${current.length}-${Date.now()}`,
+        ...newEquipment,
+        quantity: newEquipment.quantity ?? 1,
+      },
+    ]);
+    setNewEquipment(EMPTY_NEW_EQUIPMENT);
   }
 
-  async function toggleMaintainer(userId: string) {
-    if (!aquariumId) return;
-    const next = maintainers.some((m) => m.userId === userId)
-      ? maintainers.filter((m) => m.userId !== userId)
-      : [...maintainers, { userId, displayName: "" }];
-    setMaintainersBusy(true);
-    setError(null);
-    try {
-      const updated = await aquariumsApi.setMaintainers(
-        token,
-        aquariumId,
-        next.map((m) => m.userId),
-      );
-      setMaintainers(updated.maintainers);
-    } catch (cause) {
-      setError(
-        cause instanceof ApiError
-          ? cause.message
-          : "A karbantartó-lista nem menthető.",
-      );
-    } finally {
-      setMaintainersBusy(false);
-    }
+  function removeEquipmentRow(equipmentId: string) {
+    setEquipment((current) => current.filter((row) => row.id !== equipmentId));
+    setPendingRemoval(null);
   }
+
+  function toggleMaintainer(userId: string) {
+    setMaintainers((current) =>
+      current.some((m) => m.userId === userId)
+        ? current.filter((m) => m.userId !== userId)
+        : [
+            ...current,
+            selectableMaintainers.find((m) => m.userId === userId) ?? {
+              userId,
+              displayName: "",
+            },
+          ],
+    );
+  }
+
+  const waiting = isEdit
+    ? pendingParts({ savedEquipment, equipment, savedMaintainers, maintainers })
+    : [];
 
   if (!canManage)
     return (
@@ -685,8 +702,8 @@ export function PilotAquariumEditorPage({
                   <PilotMaintainersEditor
                     selected={maintainers}
                     selectable={selectableMaintainers}
-                    busy={maintainersBusy}
-                    onToggle={(userId) => void toggleMaintainer(userId)}
+                    busy={busy}
+                    onToggle={toggleMaintainer}
                   />
                 </div>
               </PilotCard>
@@ -717,6 +734,7 @@ export function PilotAquariumEditorPage({
                         </span>
                         <button
                           type="button"
+                          aria-label={`${EQUIPMENT_KIND_LABEL[row.kind]}${row.manufacturer ? ` · ${row.manufacturer}` : ""}: törlés`}
                           onClick={() => setPendingRemoval(row)}
                           className="cursor-pointer text-pilot-grey-300 transition-colors hover:text-red-500"
                         >
@@ -803,7 +821,7 @@ export function PilotAquariumEditorPage({
                 <PilotButton
                   type="button"
                   variant="secondary"
-                  onClick={() => void addEquipmentRow()}
+                  onClick={addEquipmentRow}
                 >
                   <Icon name="plus" size={13} />
                   Berendezés hozzáadása
@@ -811,7 +829,20 @@ export function PilotAquariumEditorPage({
               </div>
             </PilotCard>
 
-            <div className="flex items-center justify-end gap-3 pb-8">
+            <div className="flex flex-wrap items-center justify-end gap-3 pb-8">
+              {isEdit ? (
+                <p
+                  className="mr-auto text-sm text-pilot-grey-600"
+                  role="status"
+                  data-testid="aquarium-save-state"
+                >
+                  {waiting.length
+                    ? `Mentésre vár: ${waiting.join(" és ")}. A Mentés a fenti adatokkal együtt viszi.`
+                    : savedNotice === JSON.stringify(currentPayload())
+                      ? "Mentve."
+                      : "A Mentés az összes fenti adatot menti, a karbantartókat és a berendezéseket is."}
+                </p>
+              ) : null}
               <PilotButton type="submit" variant="primary" disabled={busy}>
                 {isEdit ? "Mentés" : "Létrehozás"}
               </PilotButton>
@@ -847,22 +878,31 @@ export function PilotAquariumEditorPage({
             ? `Törlöd ezt a berendezést: ${EQUIPMENT_KIND_LABEL[pendingRemoval.kind]}?`
             : ""
         }
-        consequence="A berendezés lekerül az akvárium listájáról."
-        recovery="Visszaállításhoz újra fel kell venni, ugyanazokkal az adatokkal."
+        consequence={
+          isEdit
+            ? "A sor lekerül a listáról, és a Mentéssel az akváriumról is."
+            : "A sor lekerül a felvinni szánt berendezések közül."
+        }
+        recovery={
+          isEdit
+            ? "Mentés előtt az oldal újratöltése visszahozza; mentés után újra fel kell venni."
+            : "Újra felveheted, ugyanazokkal az adatokkal."
+        }
         confirmLabel="Törlés"
         busy={busy}
         onConfirm={() => {
-          if (pendingRemoval) void removeEquipmentRow(pendingRemoval.id);
+          if (pendingRemoval) removeEquipmentRow(pendingRemoval.id);
         }}
         onCancel={() => setPendingRemoval(null)}
       />
+      <UnsavedChangesGuard when={waiting.length > 0} />
     </PilotThemeRoot>
   );
 }
 
 /**
- * A FIGMA `KarbantartokEditor` PILL-VÁLASZTÓJA. A mentési logika a fenti
- * `toggleMaintainer`-ben áll -- ez a komponens csak a megjelenítést adja.
+ * A FIGMA `KarbantartokEditor` PILL-VÁLASZTÓJA. A kiválasztás a lapon vár, a fenti `saveEdit` menti (leltár 3.22) -- ez a
+ * komponens csak a megjelenítést adja.
  */
 function PilotMaintainersEditor({
   selected,

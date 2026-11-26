@@ -284,6 +284,7 @@ export function MailTemplatePage() {
   return (
     <PilotThemeRoot className="space-y-6">
       <PageHeader
+        eyebrow="Beállítások"
         title="Levélsablonok"
         description="Automatikus rendszerlevelek tartalma és előnézete egy helyen. A küldési szabályok nem változnak."
       />
@@ -353,7 +354,11 @@ export function MailTemplatePage() {
               ? `${lista.length} ügyféllevél · szerkeszthető tartalom`
               : `${lista.length} sablon`}
           </p>
-          <ul aria-label="Sablonok" className="mt-4 space-y-2.5">
+          {/*
+            A LISTA SOROS, NEM KÁRTYÁS (picasso leltár 3.24, 2026-11-26): 13 magas kártya állt itt, mindegyikben a teljes leírás, és a lista
+            fél oldal volt. A leírás a kiválasztott sablonnál a szerkesztő fejlécében áll ("Kiküldés: ..."), a listában a sor súgója.
+          */}
+          <ul aria-label="Sablonok" className="mt-4 space-y-1.5">
             {lista.map((esemeny) => {
               const allapot = allapotOf(esemeny.id);
               const kivalasztott = esemeny.id === esemenyId;
@@ -361,35 +366,35 @@ export function MailTemplatePage() {
                 <li key={esemeny.id}>
                   <button
                     type="button"
+                    title={esemeny.description}
                     aria-current={kivalasztott ? "true" : undefined}
                     onClick={() => {
                       if (!kivalasztott)
                         kerValtas({ kind: "template", group, id: esemeny.id });
                     }}
-                    className={`block w-full rounded-lg p-3 text-left ring-1 transition-colors ${
+                    className={`block w-full rounded-lg px-3 py-2 text-left ring-1 transition-colors ${
                       kivalasztott
                         ? "bg-pilot-aqua-50 ring-pilot-aqua-500"
                         : "bg-white ring-pilot-grey-200 hover:bg-pilot-grey-50"
                     }`}
                   >
-                    <span className="flex flex-wrap items-start justify-between gap-2">
-                      <span className="text-[13px] font-semibold text-pilot-grey-900">
+                    <span className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+                      <span className="min-w-0 text-[13px] font-semibold text-pilot-grey-900">
                         {esemeny.name}
                       </span>
                       {allapot ? (
-                        <PilotBadge
-                          variant={
-                            allapot.source === "stored" ? "teal" : "grey"
-                          }
-                        >
-                          {allapot.source === "stored"
-                            ? "Szerkesztett"
-                            : "Alapértelmezett"}
-                        </PilotBadge>
+                        <span className="shrink-0">
+                          <PilotBadge
+                            variant={
+                              allapot.source === "stored" ? "teal" : "grey"
+                            }
+                          >
+                            {allapot.source === "stored"
+                              ? "Szerkesztett"
+                              : "Alapértelmezett"}
+                          </PilotBadge>
+                        </span>
                       ) : null}
-                    </span>
-                    <span className="mt-2 block text-xs text-pilot-grey-500">
-                      {esemeny.description}
                     </span>
                   </button>
                 </li>

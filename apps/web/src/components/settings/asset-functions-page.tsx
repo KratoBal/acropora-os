@@ -102,6 +102,7 @@ export function AssetFunctionsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        eyebrow="Beállítások"
         title="Eszköz-funkciók"
         description="Ez a lista áll az eszköz-felvitel legördülő menüjében. Kivezetni lehet, törölni nem: a már felvitt eszközök mellett a név olvasható marad."
       />

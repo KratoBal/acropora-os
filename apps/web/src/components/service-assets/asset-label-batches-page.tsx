@@ -222,6 +222,7 @@ export function AssetLabelBatchesPage() {
   return (
     <div className="space-y-4">
       <PageHeader
+        eyebrow="Beállítások"
         title="Eszköz-matricák"
         description="Kódok generálása kötegben, a korábbi kötegek listája, nyomtatható CSV letöltése."
       />

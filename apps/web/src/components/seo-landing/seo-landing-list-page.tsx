@@ -38,7 +38,7 @@ export const SEO_LANDING_COLUMNS: PilotTableColumn<SeoLandingPage>[] = [
     header: "Válogatás",
     cell: (page) => (
       <Link
-        className="font-semibold text-brand-700"
+        className="font-semibold text-pilot-aqua-700 hover:underline"
         href={`${SEO_LANDING_LIST_PATH}/${page.id}`}
       >
         {page.title}

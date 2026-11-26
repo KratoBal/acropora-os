@@ -550,6 +550,13 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         entryId: "content",
       },
       {
+        // az oktatóanyag-források (Picasso 3.17): eddig csak a Tartalom oldalról volt elérhető
+        href: "/tartalom/oktatoanyagok",
+        label: "Oktatóanyagok",
+        icon: "file-text",
+        entryId: "teaching-sources",
+      },
+      {
         // a karácsonyi nyereményjáték kezelése (kártya 31445d0f)
         href: "/tartalom/nyeremenyjatek",
         label: "Nyereményjáték",

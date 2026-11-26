@@ -322,6 +322,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.CONTENT_VIEW),
   },
   {
+    /** Az oktatóanyag-források listája (Picasso 3.17, acrobot 62278: kapjon menüpontot a Tartalom alatt): az olvasás ugyanaz a jog, mint a Tartalomé (`content.view`). */
+    id: "teaching-sources",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.CONTENT_VIEW),
+  },
+  {
     /** A karácsonyi nyereményjáték kezelése (kártya 31445d0f): saját jog, csak emberi szerepnek (acrobot, 2026-11-05). */
     id: "game",
     surfaces: ["web"],

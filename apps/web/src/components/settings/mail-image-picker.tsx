@@ -237,8 +237,8 @@ export function MailImagePicker(props: {
                 onClick={() => kivalaszt(k)}
                 className={
                   valasztott === k.id
-                    ? "w-full rounded-md border-2 border-brand-500 p-1 text-left"
-                    : "w-full rounded-md border border-dusk-200 p-1 text-left hover:border-brand-500"
+                    ? "w-full rounded-md border-2 border-pilot-aqua-600 p-1 text-left"
+                    : "w-full rounded-md border border-dusk-200 p-1 text-left hover:border-pilot-aqua-600"
                 }
               >
                 {sources.get(k.id) ? (

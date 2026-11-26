@@ -97,7 +97,7 @@ export function DoseEffectListPage() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Link
                   href={`/products/${encodeURIComponent(row.productId)}`}
-                  className="font-medium text-brand-600 underline"
+                  className="font-medium text-pilot-aqua-700 underline"
                 >
                   {row.productName}
                 </Link>

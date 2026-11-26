@@ -254,6 +254,21 @@ const computeGrossPrice = (
   return (net * (1 + (Number.isFinite(vat) ? vat : 0) / 100)).toFixed(2);
 };
 
+/** A saját beállítás mezői, ahogy a doboz megnevezi őket, amíg nincs mentett érték (lásd a doboz jegyzetét). */
+const EXTENSION_FIELD_NAMES = [
+  "beszerzési deviza",
+  "utolsó beszerzési ár",
+  "minimumkészlet",
+  "optimális készlet",
+  "újrarendelési pont",
+  "biztonsági készlet",
+  "készletkövetés",
+  "automatikus újrarendelés",
+  "beszerzésből kizárva",
+  "kifutó termék",
+  "belső megjegyzés",
+];
+
 function ProductExtensionEditor({
   canManage,
   extension,
@@ -500,120 +515,131 @@ function ProductExtensionEditor({
         </form>
       ) : (
         <>
+          {/*
+            MENTETT BEÁLLÍTÁS NÉLKÜL EGY MONDAT, NEM TIZENKÉT ÜRES SOR (picasso leltár 3.21, 2026-11-26): a termék minden változatánál
+            ismétlődött ugyanaz a ~450 px-es, csupa "—" rács. A 2026-07-21-i döntés (4af1b2a14: a mezők mentés előtt is látszanak, ne egy
+            "nincs beállítva" mondat mögött) célja megmarad: a mondat megnevezi a mezőket, csak nem rajzol hozzájuk üres értéket.
+          */}
           {!extension ? (
             <p className="mt-2 text-xs text-dusk-500">
-              Ehhez a változathoz még nincs mentett saját beállítás, az alábbi
-              mezők üresek.
+              Ehhez a változathoz még nincs mentett saját beállítás. A
+              Szerkesztés gombbal adható meg: {EXTENSION_FIELD_NAMES.join(", ")}
+              .
             </p>
-          ) : null}
-          <dl className="mt-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
-            <div>
-              <dt className="text-dusk-400">Beszerzési deviza</dt>
-              <dd className="mt-1 text-dusk-700">
-                {extension?.defaultPurchaseCurrency
-                  ? currencyLabel(extension.defaultPurchaseCurrency)
-                  : "—"}
-              </dd>
-            </div>
-            {isHufCurrency(extension?.defaultPurchaseCurrency) ? (
-              <>
+          ) : (
+            <dl className="mt-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
+              <div>
+                <dt className="text-dusk-400">Beszerzési deviza</dt>
+                <dd className="mt-1 text-dusk-700">
+                  {extension?.defaultPurchaseCurrency
+                    ? currencyLabel(extension.defaultPurchaseCurrency)
+                    : "—"}
+                </dd>
+              </div>
+              {isHufCurrency(extension?.defaultPurchaseCurrency) ? (
+                <>
+                  <div>
+                    <dt className="text-dusk-400">
+                      Utolsó beszerzési nettó ár
+                    </dt>
+                    <dd className="mt-1 text-dusk-700">
+                      {formatMoney(extension?.lastPurchaseNetPrice, "HUF", {
+                        fractionDigits: 2,
+                      })}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-dusk-400">Utolsó beszerzési ÁFA</dt>
+                    <dd className="mt-1 text-dusk-700">
+                      {formatPercent(extension?.lastPurchaseVatRate)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-dusk-400">
+                      Utolsó beszerzési bruttó ár
+                    </dt>
+                    <dd className="mt-1 text-dusk-700">
+                      {formatMoney(
+                        computeGrossPrice(
+                          extension?.lastPurchaseNetPrice,
+                          extension?.lastPurchaseVatRate,
+                        ),
+                        "HUF",
+                        { fractionDigits: 2 },
+                      )}
+                    </dd>
+                  </div>
+                </>
+              ) : (
                 <div>
-                  <dt className="text-dusk-400">Utolsó beszerzési nettó ár</dt>
-                  <dd className="mt-1 text-dusk-700">
-                    {formatMoney(extension?.lastPurchaseNetPrice, "HUF", {
-                      fractionDigits: 2,
-                    })}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-dusk-400">Utolsó beszerzési ÁFA</dt>
-                  <dd className="mt-1 text-dusk-700">
-                    {formatPercent(extension?.lastPurchaseVatRate)}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-dusk-400">Utolsó beszerzési bruttó ár</dt>
+                  <dt className="text-dusk-400">Utolsó beszerzési ár</dt>
                   <dd className="mt-1 text-dusk-700">
                     {formatMoney(
-                      computeGrossPrice(
-                        extension?.lastPurchaseNetPrice,
-                        extension?.lastPurchaseVatRate,
-                      ),
-                      "HUF",
+                      extension?.lastPurchaseNetPrice,
+                      extension?.defaultPurchaseCurrency,
                       { fractionDigits: 2 },
                     )}
                   </dd>
                 </div>
-              </>
-            ) : (
+              )}
               <div>
-                <dt className="text-dusk-400">Utolsó beszerzési ár</dt>
+                <dt className="text-dusk-400">Minimumkészlet</dt>
                 <dd className="mt-1 text-dusk-700">
-                  {formatMoney(
-                    extension?.lastPurchaseNetPrice,
-                    extension?.defaultPurchaseCurrency,
-                    { fractionDigits: 2 },
-                  )}
+                  {value(extension?.minimumStock)}
                 </dd>
               </div>
-            )}
-            <div>
-              <dt className="text-dusk-400">Minimumkészlet</dt>
-              <dd className="mt-1 text-dusk-700">
-                {value(extension?.minimumStock)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-dusk-400">Optimális készlet</dt>
-              <dd className="mt-1 text-dusk-700">
-                {value(extension?.optimalStock)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-dusk-400">Újrarendelési pont</dt>
-              <dd className="mt-1 text-dusk-700">
-                {value(extension?.reorderPoint)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-dusk-400">Biztonsági készlet</dt>
-              <dd className="mt-1 text-dusk-700">
-                {value(extension?.safetyStock)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-dusk-400">Készletkövetés</dt>
-              <dd className="mt-1 text-dusk-700">
-                {flag(extension?.stockTrackingEnabled)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-dusk-400">Automatikus újrarendelés</dt>
-              <dd className="mt-1 text-dusk-700">
-                {flag(extension?.autoReorderEnabled)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-dusk-400">Beszerzésből kizárva</dt>
-              <dd className="mt-1 text-dusk-700">
-                {flag(extension?.purchasingDisabled)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-dusk-400">Kifutó termék</dt>
-              <dd className="mt-1 text-dusk-700">
-                {flag(extension?.phaseOut)}
-              </dd>
-            </div>
-            {extension?.internalNote && !noteShownElsewhere ? (
-              <div className="sm:col-span-3">
-                <dt className="text-dusk-400">Belső megjegyzés</dt>
-                <dd className="mt-1 whitespace-pre-wrap text-dusk-700">
-                  {extension.internalNote}
+              <div>
+                <dt className="text-dusk-400">Optimális készlet</dt>
+                <dd className="mt-1 text-dusk-700">
+                  {value(extension?.optimalStock)}
                 </dd>
               </div>
-            ) : null}
-          </dl>
+              <div>
+                <dt className="text-dusk-400">Újrarendelési pont</dt>
+                <dd className="mt-1 text-dusk-700">
+                  {value(extension?.reorderPoint)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-dusk-400">Biztonsági készlet</dt>
+                <dd className="mt-1 text-dusk-700">
+                  {value(extension?.safetyStock)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-dusk-400">Készletkövetés</dt>
+                <dd className="mt-1 text-dusk-700">
+                  {flag(extension?.stockTrackingEnabled)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-dusk-400">Automatikus újrarendelés</dt>
+                <dd className="mt-1 text-dusk-700">
+                  {flag(extension?.autoReorderEnabled)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-dusk-400">Beszerzésből kizárva</dt>
+                <dd className="mt-1 text-dusk-700">
+                  {flag(extension?.purchasingDisabled)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-dusk-400">Kifutó termék</dt>
+                <dd className="mt-1 text-dusk-700">
+                  {flag(extension?.phaseOut)}
+                </dd>
+              </div>
+              {extension?.internalNote && !noteShownElsewhere ? (
+                <div className="sm:col-span-3">
+                  <dt className="text-dusk-400">Belső megjegyzés</dt>
+                  <dd className="mt-1 whitespace-pre-wrap text-dusk-700">
+                    {extension.internalNote}
+                  </dd>
+                </div>
+              ) : null}
+            </dl>
+          )}
         </>
       )}
     </div>

@@ -106,9 +106,12 @@ describe("megszűnt skálanevek", () => {
    * ISMERT JELENLETET.
    */
   it("ugyanez a keresés megtalál egy nevet, amelyik tényleg ott van", () => {
+    // A KONTROLL EGY ISMERT, SOK FÁJLBAN ÁLLÓ NEVET KERES. Korábban a `brand-700`-at: az a lila link-söprés (Picasso 3.17-3.23) után öt fájlra szűkült, és a kontroll PIROSRA váltott, holott a lánc
+    // ép volt: a név használata változott, nem a mérés. A link és a kijelölés zöldje, a `pilot-aqua-700` ma a fájlok tucatjában áll, és a mérés ugyanazt bizonyítja vele.
     let talalt = 0;
     for (const f of fajlok) {
-      if (/\bbrand-700\b/.test(kodSzoveg(readFileSync(f, "utf8")))) talalt += 1;
+      if (/\bpilot-aqua-700\b/.test(kodSzoveg(readFileSync(f, "utf8"))))
+        talalt += 1;
     }
     expect(talalt).toBeGreaterThan(5);
   });

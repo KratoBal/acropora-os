@@ -325,27 +325,18 @@ export function PilotMeasurementHistoryPage({
       className="flex min-h-screen flex-col bg-pilot-grey-50"
     >
       <div className={`${PAGE_GUTTER_X} pt-6`}>
-        <nav className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400">
-          <Link
-            href="/akvariumok"
-            className="transition-colors hover:text-pilot-aqua-600"
-          >
-            Akváriumok
-          </Link>
-          <span>/</span>
-          <Link
-            href={`/akvariumok/${aquariumId}`}
-            className="transition-colors hover:text-pilot-aqua-600"
-          >
-            {aquarium.name}
-          </Link>
-          <span>/</span>
-          <span className="font-medium text-pilot-grey-700">
-            Mérési előzmények
-          </span>
-        </nav>
+        {/*
+          A VISSZALÉPÉS A KÖZÖS MINTA (picasso leltár 3.23, R12): a többi akvárium-oldalon "‹" visszanyíl áll, itt eddig morzsa
+          (Akváriumok / név / Mérési előzmények). A nyíl az adatlapra visz; a lap neve a címben áll.
+        */}
+        <Link
+          href={`/akvariumok/${aquariumId}`}
+          className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
+        >
+          <Icon name="chevron-left" size={12} /> {aquarium.name}
+        </Link>
         <PageHeader
-          title={aquarium.name}
+          title="Mérési előzmények"
           meta={
             <>
               {aquarium.waterType ? (

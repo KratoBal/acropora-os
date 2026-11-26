@@ -95,6 +95,7 @@ export function AiChatSettingsPage() {
   return (
     <PilotThemeRoot className="space-y-6">
       <PilotPageHeader
+        eyebrow="Beállítások"
         title="AI csevegés"
         description="A vevői csevegés felajánlása, a kapcsolat-kérés és az adatok megőrzési ideje."
       />
