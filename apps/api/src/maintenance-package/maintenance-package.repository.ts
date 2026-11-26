@@ -77,13 +77,17 @@ export class MaintenancePackageRepository {
             number: true,
             /*
               CSAK A VALÓDI KIÁLLÍTÁS SZÁMÍT ITT -- egy DRAFT (előnézeti)
-              piszkozat NEM elégíti ki a küldés kapuját (ADR-014, 4. szelet):
-              a `completionCertificateId @unique` miatt legfeljebb egy sor
-              lehet, ezért a `where` egyben a "van-e valódi számla" kérdésre
-              is válaszol, nem csak szűr.
+              piszkozat NEM elégíti ki a küldés kapuját (ADR-014, 4. szelet).
+              2026-11-26 óta egy igazoláshoz több számla is tartozhat (sztornó
+              után új), de ÉLŐ (fel nem váltott) legfeljebb egy: a migráció
+              részleges egyedi indexe tartja. A `where` ezért az élő kiállított
+              számlát kéri, rendezve, egyet.
             */
             invoices: {
-              where: { status: "ISSUED" },
+              // the LIVE issued invoice (2026-11-26: a cancelled one superseded by a new invoice on the same certificate is history)
+              where: { status: "ISSUED", supersededAt: null },
+              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+              take: 1,
               select: { id: true, invoiceNumber: true },
             },
           },

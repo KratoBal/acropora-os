@@ -3866,11 +3866,27 @@ model Invoice {
   /// @@unique([source, invoiceNumber]) megkötés, nem ez a mező.
   salesOrderId            String?
   /// A KARBANTARTÁSI PISZKOZAT IDEMPOTENCIA-KULCSA (ADR-014): egy adott
-  /// teljesítési igazoláshoz legfeljebb egy Invoice sor tartozhat. Nem
+  /// teljesítési igazoláshoz legfeljebb egy ÉLŐ Invoice sor tartozhat. Nem
   /// `szamlazzInvoiceId` a kulcs, mert -- ellentétben a UNAS webshop-esettel
   /// (ADR-006) -- itt nincs második rendszer, ami ugyanazt a számlát
   /// versenyben próbálná kiállítani; a mi saját rekordunk a mérvadó.
-  completionCertificateId String?             @unique
+  ///
+  /// 2026-11-26 ÓTA RÉSZLEGES EGYEDISÉG (acrobot döntése, 62227): sztornózott
+  /// számla után UGYANARRA az igazolásra új számla készülhet (a teljesítés nem
+  /// változott, csak a számla volt hibás). Az egyediség csak a fel nem váltott
+  /// sorokra áll (`supersededAt IS NULL`): a migráció részleges egyedi indexe
+  /// tartja (20261126030000_invoice_one_live_per_certificate), a Prisma séma
+  /// nem tudja kifejezni. A régi, sztornózott sor a kapcsolatát megtartja: a
+  /// számlázás és a partner-megrendelés erről ismeri fel a TIG-számlát.
+  completionCertificateId String?
+  /// A SZTORNÓZOTT SZÁMLÁT ÚJ SZÁMLA VÁLTOTTA FEL UGYANARRA AZ IGAZOLÁSRA
+  /// (2026-11-26). Az új piszkozat létrehozása írja, ugyanabban a
+  /// tranzakcióban, és csak akkor, ha a szolgáltatás a két sztornó-jel
+  /// valamelyikét látta (`MaintenanceInvoiceRepository.isCancelled`: egy
+  /// kiállított STORNO sor, vagy a Számlázz.hu-oldali sztornózott iker). A jel
+  /// maga nem ezen a soron áll, ezért nem ez az oszlop dönti el, hogy a számla
+  /// sztornózott-e; csak azt, hogy már nem ő az igazolás élő számlája.
+  supersededAt            DateTime?
   /// A UNAS getOrder API nem ad számla-kiállítási dátumot (az Invoice
   /// alobjektum csak Status/StatusText/Number/Url mezőt dokumentál - lásd
   /// unas.hu/tudastar/api/megrendelesek-adatszerkezet), ezért source=UNAS
@@ -3971,6 +3987,7 @@ model Invoice {
   @@index([salesOrderId])
   @@index([sourceType, sourceId])
   @@index([proformaInvoiceId])
+  @@index([completionCertificateId])
 }
 
 model InvoiceLine {
@@ -4468,9 +4485,10 @@ model CompletionCertificate {
   documents  CompletionCertificateDocument[]
   /// A KARBANTARTÁSI PISZKOZAT-SZÁMLA (ADR-014, 4. szelet). Nem
   /// egy-az-egyben mező, mert egy igazoláshoz technikailag TÖBB Invoice sor
-  /// is mutathatna (pl. egy sztornó-lánc); a "legfeljebb egy" szabályt az
-  /// `Invoice.completionCertificateId @unique` kényszeríti ki, nem ez az
-  /// oldal.
+  /// is mutathat: 2026-11-26 óta a sztornózott számla után új számla
+  /// készülhet ugyanarra az igazolásra. A "legfeljebb egy ÉLŐ" szabályt a
+  /// migráció részleges egyedi indexe kényszeríti ki
+  /// (20261126030000_invoice_one_live_per_certificate), nem ez az oldal.
   invoices   Invoice[]
 
   @@index([serviceJobId])

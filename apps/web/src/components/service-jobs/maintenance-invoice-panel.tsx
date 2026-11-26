@@ -210,10 +210,20 @@ export function MaintenanceInvoicePanel({
           </dl>
           {invoice.cancelled ? (
             // A SZTORNÓZOTT SZÁMLA NEM "KÉSZ" (kártya 2cd1ed80): a szerver ugyanazt a jelet adja, mint a számlázás lista; a lap számlázása újra nyitott
+            // SZTORNÓ UTÁN ÚJ SZÁMLA UGYANARRA AZ IGAZOLÁSRA (acrobot 62227): a teljesítés nem változott, a szerver a sztornózottat
+            // felváltja (`supersededAt`), és az új piszkozat lesz a lap élő számlája
             <Alert
               variant="danger"
               title="Ez a számla sztornózva van"
-              description="A kiállított számlát sztornózták, ezért a karbantartási lap számlázása nincs kész."
+              description="A kiállított számlát sztornózták, ezért a karbantartási lap számlázása nincs kész. Ugyanerre a teljesítési igazolásra új számla készíthető."
+              action={
+                <PilotButton
+                  disabled={creating}
+                  onClick={() => void createDraft()}
+                >
+                  {creating ? "Piszkozat készítése…" : "Új számla-piszkozat"}
+                </PilotButton>
+              }
             />
           ) : null}
           {invoice.status === "ISSUING" ? (

@@ -5,7 +5,10 @@ import { after, before, describe, it } from "node:test";
 import { Prisma, prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
-import { MaintenanceInvoiceRepository } from "./maintenance-invoice.repository.js";
+import {
+  InvoiceSupersededMeanwhile,
+  MaintenanceInvoiceRepository,
+} from "./maintenance-invoice.repository.js";
 
 /**
  * THE UNSIGNED CONFIRMATION'S AUDIT GOES WITH THE DRAFT, on a real Postgres (barracuda, #2176 review). WHAT TURNS THIS
@@ -106,6 +109,8 @@ describe(
         "plain",
         "cancelled",
         "storno",
+        "reinvoice",
+        "race",
       ]) {
         const job = await prisma.serviceJob.create({
           data: {
@@ -208,6 +213,94 @@ describe(
           invoiceNumber: `${PREFIX}P-${n}`,
         }),
         false,
+      );
+    });
+
+    /*
+      SZTORNÓ UTÁN ÚJ SZÁMLA UGYANARRA AZ IGAZOLÁSRA (acrobot 62227), valódi Postgresen, a migráció részleges egyedi indexével
+      (20261126030000). MI PIROSÍT: ha a felváltás után nem jöhet létre az új piszkozat; ha felváltás NÉLKÜL két élő számla
+      állhat egy igazoláson; ha a régi sor elveszti a kapcsolatát; ha az élő számla nem az új; ha egy már felváltott számlát
+      még egyszer fel lehet váltani.
+    */
+    it("a cancelled invoice is superseded by a new draft on the same certificate; a second live one is refused", async () => {
+      const first = draft(ids.reinvoice!);
+      await repository.createDraft(first);
+      await prisma.invoice.update({
+        where: { id: first.id },
+        data: { status: "ISSUED", invoiceNumber: `${PREFIX}R1-${n}` },
+      });
+
+      // without superseding, the partial unique index keeps one live invoice per certificate
+      await assert.rejects(
+        () => repository.createDraft(draft(ids.reinvoice!)),
+        (error: unknown) =>
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002",
+      );
+
+      const second = { ...draft(ids.reinvoice!), supersedes: first.id };
+      const created = await repository.createDraft(second);
+      assert.equal(created.id, second.id);
+      const old = await prisma.invoice.findUniqueOrThrow({
+        where: { id: first.id },
+        select: { supersededAt: true, completionCertificateId: true },
+      });
+      assert.ok(old.supersededAt, "the old invoice is superseded");
+      // it keeps its certificate: billing and the partner order still know it as the certificate's invoice
+      assert.equal(old.completionCertificateId, ids.reinvoice);
+      assert.equal(
+        (await repository.existingInvoice(ids.reinvoice!))?.id,
+        second.id,
+      );
+
+      // a superseded invoice cannot be superseded again
+      await assert.rejects(
+        () =>
+          repository.createDraft({
+            ...draft(ids.reinvoice!),
+            supersedes: first.id,
+          }),
+        (error: unknown) => error instanceof InvoiceSupersededMeanwhile,
+      );
+      assert.equal(
+        await prisma.invoice.count({
+          where: {
+            completionCertificateId: ids.reinvoice!,
+            supersededAt: null,
+          },
+        }),
+        1,
+      );
+    });
+
+    it("two concurrent new invoices after a cancellation leave exactly one live invoice", async () => {
+      const first = draft(ids.race!);
+      await repository.createDraft(first);
+      await prisma.invoice.update({
+        where: { id: first.id },
+        data: { status: "ISSUED", invoiceNumber: `${PREFIX}RACE-${n}` },
+      });
+      const results = await Promise.allSettled([
+        repository.createDraft({ ...draft(ids.race!), supersedes: first.id }),
+        repository.createDraft({ ...draft(ids.race!), supersedes: first.id }),
+      ]);
+      assert.equal(
+        results.filter((result) => result.status === "fulfilled").length,
+        1,
+      );
+      const refused = results.find((result) => result.status === "rejected");
+      assert.ok(
+        refused?.status === "rejected" &&
+          (refused.reason instanceof InvoiceSupersededMeanwhile ||
+            (refused.reason instanceof Prisma.PrismaClientKnownRequestError &&
+              refused.reason.code === "P2002")),
+        String(refused?.status === "rejected" ? refused.reason : "none"),
+      );
+      assert.equal(
+        await prisma.invoice.count({
+          where: { completionCertificateId: ids.race!, supersededAt: null },
+        }),
+        1,
       );
     });
 

@@ -414,6 +414,45 @@ describe("MaintenanceInvoicePanel -- a piszkozat törlése (Luca kérése, KT-20
     A SZTORNÓZOTT SZÁMLA JELE (kártya 2cd1ed80): a panel kimondja, hogy a kiállított számla sztornózva van. MI PIROSÍT: ha a jelzés nem a szerver `cancelled` jeléből
     jön; ha egy nem sztornózott kiállított számlán is megjelenik; ha a piszkozaton megjelenne.
   */
+  // acrobot 62227: after a cancellation a new invoice can be made on the same certificate; the server supersedes the cancelled one
+  it("a cancelled invoice offers a new draft on the same certificate, and the new draft takes its place", async () => {
+    certificatesApi.list.mockResolvedValue([signedCertificate]);
+    invoiceApi.byCertificate.mockResolvedValue({
+      ...invoiceSummary,
+      status: "ISSUED",
+      invoiceNumber: "E-ACR-2026-77",
+      cancelled: true,
+    });
+    invoiceApi.draft.mockResolvedValue({
+      ...invoiceSummary,
+      id: "invoice-2",
+      grossAmount: "130000",
+    });
+    render(<MaintenanceInvoicePanel serviceJobId="job-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Új számla-piszkozat" }),
+    );
+    await waitFor(() =>
+      expect(invoiceApi.draft).toHaveBeenCalledWith("dev-token", "cert-1"),
+    );
+    await screen.findByText("130 000 Ft");
+    expect(screen.queryByText("Ez a számla sztornózva van")).toBeNull();
+  });
+
+  it("a plain issued invoice offers no new draft", async () => {
+    certificatesApi.list.mockResolvedValue([signedCertificate]);
+    invoiceApi.byCertificate.mockResolvedValue({
+      ...invoiceSummary,
+      status: "ISSUED",
+      invoiceNumber: "E-ACR-2026-78",
+    });
+    render(<MaintenanceInvoicePanel serviceJobId="job-1" />);
+    await screen.findByText("E-ACR-2026-78");
+    expect(
+      screen.queryByRole("button", { name: "Új számla-piszkozat" }),
+    ).toBeNull();
+  });
+
   it("says a cancelled issued invoice is cancelled, and says nothing on a plain issued one or a draft", async () => {
     certificatesApi.list.mockResolvedValue([signedCertificate]);
     invoiceApi.byCertificate.mockResolvedValue({
