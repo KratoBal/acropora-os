@@ -1832,6 +1832,45 @@ describe("WebshopOrderDetailPage", () => {
     },
   });
 
+  // card d31a66a3 (nautilus 63452): the label comes from the payment state and the link, not from the card state alone
+  it.each([
+    ["REFUNDED", null, "Visszatérítve"],
+    ["PARTIALLY_REFUNDED", null, "Részben visszatérítve"],
+    ["CAPTURED", null, "Kártyáról levonva"],
+    [
+      "CAPTURED",
+      {
+        sentAt: "2026-10-05T10:00:00.000Z",
+        expiresAt: "2026-10-08T10:00:00.000Z",
+        remindedAt: null,
+        amount: 9500,
+        url: "https://pay.example/x",
+      },
+      "Linken fizetve",
+    ],
+  ] as const)(
+    "a paid card order (payment %s) reads %j as its card payment",
+    async (paymentState, link, label) => {
+      api.detail.mockResolvedValue({
+        ...card({
+          state: "paid",
+          holdExpiresAt: null,
+          holdWarning: null,
+          paidAt: "2026-11-26T16:33:31.690Z",
+          link,
+          canRelease: false,
+        }),
+        payment: { ...detail.payment!, state: paymentState },
+      });
+      render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+      const field = (await screen.findByText("Kártyás fizetés")).parentElement!;
+      expect(field.textContent).toContain(label);
+      expect(field.textContent).not.toContain(
+        label === "Linken fizetve" ? "Kártyáról" : "Linken fizetve",
+      );
+    },
+  );
+
   it("a closed-unsuccessfully order with a captured card amount nobody refunded says so, with the amount (card 527ba41e)", async () => {
     api.detail.mockResolvedValue({
       ...detail,
