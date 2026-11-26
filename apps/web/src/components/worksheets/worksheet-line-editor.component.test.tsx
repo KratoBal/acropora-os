@@ -280,22 +280,38 @@ describe("WorksheetLineEditor munkaóra-mezői", () => {
   pedig sima, keret nélküli szöveg volt. MI PIROSÍT: ha a felirat újra duplán áll; ha a Törlés újra keret nélküli.
 */
 describe("WorksheetLineEditor tételsora", () => {
-  for (const pilot of [false, true]) {
-    it(`the Munkaóra label stands once per row, next to the header cell (${pilot ? "pilot" : "old"} look)`, () => {
-      render(
-        <WorksheetLineEditor
-          lines={[line()]}
-          onChange={vi.fn()}
-          pilot={pilot}
-        />,
-      );
-      // one header cell plus ONE narrow-view label; the checkbox keeps its own aria-label
-      expect(screen.getAllByText("Munkaóra")).toHaveLength(2);
-      expect(
-        screen.getByRole("checkbox", { name: "1. tétel munkaóra" }),
-      ).toBeTruthy();
+  it("the Munkaóra label stands once per row, next to the header cell (old look)", () => {
+    render(<WorksheetLineEditor lines={[line()]} onChange={vi.fn()} />);
+    // one header cell plus ONE narrow-view label; the checkbox keeps its own aria-label
+    expect(screen.getAllByText("Munkaóra")).toHaveLength(2);
+    expect(
+      screen.getByRole("checkbox", { name: "1. tétel munkaóra" }),
+    ).toBeTruthy();
+  });
+
+  /*
+    A PILOT TÉTELSOR KÉT SORBAN (picasso leltár 3.21, stage-kép 2026-11-26): egy sorban a megnevezés csonkult, a munkaóra-négyzet felirat
+    nélkül állt a fejléc alatt. MI PIROSÍT: a megnevezés újra a rövid mezők rácsában áll; visszajön a fejlécsor; a "Munkaóra" nem a négyzet
+    saját felirata; egy rövid mező felirata csak keskeny nézetben látszik.
+  */
+  it("pilot look: the name on its own line, the short fields below with their own visible labels", () => {
+    render(<WorksheetLineEditor lines={[line()]} onChange={vi.fn()} pilot />);
+    const name = screen.getByRole("textbox", { name: "1. tétel megnevezése" });
+    const quantity = screen.getByRole("textbox", {
+      name: "1. tétel mennyisége",
     });
-  }
+    // the grid of the short fields does not hold the name (in the old one-row look it did)
+    expect(quantity.closest(".grid")!.contains(name)).toBe(false);
+    expect(screen.queryByText("Megnevezés")).toBeNull();
+    const munkaora = screen.getByText("Munkaóra");
+    expect(munkaora.closest("label")).toBe(
+      screen
+        .getByRole("checkbox", { name: "1. tétel munkaóra" })
+        .closest("label"),
+    );
+    for (const label of ["Mennyiség", "Mértékegység", "Hányan"])
+      expect(screen.getByText(label).className).not.toContain("md:hidden");
+  });
 
   it("the delete button of a row in the pilot look has a frame (secondary), not bare text", () => {
     render(
