@@ -129,7 +129,7 @@ export const PRODUCT_COLUMNS: PilotTableColumn<ProductRow>[] = [
           href={item.unasListing.productUrl}
           target="_blank"
           rel="noreferrer"
-          className="text-brand-700 hover:underline"
+          className="text-pilot-aqua-700 hover:underline"
         >
           Webshopban
         </a>

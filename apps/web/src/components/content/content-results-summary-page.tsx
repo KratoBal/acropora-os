@@ -85,7 +85,7 @@ export function ContentResultsSummaryPage() {
         actions={
           <Link
             href="/tartalom"
-            className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
+            className="text-sm font-medium text-pilot-aqua-700 underline-offset-4 hover:underline"
           >
             ← Tartalom
           </Link>
@@ -146,7 +146,7 @@ export function ContentResultsSummaryPage() {
                         · legjobb:{" "}
                         <Link
                           href={`/tartalom/${encodeURIComponent(row.best.contentId)}`}
-                          className="text-brand-700 hover:underline"
+                          className="text-pilot-aqua-700 hover:underline"
                         >
                           {row.best.title}
                         </Link>{" "}
@@ -159,7 +159,7 @@ export function ContentResultsSummaryPage() {
                         · leggyengébb:{" "}
                         <Link
                           href={`/tartalom/${encodeURIComponent(row.worst.contentId)}`}
-                          className="text-brand-700 hover:underline"
+                          className="text-pilot-aqua-700 hover:underline"
                         >
                           {row.worst.title}
                         </Link>{" "}
@@ -184,7 +184,7 @@ export function ContentResultsSummaryPage() {
                     <li key={row.contentId}>
                       <Link
                         href={`/tartalom/${encodeURIComponent(row.contentId)}`}
-                        className="text-brand-700 hover:underline"
+                        className="text-pilot-aqua-700 hover:underline"
                       >
                         {row.title}
                       </Link>

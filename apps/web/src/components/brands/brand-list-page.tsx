@@ -65,7 +65,7 @@ const columns: PilotTableColumn<BrandRow>[] = [
     cell: (brand) => (
       <>
         <Link
-          className="font-semibold text-brand-700"
+          className="font-semibold text-pilot-aqua-700 hover:underline"
           href={`/admin/brands/${brand.id}`}
         >
           {brand.name}

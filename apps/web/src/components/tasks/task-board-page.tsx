@@ -311,7 +311,7 @@ function TaskCard({
             // V1.2: the order page is ours: it opens here, not in a new tab
             <a
               href={task.linkUrl}
-              className="font-semibold text-brand-700 underline-offset-4 hover:underline"
+              className="font-semibold text-pilot-aqua-700 underline-offset-4 hover:underline"
             >
               Rendelés megnyitása
             </a>
@@ -319,7 +319,7 @@ function TaskCard({
             // P8: an offer of our own opens here, not in a new tab
             <a
               href={task.linkUrl}
-              className="font-semibold text-brand-700 underline-offset-4 hover:underline"
+              className="font-semibold text-pilot-aqua-700 underline-offset-4 hover:underline"
             >
               Ajánlat megnyitása
             </a>
@@ -328,7 +328,7 @@ function TaskCard({
               href={task.linkUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-semibold text-brand-700 underline-offset-4 hover:underline"
+              className="font-semibold text-pilot-aqua-700 underline-offset-4 hover:underline"
             >
               Beszélgetés megnyitása
             </a>
