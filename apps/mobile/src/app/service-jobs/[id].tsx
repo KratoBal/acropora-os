@@ -4,6 +4,7 @@ import { Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -66,6 +67,11 @@ import {
 } from "@/lib/offline/service-job-cache";
 import { offlineCopyNoticeFor } from "@/lib/service-jobs/offline-copy-notice";
 import { BOTH_NOUN, jobWords } from "@/lib/service-jobs/job-words";
+import {
+  serviceJobStateText,
+  serviceJobStepLabel,
+  stepConfirmation,
+} from "@/lib/service-jobs/common-status";
 import {
   serviceJobStatusLabel,
   shortPath,
@@ -182,7 +188,7 @@ export default function ServiceJobDetailScreen() {
     mutationFn: (to: ServiceJobStatusValue) => moveServiceJob(id!, to, note),
     onSuccess: async (moved) => {
       setNote("");
-      setNotice(`A jegy állapota: ${serviceJobStatusLabel(moved.status)}.`);
+      setNotice(`A jegy állapota: ${serviceJobStateText(moved)}.`);
       await rememberServiceJobDetail(moved);
       queryClient.setQueryData(["service-job", id], moved);
       /**
@@ -385,6 +391,28 @@ export default function ServiceJobDetailScreen() {
   const lephet = masolatbol || partnerAlak(detail) ? [] : detail.allowedSteps;
   // A lap fajtája (a partner alakból hiányzik: ott hibajegy): a szavak, a mentett másolat mondatai és a napló ehhez igazodnak (hibajegy-maradek lista, acrobot 56196)
   const kind = "kind" in detail ? detail.kind : undefined;
+  /*
+    A LÉPÉS-GOMBOK A SZERVER `allowedSteps`-ÉBŐL RAJZOLÓDNAK (a partner-alakban a lista üres, a `from` ott nem számít), a felirat ige, és a két végállapot
+    (Lezárás, Meghiúsultnak jelölés) elé megerősítés áll: belőlük nincs visszaút (kártya 7f23785c, 5. szelet, terv 9. pont).
+  */
+  const from: ServiceJobStatusValue = partnerAlak(detail)
+    ? "NEW"
+    : detail.status;
+  const askStep = (to: ServiceJobStatusValue) => {
+    const confirmation = stepConfirmation(to, detail.jobNumber, kind);
+    if (!confirmation) {
+      step.mutate(to);
+      return;
+    }
+    Alert.alert(confirmation.title, confirmation.message, [
+      { text: "Mégse", style: "cancel" },
+      {
+        text: confirmation.confirmLabel,
+        style: "destructive",
+        onPress: () => step.mutate(to),
+      },
+    ]);
+  };
   const words = jobWords(kind);
   const copyNotice = offlineCopyNoticeFor(kind);
   const naplo = timelineRows(detail.timeline, new Date(), kind);
@@ -721,9 +749,9 @@ export default function ServiceJobDetailScreen() {
                   <Pressable
                     key={to}
                     accessibilityRole="button"
-                    accessibilityLabel={serviceJobStatusLabel(to)}
+                    accessibilityLabel={serviceJobStepLabel(from, to)}
                     disabled={step.isPending}
-                    onPress={() => step.mutate(to)}
+                    onPress={() => askStep(to)}
                     style={({ pressed }) => [
                       styles.action,
                       styles.actionLarge,
@@ -731,7 +759,7 @@ export default function ServiceJobDetailScreen() {
                     ]}
                   >
                     <Text style={styles.actionText}>
-                      Tovább → {serviceJobStatusLabel(to)}
+                      {serviceJobStepLabel(from, to)}
                     </Text>
                   </Pressable>
                 ))}

@@ -90,6 +90,9 @@ export interface ConversationContextCard {
   number: string | null;
   partnerName: string | null;
   status: string | null;
+  /** A KÖZÖS ÁLLAPOT ÉS AZ OKA (kártya 7f23785c, 5. szelet), csak `SERVICE_JOB` kártyán; szöveg és elhagyható: régi válasz, ismeretlen érték, mindkettőnél a mai felirat áll. */
+  commonStatus?: string | null;
+  commonReason?: string | null;
   createdAt: string | null;
   restricted: boolean;
   /** A kapcsolt lap fajtája (`SERVICE_JOB` kártyánál): a karbantartási lap nem hibajegy. Munkalapnál és régi válasznál hiányzik. */

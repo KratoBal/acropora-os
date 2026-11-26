@@ -1,3 +1,4 @@
+import { commonStateOf, commonStateText } from "../service-jobs/common-status";
 import { SERVICE_JOB_STATUS_LABELS } from "../service-jobs/service-job-status";
 import { worksheetDisplayStatusLabel } from "../worksheets/worksheet-presentation";
 import type {
@@ -67,6 +68,11 @@ export function contextStatusLabel(
   card: ConversationContextCard,
 ): string | null {
   if (!card.status) return null;
+  // a hibajegy kártyáján a KÖZÖS állapot az okkal, ha a szerver hozza (kártya 7f23785c, 5. szelet); munkalapnál és régi válasznál a mai felirat
+  if (card.type !== "WORKSHEET") {
+    const common = commonStateOf(card);
+    if (common) return commonStateText(common);
+  }
   const labels: Record<string, string> =
     card.type === "WORKSHEET"
       ? worksheetDisplayStatusLabel

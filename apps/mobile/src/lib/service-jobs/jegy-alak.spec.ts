@@ -92,6 +92,35 @@ describe("a hibajegy ket alakja", () => {
     assert.equal(fejlec.ugyfelNeve, "Fánk Kft.");
   });
 
+  /**
+   * A KOZOS ALLAPOT A FEJLECEN (kartya 7f23785c, 5. szelet): a szerver mezoibol, az okkal; a regi valasz a tarolt allapot mai nevet adja.
+   * A partner-alak nem kapja (a partner a sajat szavait latja).
+   */
+  it("a fejlec a kozos allapotot mutatja az okkal, regi valasznal a mai feliratot", () => {
+    const kozos = {
+      ...BELSO,
+      commonStatus: "WAITING",
+      commonReason: "PARTS",
+    } as typeof BELSO;
+    assert.equal(
+      jegyFejlec(kozos, false, belsoFelirat).allapotFelirat,
+      "Vár valamire · alkatrészre",
+    );
+    assert.equal(
+      jegyFejlec(kozos, true, belsoFelirat).allapotFelirat,
+      "Vár valamire · alkatrészre",
+    );
+    assert.equal(
+      jegyFejlec(BELSO, false, belsoFelirat).allapotFelirat,
+      "Folyamatban",
+    );
+    const ismeretlen = { ...BELSO, commonStatus: "NO_SUCH" } as typeof BELSO;
+    assert.equal(
+      jegyFejlec(ismeretlen, false, belsoFelirat).allapotFelirat,
+      "Folyamatban",
+    );
+  });
+
   it("mentett masolatbol nezve a belso alak sem leptethet", () => {
     assert.equal(jegyFejlec(BELSO, true, belsoFelirat).leptethet, false);
   });

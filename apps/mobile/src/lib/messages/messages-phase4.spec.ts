@@ -82,6 +82,38 @@ describe("messages phase 4 on the phone", () => {
     assert.equal(contextStatusLabel({ ...card, status: null }), null);
   });
 
+  // a hibajegy kártyáján a KÖZÖS állapot az okkal (kártya 7f23785c, 5. szelet); munkalapon és régi válasznál a mai felirat
+  it("a hibajegy kártyáján a közös állapot az okkal áll, a munkalapén és régi válasznál nem", () => {
+    const kozos = { commonStatus: "DONE", commonReason: "AWAITING_SIGNATURE" };
+    assert.equal(
+      contextStatusLabel({ ...card, status: "IN_PROGRESS", ...kozos }),
+      "Elkészült · aláírásra vár",
+    );
+    assert.equal(
+      contextStatusLabel({
+        ...card,
+        type: "WORKSHEET",
+        status: "COMPLETED",
+        ...kozos,
+      }),
+      "Elkészült",
+    );
+    assert.equal(
+      contextStatusLabel({ ...card, status: "IN_PROGRESS" }),
+      "Folyamatban",
+    );
+    assert.equal(
+      contextStatusLabel({
+        ...card,
+        status: "CANCELLED",
+        commonStatus: "NO_SUCH",
+      }),
+      "Meghiúsult",
+    );
+    // korlátozott kártya: nincs állapot, a közös sem szivárog át
+    assert.equal(contextStatusLabel({ ...card, status: null, ...kozos }), null);
+  });
+
   it("titles, subtitles, system events, members only in groups", () => {
     assert.equal(contextCardTitle("WORKSHEET"), "KAPCSOLT MUNKALAP");
     assert.equal(contextCardTitle("SERVICE_JOB"), "KAPCSOLT HIBAJEGY");

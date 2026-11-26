@@ -1,3 +1,4 @@
+import { commonStateOf, serviceJobStateText } from "./common-status";
 import type { ServiceJobDetail, ServiceJobPartnerDetail } from "./types";
 
 /**
@@ -90,14 +91,17 @@ export function jegyFejlec(
   detail: JegyAdatlap,
   /** A mentett masolatbol nezzuk-e. Onnan leptetni amugy sem lehet. */
   masolatbol: boolean,
-  /** Az allapot-felirat a belso alakhoz (a mobil sajat tukre). */
+  /** Az allapot-felirat a belso alakhoz (a mobil sajat tukre): a tarolt allapot mai neve, KOZOS allapot nelkuli valasznal. */
   belsoFelirat: (status: string) => string,
 ): JegyFejlec {
   if (partnerAlak(detail))
     return { allapotFelirat: detail.partnerStatusLabel, leptethet: false };
 
   return {
-    allapotFelirat: belsoFelirat(detail.status),
+    // a KOZOS allapot az okkal, ha a valasz hozza (kartya 7f23785c, 5. szelet); ha nem (regi valasz, mentett masolat), a tarolt allapot mai neve
+    allapotFelirat: commonStateOf(detail)
+      ? serviceJobStateText(detail)
+      : belsoFelirat(detail.status),
     leptethet: !masolatbol && detail.allowedSteps.length > 0,
     ugyfelNeve: detail.customerName ?? undefined,
   };

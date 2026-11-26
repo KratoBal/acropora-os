@@ -91,7 +91,8 @@ describe("a karbantartás lista képernyője", () => {
   it("a hibajegy állapotát nem mutatja, a készséget igen", () => {
     assert.doesNotMatch(kep, /serviceJobStatusLabel/);
     assert.doesNotMatch(kep, /partnerStatusLabel/);
-    assert.match(kep, /maintenanceDone/);
+    // a jelvény a közös állapotból vagy a készségből (`maintenanceDone`) jön, egy helyen: `maintenanceBadgeText` (kártya 7f23785c, 5. szelet)
+    assert.match(kep, /maintenanceBadgeText\(item\)/);
   });
 
   it("a mentett másolatba csak a szerver válasza kerül, a lap megnyitása a közös adatlapra visz", () => {
