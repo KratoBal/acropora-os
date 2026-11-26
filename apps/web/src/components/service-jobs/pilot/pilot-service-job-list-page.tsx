@@ -59,6 +59,7 @@ import {
   PILOT_TABS,
   type PilotTab,
 } from "./pilot-service-job-list-view";
+import { menuEyebrow } from "@/components/navigation";
 
 /**
  * A FIGMA MAKE TERV ÁTÜLTETÉSE -- HIBAJEGYEK LISTA KÉPERNYŐ.
@@ -781,7 +782,8 @@ export function PilotServiceJobListPage() {
         sentence on what the list is for, and the primary action at the right.
       */}
       <PageHeader
-        eyebrow="Szerviz / Munkatér"
+        // the line above the title is the page's menu entry (Picasso R7)
+        eyebrow={menuEyebrow("/szerviz/hibajegyek") ?? undefined}
         title="Hibajegyek"
         // telefonon a három soros leírás nélkül: a lista első sora így 600 helyett kb. 440 px-nél kezdődik (mérve a stage-en, picasso terv 5. pont)
         description={
@@ -1031,7 +1033,7 @@ export function PilotServiceJobListPage() {
           ) : null}
           {!appliedSearch && !hasActiveFilters && canManage ? (
             <Link href="/szerviz/hibajegyek/uj">
-              <PilotButton variant="primary">
+              <PilotButton variant="primary" size="regular">
                 <Icon name="plus" size={14} />
                 Új hibajegy
               </PilotButton>
