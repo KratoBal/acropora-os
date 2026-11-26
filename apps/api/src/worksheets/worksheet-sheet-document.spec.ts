@@ -16,7 +16,10 @@ import {
   worksheetSheetFileName,
 } from "./worksheet-sheet-document.js";
 import {
+  entryAuthorName,
+  sheetAssigneeNames,
   toVersionSummary,
+  type WorksheetDetailRow,
   type WorksheetVersionRow,
 } from "./worksheets.types.js";
 
@@ -453,5 +456,80 @@ describe("a Felvette nev a lezaraskori rogzitett nev", () => {
       await hash(elo.createdByName),
       await hash("Szerelő Sándor"),
     );
+  });
+});
+
+/*
+  A "DOLGOZOTT RAJTA" NEVEK ES A NAPLO SZERZOI IS ROGZITETTEK (card f450672c, masodik resz). MI PIROSIT: ha a lezart verzio a ELO kiosztast olvassa, egy atnevezett vagy levett felelos hasht valtoztat; ha a rogzitett lista ures, de a leker az elo nevekhez nyul, az ures lista is bukik. KONTROLL: piszkozatnal az elo nev szolgal.
+*/
+describe("a Dolgozott rajta nevek es a naplo szerzoi a rogzitett nevek", () => {
+  const at = new Date("2026-09-20T10:00:00.000Z");
+
+  function lap(
+    closedAt: Date | null,
+    frozen: string[],
+    live: string[],
+  ): WorksheetDetailRow {
+    return {
+      versions: [{ closedAt, assigneeNamesAtClose: frozen }],
+      assignees: live.map((displayName, index) => ({
+        userId: `user-${index}`,
+        assignedAt: new Date("2026-09-17T08:00:00.000Z"),
+        user: { displayName, nickname: null },
+      })),
+    } as unknown as WorksheetDetailRow;
+  }
+
+  const lezaras = new Date("2026-09-17T20:00:00.000Z");
+
+  async function hash(assigneeNames: string[]): Promise<string> {
+    return (
+      await worksheetSheetDocument(bemenet({ assigneeNames }), {
+        creationDate: at,
+      })
+    ).sha256;
+  }
+
+  it("lezart verzional a rogzitett lista all, atnevezes utan is, azonos bajtokkal", async () => {
+    const closeIdoben = sheetAssigneeNames(
+      lap(lezaras, ["Kovács Anna"], ["Kovács Anna"]),
+    );
+    const atnevezes = sheetAssigneeNames(
+      lap(lezaras, ["Kovács Anna"], ["Nagy Anna"]),
+    );
+    assert.deepEqual(atnevezes, ["Kovács Anna"]);
+    assert.equal(await hash(atnevezes), await hash(closeIdoben));
+  });
+
+  it("lezart verzional az URES rogzitett lista is iranyado (a levett felelos nem kerul vissza)", () => {
+    assert.deepEqual(sheetAssigneeNames(lap(lezaras, [], ["Nagy Anna"])), []);
+  });
+
+  it("KONTROLL: piszkozatnal az elo kiosztas nevei szolgalnak, es a hash kovetne az atnevezest", async () => {
+    const elo = sheetAssigneeNames(lap(null, [], ["Nagy Anna"]));
+    assert.deepEqual(elo, ["Nagy Anna"]);
+    assert.notEqual(await hash(elo), await hash(["Kovács Anna"]));
+  });
+
+  it("a naplo szerzoje az iraskor rogzitett nev, a kapcsolat csak a rogzites nelkuli sorra marad", () => {
+    assert.equal(
+      entryAuthorName({
+        authorName: "Szerelő Sándor",
+        author: { displayName: "Átnevezett Sándor" },
+      }),
+      "Szerelő Sándor",
+    );
+    assert.equal(
+      entryAuthorName({ authorName: "Szerelő Sándor", author: null }),
+      "Szerelő Sándor",
+    );
+    assert.equal(
+      entryAuthorName({
+        authorName: null,
+        author: { displayName: "Élő Sándor" },
+      }),
+      "Élő Sándor",
+    );
+    assert.equal(entryAuthorName({ authorName: null, author: null }), null);
   });
 });

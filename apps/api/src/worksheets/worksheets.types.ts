@@ -8,6 +8,7 @@ import {
   commonWorksheetStatus,
   formatWorksheetVersionLabel,
   personDisplayName,
+  personLegalName,
   type WorksheetAssignee,
   type WorksheetDetail,
   type WorksheetListItem,
@@ -345,6 +346,25 @@ export function currentVersionRow(
   const current = row.versions[0];
   if (!current) throw new Error("WORKSHEET_WITHOUT_VERSION");
   return current;
+}
+
+/**
+ * A "DOLGOZOTT RAJTA" NEVEK A KIADOTT LAPON (card f450672c). Lezart verzional a LEZARAS PILLANATABAN rogzitett lista az iranyado, akkor is, ha ures (egy azota levett vagy torolt felelos nem irhatja at a lapot); piszkozatnal az elo kiosztas nevei. A lezart-e kerdest a `closedAt` dönti el, nem a lista hossza.
+ */
+export function sheetAssigneeNames(row: WorksheetDetailRow): string[] {
+  const current = currentVersionRow(row);
+  if (current.closedAt) return [...current.assigneeNamesAtClose];
+  return row.assignees.map((assignee) => personLegalName(assignee.user));
+}
+
+/**
+ * A NAPLO-SOR SZERZOJE: az iras pillanataban rogzitett nev elol jar, az elo kapcsolat csak a rogzites nelkuli sorra marad (card f450672c).
+ */
+export function entryAuthorName(row: {
+  authorName: string | null;
+  author: { displayName: string } | null;
+}): string | null {
+  return row.authorName ?? row.author?.displayName ?? null;
 }
 
 /**
