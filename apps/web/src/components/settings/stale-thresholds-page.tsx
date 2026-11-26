@@ -91,6 +91,7 @@ export function StaleThresholdsPage() {
   return (
     <PilotThemeRoot className="space-y-6">
       <PilotPageHeader
+        eyebrow="Beállítások"
         title="Rendelések elavulása"
         description="Mennyi idő után jelezze a Rendelések lista, hogy egy rendelés túl sokáig áll egy státuszban."
       />

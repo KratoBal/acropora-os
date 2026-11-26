@@ -256,6 +256,23 @@ describe("a levélsablon szerkesztője", () => {
    * A szerver a kódban álló alapértelmezést UGYANOLYAN alakban adja vissza,
    * mint egy tárolt sablont: a kettő a szövegből nem különböztethető meg.
    */
+  // picasso leltár 3.24: a lista soros, a leírás a sor súgója (a kiválasztotté a szerkesztő fejlécében), nem a kártya szövege
+  it("a sablonlistában a leírás nem kártyaszöveg, hanem a sor súgója", async () => {
+    await megjelenit();
+    const list = screen.getByRole("list", { name: "Sablonok" });
+    const rows = list.querySelectorAll("button");
+    expect(rows.length).toBeGreaterThan(1);
+    for (const row of rows) {
+      const tip = row.getAttribute("title") ?? "";
+      expect(tip.length).toBeGreaterThan(0);
+      expect(row.textContent).not.toContain(tip);
+    }
+    const chosen = list.querySelector('button[aria-current="true"]')!;
+    expect(
+      screen.getByText(`Kiküldés: ${chosen.getAttribute("title")}`),
+    ).toBeTruthy();
+  });
+
   it("kimondja, ha a kódban álló alapértelmezést látjuk", async () => {
     await megjelenit({ source: "default" });
     expect(

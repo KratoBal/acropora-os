@@ -144,6 +144,7 @@ export function RentalEquipmentPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        eyebrow="Beállítások"
         title="Bérelhető eszközök"
         description="A kölcsönzött eszközök darabonként. Az összegek bruttó forintban értendők. Kivezetni lehet, törölni nem: a bérlések és a szerződések hivatkoznak rájuk."
       />

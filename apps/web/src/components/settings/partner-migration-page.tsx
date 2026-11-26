@@ -204,6 +204,7 @@ export function PartnerMigrationPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        eyebrow="Beállítások"
         title="Partner-átvezetés"
         description="Minden partner (beszállító, szerviz-partner) egyetlen vevő-törzs sor lesz, a szerep jelölésként rajta. A lista soronként megmondja, mi történne, és mi alapján (az adószám párosít, a név nem); alatta futtatható a próba, az átvezetés és a visszaállítás."
         actions={

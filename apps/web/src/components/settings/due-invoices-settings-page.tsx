@@ -128,6 +128,7 @@ export function DueInvoicesSettingsPage() {
   return (
     <PilotThemeRoot className="space-y-6">
       <PilotPageHeader
+        eyebrow="Beállítások"
         title="Lejáró számlák levele"
         description="A heti „Lejáró számlák - Utalási jegyzék” PDF kinek megy, mikor, és ki a feladó."
       />

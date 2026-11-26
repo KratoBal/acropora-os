@@ -213,6 +213,7 @@ export function PartnerDuplicatesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        eyebrow="Beállítások"
         title="Partner-duplikátumok"
         description="Ugyanaz a cég több helyen: vevőként, szállítóként vagy webshopos vásárlóként. A lista csak olvasható, innen semmi nem vonódik össze."
         actions={

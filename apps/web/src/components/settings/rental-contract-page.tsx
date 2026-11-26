@@ -144,6 +144,7 @@ export function RentalContractPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        eyebrow="Beállítások"
         title="Bérleti szerződés"
         description="A bérléskor nyomtatott szerződés szövege. A {{mezo}} alakú helyekre a rendszer a bérlés adatait írja. A szöveg, a szorzó és a napok a bérléskor rögzülnek: egy változtatás csak az új bérlésekre vonatkozik, a már megkötött szerződés újranyomtatva sem változik."
       />
