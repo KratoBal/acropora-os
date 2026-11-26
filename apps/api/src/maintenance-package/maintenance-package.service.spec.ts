@@ -75,6 +75,7 @@ function serviceWith(
   } as unknown as MaintenancePackageRepository;
   const invoices = {
     pdfFor: async (_invoiceId: string) => Buffer.from("%PDF-1.4\ninvoice"),
+    isCancelled: async () => false,
     ...invoiceOverrides,
   } as unknown as MaintenanceInvoiceDraftService;
   return new MaintenancePackageService(repository, invoices);
@@ -302,6 +303,44 @@ describe("a karbantartási lap dokumentumcsomagja", () => {
       packageFile.bytes.includes(Buffer.from("szamla-SZ2026-00042.pdf")),
     );
     assert.ok(packageFile.bytes.includes(Buffer.from("invoice-bytes")));
+  });
+
+  // barracuda a #2935-ön: a szerver kapuja ugyanazt a sztornó-jelet kérdezi, mint a panel (kártya 2cd1ed80)
+  it("sztornózott ISSUED számlával a KIKÜLDÉS elutasít, a LETÖLTÉS nem kérdezi a sztornót", async () => {
+    const adat = job({
+      completionCertificate: {
+        id: "cert-1",
+        number: "ALT-2026-001",
+        documents: [
+          {
+            type: "SIGNED_FORM",
+            fileName: "igazolas-alairt.pdf",
+            contentType: "application/pdf",
+            content: Buffer.from("%PDF-1.4\ncertificate"),
+          },
+        ],
+        invoices: [{ id: "invoice-1", invoiceNumber: "SZ2026-00042" }],
+      },
+    });
+    const asked: unknown[] = [];
+    const service = serviceWith(adat, {
+      isCancelled: async (invoice: unknown) => {
+        asked.push(invoice);
+        return true;
+      },
+    });
+    await assert.rejects(
+      () => service.assemble("job-a", "send"),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /sztornózták/.test(error.message),
+    );
+    assert.deepEqual(asked, [
+      { id: "invoice-1", invoiceNumber: "SZ2026-00042" },
+    ]);
+    asked.length = 0;
+    await service.assemble("job-a", "download");
+    assert.deepEqual(asked, []);
   });
 
   it("lezáratlan munkalap megállítja a letöltést is, névvel", async () => {

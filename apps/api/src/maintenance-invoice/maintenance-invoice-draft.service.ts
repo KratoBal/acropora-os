@@ -249,6 +249,17 @@ export class MaintenanceInvoiceDraftService {
    * számla PDF nélkül (a Számlázz.hu nem küldte) HANGOSAN hibát ad, és soha
    * nem az előnézetet.
    */
+  /**
+   * SZTORNÓZTÁK-E A KIÁLLÍTOTT SZÁMLÁT (kártya 2cd1ed80): a csomag kiküldési kapuja ugyanezt a jelet kérdezi, mint a panel
+   * (`byCertificate`), hogy a szerver és a felület ugyanazt mondja (barracuda a #2935-ön).
+   */
+  isCancelled(invoice: {
+    id: string;
+    invoiceNumber: string | null;
+  }): Promise<boolean> {
+    return this.repository.isCancelled(invoice);
+  }
+
   async pdfFor(invoiceId: string): Promise<Buffer> {
     return (await this.pdfDocument(invoiceId)).bytes;
   }

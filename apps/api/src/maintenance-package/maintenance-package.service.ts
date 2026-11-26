@@ -119,6 +119,14 @@ export class MaintenancePackageService {
       certificateDocuments.find((d) => d.type === "GENERATED_FORM") ??
       null;
     const issuedInvoice = job.completionCertificate?.invoices[0] ?? null;
+    // a sztornót csak a kiküldés kérdezi (a letöltés nem vár a számlára); ugyanaz a jel, mint a panelen (kártya 2cd1ed80)
+    const invoiceCancelled =
+      purpose === "send" && issuedInvoice
+        ? await this.invoices.isCancelled({
+            id: issuedInvoice.id,
+            invoiceNumber: issuedInvoice.invoiceNumber ?? null,
+          })
+        : false;
 
     const blockers = maintenancePackageBlockers({
       worksheets: job.worksheets.map(worksheetState),
@@ -135,6 +143,7 @@ export class MaintenancePackageService {
         megfigyelhető viselkedés, mint eddig, és a SÉMÁBÓL következik.
       */
       invoicePresent: issuedInvoice != null,
+      invoiceCancelled,
       purpose,
     });
     if (maintenancePackageIsBlocked(blockers))
