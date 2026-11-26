@@ -103,6 +103,29 @@ describe("a PilotDataTable telefonos kártyanézete", () => {
     expect(cella("12 000 Ft").className).not.toContain("max-md:hidden");
   });
 
+  // Picasso 3.28: a phone card must not carry a row of dashes for a value the row does not have
+  it("a `phoneHideWhen` cella csak azon a soron marad ki telefonon, ahol igazat ad", () => {
+    const sorok: Sor[] = [
+      { id: "a", szam: "SZ-1", datum: "2026. 08. 09.", osszeg: "12 000 Ft" },
+      { id: "b", szam: "SZ-2", datum: "2026. 08. 10.", osszeg: "9 900 Ft" },
+    ];
+    const { container } = render(
+      <PilotDataTable
+        columns={[SZAM, { ...OSSZEG, phoneHideWhen: (r: Sor) => r.id === "a" }]}
+        rows={sorok}
+        rowKey={(r) => r.id}
+      />,
+    );
+    const td = (szoveg: string) =>
+      [...container.querySelectorAll("td")].find(
+        (c) => c.textContent === szoveg,
+      )!;
+    // the cell stays in the DOM (the grid cannot change per row), only a phone drops it
+    expect(td("12 000 Ft").className).toContain("max-md:hidden");
+    expect(td("12 000 Ft").className).not.toMatch(/(^|\s)hidden(\s|$)/);
+    expect(td("9 900 Ft").className).not.toContain("max-md:hidden");
+  });
+
   it("a nowrap oszlop cellája nem törhet sorba, a többié igen", () => {
     const { cella } = rajzol();
     expect(cella("2026. 08. 09.").className).toContain("whitespace-nowrap");

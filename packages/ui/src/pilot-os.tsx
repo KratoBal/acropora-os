@@ -204,6 +204,11 @@ export interface PilotTableColumn<Row> {
    */
   phone?: "title" | "hide";
   /**
+   * Telefonon ennél a SORNÁL kimarad a cella (felirattal együtt), ha a függvény igazat ad: egy üres érték ("—") nem információ, és kártyánként négy ilyen sor
+   * a kártyát 365 px-re nyújtotta (Picasso 3.28). Asztalon a cella marad, mert az oszlop rácsa nem változhat soronként.
+   */
+  phoneHideWhen?: (row: Row) => boolean;
+  /**
    * Az oszlop fejlécére kattintva rendezhető (a tábla `sort` és `onSort` tulajdonságával):
    * a fejléc gombbá válik, és jelzi az állapotát (nyíl, `aria-sort`).
    */
@@ -422,7 +427,7 @@ export function PilotDataTable<Row>({
                         ? column.header
                         : undefined
                     }
-                    className={`px-4 ${dense ? "md:py-1.5" : "py-3"} align-middle text-sm first:pl-5 last:pr-5 ${alignClass(column.align)}${column.nowrap ? " whitespace-nowrap" : ""} ${phoneCellClass(column)}`}
+                    className={`px-4 ${dense ? "md:py-1.5" : "py-3"} align-middle text-sm first:pl-5 last:pr-5 ${alignClass(column.align)}${column.nowrap ? " whitespace-nowrap" : ""} ${phoneCellClass(column)}${column.phoneHideWhen?.(row) ? " max-md:hidden" : ""}`}
                   >
                     {column.cell(row)}
                   </td>
