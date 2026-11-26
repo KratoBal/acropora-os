@@ -51,7 +51,7 @@ const allNavigationItems = allNavigationPages;
 
 /**
  * A KÖTELEZŐ ÉS A NEM KÖTELEZŐ MEZŐ JELÖLÉSE (Picasso 3.20): ugyanaz a két jel, mint a Bérlés, az új hibajegy és a munkalap űrlapján: a kötelező mező címkéje után piros csillag (a felolvasónak
- * "kötelező"), a nem kötelezőé után szürkén "(nem kötelező)". A mezők kötelezősége a szerver szabálya (név, e-mail, új fióknál a jelszó): ez a felirat csak kimondja.
+ * "kötelező"), a nem kötelezőé után szürkén "(nem kötelező)". A név és az e-mail kötelezősége a szerver szabálya (CreateUserDto); az új fiók jelszava a kliens saját szabálya (legalább 8 karakter, lásd a mentést), a szerver DTO-ban a jelszó nem kötelező. Ez a felirat csak kimondja őket.
  */
 function Requirement({ kind }: { kind: "required" | "optional" }) {
   return kind === "required" ? (
