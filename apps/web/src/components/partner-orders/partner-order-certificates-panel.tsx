@@ -253,7 +253,7 @@ export function PartnerOrderCertificatesPanel({
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">{certificate.number}</span>
-                  <label className="cursor-pointer text-pilot-blue-700 underline">
+                  <label className="cursor-pointer text-pilot-aqua-700 underline">
                     Aláírt PDF feltöltése
                     <input
                       type="file"
@@ -273,7 +273,7 @@ export function PartnerOrderCertificatesPanel({
                     <li key={documentSummary.id}>
                       <button
                         type="button"
-                        className="text-pilot-blue-700 underline"
+                        className="text-pilot-aqua-700 underline"
                         onClick={() =>
                           void download(
                             certificate.id,

@@ -236,12 +236,11 @@ export function PartnerOrderDetailPage({ orderId }: { orderId: string }) {
     <PilotThemeRoot theme="light" className="space-y-6">
       <Link
         href={PARTNER_ORDERS_PATH}
-        className="text-sm text-pilot-blue-700 hover:underline"
+        className="text-sm text-pilot-aqua-700 hover:underline"
       >
         ← Vissza a megrendelésekhez
       </Link>
       <PilotPageHeader
-        eyebrow="Értékesítés / Megrendelések"
         title={order.orderNumber}
         description={order.title}
         actions={
@@ -279,7 +278,7 @@ export function PartnerOrderDetailPage({ orderId }: { orderId: string }) {
             <dd>
               <Link
                 href={`/ajanlatok/${order.quoteId}`}
-                className="text-pilot-blue-700 hover:underline"
+                className="text-pilot-aqua-700 hover:underline"
               >
                 {order.quoteNumber}
               </Link>
@@ -494,7 +493,8 @@ export function PartnerOrderDetailPage({ orderId }: { orderId: string }) {
                       />
                       <PilotButton
                         size="regular"
-                        variant="secondary"
+                        variant="ghost"
+                        aria-label={`Csatolás: ${PARTNER_ORDER_STEP[step].label}`}
                         disabled={uploading !== null}
                         onClick={() => fileInputs.current[step]?.click()}
                       >
@@ -515,7 +515,7 @@ export function PartnerOrderDetailPage({ orderId }: { orderId: string }) {
                       >
                         <button
                           type="button"
-                          className="font-medium text-pilot-blue-700 hover:underline"
+                          className="font-medium text-pilot-aqua-700 hover:underline"
                           onClick={() => void downloadSystem(document_)}
                         >
                           {document_.label}
@@ -543,7 +543,7 @@ export function PartnerOrderDetailPage({ orderId }: { orderId: string }) {
                       >
                         <button
                           type="button"
-                          className="font-medium text-pilot-blue-700 hover:underline"
+                          className="font-medium text-pilot-aqua-700 hover:underline"
                           onClick={() => void download(document_)}
                         >
                           {document_.fileName}
