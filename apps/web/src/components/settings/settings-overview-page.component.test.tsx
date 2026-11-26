@@ -13,7 +13,7 @@ vi.mock("next/font/local", () => ({
 }));
 
 const auth = vi.hoisted(() => ({
-  role: "OWNER" as "OWNER" | "SALES",
+  role: "OWNER" as "OWNER" | "ADMIN" | "MANAGER" | "SALES",
   // a szerver által kiszolgált menü: a `quotes` kapcsoló akkor áll, ha egy rá váró menüpont megjött
   navigation: [] as { id: string }[],
 }));
@@ -252,5 +252,19 @@ describe("beállítások gyűjtőoldal", () => {
     expect(screen.queryByText("Matricák")).not.toBeInTheDocument();
     expect(screen.queryByText("Felhasználók")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /NAV/ })).not.toBeInTheDocument();
+  });
+
+  // Picasso 3.16 (acrobot 62278): the Fejlesztés card (Komponens-katalógus) is for the admin roles only; a manager has no `settings.manage`
+  it("the Fejlesztés card is shown to the admin and the owner, and not to a manager", () => {
+    for (const role of ["OWNER", "ADMIN"] as const) {
+      auth.role = role;
+      const { unmount } = render(<SettingsOverviewPage />);
+      expect(screen.getAllByText("Fejlesztés").length).toBeGreaterThan(0);
+      unmount();
+    }
+    auth.role = "MANAGER";
+    render(<SettingsOverviewPage />);
+    expect(screen.queryByText("Fejlesztés")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Komponens-katalógus/)).not.toBeInTheDocument();
   });
 });
