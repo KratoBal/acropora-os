@@ -2569,6 +2569,22 @@ export type {
   WebshopCustomerTexts,
 } from "./webshop-customer-texts.js";
 export {
+  AI_GLOSSARY_LANGUAGES,
+  AI_GLOSSARY_LIMITS,
+  hasAiGlossaryControlCharacter,
+  parseAiGlossarySaveInput,
+} from "./ai-glossary.js";
+export type {
+  AiGlossaryEntry,
+  AiGlossaryEntryInput,
+  AiGlossaryLanguage,
+  AiGlossaryParse,
+  AiGlossarySaveInput,
+  AiGlossarySaveResult,
+  AiGlossaryVersion,
+  AiGlossaryVersionInfo,
+} from "./ai-glossary.js";
+export {
   parseWebshopGiftCardIssueInput,
   WEBSHOP_GIFT_CARD_LIMITS,
   WEBSHOP_GIFT_CARD_TRANSACTION_LABELS,
