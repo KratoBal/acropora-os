@@ -115,14 +115,11 @@ export function AquariumDetail({ id }: { id: string }) {
       <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
         <VisszaLink />
         <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-pilot-grey-400">
-          AKVÁRIUM
+          {aquarium.aquariumNumber}
         </p>
         <h1 className="text-xl font-semibold text-pilot-grey-900">
           {aquarium.name}
         </h1>
-        <p className="mt-1 font-mono text-xs text-pilot-grey-400">
-          {aquarium.aquariumNumber}
-        </p>
       </div>
 
       {/*
@@ -152,8 +149,13 @@ export function AquariumDetail({ id }: { id: string }) {
           <PilotCard>
             <PilotCardHeader title="Alapadatok" />
             <div className="px-5 py-2">
-              <PilotDataRow label="Helyszín" value={aquarium.departmentName} />
               <PilotDataRow
+                labelWidth="110px"
+                label="Helyszín"
+                value={aquarium.departmentName}
+              />
+              <PilotDataRow
+                labelWidth="110px"
                 label="Víztípus"
                 value={
                   aquarium.waterType
@@ -162,6 +164,7 @@ export function AquariumDetail({ id }: { id: string }) {
                 }
               />
               <PilotDataRow
+                labelWidth="110px"
                 label="Víztérfogat"
                 value={
                   aquarium.systemVolumeLiters !== undefined
@@ -170,10 +173,15 @@ export function AquariumDetail({ id }: { id: string }) {
                 }
               />
               <PilotDataRow
+                labelWidth="110px"
                 label="Indítás dátuma"
                 value={datum(aquarium.startedAt)}
               />
-              <PilotDataRow label="Megjegyzés" value={aquarium.notes} />
+              <PilotDataRow
+                labelWidth="110px"
+                label="Megjegyzés"
+                value={aquarium.notes}
+              />
             </div>
           </PilotCard>
 

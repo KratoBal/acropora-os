@@ -284,7 +284,7 @@ export function TicketDetail({
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 items-start gap-6 px-8 py-6 lg:grid-cols-[1fr_300px]">
+      <div className="grid grid-cols-1 items-start gap-6 px-8 py-6 lg:grid-cols-[1fr_340px]">
         <div className="flex flex-col gap-5">
           <PilotCard>
             <PilotCardHeader title={words.problemTitle} />
@@ -439,17 +439,24 @@ export function TicketDetail({
             <PilotCardHeader title={words.caseDataTitle} />
             <div className="px-5 py-4">
               {ticket.reporterPersonName && ticket.reporterName ? (
-                <PilotDataRow label="Bejelentő" value={ticket.reporterName} />
+                <PilotDataRow
+                  labelWidth="110px"
+                  label="Bejelentő"
+                  value={ticket.reporterName}
+                />
               ) : null}
               <PilotDataRow
+                labelWidth="110px"
                 label={words.createdLabel}
                 value={date.format(new Date(ticket.createdAt))}
               />
               <PilotDataRow
+                labelWidth="110px"
                 label="Helyszín"
                 value={ticket.departmentPath?.join(" / ")}
               />
               <PilotDataRow
+                labelWidth="110px"
                 label={words.stateLabel}
                 value={
                   maintenance
