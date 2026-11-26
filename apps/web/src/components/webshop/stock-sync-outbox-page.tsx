@@ -8,6 +8,7 @@ import {
   PilotCard,
   PilotCardHeader,
   PilotDataTable,
+  Pagination,
   PilotSelect,
   type PilotTableColumn,
 } from "@acropora/ui";
@@ -225,6 +226,9 @@ export function outboxColumns({
   return columns;
 }
 
+/** Egy oldal a sorból (Picasso 3.27: eddig csak "a legutóbbi 50" látszott, a többi nem). */
+export const OUTBOX_PAGE_SIZE = 25;
+
 export function StockSyncOutboxPage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -252,6 +256,7 @@ export function StockSyncOutboxPage() {
    * kerdeztuk.
    */
   const [status, setStatus] = useState<StockSyncOutboxStatus | "">("");
+  const [pageNumber, setPageNumber] = useState(1);
   const [rows, setRows] = useState<StockSyncOutboxRow[] | null>(null);
   const [rowsLoading, setRowsLoading] = useState(true);
 
@@ -292,7 +297,15 @@ export function StockSyncOutboxPage() {
     const controller = new AbortController();
     setRowsLoading(true);
     void stockSyncOutboxApi
-      .list(token, status ? { status } : {}, controller.signal)
+      .list(
+        token,
+        {
+          ...(status ? { status } : {}),
+          limit: OUTBOX_PAGE_SIZE,
+          offset: (pageNumber - 1) * OUTBOX_PAGE_SIZE,
+        },
+        controller.signal,
+      )
       .then(
         (result) => {
           setRows(result);
@@ -325,7 +338,21 @@ export function StockSyncOutboxPage() {
         },
       );
     return () => controller.abort();
-  }, [canView, status, token, reloadKey]);
+  }, [canView, status, token, reloadKey, pageNumber]);
+
+  /**
+   * A TÉTELEK SZÁMA AZ ÖSSZEFOGLALÓBÓL JÖN (nincs külön számláló-hívás): a kiválasztott állapot darabszáma, vagy minden állapoté. Amíg az összefoglaló nincs meg, a lapozó nem jelenik meg, és
+   * nem találgat.
+   */
+  const totalRows = summary
+    ? status
+      ? summary.counts[status]
+      : Object.values(summary.counts).reduce((sum, n) => sum + n, 0)
+    : null;
+  const totalPages =
+    totalRows === null
+      ? 1
+      : Math.max(1, Math.ceil(totalRows / OUTBOX_PAGE_SIZE));
 
   /**
    * A KET MUVELET KOZOS AGA. A hiba SZOVEGE a szerverrol jon (`ApiError`), mert
@@ -506,9 +533,10 @@ export function StockSyncOutboxPage() {
               <PilotSelect
                 aria-label="Állapot szűrő"
                 value={status}
-                onChange={(nextValue) =>
-                  setStatus(nextValue as StockSyncOutboxStatus | "")
-                }
+                onChange={(nextValue) => {
+                  setStatus(nextValue as StockSyncOutboxStatus | "");
+                  setPageNumber(1);
+                }}
                 chevron
               >
                 <option value="">összes</option>
@@ -544,18 +572,37 @@ export function StockSyncOutboxPage() {
               <p className="font-medium text-dusk-900">Nincs találat.</p>
               <p className="text-xs">
                 {status
-                  ? `A szűrő: ${STATUS_LABELS[status]} állapotú tételek, a legutóbbi 50. Más állapotban lehetnek tételek. Válts az "összes" nézetre.`
-                  : "A szűrő: minden állapot, a legutóbbi 50 tétel. Ez azt jelenti, hogy a sor üres, nem azt, hogy a lekérdezés nem talált rá."}
+                  ? `A szűrő: ${STATUS_LABELS[status]} állapotú tételek. Más állapotban lehetnek tételek. Válts az "összes" nézetre.`
+                  : "A szűrő: minden állapot. Ez azt jelenti, hogy a sor üres, nem azt, hogy a lekérdezés nem talált rá."}
               </p>
             </div>
           ) : (
-            <PilotDataTable
-              columns={outboxColumns({ canManage, pendingAction, retryRow })}
-              rows={rows}
-              rowKey={(row) => row.id}
-              rowTestId="outbox-row"
-              minWidth={OUTBOX_TABLE_MIN_WIDTH}
-            />
+            <>
+              <PilotDataTable
+                columns={outboxColumns({ canManage, pendingAction, retryRow })}
+                rows={rows}
+                rowKey={(row) => row.id}
+                rowTestId="outbox-row"
+                minWidth={OUTBOX_TABLE_MIN_WIDTH}
+              />
+              {totalRows !== null && totalPages > 1 ? (
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-dusk-500">
+                    {(pageNumber - 1) * OUTBOX_PAGE_SIZE + 1}
+                    {"–"}
+                    {(pageNumber - 1) * OUTBOX_PAGE_SIZE + rows.length} /{" "}
+                    {totalRows.toLocaleString("hu-HU")} tétel, a legújabb elöl
+                  </p>
+                  <Pagination
+                    variant="directionF"
+                    position="bottom"
+                    page={pageNumber}
+                    totalPages={totalPages}
+                    onPageChange={setPageNumber}
+                  />
+                </div>
+              ) : null}
+            </>
           )}
         </div>
       </PilotCard>

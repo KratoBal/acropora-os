@@ -428,15 +428,21 @@ export class UnasStockSyncOutboxRepository extends Repository {
     return { retried: result.count > 0, status: "PENDING" };
   }
 
+  /**
+   * `offset`: a lapozás kezdete a legújabbtól számítva (a lista `sequence` szerint csökken). Nélküle (vagy nullával) az első oldal jön, ugyanúgy, mint eddig: a
+   * régi hívók (`limit` egyedül) nem változnak.
+   */
   async list(params: {
     status?: UnasStockSyncOutboxStatus;
     limit: number;
+    offset?: number;
   }): Promise<UnasStockSyncOutboxListItem[]> {
     return this.outboxDatabase.unasStockSyncOutbox.findMany({
       where: params.status ? { status: params.status } : {},
       select: UNAS_STOCK_SYNC_OUTBOX_LIST_SELECT,
       orderBy: { sequence: "desc" },
       take: params.limit,
+      ...(params.offset && params.offset > 0 ? { skip: params.offset } : {}),
     });
   }
 

@@ -250,12 +250,18 @@ export const stockSyncOutboxApi = {
 
   list(
     token: string,
-    query: { status?: StockSyncOutboxStatus; limit?: number } = {},
+    query: {
+      status?: StockSyncOutboxStatus;
+      limit?: number;
+      /** A lapozás kezdete a legújabbtól számítva; nélküle az első oldal. */
+      offset?: number;
+    } = {},
     signal?: AbortSignal,
   ) {
     const params = new URLSearchParams();
     if (query.status) params.set("status", query.status);
     if (query.limit) params.set("limit", String(query.limit));
+    if (query.offset) params.set("offset", String(query.offset));
     const suffix = params.toString() ? `?${params.toString()}` : "";
     return apiRequest<StockSyncOutboxRow[]>(`${OUTBOX_BASE}${suffix}`, token, {
       signal,

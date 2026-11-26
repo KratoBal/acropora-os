@@ -39,6 +39,7 @@ function buildFakeDatabase(options: {
   const productVariantUpdateCalls: unknown[] = [];
   const updateManyCalls: unknown[] = [];
   const transactionCalls: unknown[] = [];
+  const findManyCalls: unknown[] = [];
   const rows = options.outboxRows ?? [];
   const database: UnasStockSyncOutboxDatabase = {
     async $transaction<T>(
@@ -60,6 +61,7 @@ function buildFakeDatabase(options: {
       // Behaves like Prisma: without `select` the WHOLE stored row comes back (BigInt `sequence`
       // included), with `select` only the named columns do.
       async findMany(args) {
+        findManyCalls.push(args);
         const { where, select } = (args ?? {}) as {
           where?: { id?: string };
           select?: Record<string, true>;
@@ -108,6 +110,7 @@ function buildFakeDatabase(options: {
   };
   return {
     database,
+    findManyCalls,
     updateCalls,
     productVariantUpdateCalls,
     updateManyCalls,
@@ -407,6 +410,26 @@ describe("UnasStockSyncOutboxRepository.list and findById responses", () => {
     assert.doesNotThrow(() => JSON.stringify(result));
     assert.equal("sequence" in result[0]!, false);
     assert.equal(result[0]!.id, "outbox-1");
+  });
+
+  // Picasso 3.27: paging. The first page asks exactly what it always asked (no `skip`); a later page skips what came before, newest first.
+  it("the first page sends no skip; a later page skips the rows before it, newest first", async () => {
+    const { database, findManyCalls } = buildFakeDatabase({
+      outboxRows: stored,
+    });
+    const repository = new UnasStockSyncOutboxRepository(database);
+
+    await repository.list({ limit: 25 });
+    await repository.list({ limit: 25, offset: 0 });
+    await repository.list({ limit: 25, offset: 50, status: "FAILED" });
+
+    const [first, zero, third] = findManyCalls as Record<string, unknown>[];
+    assert.equal("skip" in first!, false);
+    assert.equal("skip" in zero!, false);
+    assert.equal(third!.skip, 50);
+    assert.equal(third!.take, 25);
+    assert.deepEqual(third!.orderBy, { sequence: "desc" });
+    assert.deepEqual(third!.where, { status: "FAILED" });
   });
 
   it("returns a single row that JSON.stringify can serialise, without the internal sequence", async () => {
