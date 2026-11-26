@@ -129,10 +129,10 @@ describe("a partner-választó az új árajánlatnál", () => {
   it("says why the create button is pale beside it, at the form's end, and drops the sentence when everything is there", async () => {
     render(<QuoteNewPage />);
     expect(createButton()).toHaveAttribute("aria-disabled", "true");
-    // the button follows the form (it stood in the page header)
+    // the button follows the form (it stood in the page header): after its last card
     expect(
       screen
-        .getByText("Indítási összefoglaló")
+        .getByRole("heading", { name: "Kiinduló sablon" })
         .compareDocumentPosition(createButton()) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
@@ -153,6 +153,25 @@ describe("a partner-választó az új árajánlatnál", () => {
     );
     expect(screen.queryByText(/Hiányzik:/)).not.toBeInTheDocument();
     expect(createButton()).toHaveAttribute("aria-disabled", "false");
+  });
+
+  /*
+    ON THE SHARED FORM SCAFFOLD (Picasso 3.7, card f0b70dbd). What turns this red: the form not in the scaffold's column with
+    "Mi történik ezután" beside it; a field without its required or optional mark; the validity's last day gone with the old
+    summary column; the old summary column back.
+  */
+  it("stands on the shared form scaffold: marks, the validity's last day under it, what happens next", async () => {
+    render(<QuoteNewPage />);
+    // what happens next: inline under the form, and in the side card from 1100 px
+    expect(screen.getByText("Mi történik ezután")).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/A létrehozás nem küld semmit az ügyfélnek\./),
+    ).toHaveLength(2);
+    // two required (Partner, Ajánlat címe), three optional (Érvényesség, Pénznem, Sablon)
+    expect(screen.getAllByText("(kötelező)")).toHaveLength(2);
+    expect(screen.getAllByText("(nem kötelező)")).toHaveLength(3);
+    expect(screen.getByText(/^Lejár: /)).toBeInTheDocument();
+    expect(screen.queryByText("Indítási összefoglaló")).not.toBeInTheDocument();
   });
 
   it("says there is no such partner only after a search has answered empty", async () => {
@@ -215,8 +234,8 @@ describe("az új magánszemély az új árajánlatnál", () => {
     );
     // no e-mail, so nothing to look up
     expect(api.customersList).not.toHaveBeenCalled();
-    // the chosen customer shows in the Partner field and in the summary
-    expect((await screen.findAllByText("Kiss Anna")).length).toBe(2);
+    // the chosen customer shows in the Partner field (the summary column that repeated it is gone, Picasso 3.7)
+    expect((await screen.findAllByText("Kiss Anna")).length).toBe(1);
     expect(screen.queryByLabelText("Partner keresése")).not.toBeInTheDocument();
   });
 

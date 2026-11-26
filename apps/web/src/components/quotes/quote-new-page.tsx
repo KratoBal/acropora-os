@@ -3,14 +3,14 @@
 import {
   Alert,
   PilotButton,
-  PilotCard,
-  PilotCardHeader,
-  PilotDataRow,
-  PilotFormField,
+  PilotField,
+  PilotFieldPair,
+  PilotFormActions,
+  PilotFormCard,
+  PilotFormLayout,
   PilotInput,
   PilotPageHeader,
   PilotSelect,
-  PilotFormActions,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -69,7 +69,6 @@ export function QuoteNewPage() {
     return () => controller.abort();
   }, [canManage, token]);
 
-  const template = templates.find((t) => t.id === templateId) ?? null;
   const ready = Boolean(customer && title.trim());
   // why the create button is pale, said out loud beside it (the shared form row's "Hiányzik: ..."): a tooltip is never seen
   const missing = [
@@ -119,147 +118,113 @@ export function QuoteNewPage() {
         description="Az alapadatok és a kiinduló sablon megadása után nyílik meg az ajánlatszerkesztő."
       />
 
-      {error ? (
-        <Alert variant="danger" title="Hiba történt" description={error} />
-      ) : null}
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="space-y-6">
-          <PilotCard>
-            <PilotCardHeader title="Ajánlat alapadatai" />
-            <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
-              <PilotFormField
-                label="Partner"
-                required
-                className="sm:col-span-2"
-              >
-                {customer ? (
-                  <div className="flex items-center justify-between rounded-lg border border-pilot-grey-200 px-3 py-2">
-                    <span className="font-semibold">
-                      {customer.displayName}
-                    </span>
-                    <PilotButton
-                      variant="ghost"
-                      onClick={() => setCustomer(null)}
-                    >
-                      Csere
-                    </PilotButton>
-                  </div>
-                ) : (
-                  <QuotePartnerPicker
-                    token={token}
-                    canCreateCustomer={canCreateCustomer}
-                    onSelect={setCustomer}
-                  />
-                )}
-              </PilotFormField>
-              <PilotFormField
-                label="Ajánlat címe"
-                required
-                className="sm:col-span-2"
-              >
-                <PilotInput
-                  aria-label="Ajánlat címe"
-                  value={title}
-                  onChange={setTitle}
-                />
-              </PilotFormField>
-              <PilotFormField label="Érvényesség">
-                <PilotSelect
-                  chevron
-                  aria-label="Érvényesség"
-                  value={String(validityDays)}
-                  onChange={(value) => setValidityDays(Number(value))}
-                >
-                  {[...new Set([...VALIDITY_DAYS, validityDays])]
-                    .sort((a, b) => a - b)
-                    .map((days) => (
-                      <option key={days} value={days}>
-                        {days} nap
-                      </option>
-                    ))}
-                </PilotSelect>
-              </PilotFormField>
-              <PilotFormField label="Pénznem">
-                <PilotSelect
-                  chevron
-                  aria-label="Pénznem"
-                  value={currency}
-                  onChange={setCurrency}
-                >
-                  {CURRENCIES.map((code) => (
-                    <option key={code} value={code}>
-                      {code}
-                    </option>
-                  ))}
-                </PilotSelect>
-              </PilotFormField>
-            </div>
-          </PilotCard>
-
-          <PilotCard>
-            <PilotCardHeader title="Kiinduló sablon" />
-            <div className="space-y-3 p-5">
-              <p className="text-sm text-pilot-grey-600">
-                A sablon csak kiindulópont: minden blokk külön módosítható az
-                ajánlatban.
-              </p>
-              <PilotFormField label="Sablon">
-                <PilotSelect
-                  chevron
-                  aria-label="Sablon"
-                  value={templateId}
-                  onChange={chooseTemplate}
-                >
-                  <option value="">Sablon nélkül</option>
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </PilotSelect>
-              </PilotFormField>
-            </div>
-          </PilotCard>
-        </div>
-
-        <PilotCard>
-          <PilotCardHeader title="Indítási összefoglaló" />
-          <div className="space-y-1 p-5">
-            <PilotDataRow
-              label="Partner"
-              value={customer?.displayName ?? "—"}
+      {/*
+        ON THE SHARED FORM SCAFFOLD (Picasso 3.7, card f0b70dbd): the cards in the 760 px column, the required and optional marks,
+        "what happens next" on the right, and the action row at the form's end. The old right column ("Indítási összefoglaló")
+        repeated the fields; the one fact it added, the validity's last day, now stands under the validity field.
+      */}
+      <PilotFormLayout
+        top={
+          error ? (
+            <Alert variant="danger" title="Hiba történt" description={error} />
+          ) : null
+        }
+        afterText="Ezekkel az adatokkal jön létre a piszkozat, és megnyílik az ajánlatszerkesztő. A létrehozás nem küld semmit az ügyfélnek."
+        actions={
+          <PilotFormActions
+            missing={missing}
+            busy={saving}
+            submitLabel="Ajánlat létrehozása"
+            busyLabel="Létrehozás…"
+            onCancel={() => router.push(QUOTES_PATH)}
+            onSubmit={() => void submit()}
+          />
+        }
+      >
+        <PilotFormCard title="Ajánlat alapadatai">
+          <PilotField label="Partner" requirement="required">
+            {customer ? (
+              <div className="flex items-center justify-between rounded-lg border border-pilot-grey-200 px-3 py-2">
+                <span className="font-semibold">{customer.displayName}</span>
+                <PilotButton variant="ghost" onClick={() => setCustomer(null)}>
+                  Csere
+                </PilotButton>
+              </div>
+            ) : (
+              <QuotePartnerPicker
+                token={token}
+                canCreateCustomer={canCreateCustomer}
+                onSelect={setCustomer}
+              />
+            )}
+          </PilotField>
+          <PilotField label="Ajánlat címe" requirement="required">
+            <PilotInput
+              aria-label="Ajánlat címe"
+              value={title}
+              onChange={setTitle}
             />
-            <PilotDataRow
-              label="Sablon"
-              value={template?.name ?? "Sablon nélkül"}
-            />
-            <PilotDataRow
+          </PilotField>
+          <PilotFieldPair>
+            <PilotField
               label="Érvényesség"
-              value={`${validityDays} nap · ${formatQuoteDay(dayAfter(validityDays))}`}
-            />
-            <PilotDataRow label="Pénznem" value={currency} />
-            <PilotDataRow
-              label="Készítő"
-              value={session?.user.displayName ?? "—"}
-            />
-            <p className="pt-3 text-xs text-pilot-grey-600">
-              Ezekkel az adatokkal jön létre a piszkozat. A létrehozás nem küld
-              semmit az ügyfélnek.
-            </p>
-          </div>
-        </PilotCard>
-      </div>
+              requirement="optional"
+              help={`Lejár: ${formatQuoteDay(dayAfter(validityDays))}`}
+            >
+              <PilotSelect
+                chevron
+                aria-label="Érvényesség"
+                value={String(validityDays)}
+                onChange={(value) => setValidityDays(Number(value))}
+              >
+                {[...new Set([...VALIDITY_DAYS, validityDays])]
+                  .sort((a, b) => a - b)
+                  .map((days) => (
+                    <option key={days} value={days}>
+                      {days} nap
+                    </option>
+                  ))}
+              </PilotSelect>
+            </PilotField>
+            <PilotField label="Pénznem" requirement="optional">
+              <PilotSelect
+                chevron
+                aria-label="Pénznem"
+                value={currency}
+                onChange={setCurrency}
+              >
+                {CURRENCIES.map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                  </option>
+                ))}
+              </PilotSelect>
+            </PilotField>
+          </PilotFieldPair>
+        </PilotFormCard>
 
-      {/* THE PRIMARY BUTTON AT THE FORM'S END, ON THE RIGHT, the missing fields beside it (Picasso R11, acrobot 62575): it stood in the header */}
-      <PilotFormActions
-        missing={missing}
-        busy={saving}
-        submitLabel="Ajánlat létrehozása"
-        busyLabel="Létrehozás…"
-        onCancel={() => router.push(QUOTES_PATH)}
-        onSubmit={() => void submit()}
-      />
+        <PilotFormCard title="Kiinduló sablon">
+          <PilotField
+            label="Sablon"
+            requirement="optional"
+            help="A sablon csak kiindulópont: minden blokk külön módosítható az ajánlatban."
+          >
+            <PilotSelect
+              chevron
+              aria-label="Sablon"
+              value={templateId}
+              onChange={chooseTemplate}
+            >
+              <option value="">Sablon nélkül</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </PilotSelect>
+          </PilotField>
+        </PilotFormCard>
+      </PilotFormLayout>
     </PilotThemeRoot>
   );
 }
