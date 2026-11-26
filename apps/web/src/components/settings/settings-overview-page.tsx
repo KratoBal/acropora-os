@@ -255,18 +255,28 @@ export const SETTINGS_AREAS: SettingsArea[] = [
         entryId: "partner-duplicates",
       },
       {
-        label: "Partner-átvezetés",
-        description:
-          "A partnerek (beszállítók, szerviz-partnerek) terve: melyik vevő-sorra kerül, melyikhez kötődik, melyikből készül új. Csak olvasható.",
-        href: "/beallitasok/partner-atvezetes",
-        entryId: "partner-migration",
-      },
-      {
         label: "Hátralékos megrendelések",
         description:
           "Hány nap mozgás nélkül után jelezzen hátralékosnak a Megrendelések lista egy nyitott megrendelést.",
         href: "/beallitasok/megrendeles-hatralek",
         entryId: "partner-order-backlog",
+      },
+    ],
+  },
+  /*
+    AZ ELJÁRÁSOK (picasso leltár 3.24, acrobot döntése 2026-11-26): egyszer lefutó műveletek (próba, végrehajtás, visszaállítás), nem
+    beállítások; eddig a Mértékegységek kártyában álltak a törzsadat-listák között. A menüben ugyanígy külön alcsoport.
+  */
+  {
+    title: "Eljárások",
+    icon: "settings",
+    links: [
+      {
+        label: "Partner-átvezetés",
+        description:
+          "A partnerek (beszállítók, szerviz-partnerek) terve: melyik vevő-sorra kerül, melyikhez kötődik, melyikből készül új. Csak olvasható.",
+        href: "/beallitasok/partner-atvezetes",
+        entryId: "partner-migration",
       },
       {
         label: "Szállítási jelzők feltöltése",

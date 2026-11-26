@@ -103,6 +103,24 @@ describe("beállítások gyűjtőoldal", () => {
     expect(SETTINGS_AREAS.length).toBeGreaterThanOrEqual(6);
   });
 
+  // picasso leltár 3.24: az egyszer lefutó műveletek külön csoportban, nem a törzsadat-listák között
+  it("a Partner-átvezetés és a Szállítási jelzők feltöltése az Eljárások csoportban áll, és csak ott", () => {
+    const hol = (href: string) =>
+      SETTINGS_AREAS.filter((area) =>
+        area.links.some((link) => link.href === href),
+      ).map((area) => area.title);
+    expect(hol("/beallitasok/partner-atvezetes")).toEqual(["Eljárások"]);
+    expect(hol("/beallitasok/szallitasi-jelzok")).toEqual(["Eljárások"]);
+    expect(
+      SETTINGS_AREAS.find((area) => area.title === "Eljárások")!.links.map(
+        (link) => link.href,
+      ),
+    ).toEqual([
+      "/beallitasok/partner-atvezetes",
+      "/beallitasok/szallitasi-jelzok",
+    ]);
+  });
+
   /**
    * EGY-LINKES TERULETNEL A CIM PONTOSAN EGYSZER ALL OTT.
    *

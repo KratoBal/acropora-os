@@ -683,8 +683,9 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         entryId: "partner-duplicates",
       },
       {
-        // Egy partnertörzs, egyszeri átvezetés: a partnerek terve, csak olvas.
-        subgroup: "Törzsadatok",
+        // AZ ELJÁRÁSOK (picasso leltár 3.24, acrobot döntése 2026-11-26): egyszer lefutó műveletek, nem törzsadat, ezért saját alcsoport;
+        // a hely a menüben nem változik (Balázs sorrendje, 2026-10-26). Egy partnertörzs, egyszeri átvezetés: a partnerek terve, csak olvas.
+        subgroup: "Eljárások",
         href: "/beallitasok/partner-atvezetes",
         label: "Partner-átvezetés",
         icon: "settings",
@@ -692,7 +693,7 @@ const mainNavigationGroups: AppNavigationGroup[] = [
       },
       {
         // a82ed229: a szállítási jelzők egyszeri feltöltése a UNAS-ból (próba, írás a lenyomattal)
-        subgroup: "Törzsadatok",
+        subgroup: "Eljárások",
         href: "/beallitasok/szallitasi-jelzok",
         label: "Szállítási jelzők feltöltése",
         icon: "settings",
