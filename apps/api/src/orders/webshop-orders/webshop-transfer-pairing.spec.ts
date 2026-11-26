@@ -187,6 +187,23 @@ describe("pairing the balance after an advance", () => {
     );
   });
 
+  // barracuda on #2982: the advance recorded by hand leaves its own credit free; with an equal balance it must not pay it
+  it("a balance equal to the advance never pairs, even when the advance's own credit is the only one", () => {
+    const decision = pairTransfers(
+      [balance({ grossAmount: "4800.0000" })],
+      [credit("advance", "D-ACR-2026-7", "4800.00", on("2026-11-21"))],
+    ).get("balance:b");
+    assert.equal(decision?.kind, "review");
+    assert.deepEqual(
+      decision?.kind === "review" ? decision.transactionIds : [],
+      ["advance"],
+    );
+    assert.match(
+      decision?.kind === "review" ? decision.reason : "",
+      /Már beérkezett ugyanennyi \(4800 HUF\)/,
+    );
+  });
+
   it("a different remaining amount goes to review with both amounts", () => {
     const decision = pairTransfers(
       [balance()],

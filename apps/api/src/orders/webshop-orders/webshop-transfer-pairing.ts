@@ -33,7 +33,9 @@ export interface PairingProforma {
   /**
    * An amount already received on the same number (S5: the advance, whose proforma number the balance's transfer names too). A
    * credit naming the number with exactly this amount is that earlier payment and does not count here, unless it is also this
-   * target's own amount: then the two cannot be told apart, and both go to review.
+   * target's own amount: then no credit can be told from the earlier payment, and the target NEVER pairs, only goes to review,
+   * even with a single credit (barracuda on #2982: a hand-recorded advance leaves its own credit free, and it would pay the
+   * equal balance that has not come in).
    */
   readonly alreadyReceived?: string;
   /** Whose amount the review reason names (default `a díjbekérőé`; S5's balance: `a hátraléké`). */
@@ -144,6 +146,17 @@ export function pairTransfers(
         kind: "review",
         reason:
           "Egy utalás közleménye több díjbekérőre is hivatkozik: kézzel kell eldönteni, melyiket fizette.",
+        transactionIds: ids,
+      });
+      continue;
+    }
+    if (
+      proforma.alreadyReceived !== undefined &&
+      cents(proforma.alreadyReceived) === cents(proforma.grossAmount)
+    ) {
+      decisions.set(proforma.id, {
+        kind: "review",
+        reason: `Már beérkezett ugyanennyi (${money(proforma.alreadyReceived, proforma.currency)}) erre a számra: az utalásból nem dönthető el, hogy ez az a befizetés vagy egy újabb, kézzel kell rögzíteni.`,
         transactionIds: ids,
       });
       continue;

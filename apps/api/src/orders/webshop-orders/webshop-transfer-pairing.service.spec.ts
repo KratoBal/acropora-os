@@ -358,6 +358,27 @@ describe("the live bank pairing", () => {
     assert.deepEqual(creditsSince, []);
   });
 
+  // barracuda on #2982: an equal balance and a hand-recorded advance, its credit free, the balance not in yet
+  it("write: a balance equal to the hand-recorded advance is not paid by the advance's own credit", async () => {
+    const { service, writes } = setup({
+      balances: [BALANCE],
+      credits: [CREDITS[2]!],
+      orders: { order_b: { total: 9600 } },
+    });
+    const run = await service.runOnce("write");
+    assert.deepEqual(writes, []);
+    assert.deepEqual(
+      run.outcomes.map((row) => [
+        row.target,
+        row.decision,
+        row.expected,
+        row.transactions.map((credit) => credit.id),
+        row.written,
+      ]),
+      [["balance", "review", "4800.0000", ["bt_b_adv"], null]],
+    );
+  });
+
   it("a credit booked before the advance came in does not pay the balance", async () => {
     const { service } = setup({
       balances: [BALANCE],
