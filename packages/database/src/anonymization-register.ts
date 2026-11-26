@@ -965,6 +965,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
     description: "freeText",
     currency: "business",
     changeReason: "freeText",
+    createdByNameAtClose: "personName",
   },
   WorksheetLine: {
     description: "freeText",

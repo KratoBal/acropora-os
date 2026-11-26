@@ -259,7 +259,9 @@ export function toVersionSummary(
     label: formatWorksheetVersionLabel(worksheetNumber, row.version),
     status: row.status,
     changeReason: row.changeReason,
-    createdByName: row.createdBy?.displayName ?? null,
+    // A lezaraskor rogzitett nev elol jar (card f450672c): a kiadott lap nem kovetheti egy atnevezett vagy torolt fiokot.
+    createdByName:
+      row.createdByNameAtClose ?? row.createdBy?.displayName ?? null,
     createdAt: row.createdAt.toISOString(),
     closedAt: row.closedAt?.toISOString() ?? null,
     closedByName: row.closedBy?.displayName ?? null,

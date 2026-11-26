@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { describe, it } from "node:test";
 
+import { Prisma } from "@acropora/database";
+
 import { readPdfTextLines } from "../documents/pdf/pdf-text-readback.js";
 
 import {
@@ -13,6 +15,10 @@ import {
   worksheetSheetDocument,
   worksheetSheetFileName,
 } from "./worksheet-sheet-document.js";
+import {
+  toVersionSummary,
+  type WorksheetVersionRow,
+} from "./worksheets.types.js";
 
 /**
  * A SZÓKÖZ NORMALIZÁLÁSA AZ ÖSSZEVETÉSHEZ.
@@ -373,5 +379,79 @@ describe("a lap rögzített készítési idővel", () => {
       creationDate: at,
     });
     assert.notEqual(a.sha256, b.sha256);
+  });
+});
+
+/*
+  A "FELVETTE" NEV A LEZARAS PILLANATABOL JON (card f450672c). Az ujragenerald gomb a tarolt bajtokkal veti ossze az ujat, ezert a lap nem kovetheti a fiok MOSTANI nevet: egy atnevezes vagy egy torolt fiok (SetNull) nem hozhat mas bajtokat.
+  MI PIROSIT: ha a rogzitett nev elol jaras megszunik (a leképezés visszaall az elo nevre), akkor az atnevezett fiokos eset hasht valtoztat. A kontroll: a rogzites nelkuli (piszkozat) sor az elo nevet adja, tehat a teszt nem mindenre azonos.
+*/
+describe("a Felvette nev a lezaraskori rogzitett nev", () => {
+  const at = new Date("2026-09-20T10:00:00.000Z");
+
+  function sor(
+    frozen: string | null,
+    live: string | null,
+  ): WorksheetVersionRow {
+    return {
+      id: "version-1",
+      worksheetId: "worksheet-1",
+      version: 1,
+      status: "AWAITING_SIGNATURE",
+      changeReason: null,
+      createdByNameAtClose: frozen,
+      createdBy: live === null ? null : { displayName: live },
+      createdAt: new Date("2026-09-17T08:00:00.000Z"),
+      closedAt: new Date("2026-09-17T20:00:00.000Z"),
+      closedBy: null,
+      sentForSignatureAt: null,
+      sentForSignatureTo: null,
+      netAmount: new Prisma.Decimal(0),
+      vatAmount: new Prisma.Decimal(0),
+      grossAmount: new Prisma.Decimal(0),
+      lines: [],
+      signature: null,
+    } as unknown as WorksheetVersionRow;
+  }
+
+  async function hash(createdByName: string | null): Promise<string> {
+    return (
+      await worksheetSheetDocument(bemenet({ createdByName }), {
+        creationDate: at,
+      })
+    ).sha256;
+  }
+
+  it("atnevezett fiok utan is a rogzitett nev all a lapon, azonos bajtokkal", async () => {
+    const closeIdoben = toVersionSummary(
+      sor("Szerelő Sándor", "Szerelő Sándor"),
+      "BIO-2026-001",
+    );
+    const atnevezes = toVersionSummary(
+      sor("Szerelő Sándor", "Kovács Béla"),
+      "BIO-2026-001",
+    );
+    assert.equal(atnevezes.createdByName, "Szerelő Sándor");
+    assert.equal(
+      await hash(atnevezes.createdByName),
+      await hash(closeIdoben.createdByName),
+    );
+  });
+
+  it("torolt fiok (a kapcsolat null) utan is a rogzitett nev all", () => {
+    const summary = toVersionSummary(
+      sor("Szerelő Sándor", null),
+      "BIO-2026-001",
+    );
+    assert.equal(summary.createdByName, "Szerelő Sándor");
+  });
+
+  it("KONTROLL: rogzites nelkul az elo nev szolgal, es a hash kovetne az atnevezest", async () => {
+    const elo = toVersionSummary(sor(null, "Kovács Béla"), "BIO-2026-001");
+    assert.equal(elo.createdByName, "Kovács Béla");
+    assert.notEqual(
+      await hash(elo.createdByName),
+      await hash("Szerelő Sándor"),
+    );
   });
 });
