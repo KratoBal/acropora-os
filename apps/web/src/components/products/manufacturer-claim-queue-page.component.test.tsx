@@ -91,6 +91,24 @@ describe("a gyártói állítások sora (T5.3, 4. pont)", () => {
     await waitFor(() => expect(api.list).toHaveBeenLastCalledWith("t", {}));
   });
 
+  it("üres lista a szűrő miatt: kimondja, hogy a szűrő az ok, és egy gombbal az összeset mutatja", async () => {
+    api.list.mockResolvedValue({ items: [], truncated: false });
+    render(<ManufacturerClaimQueuePage />);
+    expect(
+      await screen.findByText(
+        /a „Csak az ellenőrzésre várók” szűrő miatt üres/,
+      ),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Az összes állítás mutatása" }),
+    );
+    await waitFor(() => expect(api.list).toHaveBeenLastCalledWith("t", {}));
+    expect(await screen.findByText("Még nincs gyártói állítás.")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Az összes állítás mutatása" }),
+    ).toBeNull();
+  });
+
   it("csonka listánál kimondja", async () => {
     api.list.mockResolvedValue({
       items: [allitas("a", "DOSING")],
