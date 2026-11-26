@@ -5,12 +5,15 @@ import {
   open,
   opendir,
   readFile,
+  realpath,
   rename,
   rm,
   stat,
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+
+import { Logger } from "@nestjs/common";
 
 import {
   DOCUMENT_OWNERS,
@@ -40,8 +43,15 @@ import {
  */
 export class FilesystemDocumentStore implements DocumentStore {
   private readonly root: string;
+  private readonly logger = new Logger(FilesystemDocumentStore.name);
 
-  constructor(rootDirectory: string) {
+  /** `isMountPoint`: whether the root is a mounted volume (the default reads the kernel's mount table; a test passes its own). */
+  constructor(
+    rootDirectory: string,
+    private readonly isMountPoint: (
+      root: string,
+    ) => Promise<boolean> = rootIsMountPoint,
+  ) {
     this.root = path.resolve(rootDirectory);
   }
 
@@ -239,10 +249,8 @@ export class FilesystemDocumentStore implements DocumentStore {
     try {
       await access(path.join(this.root, MARKER_FILE), constants.F_OK);
     } catch {
-      return {
-        state: "not-configured",
-        reason: `A jelölő fájl hiányzik, tehát a kötet nincs csatolva: ${path.join(this.root, MARKER_FILE)}`,
-      };
+      const missing = await this.markerMissing();
+      if (missing) return missing;
     }
 
     // AZ ÍRHATÓSÁG A JELÖLŐ UTÁN JÖN, és a sorrend számít: egy csatolt, de
@@ -258,6 +266,73 @@ export class FilesystemDocumentStore implements DocumentStore {
     }
 
     return { state: "ready" };
+  }
+
+  /**
+   * A HIÁNYZÓ JELÖLŐ, AMIKOR A GYÖKÉR BIZONYÍTOTTAN CSATOLT KÖTET (kártya 0c122c27).
+   *
+   * A jelölő azt bizonyítja, hogy a kötet csatolva van: egy NEM csatolt, üres csatolási pont ugyanolyan írható, ezért az
+   * alkalmazás magától nem teheti le (fent). Csakhogy a jelölőt el lehet veszíteni úgy, hogy a kötet és az adat végig ott
+   * van: 2026-11-25-én a teszt OS tárolója egy újratelepítés után `not-configured` lett, és root kellett a visszatételéhez.
+   *
+   * A csatoltságot a jelölő NÉLKÜL is meg lehet mérni: a kernel csatolási táblája (`/proc/self/mountinfo`) megmondja, hogy
+   * a gyökér maga csatolási pont-e. Ha az, a jelölő hiánya nem a csatolás hiánya, és pótolható: ez nem gyengíti a védelmet,
+   * mert egy nem csatolt könyvtár NEM csatolási pont, és ott a válasz továbbra is `not-configured`. A pótlás hangos: a napló
+   * figyelmeztet, mert egy eltűnt jelölő oka maga is kérdés.
+   *
+   * `null`: a jelölő pótolva, mehet tovább az írhatóság mérésére; különben a válasz.
+   */
+  private async markerMissing(): Promise<DocumentStoreStatus | null> {
+    const marker = path.join(this.root, MARKER_FILE);
+    if (!(await this.isMountPoint(this.root).catch(() => false))) {
+      return {
+        state: "not-configured",
+        reason: `A jelölő fájl hiányzik, és a tároló gyökere nem csatolási pont, tehát a kötet nincs csatolva: ${marker}`,
+      };
+    }
+    /*
+      CSAK HA A KÖTETEN MÁR VAN SAJÁT DOKUMENTUM (barracuda, #3057): egy ROSSZ, üres kötet is csatolási pont (a Coolify egy
+      újratelepítésnél más néven újat hoz létre, vagy a név elírva). Ha arra is letenné, minden új dokumentum oda menne, a
+      régiek pedig hiányoznának: az adat kettéválna. A 2026-11-25-i eset más volt: a kötet és az adat ott volt, csak a jelölő
+      veszett el.
+
+      EZ A FELTÉTEL A #3058-RA ÉPÜL, és nélküle nem bizonyít: amíg a `put` a nem `ready` tárolóba is írt, egy rossz kötetre az
+      első számla vagy üzenet után már lett volna "saját dokumentum". A #3058 óta a `put` csak `ready` tárolóba ír, tehát
+      saját elrendezésű dokumentum csak egy EGYKOR JELÖLT köteten lehet. (A futás kezdete mint horgony nem jó: minden
+      újraindítás előre lépteti, és egy napi telepítés után a rossz kötet tegnapi írásai már "régiek".)
+    */
+    if (!(await this.holdsOwnDocument())) {
+      return {
+        state: "not-configured",
+        reason: `A tároló gyökere csatolt kötet, de jelölő nélküli és üres (új vagy rossz kötet): első beállításnál a jelölőt kézzel kell letenni: ${marker}`,
+      };
+    }
+    try {
+      // `wx`: egy közben letett jelölőt nem ír felül
+      const handle = await open(marker, "wx");
+      await handle.close();
+    } catch (error) {
+      if (!(
+        typeof error === "object" &&
+        error !== null &&
+        (error as { code?: unknown }).code === "EEXIST"
+      )) {
+        return {
+          state: "broken",
+          reason: `A tároló gyökere csatolt kötet, de a hiányzó jelölő nem pótolható (${(error as { code?: string }).code ?? "ismeretlen hiba"}): ${marker}`,
+        };
+      }
+    }
+    this.logger.warn(
+      `A dokumentumtár jelölője hiányzott, a gyökér csatolt kötet, ezért pótoltam: ${marker}. Aki vagy ami törölte, azt meg kell keresni.`,
+    );
+    return null;
+  }
+
+  /** Whether the volume holds a document of our layout (the first one found ends the walk). */
+  private async holdsOwnDocument(): Promise<boolean> {
+    for await (const _key of this.list()) return true;
+    return false;
   }
 
   /**
@@ -299,6 +374,43 @@ export class FilesystemDocumentStore implements DocumentStore {
  * legrosszabb helyen derül ki, a felhasználó első feltöltésénél.
  */
 export const MARKER_FILE = ".acropora-document-store";
+
+/**
+ * The mount points in `/proc/self/mountinfo` (its fifth field; the kernel writes a space, a tab, a newline and a backslash
+ * in a path as an octal escape).
+ */
+export function mountPointsFrom(mountinfo: string): Set<string> {
+  const points = new Set<string>();
+  for (const line of mountinfo.split("\n")) {
+    const field = line.split(" ")[4];
+    if (field)
+      points.add(
+        field.replace(/\\([0-7]{3})/g, (_m, octal: string) =>
+          String.fromCharCode(parseInt(octal, 8)),
+        ),
+      );
+  }
+  return points;
+}
+
+/**
+ * Whether a directory is itself a mount point: on the kernel's mount table when it can be read, else (no /proc) by its
+ * device against its parent's (a mounted volume is another device than the directory it is mounted into).
+ */
+export async function rootIsMountPoint(root: string): Promise<boolean> {
+  const real = await realpath(root);
+  try {
+    return mountPointsFrom(await readFile("/proc/self/mountinfo", "utf8")).has(
+      real,
+    );
+  } catch {
+    const [self, parent] = await Promise.all([
+      stat(real),
+      stat(path.dirname(real)),
+    ]);
+    return real !== path.dirname(real) && self.dev !== parent.dev;
+  }
+}
 
 function isMissingFile(error: unknown): boolean {
   return (

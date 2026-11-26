@@ -17,6 +17,8 @@ import { DocumentStoreNotReadyError } from "./document-store.js";
 import {
   FilesystemDocumentStore,
   MARKER_FILE,
+  mountPointsFrom,
+  rootIsMountPoint,
 } from "./filesystem-document-store.js";
 
 describe("the filesystem document store", () => {
@@ -478,6 +480,126 @@ describe("a gazda a lemezen is elvalik", () => {
       );
     } finally {
       await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+/*
+  A LOST MARKER ON A MOUNTED VOLUME (card 0c122c27, 2026-11-25: the test OS store went not-configured after a redeploy while the
+  volume and its data were there, and root had to put the marker back). WHAT TURNS THIS RED: the marker is put back where the
+  root is NOT a mount point (the protection the marker exists for would be gone); it is not put back on a mount point; a marker
+  set meanwhile is written over; the reason does not say the root is not a volume.
+*/
+describe("a lost marker, and whether the root is a mounted volume", () => {
+  const key = {
+    owner: "asset" as const,
+    ownerId: "asset-1",
+    documentId: "doc-1",
+  };
+
+  it("on a mount point holding our documents the missing marker is put back, and the store is ready with its data", async () => {
+    const mounted = await mkdtemp(
+      path.join(tmpdir(), "document-store-mounted-"),
+    );
+    try {
+      const store = new FilesystemDocumentStore(mounted, async () => true);
+      // the data of before, written straight to the volume (the put refuses an unmarked store since #3058)
+      await mkdir(path.join(mounted, "assets", "asset-1"), { recursive: true });
+      await writeFile(
+        path.join(mounted, "assets", "asset-1", "doc-1"),
+        Uint8Array.from([7]),
+      );
+
+      assert.deepEqual(await store.describe(), { state: "ready" });
+      assert.deepEqual(
+        (await readdir(mounted)).sort(),
+        [MARKER_FILE, "assets"].sort(),
+      );
+      assert.deepEqual(await store.get(key), Uint8Array.from([7]));
+    } finally {
+      await rm(mounted, { recursive: true, force: true });
+    }
+  });
+
+  /*
+    A WRONG, EMPTY VOLUME (barracuda on #3057: Coolify making a new volume under another name, or a typo). It is a mount point
+    too. WHAT TURNS THIS RED: the marker put on it (new documents would go there and the old ones would be missing), or put
+    after the first write some caller makes without asking the state (billing, quotes, messages do).
+  */
+  it("an empty mounted volume stays not-configured, and the put writes nothing there (with #3058, the two prove it together)", async () => {
+    const empty = await mkdtemp(path.join(tmpdir(), "document-store-empty-"));
+    try {
+      const store = new FilesystemDocumentStore(empty, async () => true);
+      const first = await store.describe();
+      assert.equal(first.state, "not-configured");
+      assert.match(
+        "reason" in first ? first.reason : "",
+        /kézzel kell letenni/,
+      );
+
+      // a caller that writes without asking the state: refused, so the volume stays empty and unmarked
+      await assert.rejects(store.put(key, Uint8Array.from([1])));
+      assert.deepEqual(await readdir(empty), []);
+      assert.equal((await store.describe()).state, "not-configured");
+    } finally {
+      await rm(empty, { recursive: true, force: true });
+    }
+  });
+
+  it("where the root is not a mount point the marker is NOT put back, and the reason says the root is no volume", async () => {
+    const bare = await mkdtemp(
+      path.join(tmpdir(), "document-store-notmounted-"),
+    );
+    try {
+      const store = new FilesystemDocumentStore(bare, async () => false);
+      const status = await store.describe();
+
+      assert.equal(status.state, "not-configured");
+      assert.match(
+        "reason" in status ? status.reason : "",
+        /nem csatolási pont/,
+      );
+      assert.deepEqual(await readdir(bare), []);
+    } finally {
+      await rm(bare, { recursive: true, force: true });
+    }
+  });
+
+  it("a mount check that fails counts as no mount: nothing is put back", async () => {
+    const bare = await mkdtemp(
+      path.join(tmpdir(), "document-store-checkfails-"),
+    );
+    try {
+      const store = new FilesystemDocumentStore(bare, async () => {
+        throw new Error("EACCES");
+      });
+      assert.equal((await store.describe()).state, "not-configured");
+      assert.deepEqual(await readdir(bare), []);
+    } finally {
+      await rm(bare, { recursive: true, force: true });
+    }
+  });
+
+  it("reads the kernel's mount table, escapes included", () => {
+    const table = [
+      "22 1 0:21 / / rw,relatime - overlay overlay rw",
+      "1210 22 259:1 /var/lib/docker/volumes/v/_data /data/document-store rw,relatime - ext4 /dev/sda1 rw",
+      "1211 22 0:44 / /mnt/with\\040space rw - tmpfs tmpfs rw",
+      "",
+    ].join("\n");
+    assert.deepEqual(
+      [...mountPointsFrom(table)],
+      ["/", "/data/document-store", "/mnt/with space"],
+    );
+  });
+
+  it("on this machine: the filesystem root is a mount point, a fresh directory is not (the real check, both ways)", async () => {
+    const fresh = await mkdtemp(path.join(tmpdir(), "document-store-fresh-"));
+    try {
+      assert.equal(await rootIsMountPoint("/"), true);
+      assert.equal(await rootIsMountPoint(fresh), false);
+    } finally {
+      await rm(fresh, { recursive: true, force: true });
     }
   });
 });
