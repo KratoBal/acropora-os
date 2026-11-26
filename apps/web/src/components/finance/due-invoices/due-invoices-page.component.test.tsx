@@ -293,10 +293,31 @@ describe("the due invoices page", () => {
       ),
     );
     render(<DueInvoicesPage />);
-    const summary = await screen.findByTestId("due-summary");
-    expect(summary).toHaveTextContent("2 számla, ebből 1 lejárt");
-    expect(summary).toHaveTextContent(/115,50\s?EUR/);
-    expect(summary).toHaveTextContent(/127\s?000\s?Ft/);
+    // Picasso 3.25: metric tiles, not a sentence; overdue in amber when any
+    const summary = await screen.findByRole("group", { name: "Összesítés" });
+    const tile = (label: string) =>
+      within(summary).getByText(label).closest("div")!;
+    expect(tile("Számla")).toHaveTextContent(/^Számla2$/);
+    expect(tile("Lejárt")).toHaveTextContent(/^Lejárt1$/);
+    expect(within(tile("Lejárt")).getByText("1").className).toContain(
+      "text-pilot-amber-700",
+    );
+    expect(tile("Hátralék")).toHaveTextContent(/115,50\s?EUR/);
+    expect(tile("Hátralék")).toHaveTextContent(/127\s?000\s?Ft/);
+    expect(summary).not.toHaveTextContent(/hiányzik adat/);
+  });
+
+  it("says under the count how many rows miss data, and leaves overdue grey when none", async () => {
+    api.list.mockResolvedValue(response([row()], { withMissingData: 1 }));
+    render(<DueInvoicesPage />);
+    const summary = await screen.findByRole("group", { name: "Összesítés" });
+    expect(
+      within(summary).getByText("Számla").closest("div"),
+    ).toHaveTextContent("1 sorból hiányzik adat");
+    expect(
+      within(within(summary).getByText("Lejárt").closest("div")!).getByText("0")
+        .className,
+    ).not.toContain("text-pilot-amber-700");
   });
 
   it("without the finance read right nothing loads", async () => {
@@ -518,7 +539,12 @@ describe("entering a supplier bank account by hand", () => {
     expect(section).toHaveTextContent(/1\s+számla, hátralék:\s+79\s?057\s?Ft/);
     // the main table still holds only the transfer row
     expect(screen.getByText("Alfa Kft.")).toBeInTheDocument();
-    expect(screen.getByTestId("due-summary")).toHaveTextContent(/1 számla/);
+    // and the count tile counts only that one
+    expect(
+      within(screen.getByRole("group", { name: "Összesítés" }))
+        .getByText("Számla")
+        .closest("div"),
+    ).toHaveTextContent(/^Számla1$/);
   });
 
   it("shows no section when no row moved", async () => {

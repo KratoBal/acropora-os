@@ -9,7 +9,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import { ServiceBackLink } from "@/components/service/service-detail-chrome";
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import { ServiceListHeader } from "@/components/service/service-list-chrome";
 import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { worksheetsApi } from "@/lib/api/worksheets";
@@ -122,9 +122,9 @@ export function WorksheetEntryPage({
       <ServiceOfflineNotice
         state={entries ? { kind: "loaded" } : { kind: "empty" }}
       />
-      <ServiceBackLink href={`/szerviz/munkalapok/${worksheetId}`}>
-        Vissza a munkalapra
-      </ServiceBackLink>
+      <PilotBackLink href={`/szerviz/munkalapok/${worksheetId}`} flush>
+        Munkalap
+      </PilotBackLink>
       {/* A PROTOTIPUS EYEBROW-JA ITT A MUNKALAP SZAMA LENNE -- es NEM veszem at,
           mert ez a lap szandekosan CSAK a bejegyzes-listat keri le, hogy hideg
           inditasbol is felalljon (lasd a fajl fejlecet). A valaszban nincs

@@ -51,6 +51,13 @@ const SUMMARY: ContentResultsSummary = {
 };
 
 describe("ContentResultsSummaryPage", () => {
+  it("steps back to the content list with the shared arrow link", async () => {
+    api.summary.mockResolvedValue(SUMMARY);
+    render(<ContentResultsSummaryPage />);
+    const back = await screen.findByRole("link", { name: "Tartalom" });
+    expect(back.getAttribute("href")).toBe("/tartalom");
+  });
+
   it("shows per channel the counts, the averages ('–' when unmeasured), the best and the worst; the pre-registrations; the dayparts", async () => {
     api.summary.mockResolvedValue(SUMMARY);
     render(<ContentResultsSummaryPage />);

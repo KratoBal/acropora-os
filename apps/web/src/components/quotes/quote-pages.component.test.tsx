@@ -1790,6 +1790,29 @@ describe("Ajánlat szerkesztő (569:171)", () => {
     expect(api.costing).not.toHaveBeenCalled();
   });
 
+  /*
+    A BRUTTÓ A NETTÓ ALATT A BELSŐ KALKULÁCIÓBAN (Luca 2026-11-26, kártya 7337010c). MI PIROSÍT: ha a bruttó hiányzik az eladási ár
+    vagy az opciók alól, ha a kliens számolja (a szerver értéke helyett), vagy ha egy régi válasz bruttó nélkül üres sort rajzol.
+  */
+  it("a belső kalkulációban az eladási ár és az opciók alatt a szerver bruttója áll", async () => {
+    api.detail.mockResolvedValue(
+      quote([version({ grossTotal: "254001", optionalGrossTotal: "3371" })]),
+    );
+    const { unmount } = render(<QuoteEditorPage quoteId="q1" />);
+    await screen.findByText("Belső kalkuláció");
+    // the server's number as it is (254001 is not what any rate makes of the net: the client must not compute)
+    expect(await screen.findByText(/^bruttó 254\s001 Ft$/)).toBeTruthy();
+    expect(screen.getByText(/^bruttó 3\s?371 Ft$/)).toBeTruthy();
+    unmount();
+
+    // an older answer without the gross: no empty line
+    api.detail.mockResolvedValue(quote([version()]));
+    render(<QuoteEditorPage quoteId="q1" />);
+    await screen.findByText("Belső kalkuláció");
+    await screen.findByText(/33\s000 Ft · 62,26%/);
+    expect(screen.queryByText(/^bruttó /)).toBeNull();
+  });
+
   it("az árak megjelenítése ajánlatonként váltható: a verzió értékét mutatja, váltáskor elküldi", async () => {
     api.detail.mockResolvedValue(quote([version({ priceDisplay: "GROSS" })]));
     api.updateVersion.mockResolvedValue(
@@ -2571,6 +2594,31 @@ describe("PDF előnézet és publikálás (569:363)", () => {
         screen.queryByRole("button", { name: "Verzió publikálása" }),
       ).toBeNull(),
     );
+  });
+
+  // egy alak a visszalépésre (Picasso R12): a nyíl a piszkozatnál a szerkesztőre, publikáltnál az adatlapra visz
+  it("a nyíl a piszkozatnál a szerkesztőre, publikált verziónál az adatlapra visz", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    const draft = render(<QuotePdfPage quoteId="q1" />);
+    expect(
+      (await screen.findByRole("link", { name: "Szerkesztő" })).getAttribute(
+        "href",
+      ),
+    ).toBe("/ajanlatok/q1/szerkesztes");
+    draft.unmount();
+
+    api.detail.mockResolvedValue(
+      quote([
+        version({ status: "PUBLISHED", publishedAt: "2026-10-08T08:00:00Z" }),
+      ]),
+    );
+    render(<QuotePdfPage quoteId="q1" />);
+    expect(
+      (await screen.findByRole("link", { name: "Ajánlat" })).getAttribute(
+        "href",
+      ),
+    ).toBe("/ajanlatok/q1");
+    expect(screen.queryByRole("link", { name: "Szerkesztő" })).toBeNull();
   });
 
   it("publikált verziónál nincs publikáló gomb, a kért verzió PDF-je töltődik", async () => {

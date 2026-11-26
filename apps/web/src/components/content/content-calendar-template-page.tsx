@@ -24,10 +24,10 @@ import {
   type ContentTemplateEventKind,
   type ContentTemplateRule,
 } from "@acropora/types";
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import { ApiError } from "@/lib/api/client";
 import {
   contentCalendarApi,
@@ -116,17 +116,12 @@ export function ContentCalendarTemplatePage() {
 
   return (
     <div className="space-y-6">
+      <PilotBackLink href="/tartalom/naptar" flush>
+        Naptár
+      </PilotBackLink>
       <PageHeader
         title="Tartalomnaptár: sablon"
         description="Melyik eseményhez milyen tartalom tartozik, és mikor. A napok itt állíthatók, kódváltozás nélkül."
-        actions={
-          <Link
-            href="/tartalom/naptar"
-            className="text-sm font-medium text-pilot-aqua-700 underline-offset-4 hover:underline"
-          >
-            ← Naptár
-          </Link>
-        }
       />
       <NewsletterSetting token={token} canManage={canManage} />
       {error ? (

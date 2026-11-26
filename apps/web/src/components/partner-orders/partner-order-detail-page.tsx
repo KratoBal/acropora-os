@@ -24,6 +24,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { partnerOrdersApi } from "@/lib/api/partner-orders";
 import { completionCertificatesApi } from "@/lib/api/completion-certificates";
@@ -234,12 +235,9 @@ export function PartnerOrderDetailPage({ orderId }: { orderId: string }) {
 
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
-      <Link
-        href={PARTNER_ORDERS_PATH}
-        className="text-sm text-pilot-aqua-700 hover:underline"
-      >
-        ← Vissza a megrendelésekhez
-      </Link>
+      <PilotBackLink href={PARTNER_ORDERS_PATH} flush>
+        Megrendelések
+      </PilotBackLink>
       <PilotPageHeader
         title={order.orderNumber}
         description={order.title}

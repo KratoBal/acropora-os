@@ -13,6 +13,7 @@ import {
 import {
   PilotBadge,
   PilotButton,
+  PilotCard,
   PilotDataTable,
   PilotPageHeader,
   type PilotTableColumn,
@@ -250,21 +251,53 @@ export function DueInvoicesPage() {
         title="Lejáró számlák"
         description="Az átutalással fizetendő, még ki nem fizetett bejövő számlák, a fizetési határidő szerint: a lejártak elöl."
       />
+      {/*
+        THE SUMMARY AS METRICS, NOT A SENTENCE (Picasso 3.25, card f0b70dbd), in the tiles of the ticket list: how many invoices, how
+        many of them overdue (amber when any), and the outstanding amount per currency. A row with missing data is said under the count.
+      */}
       {data && data.items.length > 0 ? (
-        <p className="text-sm text-pilot-grey-700" data-testid="due-summary">
-          {data.summary.count} számla
-          {data.summary.overdue > 0
-            ? `, ebből ${data.summary.overdue} lejárt`
-            : ""}
-          {data.summary.withMissingData > 0
-            ? `, ${data.summary.withMissingData} sorból hiányzik adat`
-            : ""}
-          . Hátralék:{" "}
-          {data.summary.totals
-            .map((total) => formatMoney(total.outstanding, total.currency))
-            .join(" + ")}
-          .
-        </p>
+        <div
+          role="group"
+          aria-label="Összesítés"
+          data-testid="due-summary"
+          className="grid grid-cols-3 gap-2 sm:gap-4 lg:max-w-[780px]"
+        >
+          <PilotCard className="px-3 py-3 sm:px-4 sm:py-4">
+            <p className="text-xs text-pilot-grey-600 sm:text-sm">Számla</p>
+            <p className="mt-1 text-2xl font-semibold text-pilot-grey-900 sm:mt-2">
+              {data.summary.count}
+            </p>
+            {data.summary.withMissingData > 0 ? (
+              <p className="mt-1 text-xs text-pilot-grey-500">
+                {data.summary.withMissingData} sorból hiányzik adat
+              </p>
+            ) : null}
+          </PilotCard>
+          <PilotCard className="px-3 py-3 sm:px-4 sm:py-4">
+            <p className="text-xs text-pilot-grey-600 sm:text-sm">Lejárt</p>
+            <p
+              className={`mt-1 text-2xl font-semibold sm:mt-2 ${
+                data.summary.overdue > 0
+                  ? "text-pilot-amber-700"
+                  : "text-pilot-grey-900"
+              }`}
+            >
+              {data.summary.overdue}
+            </p>
+          </PilotCard>
+          <PilotCard className="px-3 py-3 sm:px-4 sm:py-4">
+            <p className="text-xs text-pilot-grey-600 sm:text-sm">Hátralék</p>
+            {/* one line per currency: two amounts side by side would not fit a phone's third of the row */}
+            {data.summary.totals.map((total) => (
+              <p
+                key={total.currency}
+                className="mt-1 text-base font-semibold text-pilot-grey-900 sm:mt-2 sm:text-xl"
+              >
+                {formatMoney(total.outstanding, total.currency)}
+              </p>
+            ))}
+          </PilotCard>
+        </div>
       ) : null}
       <section className="overflow-hidden rounded-xl bg-white ring-1 ring-pilot-grey-200">
         {error ? (

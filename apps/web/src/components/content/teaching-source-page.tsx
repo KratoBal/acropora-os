@@ -30,10 +30,10 @@ import {
   Skeleton,
   Textarea,
 } from "@acropora/ui";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import { contentApi } from "@/lib/api/content";
 
 import { CONTENT_STATE_LABELS } from "./content-labels";
@@ -420,9 +420,7 @@ export function TeachingSourcePage({ contentId }: { contentId: string }) {
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/tartalom" className="text-xs text-pilot-grey-600">
-          ← Tartalom
-        </Link>
+        <PilotBackLink href="/tartalom">Tartalom</PilotBackLink>
         <PageHeader
           title={item.title}
           description={`Oktatóanyag · ${CONTENT_STATE_LABELS[item.state]}${

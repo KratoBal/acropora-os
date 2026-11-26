@@ -59,7 +59,7 @@ describe("egy bejegyzés saját lapja", () => {
     */
     render(<WorksheetEntryPage worksheetId="w-1" entryId="entry-1" />);
     const vissza = await screen.findByRole("link", {
-      name: /Vissza a munkalapra/,
+      name: "Munkalap",
     });
     expect(vissza.getAttribute("href")).toBe("/szerviz/munkalapok/w-1");
   });

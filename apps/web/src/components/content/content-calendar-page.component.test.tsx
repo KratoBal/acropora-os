@@ -148,6 +148,13 @@ beforeEach(() => {
 });
 
 describe("ContentCalendarPage", () => {
+  it("steps back to the content list with the shared arrow link", async () => {
+    api.feed.mockReturnValue(new Promise(() => {}));
+    render(<ContentCalendarPage />);
+    const back = await screen.findByRole("link", { name: "Tartalom" });
+    expect(back.getAttribute("href")).toBe("/tartalom");
+  });
+
   it("reads the Monday-to-Sunday week of the URL day, and shows the loading state, not an empty calendar, while it waits", async () => {
     api.feed.mockReturnValue(new Promise(() => {}));
     render(<ContentCalendarPage />);

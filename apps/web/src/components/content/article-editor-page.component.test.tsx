@@ -184,6 +184,12 @@ describe("suggestArticleSlug", () => {
 });
 
 describe("ArticleEditorPage", () => {
+  it("steps back to the content list with the shared arrow link", async () => {
+    await loaded();
+    const back = await screen.findByRole("link", { name: "Tartalom" });
+    expect(back.getAttribute("href")).toBe("/tartalom");
+  });
+
   it("starts a new article from the title's slug and the blog channel", async () => {
     api.article.mockResolvedValue(editorData({ article: null }));
     await loaded();
