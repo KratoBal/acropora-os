@@ -15,6 +15,12 @@ export interface QuotePdfItem {
   unitNetPrice: Prisma.Decimal;
   vatRatePercent: Prisma.Decimal;
   isOptional: boolean;
+  /** KIVÁLTOTT TÉTEL (card 2540d9d4): a tétel azonosítója, amit az opcionális tétel `replacesRef`-je megnevez (a PDF-ben nincs más kulcs) */
+  ref?: string;
+  /** az a (nem opcionális) tétel `ref`-je, amelynek a helyére ez az opcionális tétel lép; üres: kiegészítés */
+  replacesRef?: string | null;
+  /** a kiváltott tétel NEVE, a "„X” helyett" címkéhez (a közzétételkor számolva) */
+  replacesName?: string | null;
 }
 
 export interface QuotePdfBlock {
@@ -60,12 +66,22 @@ export function lineGross(item: QuotePdfItem): Prisma.Decimal {
   );
 }
 
-/** The offered (non-optional) totals; the optional lines are shown apart. */
+/**
+ * The offered (non-optional) totals; the optional lines are shown apart. `replacedNet` / `replacedGross` are the offered lines an optional item
+ * stands in for (KIVÁLTOTT TÉTEL, card 2540d9d4): with every option chosen they drop out, so "including the optional items" is
+ * `gross - replacedGross + optionalGross`, not `gross + optionalGross` (that counted the replaced line twice).
+ */
 export function quoteTotals(blocks: readonly QuotePdfBlock[]) {
   let net = ZERO;
   let gross = ZERO;
   let optionalNet = ZERO;
   let optionalGross = ZERO;
+  let replacedNet = ZERO;
+  let replacedGross = ZERO;
+  const replaced = new Set<string>();
+  for (const block of blocks)
+    for (const item of block.items)
+      if (item.isOptional && item.replacesRef) replaced.add(item.replacesRef);
   for (const block of blocks)
     for (const item of block.items) {
       if (item.isOptional) {
@@ -74,9 +90,21 @@ export function quoteTotals(blocks: readonly QuotePdfBlock[]) {
       } else {
         net = net.plus(lineNet(item));
         gross = gross.plus(lineGross(item));
+        if (item.ref && replaced.has(item.ref)) {
+          replacedNet = replacedNet.plus(lineNet(item));
+          replacedGross = replacedGross.plus(lineGross(item));
+        }
       }
     }
-  return { net, vat: gross.minus(net), gross, optionalNet, optionalGross };
+  return {
+    net,
+    vat: gross.minus(net),
+    gross,
+    optionalNet,
+    optionalGross,
+    replacedNet,
+    replacedGross,
+  };
 }
 
 /**
