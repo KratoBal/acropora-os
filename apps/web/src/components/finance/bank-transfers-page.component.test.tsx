@@ -4,6 +4,7 @@ import type {
   Session,
   UserRole,
 } from "@acropora/types";
+import { BANK_TRANSFER_REFUSAL_TEXT } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -238,6 +239,28 @@ describe("BankTransfersPage", () => {
       expect(await screen.findByText(label)).toBeInTheDocument();
       expect(screen.getByText(reason)).toBeInTheDocument();
     }
+    expect(screen.queryByText("Kézi párosítás kell")).not.toBeInTheDocument();
+  });
+
+  it("an invoice made in CASHMAN is named grey with the sentence that says where its payment goes (2026-11-26)", async () => {
+    api.list.mockResolvedValue([
+      credit({
+        id: "allatkert",
+        decision: {
+          markable: false as const,
+          refusal: "OTHER_PROGRAM",
+          reason: BANK_TRANSFER_REFUSAL_TEXT.OTHER_PROGRAM,
+          detail: "2026/00058",
+        },
+      }),
+    ]);
+    render(<BankTransfersPage />);
+    expect(await screen.findByText("CASHMAN-számla")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /a kifizetését a CASHMAN-ben kell rögzíteni.*\(2026\/00058\)/,
+      ),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Kézi párosítás kell")).not.toBeInTheDocument();
   });
 
