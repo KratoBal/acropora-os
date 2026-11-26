@@ -6442,6 +6442,8 @@ model WorksheetVersion {
   closedById   String?
   /// A "FELVETTE" NEV A LEZARAS PILLANATABAN (card f450672c). A lap PDF-je eddig a fiok MOSTANI nevet irta (elo kapcsolat), ezert egy atnevezes vagy egy torolt fiok (SetNull) utan az ujragenerált lap mas bajtokat adott. A close() ide fagyasztja a nevet; amig NULL (piszkozat, vagy a lezaras elotti sor), az elo nev szolgal. A korabban lezart sorokat a migracio a mostani nevvel toltotte ki: az elerheto legjobb ertek, a regebbi nev nem volt tarolva.
   createdByNameAtClose String?
+  /// A "DOLGOZOTT RAJTA" NEVEK A LEZARAS PILLANATABAN (card f450672c, masodik resz). Ugyanaz a hiba, mint a `createdByNameAtClose`: a lap PDF-je a felelosok MOSTANI nevet irta, ezert egy atnevezes, egy levett vagy egy torolt felelos utan az ujragenerált lap mas bajtokat adott. Lezart verzional (closedAt nem null) EZ a lista az iranyado, akkor is, ha ures; a piszkozat az elo kiosztast olvassa. A close() tolti, sorrend: kiosztas ideje, majd azonosito (mint az elo lista). A korabban lezart sorokat a migracio a mostani kiosztas nevevel toltotte ki: az elerheto legjobb ertek.
+  assigneeNamesAtClose String[] @default([])
 
   /// MIKOR KULDTUK KI ALAIRASRA, ES KINEK.
   ///
@@ -6598,6 +6600,8 @@ model WorksheetEntry {
   /// tavozo kollega bejegyzese NEM tunhet el, mert a naplo rola szol. A
   /// felulet KIMONDJA, hogy a szerzo ismeretlen, nem elrejti a sort.
   authorId    String?
+  /// A SZERZO NEVE AZ IRAS PILLANATABAN (card f450672c, masodik resz): a naplo-sor a kiadott lapra is felkerul, es egy atnevezes vagy torolt fiok nem irhatja at utolag. Az `addEntry` tolti; NULL, ha a sor korabbi es a migracio nem tudta kitolteni (nincs szerzo). A korabbi sorokat a migracio a szerzo mostani nevevel toltotte ki. Olvasaskor ez elol jar az elo kapcsolattal szemben.
+  authorName  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
