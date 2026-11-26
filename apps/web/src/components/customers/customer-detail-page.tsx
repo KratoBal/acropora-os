@@ -1,5 +1,9 @@
 "use client";
 import {
+  PilotBackLink,
+  backLinkLabel,
+} from "@/components/pilot/pilot-back-link";
+import {
   Alert,
   Badge,
   Button,
@@ -19,7 +23,6 @@ import {
   type CustomerDetail,
   type UpdateCustomerAddressInput,
 } from "@acropora/types";
-import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -315,19 +318,17 @@ export function CustomerDetailPage({ customerId }: { customerId: string }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={customer.companyName || customer.displayName}
-        description={`${customer.customerNumber} · ${
-          customer.type === "COMPANY" ? "Cég" : "Magánszemély"
-        }`}
-        actions={
-          <Link href={backToList.href}>
-            <Button variant="secondary">
-              {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
-            </Button>
-          </Link>
-        }
-      />
+      <div>
+        <PilotBackLink href={backToList.href}>
+          {backLinkLabel(backToList, "Vevők")}
+        </PilotBackLink>
+        <PageHeader
+          title={customer.companyName || customer.displayName}
+          description={`${customer.customerNumber} · ${
+            customer.type === "COMPANY" ? "Cég" : "Magánszemély"
+          }`}
+        />
+      </div>
       {/* the badge row: the place of the roles later (customer, supplier, service partner) */}
       <div className="flex flex-wrap gap-2" data-testid="customer-badges">
         <Badge variant={fromUnas ? "info" : "neutral"}>
