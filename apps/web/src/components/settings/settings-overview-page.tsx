@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  Icon,
-  PageHeader,
-  type IconName,
-} from "@acropora/ui";
+import { Icon, PilotCard, PilotPageHeader, type IconName } from "@acropora/ui";
 import {
   hasPermission,
   isNavigationEntryVisible,
@@ -18,6 +11,8 @@ import {
 import Link from "next/link";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
+
 import { AppearanceSettingsCard } from "./appearance-settings-card";
 
 /**
@@ -489,8 +484,8 @@ export function SettingsAreaGrid({
 
 export function SettingsOverviewPage() {
   return (
-    <div className="space-y-6">
-      <PageHeader
+    <PilotThemeRoot className="space-y-6">
+      <PilotPageHeader
         title="Beállítások"
         description="A rendszer beállítható területei. Minden hivatkozás egy meglévő oldalra visz."
       />
@@ -513,60 +508,64 @@ export function SettingsOverviewPage() {
         pedig lathatatlan maradna.
       */}
       <SettingsAreaGrid areas={SETTINGS_AREAS} />
-    </div>
+    </PilotThemeRoot>
   );
 }
 
+/**
+ * THE AREA CARDS ON THE PILOT SET, IN BALANCED COLUMNS (Picasso 3.16, card f0b70dbd): the old two-column grid stretched every card of a
+ * row to the tallest one, and a one-link card stood beside a five-link one with half of it empty. Columns let each card keep its own
+ * height (`break-inside-avoid` keeps a card whole); the order in the page, and so for a screen reader, is unchanged.
+ */
 function AreaCards({ areas }: { areas: readonly SettingsArea[] }) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div className="gap-4 sm:columns-2 xl:columns-3">
       {areas.map((area) => {
         const cim = (
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-dusk-900">
-            <Icon name={area.icon} className="size-4 text-dusk-400" />
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-pilot-grey-900">
+            <Icon name={area.icon} className="size-4 text-pilot-grey-400" />
             {area.title}
           </h2>
         );
         const egyetlen = area.links.length === 1 ? area.links[0] : null;
         return (
-          <Card key={area.title}>
+          <PilotCard
+            key={area.title}
+            className="mb-4 break-inside-avoid overflow-hidden"
+          >
             {egyetlen ? (
               <Link
                 href={egyetlen.href}
-                className="block rounded-lg transition hover:bg-dusk-50"
+                className="block p-5 transition hover:bg-pilot-grey-50"
               >
-                <CardHeader>{cim}</CardHeader>
-                <CardContent>
-                  <p className="text-xs text-dusk-500">
-                    {egyetlen.description}
-                  </p>
-                </CardContent>
+                {cim}
+                <p className="mt-2 text-xs text-pilot-grey-600">
+                  {egyetlen.description}
+                </p>
               </Link>
             ) : (
-              <>
-                <CardHeader>{cim}</CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    {area.links.map((link) => (
-                      <li key={link.href}>
-                        <Link
-                          href={link.href}
-                          className="block rounded-md border border-dusk-200 px-3 py-2 transition hover:border-pilot-aqua-600 hover:bg-dusk-50"
-                        >
-                          <span className="block text-sm font-medium text-dusk-900">
-                            {link.label}
-                          </span>
-                          <span className="block text-xs text-dusk-500">
-                            {link.description}
-                          </span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </>
+              <div className="p-5">
+                {cim}
+                <ul className="mt-3 space-y-2">
+                  {area.links.map((link) => (
+                    <li key={link.href}>
+                      <Link
+                        href={link.href}
+                        className="block rounded-md border border-pilot-grey-200 px-3 py-2 transition hover:border-pilot-aqua-600 hover:bg-pilot-grey-50"
+                      >
+                        <span className="block text-sm font-medium text-pilot-grey-900">
+                          {link.label}
+                        </span>
+                        <span className="block text-xs text-pilot-grey-600">
+                          {link.description}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
-          </Card>
+          </PilotCard>
         );
       })}
     </div>

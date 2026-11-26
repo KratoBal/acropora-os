@@ -1,9 +1,9 @@
 "use client";
 
 import {
-  Card,
-  CardContent,
-  CardHeader,
+  PilotCard,
+  PilotCardHeader,
+  PilotSegmentedControl,
   useThemePreference,
   type ThemePreference,
 } from "@acropora/ui";
@@ -27,9 +27,9 @@ const OPTIONS: { value: ThemePreference; label: string }[] = [
  * ugyanúgy meg kell jelennie.
  *
  * MA CSAK A FIGMA-SZERŰ OLDALAKAT ÉRINTI (lásd `PilotThemeRoot` és
- * `figma-theme.css` fejlécét) -- ez a kártya viszont ettől függetlenül,
- * a mai (nem pilot) arculatban jelenik meg, mert a Beállítások lap maga
- * még nem Figma-szerű oldal ebben a körben.
+ * `figma-theme.css` fejlécét). A Beállítások lap maga 2026-11-26 óta
+ * pilot-oldal (Picasso 3.16), tehát ez a kártya is a pilot készlettel áll,
+ * a választó a közös szegmentált kapcsoló.
  *
  * A LÁBSZÖVEG SZÁNDÉKOSAN NEM NEVEZ MEG OLDALT NÉVSZERINT (murena,
  * 2026-09-24, kanban 9728c62c): korábban "Akváriumok és Mérési
@@ -44,35 +44,25 @@ const OPTIONS: { value: ThemePreference; label: string }[] = [
 export function AppearanceSettingsCard() {
   const { preference, setPreference } = useThemePreference();
 
+  const label = OPTIONS.find((option) => option.value === preference)?.label;
   return (
-    <Card>
-      <CardHeader>
-        <h2 className="text-sm font-semibold text-dusk-900">Megjelenés</h2>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-xs text-dusk-500">
+    <PilotCard className="overflow-hidden">
+      <PilotCardHeader title="Megjelenés" />
+      <div className="space-y-3 p-5">
+        <p className="text-xs text-pilot-grey-600">
           Egyelőre csak az új, Figma-alapú felületeket érinti (ahol a képernyő
           már a friss tervet követi), a többi felület a mai kinézeten marad,
           amíg át nem kerül.
         </p>
-        <div className="inline-flex gap-1 rounded-md bg-dusk-100 p-1">
-          {OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setPreference(option.value)}
-              aria-pressed={preference === option.value}
-              className={`cursor-pointer rounded px-3 py-1.5 text-sm font-medium transition ${
-                preference === option.value
-                  ? "bg-white text-dusk-900 shadow-sm"
-                  : "text-dusk-500 hover:text-dusk-700"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+        <PilotSegmentedControl
+          options={OPTIONS.map((option) => option.label)}
+          value={label ?? OPTIONS[2]!.label}
+          onChange={(picked) => {
+            const option = OPTIONS.find((o) => o.label === picked);
+            if (option) setPreference(option.value);
+          }}
+        />
+      </div>
+    </PilotCard>
   );
 }
