@@ -393,6 +393,42 @@ describe("HomepageContentEditorPage", () => {
     expect(sent()).toEqual(UNTOUCHED);
   });
 
+  // Picasso 3.18 (acrobot 62278): the send-to-the-shop switch was the same small green switch as a block's visibility: two actions of different weight, one sign
+  it("HP-ED-SWITCH-LOOK: the send switch has its own look and state word, the visibility switch stays the small green one", async () => {
+    api.get.mockResolvedValue(stored({ projectionEnabled: true }));
+    render(<HomepageContentEditorPage />);
+    const send = await screen.findByLabelText(/menjen a webshopba/);
+    expect(send.className).toContain("h-7");
+    expect(send.className).toContain("bg-pilot-accent-warm");
+    expect(send.className).not.toContain("bg-pilot-aqua-600");
+    expect(screen.getByText("BE")).toBeTruthy();
+    const visibility = await screen.findByRole("switch", {
+      name: "Márkák: látszik",
+    });
+    expect(visibility.className).toContain("h-5");
+    expect(visibility.className).not.toContain("bg-pilot-accent-warm");
+  });
+
+  it("HP-ED-SWITCH-WORD: the state word says KI while the send switch is off", async () => {
+    render(<HomepageContentEditorPage />);
+    await screen.findByLabelText(/menjen a webshopba/);
+    expect(screen.getByText("KI")).toBeTruthy();
+    expect(screen.queryByText("BE")).toBeNull();
+  });
+
+  // Picasso 3.18: the fields cut their text; the full value is the tooltip
+  it("HP-ED-TOOLTIP: a single-line field carries its full value as the tooltip", async () => {
+    render(<HomepageContentEditorPage />);
+    const inputs = await screen.findAllByRole("textbox");
+    const withTitle = inputs.filter(
+      (input) =>
+        input instanceof HTMLInputElement &&
+        input.value.length > 0 &&
+        input.getAttribute("title") === input.value,
+    );
+    expect(withTitle.length).toBeGreaterThan(0);
+  });
+
   it("HP-ED-SWITCH-RIGHTS: an editor without settings.manage sees the switch but cannot use it", async () => {
     auth.role = "MANAGER";
     render(<HomepageContentEditorPage />);

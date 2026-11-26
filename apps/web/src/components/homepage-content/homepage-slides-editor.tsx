@@ -281,6 +281,7 @@ function SlideFields({
         <input
           aria-label={`${n}. dia: ${label}`}
           value={(slide[key] as string | null) ?? ""}
+          title={(slide[key] as string | null) ?? ""}
           maxLength={max}
           aria-invalid={
             options.button && !isShopHref((slide[key] as string | null) ?? "")

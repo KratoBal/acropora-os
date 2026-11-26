@@ -145,6 +145,7 @@ export function HomepageFooterEditor({
                 aria-label={`${index + 1}. oszlop címe`}
                 placeholder="Oszlop címe"
                 value={column.title}
+                title={column.title}
                 maxLength={HOMEPAGE_LIMITS.footerLabel}
                 onChange={(event) =>
                   setColumn(index, { ...column, title: event.target.value })
@@ -170,6 +171,7 @@ export function HomepageFooterEditor({
                   aria-label={`${index + 1}. oszlop, ${linkIndex + 1}. sor: felirat`}
                   placeholder="Felirat"
                   value={link.label}
+                  title={link.label}
                   maxLength={HOMEPAGE_LIMITS.footerLabel}
                   onChange={(event) =>
                     setColumn(index, {
@@ -187,6 +189,7 @@ export function HomepageFooterEditor({
                   aria-label={`${index + 1}. oszlop, ${linkIndex + 1}. sor: cél`}
                   placeholder="/store vagy https://"
                   value={link.href}
+                  title={link.href}
                   maxLength={HOMEPAGE_LIMITS.href}
                   onChange={(event) =>
                     setColumn(index, {
@@ -270,6 +273,7 @@ export function HomepageFooterEditor({
                 aria-label={`Lábléc: ${label}`}
                 placeholder="https://"
                 value={footer.social[key] ?? ""}
+                title={footer.social[key] ?? ""}
                 maxLength={HOMEPAGE_LIMITS.href}
                 onChange={(event) =>
                   set({
@@ -292,6 +296,7 @@ export function HomepageFooterEditor({
           aria-label="Lábléc: jogi sor"
           placeholder="© Acropora Kft."
           value={footer.bottomText}
+          title={footer.bottomText}
           maxLength={HOMEPAGE_LIMITS.footerBottomText}
           onChange={(event) => set({ bottomText: event.target.value })}
           className={HOMEPAGE_INPUT_CLASS}
