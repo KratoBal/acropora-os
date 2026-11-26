@@ -239,6 +239,81 @@ function addLine(description: string, quantity: string, unitNet: string) {
   });
 }
 
+/*
+  AZ ELMENTETLEN VÁLTOZÁS ŐRE (acrobot 62936, barracuda #3034): a szerkesztőnek nincs automatikus mentése, a belső hivatkozásos kilépés eddig jelzés
+  nélkül elvitte a beírt tételeket. MI PIROSÍT: ha egy üres, érintetlen szerkesztő kérdez; ha a beírt tétel után a kilépés nem kérdez; ha a mentés
+  után is kérdez (a tárolt vázlat a mostani tartalom); ha a megerősítés nem visz el a kért címre.
+*/
+describe("BillingDocumentEditor unsaved changes", () => {
+  const LEAVE = "Kilépsz a mentetlen változtatásokkal?";
+  function renderWithLink() {
+    navigation.push.mockReset();
+    render(
+      <>
+        <BillingDocumentEditor />
+        <a
+          href="/penzugy/szamlazas"
+          onClick={(event) => event.preventDefault()}
+        >
+          Kilépő link
+        </a>
+      </>,
+    );
+  }
+
+  it("an untouched editor lets the user leave without a question", () => {
+    renderWithLink();
+    fireEvent.click(screen.getByRole("link", { name: "Kilépő link" }));
+    expect(screen.queryByText(LEAVE)).toBeNull();
+  });
+
+  it("after a line is typed, leaving asks, and the confirmation goes where the link pointed", async () => {
+    renderWithLink();
+    addLine("Munkadíj", "1", "280000");
+    fireEvent.click(screen.getByRole("link", { name: "Kilépő link" }));
+    expect(await screen.findByText(LEAVE)).toBeInTheDocument();
+    expect(navigation.push).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Kilépés mentés nélkül" }),
+    );
+    expect(navigation.push).toHaveBeenCalledWith("/penzugy/szamlazas");
+  });
+
+  // a kiállítás megerősítése előbb elmenti a vázlatot, és csak az időbélyegét írja az állapotba: az sem szerkesztés
+  it("after the issue confirmation saved the draft, leaving does not ask", async () => {
+    renderWithLink();
+    fireEvent.click(radio("Papír alapú"));
+    await pickPartner();
+    addLine("Munkadíj", "1", "280000");
+    fireEvent.click(screen.getByRole("button", { name: "Számla kiállítása" }));
+    await waitFor(() => expect(api.issueSummary).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    fireEvent.click(screen.getByRole("link", { name: "Kilépő link" }));
+    expect(
+      screen.queryByText("Kilépsz a mentetlen változtatásokkal?"),
+    ).toBeNull();
+  });
+
+  it("after the draft is saved, leaving does not ask", async () => {
+    renderWithLink();
+    addLine("Munkadíj", "1", "280000");
+    await pickPartner();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Vázlat mentése|Mentés…/ }),
+    );
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    await screen.findByText(/Mentve/);
+    // az állapotcsere utáni hatás is lefut, mielőtt kattintunk (különben a negatív állítás üres lenne)
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    fireEvent.click(screen.getByRole("link", { name: "Kilépő link" }));
+    expect(screen.queryByText(LEAVE)).toBeNull();
+  });
+});
+
 describe("BillingDocumentEditor", () => {
   it("defaults: Számla, E-számla, the invoice title, summary and disabled issue button", () => {
     render(<BillingDocumentEditor />);

@@ -24,9 +24,10 @@ import {
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { UnsavedChangesGuard } from "@/components/common/unsaved-changes-guard";
 import { useMailImages } from "@/components/settings/mail-image-picker";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { billingDocumentsApi } from "@/lib/api/billing-documents";
@@ -179,6 +180,22 @@ export function BillingDocumentEditor({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  /*
+    AZ ELMENTETLEN VÁLTOZÁS (acrobot 62936, barracuda #3034): a szerkesztőnek nincs automatikus mentése, ezért egy oldalsávos vagy nyilas kilépés a beírt
+    tételeket jelzés nélkül elvitte. A `dirty` a mentés vagy betöltés utáni első állapotváltozástól igaz; a betöltés és a mentés a saját állapotcseréje
+    előtt `skipDirty`-et emel, hogy a szerver állapota ne számítson változtatásnak. Az új, üres bizonylat az első állapotával tiszta.
+  */
+  const [dirty, setDirty] = useState(false);
+  const skipDirty = useRef(!documentId);
+  useEffect(() => {
+    if (!state) return;
+    if (skipDirty.current) {
+      skipDirty.current = false;
+      setDirty(false);
+      return;
+    }
+    setDirty(true);
+  }, [state]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   /*
     A LEVÉL KÉPEI: olvasni számlaküldési vagy beállítás-kezelési joggal,
@@ -312,6 +329,7 @@ export function BillingDocumentEditor({
     billingDocumentsApi
       .detail(token, documentId, controller.signal)
       .then((detail) => {
+        skipDirty.current = true;
         setState(fromDetail(detail));
         setStatus(detail.status);
         setDeductedAdvance(detail.deductedAdvance ?? null);
@@ -419,6 +437,7 @@ export function BillingDocumentEditor({
       const { detail, created } = await persist();
       // A TÁROLT ÁLLAPOT A MÉRVADÓ (a szerver számolt), a termék-sor alcíme
       // viszont csak a szerkesztőben él: sorrend szerint átvesszük.
+      skipDirty.current = true;
       setState((previous) => {
         const next = fromDetail(detail);
         next.lines = next.lines.map((line, index) => ({
@@ -500,6 +519,8 @@ export function BillingDocumentEditor({
       // A MENTÉS ÚJ IDŐBÉLYEGE AZ ÁLLAPOTBA IS (Luca díjbekérője, 2026-11-16): a mentés a sor `updatedAt`-ját léptette, és a
       // következő mentés ezt kéri vissza. Ha az állapot a régit tartja, egy elbukott kiállítás után minden mentés és az
       // előnézet is "időközben más is mentette" ütközést ad (és egy új bizonylat újrapróbája újra létrehozni próbálná).
+      // a mentés időbélyege nem szerkesztés: a tárolt vázlat a mostani tartalom, nincs mit elveszíteni
+      skipDirty.current = true;
       setState((previous) =>
         previous
           ? { ...previous, savedUpdatedAt: saved.detail.updatedAt }
@@ -539,6 +560,7 @@ export function BillingDocumentEditor({
         saved.updatedAt,
         confirmation,
       );
+      skipDirty.current = true;
       setState(fromDetail(issued));
       setStatus(issued.status);
       setIssued(issuedOf(issued));
@@ -570,6 +592,7 @@ export function BillingDocumentEditor({
           pending.detail.id,
         );
         setStatus(current.status);
+        skipDirty.current = true;
         setState((previous) => {
           const next = fromDetail(current);
           // a termék-sor alcíme csak a szerkesztőben él: sorrend szerint átvesszük, mint a mentés
@@ -695,6 +718,8 @@ export function BillingDocumentEditor({
 
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
+      {/* az oldalsávos és bármely belső hivatkozásos kilépés is rákérdez, ha van mentetlen változás (nincs automatikus mentés) */}
+      <UnsavedChangesGuard when={dirty && editable} />
       <PilotPageHeader
         title={capabilities.newTitle}
         description={`${format === "ELECTRONIC" && state.documentType === "INVOICE" ? "E-számla" : capabilities.label} kiállítása Számlázz.hu-n keresztül.`}
