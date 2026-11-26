@@ -403,6 +403,11 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
 
   const v = version;
   const blocks = v.blocks;
+  // the replaced item may stand in any block of the version (murena #3026): one lookup over all of them
+  const itemNames = new Map(
+    v.blocks.flatMap((b) => b.items).map((i) => [i.id, i.name] as const),
+  );
+  const itemName = (id: string) => itemNames.get(id) ?? null;
   const move = (index: number, delta: number) => {
     const ids = blocks.map((b) => b.id);
     const target = index + delta;
@@ -511,6 +516,7 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
             <BlockCard
               key={block.id}
               block={block}
+              itemName={itemName}
               currency={v.currency}
               busy={busy}
               first={index === 0}
@@ -794,6 +800,7 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
 
 function BlockCard({
   block,
+  itemName,
   currency,
   busy,
   first,
@@ -810,6 +817,8 @@ function BlockCard({
   onDirtyChange,
 }: {
   block: QuoteInternalBlock;
+  /** an item's name by its id, across the version: the replaced item of an option */
+  itemName: (id: string) => string | null;
   currency: string;
   busy: boolean;
   first: boolean;
@@ -962,6 +971,12 @@ function BlockCard({
                     {item.isOptional ? "☐ " : ""}
                     {item.name}
                   </p>
+                  {/* what the option does, as on the PDF and the public page (card 2540d9d4): an addition, or which item it replaces */}
+                  {item.isOptional ? (
+                    <p className="text-xs font-semibold text-pilot-aqua-700">
+                      {optionalItemNote(item, itemName)}
+                    </p>
+                  ) : null}
                   {item.variantLabel ? (
                     <p className="text-xs text-pilot-grey-600">
                       {item.variantLabel}
@@ -1169,6 +1184,21 @@ function ItemGrossLines({
       ) : null}
     </>
   );
+}
+
+/**
+ * THE NOTE UNDER AN OPTIONAL ITEM IN THE EDITOR (card 2540d9d4; acrobot 62814): "Opcionális · kiegészítés", or, when the option replaces
+ * an item (`replacesItemId`, murena #3026), the replaced item's name: "Opcionális · a(z) „…” helyett". A replaced item no longer in
+ * the version (deleted since) reads as an addition, as the server treats it.
+ */
+export function optionalItemNote(
+  item: { replacesItemId?: string | null },
+  itemName: (id: string) => string | null,
+): string {
+  const replaced = item.replacesItemId ? itemName(item.replacesItemId) : null;
+  return replaced
+    ? `Opcionális · a(z) „${replaced}” helyett`
+    : "Opcionális · kiegészítés";
 }
 
 function Fact({
