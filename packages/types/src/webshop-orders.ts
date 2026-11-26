@@ -535,6 +535,15 @@ export interface WebshopOrderDetail {
     number: string | null;
   } | null;
   /**
+   * THE FINAL INVOICE ON THE BALANCE (card d31a66a3, S4): made once the balance came in, deducting the advance invoice, the
+   * whole order's lines. `null` until it is made; the draft, the issuing and the refused one show too.
+   */
+  finalInvoice: {
+    id: string;
+    status: "DRAFT" | "ISSUING" | "ISSUED" | "ISSUE_FAILED";
+    number: string | null;
+  } | null;
+  /**
    * A rendelés szállítólevele (kártya 0a14f739 C/1): a kiállított számla
    * tételeiből, a Számlázz.hu-n át. Amíg nem készült, `null`.
    */

@@ -138,6 +138,8 @@ function setup(
     webshopInvoices?: (afterClaim: boolean) => WebshopOrderInvoiceFact[];
     /** The webshop transfer that paid the proforma (d31a66a3, S1); null: none (the default). */
     transfer?: { amount: string; advance?: boolean } | null;
+    /** The webshop order's recorded balance after an advance (S3); absent: none. */
+    balance?: { amount: string };
     /** Számlázz.hu feed invoices of the order the OS did not issue (the Autokassza check, barracuda on #2884). */
     foreign?: string[];
   } = {},
@@ -198,6 +200,12 @@ function setup(
     webshopForeignFeedInvoices: async (orderId: string, proformaId: string) => {
       calls.webshopAsked.push(`feed ${orderId} ${proformaId}`);
       return options.foreign ?? [];
+    },
+    webshopBalanceFacts: async (orderId: string) => {
+      calls.webshopAsked.push(`balance ${orderId}`);
+      return options.balance
+        ? { amount: d(options.balance.amount), currency: "HUF" }
+        : null;
     },
     webshopTransferFacts: async (orderId: string, proformaId: string) => {
       calls.webshopAsked.push(`transfer ${orderId} ${proformaId}`);
@@ -525,6 +533,50 @@ describe("BillingDocumentIssueService", () => {
       over: advanceRow,
       transfer: { amount: "1270", advance: true },
     });
+    assert.equal((await issue(ok.service)).status, "ISSUED");
+    assert.match(ok.calls.xml[0] ?? "", /<fizetve>true<\/fizetve>/);
+  });
+
+  /*
+    A WEBSHOP VÉGSZÁMLÁJA A HÁTRALÉKRA, A KÖZÖS KIÁLLÍTÁSON (S4; acrobot 62375). MI PIROSÍT: hátralék nélkül, vagy egy fillérre nem
+    egyező fizetendővel kimegy (a szerkesztőből is), vagy egyező hátraléknál nem "fizetve" megy.
+  */
+  const webshopFinal = {
+    documentType: "FINAL_INVOICE",
+    sourceType: "WEBSHOP_ORDER",
+    sourceId: "order_38",
+    referencedInvoiceId: "adv-1",
+    referencedInvoice: {
+      id: "adv-1",
+      documentType: "ADVANCE_INVOICE",
+      invoiceNumber: "E-ELO-1",
+      grossAmount: d("270"),
+      currency: "HUF",
+      correctionInvoices: [],
+    },
+  };
+
+  it("WEBSHOP-FINAL (S4): it goes out paid when it leaves the balance to pay; without the balance or 1 Ft off it stops before the claim", async () => {
+    const none = setup({ over: webshopFinal });
+    await assert.rejects(
+      issue(none.service),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        /hátralék beérkezése után/.test(error.message),
+    );
+    const off = setup({ over: webshopFinal, balance: { amount: "999" } });
+    await assert.rejects(
+      issue(off.service),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        /eltérés 1\.00 HUF/.test(error.message),
+    );
+    assert.deepEqual(
+      [none.calls.claim, off.calls.claim, off.calls.generate],
+      [0, 0, 0],
+    );
+    // the draft's gross (1270) minus the advance (270): the balance of 1000
+    const ok = setup({ over: webshopFinal, balance: { amount: "1000" } });
     assert.equal((await issue(ok.service)).status, "ISSUED");
     assert.match(ok.calls.xml[0] ?? "", /<fizetve>true<\/fizetve>/);
   });

@@ -22,9 +22,11 @@ import {
   type WebshopOrderDetail,
   type WebshopOrderStatus,
 } from "@acropora/types";
+import { Prisma } from "@acropora/database";
 
 import { BillingDocumentEmailDraftService } from "../../billing/billing-document-email-draft.service.js";
 import { BillingDocumentEmailService } from "../../billing/billing-document-email.service.js";
+import { finalBalanceMismatch } from "../../billing/billing-document-issue.js";
 import { BillingDocumentIssueService } from "../../billing/billing-document-issue.service.js";
 import { BillingDocumentsService } from "../../billing/billing-documents.service.js";
 import type { BillingDocumentDraftDto } from "../../billing/dto/billing-document-draft.dto.js";
@@ -420,6 +422,44 @@ export class WebshopOrderInvoiceService {
     );
   }
 
+  /**
+   * THE FINAL INVOICE ON THE BALANCE (card d31a66a3, S4): the same window and issue as the order's invoice, on the draft made
+   * from the advance invoice with the whole order's lines (`prepareFinal`). The route requires the confirmation.
+   */
+  issueFinal(
+    orderId: string,
+    user: AuthenticatedUser,
+    now = new Date(),
+    confirmation?: WebshopInvoiceConfirmation,
+  ): Promise<WebshopInvoiceIssueResult<WebshopOrderDetail>> {
+    return this.serial(orderId, () =>
+      this.issueNow(
+        (id, by, at) => this.prepareFinal(id, by, at),
+        orderId,
+        user,
+        now,
+        confirmation,
+      ),
+    );
+  }
+
+  /** The final invoice's confirmation window: the draft the issue makes, saved, and the shared summary of it. */
+  finalSummary(
+    orderId: string,
+    user: AuthenticatedUser,
+    now = new Date(),
+  ): Promise<WebshopInvoiceSummary> {
+    return this.serial(orderId, async () => {
+      const prepared = await this.prepareFinal(orderId, user, now);
+      if (prepared.kind === "issued")
+        throw new ConflictException(
+          "A rendelés végszámlája már ki van állítva.",
+        );
+      const summary = await this.issuing.summary(prepared.saved.id, now);
+      return { ...summary, documentId: prepared.saved.id };
+    });
+  }
+
   /** The advance invoice's confirmation window: the draft the issue makes, saved, and the shared summary of it. */
   advanceSummary(
     orderId: string,
@@ -701,6 +741,108 @@ export class WebshopOrderInvoiceService {
   }
 
   /**
+   * THE FINAL INVOICE DRAFT (card d31a66a3, S4). After an advance and its advance invoice, once the balance came in (S3): the
+   * billing's own `finalFromAdvance` (one per advance invoice, deducting it), with the WHOLE order's lines as its invoice would
+   * carry them (`invoiceDraftOf`; the advance proforma's single line would leave nothing to pay), fulfilled and due on the
+   * balance's day, and going out paid. What it leaves to pay must be the balance to the fillér (acrobot 62375: otherwise it
+   * stops, naming both amounts; the customer has paid already). The gates: an advance transfer (not a whole one), its issued
+   * advance invoice, the recorded balance, and no foreign Számlázz.hu invoice (`paidTransfer`).
+   */
+  private async prepareFinal(
+    orderId: string,
+    user: AuthenticatedUser,
+    now: Date,
+  ): Promise<
+    | { kind: "issued" }
+    | {
+        kind: "draft";
+        saved: BillingDocumentDetail;
+        order: MedusaOrderDetailRow;
+      }
+  > {
+    this.requireIssuing();
+    const existing = (
+      await this.repository.invoices([orderId], "FINAL_INVOICE")
+    ).get(orderId);
+    if (existing?.status === "ISSUED") return { kind: "issued" };
+    if (existing?.status === "ISSUING")
+      throw new ConflictException(
+        "A rendelés végszámlája már kiállítás alatt van, és ellenőrzésre vár: nézd meg a Számlázz.hu-n, mielőtt újra próbálod.",
+      );
+    if (existing?.status === "ISSUE_FAILED")
+      throw new ConflictException(
+        "A rendelés végszámlájának kiállítása elutasítva maradt. Nyisd meg a bizonylatot a Számlázásban, ott látod az okát.",
+      );
+
+    const { order, status } = await this.orders.source(orderId);
+    const refusal = invoiceRefusal(statusOf(status?.status));
+    if (refusal) throw new ConflictException(refusal);
+    if (
+      orderPaymentProviderId(
+        primaryPaymentCollection(order.payment_collections),
+      ) !== BANK_TRANSFER_PROVIDER_ID
+    )
+      throw new ConflictException(
+        "Végszámla a hátralékra csak előre utalásos rendeléshez állítható ki.",
+      );
+    await this.paidTransfer(orderId, "advance");
+    const balance = (await this.repository.balanceReceipts([orderId])).get(
+      orderId,
+    );
+    if (!balance)
+      throw new ConflictException(
+        "A végszámla a hátralék beérkezése után állítható ki: előbb rögzítsd a hátralékot (Hátralék beérkezett).",
+      );
+    const advanceInvoice = (
+      await this.repository.invoices([orderId], "ADVANCE_INVOICE")
+    ).get(orderId);
+    if (advanceInvoice?.status !== "ISSUED")
+      throw new ConflictException(
+        "A végszámla az előlegszámlát vonja le: előbb állítsd ki az előlegszámlát.",
+      );
+
+    const advance = await this.documents.detail(advanceInvoice.id);
+    if (!advance.customer)
+      throw new ConflictException("Az előlegszámlának nincs partnere.");
+    const draft = invoiceDraftOf(order, {
+      customerId: advance.customer.id,
+      now,
+      loyaltyShape: loyaltyInvoiceShapeOf(),
+      paidOn: balance.receivedOn,
+    });
+    if (!draft.ok) throw new UnprocessableEntityException(draft.message);
+    const made = await this.documents.finalFromAdvance(
+      advanceInvoice.id,
+      user,
+      {
+        lines: draft.draft.lines,
+      },
+    );
+    if (made.status === "ISSUED") return { kind: "issued" };
+    if (made.status !== "DRAFT")
+      throw new ConflictException(
+        "A rendelés végszámlája kiállítás alatt van vagy elutasítva maradt: nézd meg a Számlázásban.",
+      );
+    const saved = (await this.repository.setDraftDays(
+      made.id,
+      balance.receivedOn,
+    ))
+      ? await this.documents.detail(made.id)
+      : made;
+    const mismatch = finalBalanceMismatch(
+      saved.totals.grossAmount,
+      advance.totals.grossAmount,
+      saved.currency,
+      {
+        amount: new Prisma.Decimal(balance.amount),
+        currency: balance.currency,
+      },
+    );
+    if (mismatch) throw new ConflictException(mismatch);
+    return { kind: "draft", saved, order };
+  }
+
+  /**
    * ELŐRE UTALÁSNÁL AZ OS ÁLLÍTJA KI A SZÁMLÁT, A BEÉRKEZÉS UTÁN (kártya d31a66a3, S1; acrobot 61615). A Számlázz.hu
    * „Díjbekérő automatikus számlázása” (Autokassza) KI van kapcsolva (emlék 2954, 2955), tehát a kifizetett díjbekérőből
    * nem készül magától számla: eddig az OS 409-cel elutasított, és így senki nem számlázott.
@@ -800,7 +942,10 @@ export class WebshopOrderInvoiceService {
         "A rendelés szállítólevelének kiállítása elutasítva maradt. Nyisd meg a bizonylatot a Számlázásban, ott látod az okát.",
       );
 
-    const invoice = (await this.repository.invoices([orderId])).get(orderId);
+    // the delivery note follows the order's invoice, or after an advance its issued final invoice (S4)
+    const invoice = (await this.repository.settlingInvoices([orderId])).get(
+      orderId,
+    );
     if (invoice?.status !== "ISSUED")
       throw new ConflictException(
         "A szállítólevél a kiállított számla tételeiből készül: előbb állítsd ki a számlát.",

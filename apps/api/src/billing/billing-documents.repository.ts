@@ -12,6 +12,7 @@ import { foreignFeedInvoicesOf } from "../orders/webshop-orders/webshop-foreign-
 import { WEBSHOP_ADVANCE_TAG } from "../orders/webshop-orders/webshop-order-invoice.rules.js";
 import type {
   WebshopOrderInvoiceFact,
+  WebshopBalanceFacts,
   WebshopTransferFacts,
 } from "./billing-document-issue.js";
 import type { NormalizedBillingDraft } from "./billing-document-draft.js";
@@ -473,6 +474,21 @@ export class BillingDocumentsRepository {
       currency: receipt.currency,
       advance: proforma?.tags.includes(WEBSHOP_ADVANCE_TAG) ?? false,
     };
+  }
+
+  /**
+   * THE BALANCE THAT CAME IN AFTER AN ADVANCE (card d31a66a3, S4): the order's recorded balance receipt (S3). `null`: none yet.
+   */
+  async webshopBalanceFacts(
+    orderId: string,
+  ): Promise<WebshopBalanceFacts | null> {
+    const balance = await this.database.webshopBalanceReceipt.findUnique({
+      where: { orderId },
+      select: { amount: true, currency: true },
+    });
+    return balance
+      ? { amount: balance.amount, currency: balance.currency }
+      : null;
   }
 
   /**

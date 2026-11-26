@@ -164,8 +164,9 @@ function orderedLines(
 
 /**
  * THE DOCUMENT SETTLES A PAID PROFORMA, so it goes out with `fizetve=true` and is due on its issue day: an advance invoice whose
- * proforma the feed shows paid (card 00926d89), or a webshop invoice whose proforma the recorded transfer paid (card d31a66a3,
- * S1). Who decides "paid" is `proformaPaidOf`; this only says which document types may carry it.
+ * proforma the feed shows paid (card 00926d89), a webshop invoice whose proforma the recorded transfer paid (card d31a66a3,
+ * S1), or a webshop final invoice whose balance came in (S4). Who decides "paid" is `proformaPaidOf`; this only says which
+ * document types may carry it.
  */
 export function settlesPaidProforma(
   document: Pick<
@@ -173,11 +174,13 @@ export function settlesPaidProforma(
     "documentType" | "proformaNumber" | "proformaPaid"
   >,
 ): boolean {
+  if (document.proformaPaid !== true) return false;
+  // a webshop final invoice is paid by the recorded balance (card d31a66a3, S4): it settles no proforma of its own
+  if (document.documentType === "FINAL_INVOICE") return true;
   return (
     (document.documentType === "ADVANCE_INVOICE" ||
       document.documentType === "INVOICE") &&
-    document.proformaNumber !== null &&
-    document.proformaPaid === true
+    document.proformaNumber !== null
   );
 }
 

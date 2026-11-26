@@ -441,7 +441,7 @@ describe("an advance invoice from a paid proforma", () => {
     );
   });
 
-  it("an unpaid proforma, a final invoice, or an advance without a proforma number changes nothing", () => {
+  it("an unpaid proforma, an unpaid final invoice, or an advance without a proforma number changes nothing", () => {
     for (const document of [
       { ...paidAdvance, proformaPaid: false },
       { ...paidAdvance, proformaPaid: undefined },
@@ -449,6 +449,7 @@ describe("an advance invoice from a paid proforma", () => {
         ...paidAdvance,
         documentType: "FINAL_INVOICE" as const,
         advanceNumber: "E-CRPR-3",
+        proformaPaid: false,
       },
       { ...paidAdvance, proformaNumber: null },
     ]) {
@@ -465,6 +466,34 @@ describe("an advance invoice from a paid proforma", () => {
         JSON.stringify(document),
       );
     }
+  });
+});
+
+/*
+  A WEBSHOP VÉGSZÁMLÁJA A BEÉRKEZETT HÁTRALÉKRA (kártya d31a66a3, S4): kifizetve megy ki, díjbekérő nélkül (a hátralékot rendezi, nem
+  díjbekérőt). Eddig végszámla sosem kaphatta meg (a fenti esetek között állt); a változás szándékos. Hogy mikor "kifizetve", azt
+  `proformaPaidOf` dönti el: csak egy webshop rendelés végszámláján, ha a fizetendője a rögzített hátralék fillérre
+  (billing-document-issue.service.spec WEBSHOP-FINAL). MI PIROSÍT: a jelző kimarad, vagy fizetetlen végszámlára is rákerül.
+*/
+describe("a final invoice paid by the balance", () => {
+  it("carries fizetve and is due on its issue day, without a proforma number", () => {
+    const result = toSzamlazzAgentInput(
+      {
+        ...base,
+        documentType: "FINAL_INVOICE",
+        advanceNumber: "E-CRPR-3",
+        proformaNumber: null,
+        proformaPaid: true,
+        issueDate: "2026-11-16",
+      },
+      { agentKey: "test-key", previewOnly: false },
+    );
+    assert.equal(result.paid, true);
+    assert.equal(result.paymentDueDate, "2026-11-16");
+    assert.match(
+      buildSzamlazzAgentInvoiceXml(result),
+      /<fizetve>true<\/fizetve>/,
+    );
   });
 });
 

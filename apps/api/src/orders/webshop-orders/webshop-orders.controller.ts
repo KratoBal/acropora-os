@@ -429,6 +429,39 @@ export class WebshopOrdersController {
   }
 
   /**
+   * A VÉGSZÁMLA A HÁTRALÉKRA (kártya d31a66a3, S4): a hátralék rögzített beérkezése és a kiállított előlegszámla után, a rendelés
+   * számlájával azonos két joggal, megerősítő ablakkal. A válasz a friss adatlap.
+   */
+  @Post(":id/final-invoice")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.BILLING_ISSUE)
+  issueFinalInvoice(
+    @Param("id") id: string,
+    @Body() input: WebshopOrderInvoiceIssueDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.invoices.issueFinal(id, user, new Date(), {
+      issueDate: input.issueDate,
+      fulfillmentDate: input.fulfillmentDate,
+      dueDate: input.dueDate ?? null,
+      fingerprint: input.fingerprint,
+      send: input.send,
+    });
+  }
+
+  /** A végszámla megerősítő ablakának értékei; POST, mert a vázlatot elkészíti és menti, ahogy a kiállítás. */
+  @Post(":id/final-invoice/summary")
+  @HttpCode(200)
+  @Header("Cache-Control", "private, no-store")
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.BILLING_ISSUE)
+  finalInvoiceSummary(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.invoices.finalSummary(id, user);
+  }
+
+  /**
    * A RENDELÉS SZÁLLÍTÓLEVELE a kiállított számla tételeiből, ugyanazzal a
    * kiállítással (kártya 0a14f739 C/1). Ugyanaz a két jog kell, mint a
    * számlához. A válasz a friss adatlap.

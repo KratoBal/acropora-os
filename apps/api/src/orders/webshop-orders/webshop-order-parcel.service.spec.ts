@@ -97,6 +97,13 @@ function setup(
     },
   } as unknown as WebshopOrdersService;
   const repository = {
+    // the order's invoice, or its issued final invoice (S4): the fake's own invoices here
+    settlingInvoices(
+      this: { invoices: (ids: string[]) => unknown },
+      ids: string[],
+    ) {
+      return this.invoices(ids);
+    },
     invoices: async (ids: string[]) =>
       new Map(over.invoice ? [[ids[0]!, over.invoice]] : []),
     externalInvoices: async (ids: string[]) =>

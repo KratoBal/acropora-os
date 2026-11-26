@@ -50,6 +50,8 @@ const api = vi.hoisted(() => ({
   invoiceSummary: vi.fn(),
   issueAdvanceInvoice: vi.fn(),
   advanceInvoiceSummary: vi.fn(),
+  issueFinalInvoice: vi.fn(),
+  finalInvoiceSummary: vi.fn(),
   issueDeliveryNote: vi.fn(),
   sendProforma: vi.fn(),
   proformaSummary: vi.fn(),
@@ -249,6 +251,7 @@ const detail: WebshopOrderDetail = {
   invoice: null,
   deliveryNote: null,
   advanceInvoice: null,
+  finalInvoice: null,
   bankTransfer: false,
   proforma: null,
   transferReceipt: null,
@@ -345,6 +348,8 @@ beforeEach(() => {
   api.invoiceSummary.mockReset().mockResolvedValue(INVOICE_SUMMARY);
   api.issueAdvanceInvoice.mockReset();
   api.advanceInvoiceSummary.mockReset().mockResolvedValue(INVOICE_SUMMARY);
+  api.issueFinalInvoice.mockReset();
+  api.finalInvoiceSummary.mockReset().mockResolvedValue(INVOICE_SUMMARY);
   api.issueDeliveryNote.mockReset();
   api.sendProforma.mockReset();
   api.proformaSummary.mockReset().mockResolvedValue(PROFORMA_SUMMARY);
@@ -3264,6 +3269,84 @@ describe("the proforma on the Fizetés card", () => {
     });
     expect(api.issueInvoice).not.toHaveBeenCalled();
     expect(api.invoiceSummary).not.toHaveBeenCalled();
+  });
+
+  /*
+    A VÉGSZÁMLA A HÁTRALÉKRA (d31a66a3, S4). MI PIROSÍT: a kiállított előlegszámla és a beérkezett hátralék után nincs Végszámla gomb;
+    hátralék vagy kiállított előlegszámla nélkül is van; a gomb ablak nélkül állít ki, vagy a számla vagy az előlegszámla útját hívja.
+  */
+  const withBalance = (): WebshopOrderDetail => ({
+    ...paid({ advance: true, amount: "8000.0000" }),
+    advanceInvoice: {
+      id: "advance-proforma_38",
+      status: "ISSUED",
+      number: "E-ACR-2026-80",
+    },
+    balanceReceipt: {
+      source: "MANUAL",
+      receivedOn: "2026-10-09",
+      reference: "OTP hátralék 21",
+      amount: "12840.0000",
+      currency: "HUF",
+      recordedBy: "Teszt Elek",
+    },
+  });
+
+  it("the balance in and the advance invoice issued: the final invoice through its own window", async () => {
+    api.detail.mockResolvedValue(withBalance());
+    api.issueFinalInvoice.mockResolvedValue({
+      order: {
+        ...withBalance(),
+        finalInvoice: { id: "final-1", status: "ISSUED", number: "V-1" },
+        invoice: { id: "final-1", status: "ISSUED", number: "V-1" },
+      },
+      mail: null,
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Számla" });
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Végszámla kiállítása" }),
+    );
+    const confirm = await screen.findByRole("dialog", {
+      name: "Biztos, hogy kiállítod a végszámlát?",
+    });
+    expect(confirm.textContent).toContain("az előlegszámlát levonva");
+    await vi.waitFor(() =>
+      expect(confirm.textContent).toContain(INVOICE_SUMMARY.buyerAddress),
+    );
+    expect(api.finalInvoiceSummary).toHaveBeenCalledWith("token", "order_38");
+    fireEvent.click(within(confirm).getByRole("button", { name: "Kiállítom" }));
+    expect(await within(card).findByText("V-1")).toBeTruthy();
+    expect(api.issueFinalInvoice).toHaveBeenCalledWith("token", "order_38", {
+      ...CONFIRMED,
+      send: false,
+    });
+    expect(api.issueAdvanceInvoice).not.toHaveBeenCalled();
+    expect(api.issueInvoice).not.toHaveBeenCalled();
+  });
+
+  it("no final invoice button before the balance or before the advance invoice is issued", async () => {
+    for (const order of [
+      { ...withBalance(), balanceReceipt: null },
+      {
+        ...withBalance(),
+        advanceInvoice: {
+          id: "advance-proforma_38",
+          status: "DRAFT" as const,
+          number: null,
+        },
+      },
+    ]) {
+      api.detail.mockResolvedValue(order);
+      const view = render(
+        createElement(WebshopOrderDetailPage, { id: "order_38" }),
+      );
+      const card = await screen.findByRole("region", { name: "Számla" });
+      expect(
+        within(card).queryByRole("button", { name: "Végszámla kiállítása" }),
+      ).toBeNull();
+      view.unmount();
+    }
   });
 
   it("a whole transfer has no advance invoice button", async () => {

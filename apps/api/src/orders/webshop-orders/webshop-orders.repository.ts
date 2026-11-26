@@ -328,7 +328,11 @@ export class WebshopOrdersRepository {
   async invoices(
     orderIds: string[],
     documentType:
-      "INVOICE" | "DELIVERY_NOTE" | "PROFORMA" | "ADVANCE_INVOICE" = "INVOICE",
+      | "INVOICE"
+      | "DELIVERY_NOTE"
+      | "PROFORMA"
+      | "ADVANCE_INVOICE"
+      | "FINAL_INVOICE" = "INVOICE",
   ): Promise<Map<string, WebshopOrderInvoiceRow>> {
     if (!orderIds.length) return new Map();
     const rows = await prisma.invoice.findMany({
@@ -348,6 +352,26 @@ export class WebshopOrdersRepository {
           status: row.status as BillingDocumentStatus,
           number: row.invoiceNumber,
         });
+    return result;
+  }
+
+  /**
+   * THE DOCUMENT THAT INVOICES THE ORDER (card d31a66a3, S4): its invoice, or, after an advance, its ISSUED final invoice. The
+   * invoice step, the parcel's release, the delivery note and the list read the order's invoice from here, so an OS-issued
+   * final invoice closes them as an invoice does (the OS's own documents are not linked back from the feed, S2). A final
+   * invoice draft does not count: until it is issued the order is not invoiced. The advance invoice never counts here.
+   */
+  async settlingInvoices(
+    orderIds: string[],
+  ): Promise<Map<string, WebshopOrderInvoiceRow>> {
+    const [invoices, finals] = await Promise.all([
+      this.invoices(orderIds),
+      this.invoices(orderIds, "FINAL_INVOICE"),
+    ]);
+    const result = new Map(invoices);
+    for (const [orderId, row] of finals)
+      if (!result.has(orderId) && row.status === "ISSUED")
+        result.set(orderId, row);
     return result;
   }
 

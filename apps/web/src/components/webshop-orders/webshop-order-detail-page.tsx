@@ -528,6 +528,20 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
   };
   const advanceInvoiceSummary = () =>
     webshopOrdersApi.advanceInvoiceSummary(token, id);
+  const issueFinalInvoice = async (
+    confirmation: WebshopInvoiceConfirmation,
+  ) => {
+    const result = await webshopOrdersApi.issueFinalInvoice(
+      token,
+      id,
+      confirmation,
+    );
+    setOrder(result.order);
+    setInvoiceMail(result.mail);
+    setNow(Date.now());
+  };
+  const finalInvoiceSummary = () =>
+    webshopOrdersApi.finalInvoiceSummary(token, id);
   const issueDeliveryNote = async () => {
     setOrder(await webshopOrdersApi.issueDeliveryNote(token, id));
     setNow(Date.now());
@@ -755,6 +769,8 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           onInvoiceSummary={invoiceSummary}
           onIssueAdvanceInvoice={issueAdvanceInvoice}
           onAdvanceInvoiceSummary={advanceInvoiceSummary}
+          onIssueFinalInvoice={issueFinalInvoice}
+          onFinalInvoiceSummary={finalInvoiceSummary}
           onIssueDeliveryNote={issueDeliveryNote}
           onOpenPdf={openPdf}
           onCreateParcel={createParcel}
@@ -803,6 +819,8 @@ function InvoiceCard({
   onSummary,
   onIssueAdvance,
   onAdvanceSummary,
+  onIssueFinal,
+  onFinalSummary,
   onIssueDeliveryNote,
   onOpenPdf,
 }: {
@@ -815,6 +833,9 @@ function InvoiceCard({
   /** The advance invoice of an advance transfer (card d31a66a3, S2): the same window, its own draft. */
   onIssueAdvance: (confirmation: WebshopInvoiceConfirmation) => Promise<void>;
   onAdvanceSummary: () => Promise<WebshopInvoiceSummary>;
+  /** The final invoice on the balance (d31a66a3, S4). */
+  onIssueFinal: (confirmation: WebshopInvoiceConfirmation) => Promise<void>;
+  onFinalSummary: () => Promise<WebshopInvoiceSummary>;
   onIssueDeliveryNote: () => Promise<void>;
   onOpenPdf: (documentId: string) => Promise<void>;
 }) {
@@ -823,7 +844,7 @@ function InvoiceCard({
   // A KIÁLLÍTÁS MEGERŐSÍTÉSSEL (acrobot 26827, biztonsági korlát): a gomb
   // valódi Számlázz.hu-bizonylatot állít ki, tehát egy kattintás nem elég
   const [confirming, setConfirming] = useState<
-    "invoice" | "advance" | "deliveryNote" | null
+    "invoice" | "advance" | "final" | "deliveryNote" | null
   >(null);
   /*
     A SZÁMLA MEGERŐSÍTŐ ABLAKA (kártya 7ba97e0d, S2; Balázs 2026-11-11 11:12-11:20): a vevő, a három (javítható)
@@ -834,7 +855,7 @@ function InvoiceCard({
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [send, setSend] = useState(false);
   const openInvoiceConfirm = async (
-    target: "invoice" | "advance" = "invoice",
+    target: "invoice" | "advance" | "final" = "invoice",
   ) => {
     setError(null);
     setSummary(null);
@@ -843,7 +864,11 @@ function InvoiceCard({
     setConfirming(target);
     try {
       setSummary(
-        await (target === "advance" ? onAdvanceSummary() : onSummary()),
+        await (target === "advance"
+          ? onAdvanceSummary()
+          : target === "final"
+            ? onFinalSummary()
+            : onSummary()),
       );
     } catch (cause) {
       setSummaryError(
@@ -898,6 +923,16 @@ function InvoiceCard({
                 onOpenPdf={(documentId) =>
                   void run(() => onOpenPdf(documentId))
                 }
+              />
+            ) : null}
+            {order.transferReceipt?.advance &&
+            order.advanceInvoice?.status === "ISSUED" &&
+            (order.balanceReceipt || order.finalInvoice) ? (
+              <FinalInvoiceField
+                final={order.finalInvoice}
+                canIssue={canIssue}
+                busy={busy}
+                onIssue={() => void openInvoiceConfirm("final")}
               />
             ) : null}
           </>
@@ -1011,16 +1046,24 @@ function InvoiceCard({
         onCancel={() => setConfirming(null)}
       />
       <BillingIssueConfirmDialog
-        open={confirming === "invoice" || confirming === "advance"}
+        open={
+          confirming === "invoice" ||
+          confirming === "advance" ||
+          confirming === "final"
+        }
         title={
           confirming === "advance"
             ? "Biztos, hogy kiállítod az előlegszámlát?"
-            : "Biztos, hogy kiállítod a számlát?"
+            : confirming === "final"
+              ? "Biztos, hogy kiállítod a végszámlát?"
+              : "Biztos, hogy kiállítod a számlát?"
         }
         consequence={
           confirming === "advance"
             ? "A kiállítással valódi előlegszámla készül a Számlázz.hu-n, saját számmal, az előleg-díjbekérő tételeiből, kifizetettként. Az előlegszámla ezután nem szerkeszthető."
-            : "A kiállítással valódi számla készül a Számlázz.hu-n, saját számmal, a rendelés tételeiből. A számla ezután nem szerkeszthető."
+            : confirming === "final"
+              ? "A kiállítással valódi végszámla készül a Számlázz.hu-n, saját számmal, a rendelés teljes tételeiből, az előlegszámlát levonva, kifizetettként (a hátralék beérkezett). A végszámla ezután nem szerkeszthető."
+              : "A kiállítással valódi számla készül a Számlázz.hu-n, saját számmal, a rendelés tételeiből. A számla ezután nem szerkeszthető."
         }
         confirmLabel="Kiállítom"
         summary={summary}
@@ -1032,7 +1075,11 @@ function InvoiceCard({
         busy={busy}
         onConfirm={(confirmation, sendIt) =>
           void run(() =>
-            (confirming === "advance" ? onIssueAdvance : onIssue)({
+            (confirming === "advance"
+              ? onIssueAdvance
+              : confirming === "final"
+                ? onIssueFinal
+                : onIssue)({
               ...confirmation,
               send: sendIt,
             }),
@@ -1614,6 +1661,62 @@ function transferInvoiceWait(
  * THE ADVANCE INVOICE OF AN ADVANCE TRANSFER (card d31a66a3, S2): issued by the OS from the advance proforma, through the same
  * confirmation window as the invoice. Issued: its number and PDF; issuing or refused: where to look, no new button.
  */
+/**
+ * THE FINAL INVOICE ON THE BALANCE (card d31a66a3, S4): after the advance invoice, once the balance came in. Before it is issued
+ * this field offers it; issued, the card shows it as the order's invoice (`settlingInvoices`), so here only the way there.
+ */
+function FinalInvoiceField({
+  final,
+  canIssue,
+  busy,
+  onIssue,
+}: {
+  final: WebshopOrderDetail["finalInvoice"];
+  canIssue: boolean;
+  busy: boolean;
+  onIssue: () => void;
+}) {
+  const link = final ? (
+    <Link
+      href={`/penzugy/szamlazas/${encodeURIComponent(final.id)}`}
+      className="text-sm font-medium text-pilot-aqua-700 underline"
+    >
+      Megnyitás a Számlázásban
+    </Link>
+  ) : null;
+  if (final?.status === "ISSUING")
+    return (
+      <>
+        <p className="text-sm text-pilot-amber-700">
+          A végszámla kiállítása elindult, és ellenőrzésre vár: nézd meg a
+          Számlázz.hu-n, elkészült-e.
+        </p>
+        {link}
+      </>
+    );
+  if (final?.status === "ISSUE_FAILED")
+    return (
+      <>
+        <p className="text-sm text-pilot-red-700">
+          A végszámla kiállítása elutasítva maradt. Az okát a bizonylatnál
+          látod.
+        </p>
+        {link}
+      </>
+    );
+  if (final?.status === "ISSUED") return link;
+  return canIssue ? (
+    <PilotButton
+      size="regular"
+      variant="primary"
+      disabled={busy}
+      onClick={onIssue}
+    >
+      {busy ? "Kiállítás…" : "Végszámla kiállítása"}
+    </PilotButton>
+  ) : null;
+}
+
 function AdvanceInvoiceField({
   advance,
   canIssue,
@@ -2588,6 +2691,8 @@ function OrderBody({
   invoiceMail,
   onInvoiceSummary,
   onIssueAdvanceInvoice,
+  onIssueFinalInvoice,
+  onFinalInvoiceSummary,
   onAdvanceInvoiceSummary,
   onIssueDeliveryNote,
   onOpenPdf,
@@ -2645,6 +2750,11 @@ function OrderBody({
   onIssueAdvanceInvoice: (
     confirmation: WebshopInvoiceConfirmation,
   ) => Promise<void>;
+  /** The final invoice on the balance (d31a66a3, S4): the same window, its own draft. */
+  onIssueFinalInvoice: (
+    confirmation: WebshopInvoiceConfirmation,
+  ) => Promise<void>;
+  onFinalInvoiceSummary: () => Promise<WebshopInvoiceSummary>;
   onAdvanceInvoiceSummary: () => Promise<WebshopInvoiceSummary>;
   onIssueDeliveryNote: () => Promise<void>;
   onOpenPdf: (documentId: string) => Promise<void>;
@@ -3291,6 +3401,8 @@ function OrderBody({
             mail={invoiceMail}
             onSummary={onInvoiceSummary}
             onIssueAdvance={onIssueAdvanceInvoice}
+            onIssueFinal={onIssueFinalInvoice}
+            onFinalSummary={onFinalInvoiceSummary}
             onAdvanceSummary={onAdvanceInvoiceSummary}
             onIssueDeliveryNote={onIssueDeliveryNote}
             onOpenPdf={onOpenPdf}

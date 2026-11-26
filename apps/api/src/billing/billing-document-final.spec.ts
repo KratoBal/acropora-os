@@ -254,6 +254,44 @@ describe("a final invoice from an advance", () => {
     );
   });
 
+  // the webshop order's final invoice (card d31a66a3, S4): the caller gives the whole order's lines, the advance proforma's single
+  // advance line would leave nothing to pay. What turns this red: the given lines ignored, the proforma's taken instead.
+  it("a webshop final invoice takes the lines its caller gives, not the advance proforma's", async () => {
+    const s = setup({
+      "pro-1": doc({
+        id: "pro-1",
+        documentType: "PROFORMA",
+        invoiceNumber: "D-2026-7",
+        lines: [line("a", "Előleg: webshop rendelés #38", "3780")],
+      }),
+      [advanceIdFor("pro-1")]: doc({
+        id: advanceIdFor("pro-1"),
+        proformaInvoiceId: "pro-1",
+      }),
+    });
+    await s.service.finalFromAdvance(advanceIdFor("pro-1"), USER, {
+      lines: [
+        {
+          productId: null,
+          description: "Coral Food",
+          quantity: "3",
+          unit: "db",
+          unitNet: "3937.0079",
+          vatRatePercent: "27",
+          discountPercent: null,
+          comment: null,
+        },
+      ],
+    });
+    const input = s.created[0] as {
+      draft: { lines: { description: string }[] };
+    };
+    assert.deepEqual(
+      input.draft.lines.map((l) => l.description),
+      ["Coral Food"],
+    );
+  });
+
   /*
     A MÉRFÖLDKŐ-DÍJBEKÉRŐBŐL KÉSZÜLT ELŐLEG VÉGSZÁMLÁJA (kártya 2650d371, Balázs kérdése): a mérföldkő-díjbekérő a százalékos rész, tehát a
     végszámla az AJÁNLAT teljes elfogadott tételeivel készül, különben a Számlázz.hu a levont előleg után nullát hagy. MI PIROSÍT: ha egy

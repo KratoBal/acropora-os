@@ -9,6 +9,7 @@ import {
 import type {
   AuthenticatedUser,
   BillingDocumentDetail,
+  BillingDocumentDraftInput,
   BillingDocumentFinalInvoiceNotice,
   BillingDocumentStatus,
   BillingDocumentType,
@@ -326,6 +327,12 @@ export class BillingDocumentsService {
   async finalFromAdvance(
     advanceId: string,
     user: AuthenticatedUser,
+    /**
+     * A webshop order's final invoice (card d31a66a3, S4): the whole order's lines, as its invoice would carry them. The
+     * advance proforma's own line is the advance alone, so the default (the proforma's lines) would leave nothing to pay.
+     * Used only when the draft is made; an existing draft is returned as it is (its caller updates it).
+     */
+    options: { lines?: BillingDocumentDraftInput["lines"] } = {},
   ): Promise<BillingDocumentDetail> {
     const advance = await this.repository.find(advanceId);
     if (!advance) throw new NotFoundException("Az előlegszámla nem található.");
@@ -369,8 +376,12 @@ export class BillingDocumentsService {
       proforma ? await this.repository.quoteBasisOfProforma(proforma.id) : null,
     );
     if (source.kind === "REFUSED") throw new ConflictException(source.message);
-    const finalLines: ReturnType<typeof draftLinesOf> | FinalDraftLine[] =
-      source.kind === "QUOTE"
+    const finalLines:
+      | ReturnType<typeof draftLinesOf>
+      | FinalDraftLine[]
+      | BillingDocumentDraftInput["lines"] = options.lines
+      ? options.lines
+      : source.kind === "QUOTE"
         ? source.items.map(finalLineOfQuoteItem)
         : source.kind === "EMPTY"
           ? []
