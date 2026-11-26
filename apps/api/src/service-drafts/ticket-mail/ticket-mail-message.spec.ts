@@ -331,6 +331,46 @@ describe("cleanMailBody", () => {
       "Megjött a szűrő.\n\n2026. nov. 16., H, 10:00 időpontban Anna <anna@acropora.hu> írta:\n> régi";
     assert.equal(cleanMailBody(body).text, "Megjött a szűrő.");
   });
+  /*
+    THE ec7b947b TEST MAIL (acrobot 2026-11-26 09:02, the mail of 08:01:54 UTC): the writer's own text carries the sentence "A telefonban a szerelő
+    ezt írta:" and two lines of their own after it, then the Gmail Hungarian reply header, then the old mail quoted. The cut took the writer's own
+    sentence for the header and threw away two lines. WHAT TURNS THIS RED: a cut at any line that merely ends in "ezt írta:"; a header that is not
+    cut (the old mail would stay in the report); the quote lines kept; the blank run not collapsed.
+  */
+  const FLOTTA_PROBA =
+    "A szűrő a 3-as medencénél csöpög.\nA telefonban a szerelő ezt írta:\nA cső a csőnél is folyik, kérlek jöjjetek ki.\n\n2026. nov. 25., Sze, 10:12 időpontban Szerelő Sándor <szerelo@acropora.example> ezt írta:\n> Kérlek nézzétek meg a szűrőt.\n> Ez a régi levél, ez összecsukva kell legyen.";
+  it("keeps the writer's own 'ezt írta:' sentence and the lines after it, and cuts only the real reply header (the ec7b947b test mail)", () => {
+    assert.equal(
+      cleanMailBody(FLOTTA_PROBA).text,
+      "A szűrő a 3-as medencénél csöpög.\nA telefonban a szerelő ezt írta:\nA cső a csőnél is folyik, kérlek jöjjetek ki.",
+    );
+  });
+  it("a Hungarian 'írta:' line is a header only with 'időpontban' or with the quote right after it", () => {
+    // the writer's own sentence, no quote after it: kept
+    assert.equal(
+      cleanMailBody("Ő ezt írta:\nCsöpög a cső.").text,
+      "Ő ezt írta:\nCsöpög a cső.",
+    );
+    // blank lines between the header and the quote do not hide the quote
+    assert.equal(
+      cleanMailBody(
+        "Csöpög.\n\nKovács Anna <anna@acropora.hu> ezt írta:\n\n> régi",
+      ).text,
+      "Csöpög.",
+    );
+    // a header without 'időpontban' (another client) but with the quote after it: cut
+    assert.equal(
+      cleanMailBody("Csöpög.\nKovács Anna írta:\n> régi\nmaradék").text,
+      "Csöpög.",
+    );
+    // 'időpontban' alone cuts (Gmail's header), even when the quote lines are missing
+    assert.equal(
+      cleanMailBody(
+        "Csöpög.\n2026. nov. 16., H, 10:00 időpontban Anna <a@b.hu> írta:\nrégi",
+      ).text,
+      "Csöpög.",
+    );
+  });
   it("cuts an Outlook style header block and a forwarded divider", () => {
     const outlook =
       "Lásd lent.\n\nFrom: Anna <anna@acropora.hu>\nSent: Monday, November 16, 2026 10:00\nTo: ticket@acropora.hu\nrégi";
