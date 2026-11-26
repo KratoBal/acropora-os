@@ -116,6 +116,29 @@ export function deliveryNoteDraftOf(
   };
 }
 
+/**
+ * A CANCELLED WEBSHOP ORDER (barracuda's pre-release review of d31a66a3, N3a): the shop canceled it (Medusa's own `status`), or
+ * closed it unsuccessfully (the business status; that close cancels the order, or, where Medusa cannot, gives the credits back).
+ * On such an order the OS does not record a balance, issue a final invoice or pair a bank transfer: the money that came in is a
+ * refund case, which a person settles. `null`: not cancelled.
+ */
+export function cancelledOrderOf(
+  order: { status?: string | null },
+  businessStatus: string | null | undefined,
+): "canceled" | "closed_unsuccessfully" | null {
+  if (order.status === "canceled") return "canceled";
+  if (businessStatus === "closed_unsuccessfully")
+    return "closed_unsuccessfully";
+  return null;
+}
+
+/** The sentence for a cancelled order: what does not happen, and what to do. */
+export const cancelledOrderRefusal = (
+  cancelled: "canceled" | "closed_unsuccessfully",
+  what: string,
+) =>
+  `A rendelés ${cancelled === "canceled" ? "le van mondva a webshopban" : "sikertelenül lezárt"}: ${what}. A beérkezett pénz visszatérítés, kézzel rendezd.`;
+
 /** Ezekben az állapotokban még (vagy már) nem állítunk ki számlát. */
 const NOT_INVOICEABLE: readonly WebshopOrderStatus[] = [
   "pending_processing",

@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { ThumbnailFallback } from "./entity-thumbnail-fallback";
 import { Icon } from "./icon";
 import { PageHeader, type PageHeaderProps } from "./page-header";
+import { sv } from "./service-theme";
 
 /**
  * ACROPORA OS, DIRECTION F: A KÖZÖS ÉPÍTŐELEMEK (Balázs briefje, 2026-09-30,
@@ -303,8 +304,14 @@ export function PilotDataTable<Row>({
     if (column.phone === "hide") return "max-md:hidden";
     const base =
       "max-md:flex max-md:items-baseline max-md:justify-between max-md:gap-4 max-md:px-0 max-md:py-1.5 max-md:text-right max-md:first:pl-0 max-md:last:pr-0";
+    /*
+      THE CARD'S TITLE IS A BLOCK, NOT A ROW (Picasso's screen inventory 2026-11-25, R4; acrobot 62594). The other cells are a flex
+      row (the label on the left, the value on the right); the title cell took the same row, so a title made of several parts (the
+      ticket's title, its number under it, the reporter) put them SIDE BY SIDE: the number HJ-2026-019 was squeezed into three lines
+      beside the title. A block stacks them, left-aligned, the full card width.
+    */
     if (column.id === titleId) {
-      return `${base} max-md:justify-start max-md:pb-2 max-md:text-left max-md:font-semibold max-md:before:hidden`;
+      return "max-md:block max-md:px-0 max-md:py-1.5 max-md:pb-2 max-md:text-left max-md:font-semibold max-md:first:pl-0 max-md:last:pr-0 max-md:before:hidden";
     }
     return `${base} max-md:before:shrink-0 max-md:before:text-left max-md:before:text-[11px] max-md:before:font-semibold max-md:before:uppercase max-md:before:tracking-[0.05em] max-md:before:text-pilot-grey-500 ${PHONE_LABEL_CONTENT}${
       typeof column.header === "string" && column.header
@@ -559,10 +566,11 @@ export function PilotLinkTabs({
   tabs: ReadonlyArray<{ href: string; label: string; active: boolean }>;
   label: string;
   /**
-   * `pill` (az eredeti, keretes gomb-fül) vagy `underline` (a közös fül-alak: aláhúzott aktív fül, mint a Számlázás és a hibajegy-lista füleinél; Picasso 3.17: a
-   * Tudásbázis nyolc füle a "hetedik fül-alak" volt). Alapból `pill`, tehát egyik meglévő hívó sem változik.
+   * `pill` (az eredeti, keretes gomb-fül), `underline` (aláhúzott aktív fül; Picasso 3.17) vagy `solid`: A LISTÁK EGY FÜL-ALAKJA (Picasso R9,
+   * acrobot 62497), a teli zöld pirula (`sv.pillTab`), mert Balázs 2026-10-01-én az aláhúzáson, 2026-11-02-án a halványzöld fülön nem látta,
+   * melyik fülön áll. Alapból `pill`, tehát a hívó maga választ.
    */
-  variant?: "pill" | "underline";
+  variant?: "pill" | "underline" | "solid";
   renderLink?: (tab: {
     href: string;
     className: string;
@@ -571,27 +579,32 @@ export function PilotLinkTabs({
   }) => ReactNode;
 }) {
   const underline = variant === "underline";
+  const solid = variant === "solid";
   return (
     <nav
       aria-label={label}
       className={
-        underline
-          ? "flex gap-0 overflow-x-auto border-b border-pilot-grey-200"
-          : "flex flex-wrap gap-2"
+        solid
+          ? sv.pillTabs
+          : underline
+            ? "flex gap-0 overflow-x-auto border-b border-pilot-grey-200"
+            : "flex flex-wrap gap-2"
       }
     >
       {tabs.map((tab) => {
-        const className = underline
-          ? `-mb-px whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-pilot-aqua-700 ${
-              tab.active
-                ? "border-pilot-aqua-600 text-pilot-aqua-700"
-                : "border-transparent text-pilot-grey-500 hover:text-pilot-grey-800"
-            }`
-          : `inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg px-3.5 text-sm transition-colors ${
-              tab.active
-                ? "bg-pilot-aqua-50 font-semibold text-pilot-aqua-700 ring-1 ring-pilot-aqua-600"
-                : "bg-white text-pilot-grey-600 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50 hover:text-pilot-grey-900"
-            }`;
+        const className = solid
+          ? `${sv.pillTab} outline-none focus-visible:ring-2 focus-visible:ring-pilot-aqua-700 ${tab.active ? sv.pillTabActive : sv.pillTabIdle}`
+          : underline
+            ? `-mb-px whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-pilot-aqua-700 ${
+                tab.active
+                  ? "border-pilot-aqua-600 text-pilot-aqua-700"
+                  : "border-transparent text-pilot-grey-500 hover:text-pilot-grey-800"
+              }`
+            : `inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg px-3.5 text-sm transition-colors ${
+                tab.active
+                  ? "bg-pilot-aqua-50 font-semibold text-pilot-aqua-700 ring-1 ring-pilot-aqua-600"
+                  : "bg-white text-pilot-grey-600 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50 hover:text-pilot-grey-900"
+              }`;
         const props = {
           href: tab.href,
           className,

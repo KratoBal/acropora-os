@@ -91,6 +91,18 @@ describe("a PilotDataTable telefonos kártyanézete", () => {
     );
   });
 
+  // Picasso R4 (acrobot 62594): a több részből álló cím (a hibajegy címe, alatta a száma) egy sorban egymás mellé került, és a szám
+  // három sorra tört; a cím-cella blokk, a részei egymás alatt, balra, a kártya teljes szélességén
+  it("a kártya címe blokk (a részei egymás alá kerülnek, balra), nem a felirat-érték sor", () => {
+    const { cella } = rajzol();
+    const cim = cella("SZ-1");
+    expect(cim.className).toContain("max-md:block");
+    expect(cim.className).toContain("max-md:text-left");
+    expect(cim.className).not.toContain("max-md:flex");
+    expect(cim.className).not.toContain("max-md:justify-between");
+    expect(cella("12 000 Ft").className).toContain("max-md:flex");
+  });
+
   it("a `phone: title` oszlop a cím, és nem az első", () => {
     const { cella } = rajzol([SZAM, { ...OSSZEG, phone: "title" }, DATUM]);
     expect(cella("12 000 Ft").className).toContain("max-md:before:hidden");

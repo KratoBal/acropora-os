@@ -8,6 +8,7 @@ import { BillingDocumentEmailController } from "./billing-document-email.control
 import { BillingDocumentEmailRepository } from "./billing-document-email.repository.js";
 import { BillingDocumentEmailDraftService } from "./billing-document-email-draft.service.js";
 import { BillingDocumentLanguageService } from "./billing-document-language.service.js";
+import { WebshopOrderCancellationService } from "./webshop-order-cancellation.service.js";
 import { BillingDocumentEmailService } from "./billing-document-email.service.js";
 import { BillingDocumentAdvanceController } from "./billing-document-advance.controller.js";
 import { BillingDocumentFinalController } from "./billing-document-final.controller.js";
@@ -94,6 +95,7 @@ import {
     BillingDocumentEmailService,
     BillingDocumentEmailDraftService,
     BillingDocumentLanguageService,
+    WebshopOrderCancellationService,
     OutgoingPackageService,
     ExternalInvoicePdfScheduler,
     ExternalInvoiceMailPdfScheduler,

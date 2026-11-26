@@ -105,6 +105,46 @@ describe("anyagigénylés a munkalapon, a weben", () => {
     expect(screen.queryByRole("button", { name: "Anyagigénylés" })).toBeNull();
   });
 
+  /*
+    AZ ÜRES, NEM SZERKESZTHETŐ KÁRTYA EGY SOR (picasso R6, acrobot 62415): a lezárt lapon a nulla elemű Anyagigények doboza semmit nem mondott. MI
+    PIROSÍT: ha a nem szerkeszthető, üres lapon a kártya (fejléc, doboz) marad; ha a szerkeszthető lapról eltűnik a kártya vagy a gomb; ha vannak
+    igények, és mégis a sor áll; ha a betöltési hiba helyett a sor áll.
+  */
+  it("üresen: a nem szerkeszthető lapon egy sor, a szerkeszthetőn a kártya a gombbal", async () => {
+    api.listForWorksheet.mockResolvedValue({ items: [] });
+    const writable = render(
+      <WorksheetMaterialRequests worksheetId="w-1" canWrite />,
+    );
+    await waitFor(() => screen.getByText(/az Anyagigénylés gombbal/));
+    expect(screen.getByText("Anyagigények (0)")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Anyagigénylés" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("material-requests-empty-line")).toBeNull();
+    writable.unmount();
+
+    render(<WorksheetMaterialRequests worksheetId="w-1" canWrite={false} />);
+    const line = await screen.findByTestId("material-requests-empty-line");
+    expect(line.textContent).toBe(
+      "Anyagigények (0): ezen a munkalapon még nincs anyagigény.",
+    );
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(document.querySelectorAll("p")).toHaveLength(1);
+  });
+
+  it("vannak igények vagy betöltési hiba: a kártya áll, a sor nem", async () => {
+    const withItems = render(
+      <WorksheetMaterialRequests worksheetId="w-1" canWrite={false} />,
+    );
+    await waitFor(() => screen.getByText("Anyagigények (1)"));
+    expect(screen.queryByTestId("material-requests-empty-line")).toBeNull();
+    withItems.unmount();
+    api.listForWorksheet.mockRejectedValue(new Error("Nem tölthető be."));
+    render(<WorksheetMaterialRequests worksheetId="w-1" canWrite={false} />);
+    await waitFor(() => screen.getByText("Nem tölthető be."));
+    expect(screen.queryByTestId("material-requests-empty-line")).toBeNull();
+  });
+
   it("hiányos sorral NEM küld -- a kérés el sem megy", async () => {
     /*
       MI PIROSIT: ha a validacio kihagyna barmelyik mezot. A `create` HIVAS

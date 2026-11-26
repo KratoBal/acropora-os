@@ -59,7 +59,8 @@ export function KnowledgeBaseTabs({ active }: { active: string }) {
   return (
     <PilotLinkTabs
       label="Tudásbázis oldalai"
-      variant="underline"
+      // the lists' one tab shape (Picasso R9, acrobot 62497): the 3.17 underline gave way to Balázs's two notes
+      variant="solid"
       tabs={tabs}
       renderLink={({ href, className, children, ...rest }) => (
         <Link href={href} className={className} {...rest}>

@@ -239,9 +239,35 @@ export function cleanSubject(
   return text || null;
 }
 
+/**
+ * THE HUNGARIAN "... wrote:" LINE, ONLY WHEN IT IS A REPLY HEADER (acrobot 2026-11-26, the ec7b947b test mail): a line that merely ends in "ezt
+ * írta:" is the writer's own sentence ("A telefonban a szerelő ezt írta:" followed by their own text), and cutting there threw the writer's own
+ * lines away. A real header is the mail client's line above the quote: it carries the "időpontban" of Gmail's Hungarian header, or the quote
+ * (`>` lines) follows it. Neither is true of the writer's own sentence.
+ */
+const HU_WROTE_LINE = /^.{3,200}\s(?:írta|ezt írta):\s*$/i;
+
+function isHungarianReplyHeader(lines: string[], index: number): boolean {
+  const trimmed = lines[index]!.trim();
+  // THE HEADER WRAPPED BY THE CLIENT (barracuda, #2993): the first line carries Gmail's "időpontban", the second the address and "ezt írta:". The
+  // cut belongs to the FIRST line, or its half stays in the report text.
+  if (
+    /\sidőpontban(?:\s|$)/i.test(trimmed) &&
+    !/(?:írta|ezt írta):\s*$/i.test(trimmed) &&
+    /^\S.{0,200}(?:írta|ezt írta):\s*$/i.test((lines[index + 1] ?? "").trim())
+  )
+    return true;
+  if (!HU_WROTE_LINE.test(trimmed)) return false;
+  if (/\sidőpontban\s/i.test(trimmed)) return true;
+  const next = lines
+    .slice(index + 1)
+    .map((line) => line.trim())
+    .find((line) => line !== "");
+  return next?.startsWith(">") ?? false;
+}
+
 const REPLY_MARKERS: RegExp[] = [
   /^On .{5,200} wrote:\s*$/i,
-  /^.{3,200}\s(?:írta|ezt írta):\s*$/i,
   /^-{2,}\s*(?:Original Message|Eredeti üzenet|Forwarded message|Továbbított üzenet)\s*-{2,}\s*$/i,
   /^_{5,}\s*$/,
   /^--\s?$/,
@@ -270,7 +296,8 @@ export function cleanMailBody(
     const joined = `${trimmed} ${lines[index + 1]?.trim() ?? ""}`;
     if (
       REPLY_MARKERS.some((marker) => marker.test(trimmed)) ||
-      /^On .{5,200} wrote:\s*$/i.test(joined)
+      /^On .{5,200} wrote:\s*$/i.test(joined) ||
+      isHungarianReplyHeader(lines, index)
     )
       break;
     if (

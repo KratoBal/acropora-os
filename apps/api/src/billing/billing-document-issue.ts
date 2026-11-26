@@ -574,6 +574,52 @@ export function finalBalanceMismatch(
   return `A végszámla fizetendője (bruttó ${money(new Prisma.Decimal(finalGross), currency)} mínusz az előleg ${money(advance, currency)}) ${money(payable, currency)}, a beérkezett hátralék ${money(balance.amount, balance.currency)}; az eltérés ${money(payable.minus(balance.amount), currency)}. A végszámla nem megy ki: a vevő már fizetett, rendezd kézzel.`;
 }
 
+/**
+ * A DOCUMENT'S GROSS PER VAT RATE, by its lines with the Számlázz.hu rounding (`szamlazzAmountsOfLine`, as the issue sends
+ * them). The key is the rate as a number's text (`"27"`, `"5"`). `null`: a line's amount cannot be computed.
+ */
+export function grossByVatRate(
+  lines: readonly Parameters<typeof szamlazzAmountsOfLine>[0][],
+  currency: string,
+): Map<string, Prisma.Decimal> | null {
+  const byRate = new Map<string, Prisma.Decimal>();
+  for (const line of lines) {
+    const amounts = szamlazzAmountsOfLine(line, currency);
+    if (!amounts.ok) return null;
+    const rate = new Prisma.Decimal(line.vatRatePercent.toString()).toString();
+    byRate.set(
+      rate,
+      (byRate.get(rate) ?? new Prisma.Decimal(0)).plus(amounts.grossAmount),
+    );
+  }
+  return byRate;
+}
+
+/**
+ * THE ADVANCE PER VAT RATE AGAINST THE FINAL INVOICE (barracuda's pre-release review of d31a66a3, N3b). Számlázz.hu deducts the
+ * advance invoice from the final invoice rate by rate. When the order was edited after the advance and a rate's items left the
+ * order, the final invoice would carry that rate's advance as a negative line, and the total's fillér check does not see it
+ * (the other rates make up for it). So every rate the advance has must be on the final invoice with at least that gross; if
+ * not, it stops and names the rate and both amounts. `null`: every rate is covered.
+ */
+export function advanceRateUncovered(
+  advance: ReadonlyMap<string, Prisma.Decimal> | null,
+  final: ReadonlyMap<string, Prisma.Decimal> | null,
+  currency: string,
+): string | null {
+  if (!advance || !final)
+    return "Az előlegszámla vagy a végszámla ÁFA-kulcsonkénti összege nem számolható. A végszámla nem megy ki: nézd meg a két bizonylatot.";
+  for (const [rate, amount] of [...advance].sort(
+    ([a], [b]) => Number(b) - Number(a),
+  )) {
+    if (!amount.greaterThan(0)) continue;
+    const covered = final.get(rate) ?? new Prisma.Decimal(0);
+    if (covered.lessThan(amount))
+      return `Az előleg ${rate}%-os része ${money(amount, currency)}, a végszámla ${rate}%-os tételei csak ${money(covered, currency)}. A rendelés az előleg óta változott (egy ${rate}%-os tétel kikerült vagy olcsóbb lett), és a Számlázz.hu ezen a kulcson negatív sorral vonná le az előleget. A végszámla nem megy ki: rendezd kézzel.`;
+  }
+  return null;
+}
+
 /** Is this webshop final invoice paid by the recorded balance (S4): what it leaves to pay is the balance to the fillér. */
 export function finalPaidByBalance(
   row: BillingDocumentRow,

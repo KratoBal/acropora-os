@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  EmptyState,
   Skeleton,
   PilotDateField,
   PilotSelect,
@@ -223,6 +222,17 @@ export function WorksheetMaterialRequests({
     }
   };
 
+  // az üres, nem szerkeszthető kártya egy sor (picasso R6, acrobot 62415): lásd `worksheet-entries.tsx`
+  if (requests && requests.length === 0 && !canWrite)
+    return (
+      <p
+        className="px-1 text-sm text-pilot-grey-500"
+        data-testid="material-requests-empty-line"
+      >
+        Anyagigények (0): ezen a munkalapon még nincs anyagigény.
+      </p>
+    );
+
   return (
     <PilotCard>
       <PilotCardHeader
@@ -345,14 +355,10 @@ export function WorksheetMaterialRequests({
         {requests === null ? <Skeleton className="h-16" /> : null}
 
         {requests && requests.length === 0 ? (
-          <EmptyState
-            title="Ezen a munkalapon még nincs anyagigény"
-            description={
-              canWrite
-                ? "Az Anyagigénylés gombbal viheted fel, mire van szükséged."
-                : "Az anyagigényeket a lapon dolgozó kollégák viszik fel."
-            }
-          />
+          <p className="text-sm text-pilot-grey-500">
+            Ezen a munkalapon még nincs anyagigény: az Anyagigénylés gombbal
+            viheted fel, mire van szükséged.
+          </p>
         ) : null}
 
         <ul className="space-y-2">

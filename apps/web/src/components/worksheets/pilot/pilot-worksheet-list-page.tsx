@@ -12,8 +12,10 @@ import {
   PilotSelect,
   type PilotTableColumn,
   PAGE_GUTTER_X,
+  ServiceListTabs,
 } from "@acropora/ui";
 import {
+  commonServiceStatusLabel,
   hasPermission,
   PERMISSIONS,
   type WorksheetCopyResult,
@@ -43,15 +45,17 @@ import { serviceJobRef } from "../service-job-ref";
 import {
   formatDay,
   formatLaborHours,
-  worksheetDisplayLabel,
-  worksheetDisplayPilotVariant,
+  worksheetCommonState,
+  worksheetReasonText,
 } from "../worksheet-labels";
+import { commonPilotVariant } from "@/components/service-jobs/common-status-view";
 import {
   PilotBadge,
   PilotButton,
   PilotCard,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
+import { menuEyebrow } from "@/components/navigation";
 
 /**
  * A FIGMA MAKE TERV ÁTÜLTETÉSE -- MUNKALAPOK LISTA (8. kör, 1/3 rész).
@@ -130,7 +134,7 @@ const FIGMA_TAB_ORDER: {
   { key: "", label: "Összes" },
   { key: "DRAFT", label: "Új és folyamatban" },
   { key: "AWAITING_SIGNATURE", label: "Elkészült" },
-  { key: "SIGNED", label: "Lezárva" },
+  { key: "SIGNED", label: "Lezárt" },
   { key: "REJECTED", label: "Elutasítva" },
 ];
 
@@ -158,7 +162,7 @@ const STAT_TILES: {
   },
   {
     key: "SIGNED",
-    label: "Lezárva",
+    label: "Lezárt",
     detail: "aláírva",
     tone: "text-pilot-aqua-700",
   },
@@ -270,16 +274,21 @@ export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
     id: "status",
     header: "Állapot",
     width: "130px",
-    cell: (worksheet) => (
-      <PilotBadge
-        variant={worksheetDisplayPilotVariant(
-          worksheet.status,
-          worksheet.lineCount ?? 0,
-        )}
-      >
-        {worksheetDisplayLabel(worksheet.status, worksheet.lineCount ?? 0)}
-      </PilotBadge>
-    ),
+    cell: (worksheet) => {
+      // a KÖZÖS állapot az okkal (kártya 7f23785c): a közös szótár számolja a változatból és a tételszámból
+      const state = worksheetCommonState(worksheet);
+      const reason = worksheetReasonText(state);
+      return (
+        <div className="flex flex-col items-start gap-0.5">
+          <PilotBadge variant={commonPilotVariant(state)}>
+            {commonServiceStatusLabel[state.status]}
+          </PilotBadge>
+          {reason ? (
+            <span className="text-xs text-pilot-grey-500">{reason}</span>
+          ) : null}
+        </div>
+      );
+    },
   },
   {
     id: "createdAt",
@@ -690,14 +699,15 @@ export function PilotWorksheetListPage() {
       className={`flex min-h-screen flex-col gap-6 bg-pilot-grey-50 ${PAGE_GUTTER_X} py-8`}
     >
       <PageHeader
-        eyebrow="Szerviz / Munkatér"
+        // the line above the title is the page's menu entry (Picasso R7)
+        eyebrow={menuEyebrow("/szerviz/munkalapok") ?? undefined}
         title="Munkalapok"
         description="A helyszíni munka teljes életútja: kiosztás, tételek, napló, átadás és aláírás."
         actions={
           canManage ? (
             <Link href="/szerviz/munkalapok/uj">
               <PilotButton variant="primary" size="regular">
-                <Icon name="plus" size={13} />
+                <Icon name="plus" size={14} />
                 Új munkalap
               </PilotButton>
             </Link>
@@ -751,30 +761,21 @@ export function PilotWorksheetListPage() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-1" role="tablist">
-        {FIGMA_TAB_ORDER.map((tab) => {
-          const active = activeStatus === tab.key;
-          return (
-            <button
-              key={tab.key || "all"}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => selectStatus(tab.key)}
-              className={`flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md px-4 py-2 text-sm transition-colors ${
-                active
-                  ? "bg-pilot-aqua-50 font-semibold text-pilot-aqua-700"
-                  : "text-pilot-grey-600 hover:text-pilot-grey-900"
-              }`}
-            >
-              {tab.label}
-              <span className="text-xs font-normal text-pilot-grey-400">
-                {tabCount(tab.key) ?? "–"}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {/* the lists' one tab shape (Picasso R9) and the shared tab keyboard (arrows, Home, End; barracuda on #2991); "Összes" is the empty status */}
+      <ServiceListTabs
+        variant="pill"
+        label="Munkalapok szűrése"
+        className="flex flex-wrap gap-1"
+        idPrefix="munkalap-ful"
+        panelId="munkalap-lista"
+        active={activeStatus || "all"}
+        onSelect={(key) => selectStatus(key === "all" ? "" : key)}
+        tabs={FIGMA_TAB_ORDER.map((tab) => ({
+          key: tab.key || "all",
+          label: tab.label,
+          count: tabCount(tab.key) ?? "–",
+        }))}
+      />
 
       <div className="flex flex-wrap items-center gap-3">
         <input
@@ -984,63 +985,73 @@ export function PilotWorksheetListPage() {
         </ul>
       ) : null}
 
-      {loading && !data ? (
-        <div className="space-y-3">
-          <Skeleton className="h-16" />
-          <Skeleton className="h-64" />
-        </div>
-      ) : data?.items.length ? (
-        <PilotCard className="overflow-hidden">
-          <PilotDataTable
-            columns={columns}
-            sort={sort}
-            onSort={onSort}
-            rows={data.items}
-            rowKey={(worksheet) => worksheet.id}
-            rowTestId="worksheet-row"
-            minWidth={WORKSHEET_TABLE_MIN_WIDTH}
-            onRowActivate={(worksheet) =>
-              router.push(`/szerviz/munkalapok/${worksheet.id}`)
-            }
-            rowLabel={(worksheet) =>
-              `${worksheetListLines(worksheet).main} megnyitása`
-            }
-            rowClassName={(worksheet) => (worksheet.hidden ? "opacity-50" : "")}
-          />
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-pilot-grey-100 px-4 py-3 text-xs text-pilot-grey-500">
-            <span>
-              {data.items.length} / {data.pagination.totalItems} munkalap
-            </span>
-            <Pagination
-              position="bottom"
-              page={data.pagination.page}
-              totalPages={data.pagination.totalPages}
-              onPageChange={goToPage}
-            />
+      {/* the panel the tabs show (aria-controls): the list's loading, empty and table states, one at a time */}
+      <div
+        id="munkalap-lista"
+        role="tabpanel"
+        aria-labelledby={`munkalap-ful-${activeStatus || "all"}`}
+        className="empty:hidden"
+      >
+        {loading && !data ? (
+          <div className="space-y-3">
+            <Skeleton className="h-16" />
+            <Skeleton className="h-64" />
           </div>
-        </PilotCard>
-      ) : data ? (
-        <EmptyState
-          title={hasFilters ? "Nincs találat" : "Nincs munkalap"}
-          description={
-            hasFilters
-              ? "Módosítsd a keresést, vagy töröld a szűrőket."
-              : mineOnly
-                ? "Rád jelenleg nincs munkalap kiosztva."
-                : "Vegyél fel új munkalapot."
-          }
-          action={
-            !hasFilters && canManage ? (
-              <Link href="/szerviz/munkalapok/uj">
-                <PilotButton variant="primary">
-                  <Icon name="plus" size={13} />
-                  Új munkalap
-                </PilotButton>
-              </Link>
-            ) : undefined
-          }
-        />
-      ) : null}
+        ) : data?.items.length ? (
+          <PilotCard className="overflow-hidden">
+            <PilotDataTable
+              columns={columns}
+              sort={sort}
+              onSort={onSort}
+              rows={data.items}
+              rowKey={(worksheet) => worksheet.id}
+              rowTestId="worksheet-row"
+              minWidth={WORKSHEET_TABLE_MIN_WIDTH}
+              onRowActivate={(worksheet) =>
+                router.push(`/szerviz/munkalapok/${worksheet.id}`)
+              }
+              rowLabel={(worksheet) =>
+                `${worksheetListLines(worksheet).main} megnyitása`
+              }
+              rowClassName={(worksheet) =>
+                worksheet.hidden ? "opacity-50" : ""
+              }
+            />
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-pilot-grey-100 px-4 py-3 text-xs text-pilot-grey-500">
+              <span>
+                {data.items.length} / {data.pagination.totalItems} munkalap
+              </span>
+              <Pagination
+                position="bottom"
+                page={data.pagination.page}
+                totalPages={data.pagination.totalPages}
+                onPageChange={goToPage}
+              />
+            </div>
+          </PilotCard>
+        ) : data ? (
+          <EmptyState
+            title={hasFilters ? "Nincs találat" : "Nincs munkalap"}
+            description={
+              hasFilters
+                ? "Módosítsd a keresést, vagy töröld a szűrőket."
+                : mineOnly
+                  ? "Rád jelenleg nincs munkalap kiosztva."
+                  : "Vegyél fel új munkalapot."
+            }
+            action={
+              !hasFilters && canManage ? (
+                <Link href="/szerviz/munkalapok/uj">
+                  <PilotButton variant="primary" size="regular">
+                    <Icon name="plus" size={14} />
+                    Új munkalap
+                  </PilotButton>
+                </Link>
+              ) : undefined
+            }
+          />
+        ) : null}
+      </div>
     </PilotThemeRoot>
   );
 }

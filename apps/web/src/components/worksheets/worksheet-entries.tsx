@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  Alert,
-  EmptyState,
-  Skeleton,
-  Textarea,
-  PilotButton,
-} from "@acropora/ui";
+import { Alert, Skeleton, Textarea, PilotButton } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -117,6 +111,22 @@ export function WorksheetEntries({
     }
   };
 
+  /*
+    AZ ÜRES, NEM SZERKESZTHETŐ KÁRTYA EGY SOR (picasso R6, acrobot 62415): egy lezárt lapon a nulla elemű Bejegyzések és Anyagigények doboza együtt
+    400 px volt, és semmit nem mondott. Ahol nincs mit tenni vele (nincs írási jog, a betöltött lista üres), a kártya helyett egy sor áll: kimondja,
+    hogy nincs, és nem foglal helyet. Betöltési hibánál a lista nem töltődik be (`entries` marad `null`), tehát a hiba a kártyán látszik; a
+    szerkeszthető lapon a kártya marad (ott a Bejegyzés gomb van benne).
+  */
+  if (entries && entries.length === 0 && !canWrite)
+    return (
+      <p
+        className="px-1 text-sm text-pilot-grey-500"
+        data-testid="entries-empty-line"
+      >
+        Bejegyzések (0): ezen a lapon még nincs bejegyzés.
+      </p>
+    );
+
   return (
     <PilotCard>
       <PilotCardHeader
@@ -149,14 +159,10 @@ export function WorksheetEntries({
         {entries === null ? <Skeleton className="h-16" /> : null}
 
         {entries && entries.length === 0 ? (
-          <EmptyState
-            title="Ezen a lapon még nincs bejegyzés"
-            description={
-              canWrite
-                ? "A Bejegyzés gombbal írhatod le, mi történt."
-                : "A bejegyzéseket a lapon dolgozó kollégák írják."
-            }
-          />
+          <p className="text-sm text-pilot-grey-500">
+            Ezen a lapon még nincs bejegyzés: a Bejegyzés gombbal írhatod le, mi
+            történt.
+          </p>
         ) : null}
 
         <ul className="space-y-2">

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 
 import { PageHeader } from "./page-header";
 import { sv, serviceToneClass, type ServiceTone } from "./service-theme";
@@ -168,6 +168,8 @@ export function ServiceListHeader({
 export interface ServiceListTab {
   key: string;
   label: string;
+  /** The tab's number after its label (the pill shape only; Picasso R9). Omitted: no number. */
+  count?: ReactNode;
 }
 
 /**
@@ -182,17 +184,57 @@ export function ServiceListTabs({
   onSelect,
   label,
   variant = "underline",
+  idPrefix,
+  panelId,
+  className,
 }: {
   tabs: ServiceListTab[];
   active: string;
   onSelect: (key: string) => void;
   label: string;
   variant?: "underline" | "pill";
+  /** The tabs' ids (`${idPrefix}-${key}`): the panel names the active one in its `aria-labelledby`. Absent: no ids. */
+  idPrefix?: string;
+  /** The id of the panel the tabs show (`role="tabpanel"`): every tab's `aria-controls`. Absent: none. */
+  panelId?: string;
+  /** The row's own layout (a list whose tabs wrap instead of scrolling); absent: the variant's. */
+  className?: string;
 }) {
   const pill = variant === "pill";
+  /*
+    THE KEYBOARD OF A TAB LIST (WAI-ARIA tabs, manual activation; barracuda on #2991, acrobot 62594): one tab is in the Tab order
+    (the active one), the arrow keys move the focus along the row (round), Home and End to the ends, and Enter or Space selects,
+    as a click: a list reloads from the server on a switch, so the focus alone does not switch it. As the Számlázás tabs did.
+  */
+  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const row = [
+      ...(event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>(
+        '[role="tab"]',
+      ) ?? []),
+    ];
+    const index = row.indexOf(event.currentTarget);
+    const last = row.length - 1;
+    const target =
+      event.key === "ArrowRight"
+        ? index === last
+          ? 0
+          : index + 1
+        : event.key === "ArrowLeft"
+          ? index === 0
+            ? last
+            : index - 1
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? last
+              : null;
+    if (target === null || index < 0) return;
+    event.preventDefault();
+    row[target]?.focus();
+  };
   return (
     <div
-      className={pill ? sv.pillTabs : sv.tabs}
+      className={className ?? (pill ? sv.pillTabs : sv.tabs)}
       role="tablist"
       aria-label={label}
     >
@@ -203,15 +245,26 @@ export function ServiceListTabs({
             key={tab.key}
             type="button"
             role="tab"
+            id={idPrefix ? `${idPrefix}-${tab.key}` : undefined}
             aria-selected={on}
+            aria-controls={panelId}
+            tabIndex={on ? 0 : -1}
             onClick={() => onSelect(tab.key)}
+            onKeyDown={onKeyDown}
             className={
               pill
-                ? `${sv.pillTab} ${on ? sv.pillTabActive : sv.pillTabIdle}`
+                ? `cursor-pointer ${sv.pillTab} outline-none focus-visible:ring-2 focus-visible:ring-pilot-aqua-700 ${on ? sv.pillTabActive : sv.pillTabIdle}`
                 : `${sv.tab} ${on ? sv.tabActive : ""}`
             }
           >
             {tab.label}
+            {pill && tab.count !== undefined ? (
+              <span
+                className={`${sv.pillTabCount} ${on ? sv.pillTabCountActive : sv.pillTabCountIdle}`}
+              >
+                {tab.count}
+              </span>
+            ) : null}
           </button>
         );
       })}

@@ -47,6 +47,7 @@ import {
   PARTNER_ORDER_STATUS,
   PARTNER_ORDERS_PATH,
 } from "./partner-order-format";
+import { menuEyebrow } from "@/components/navigation";
 
 const PAGE_SIZE = 25;
 
@@ -309,7 +310,8 @@ export function PartnerOrderListPage() {
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
       <PilotPageHeader
-        eyebrow="Értékesítés / Megrendelések"
+        // the line above the title is the page's menu entry (Picasso R7)
+        eyebrow={menuEyebrow("/megrendelesek") ?? undefined}
         title="Megrendelések"
         description="Az elfogadott ajánlatoktól a számláig: aláírt megrendelőlap, teljesítésigazolás és számla egy helyen."
       />

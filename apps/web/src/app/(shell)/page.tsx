@@ -3,7 +3,9 @@
 import { Alert, Icon, Skeleton, type IconName } from "@acropora/ui";
 import {
   commonServiceStateText,
+  commonWorksheetStatus,
   worksheetStatusLabel,
+  type WorksheetVersionStatus,
   type CommonServiceStatus,
   type CommonServiceStatusReason,
   type DashboardActivity,
@@ -98,10 +100,18 @@ function DaysPill({ days }: { days: number }) {
   );
 }
 
+/**
+ * A MUNKALAP ÁLLAPOTA A KEZDŐLAPON A KÖZÖS SZAVAKKAL (kártya 7f23785c, acrobot 62451): a nyitott munkalapok csempéje a változat-állapotot kapja,
+ * tételszám nélkül. A piszkozat az összevont „Új és folyamatban" (nem találgat Új és Folyamatban között), a többi a közös szótár szava az okkal
+ * („Elkészült · aláírásra vár", „Folyamatban · elutasítva", „Lezárt"): ugyanazt mondja, mint a munkalap-lista, hogy a Lezárt/Lezárva kettősség
+ * ne maradjon a weben. Ismeretlen állapotnál a nyers kód.
+ */
 function worksheetStatusText(status: string) {
-  return Object.hasOwn(worksheetStatusLabel, status)
-    ? worksheetStatusLabel[status as keyof typeof worksheetStatusLabel]
-    : status;
+  if (!Object.hasOwn(worksheetStatusLabel, status)) return status;
+  const version = status as WorksheetVersionStatus;
+  return version === "DRAFT"
+    ? worksheetStatusLabel.DRAFT
+    : commonServiceStateText(commonWorksheetStatus(version, 1));
 }
 
 /** A jegy közös állapota (kártya 7f23785c), ha a szerver küldi; régi válasznál a tárolt állapot neve. */

@@ -1209,7 +1209,7 @@ describe("service-job list (d): the phone header", () => {
     await screen.findByText("Jegy 3");
     for (const tab of screen.getAllByRole("tab")) {
       expect(tab.className).toMatch(/\bpx-2\.5\b/);
-      expect(tab.className).toMatch(/\bsm:px-4\b/);
+      expect(tab.className).toMatch(/\bsm:px-3\.5\b/);
     }
     const search = screen.getByLabelText("Hibajegy keresése");
     // a flexible basis (not w-full) below sm, the old fixed width from sm up

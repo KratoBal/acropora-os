@@ -10,6 +10,7 @@ import {
   PilotInput,
   PilotPageHeader,
   PilotSelect,
+  PilotFormActions,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -70,10 +71,10 @@ export function QuoteNewPage() {
 
   const template = templates.find((t) => t.id === templateId) ?? null;
   const ready = Boolean(customer && title.trim());
-  // why the create button is grey, said out loud: a tooltip on a disabled button is never seen
+  // why the create button is pale, said out loud beside it (the shared form row's "Hiányzik: ..."): a tooltip is never seen
   const missing = [
-    customer ? null : "a partner (válaszd ki a találatok közül)",
-    title.trim() ? null : "az ajánlat címe",
+    customer ? null : "Partner (válaszd ki a találatok közül)",
+    title.trim() ? null : "Ajánlat címe",
   ].filter((part): part is string => part !== null);
 
   const chooseTemplate = (id: string) => {
@@ -116,36 +117,11 @@ export function QuoteNewPage() {
         eyebrow="Értékesítés / Árajánlatok"
         title="Új árajánlat"
         description="Az alapadatok és a kiinduló sablon megadása után nyílik meg az ajánlatszerkesztő."
-        actions={
-          <div className="flex flex-wrap gap-3">
-            <PilotButton
-              variant="secondary"
-              size="regular"
-              onClick={() => router.push(QUOTES_PATH)}
-            >
-              Mégse
-            </PilotButton>
-            <PilotButton
-              size="regular"
-              disabled={!ready || saving}
-              title={ready ? undefined : "A partner és a cím kötelező."}
-              onClick={() => void submit()}
-            >
-              Ajánlat létrehozása
-            </PilotButton>
-          </div>
-        }
       />
 
       {error ? (
         <Alert variant="danger" title="Hiba történt" description={error} />
       ) : null}
-
-      {ready ? null : (
-        <p role="status" className="text-sm text-pilot-grey-600">
-          Az ajánlat létrehozásához még hiányzik: {missing.join(" és ")}.
-        </p>
-      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-6">
@@ -274,6 +250,16 @@ export function QuoteNewPage() {
           </div>
         </PilotCard>
       </div>
+
+      {/* THE PRIMARY BUTTON AT THE FORM'S END, ON THE RIGHT, the missing fields beside it (Picasso R11, acrobot 62575): it stood in the header */}
+      <PilotFormActions
+        missing={missing}
+        busy={saving}
+        submitLabel="Ajánlat létrehozása"
+        busyLabel="Létrehozás…"
+        onCancel={() => router.push(QUOTES_PATH)}
+        onSubmit={() => void submit()}
+      />
     </PilotThemeRoot>
   );
 }
