@@ -7,7 +7,7 @@ import {
   worksheetDisplayPilotVariant,
   worksheetReasonText,
   worksheetStatusLabel,
-  worksheetVersionLabel,
+  worksheetVersionText,
 } from "./worksheet-labels";
 
 /*
@@ -81,13 +81,19 @@ describe("a jelvény szavai", () => {
 });
 
 describe("a tételszám nélküli helyek (fül, verziótörténet, lap-kártya)", () => {
-  it("az aláírt változat Lezárt, a piszkozat a mai Új és folyamatban", () => {
+  it("az aláírt változat Lezárt, a piszkozat a mai Új és folyamatban (a fül szavai)", () => {
     expect(worksheetStatusLabel.SIGNED).toBe("Lezárt");
     expect(worksheetStatusLabel.DRAFT).toBe("Új és folyamatban");
-    expect(worksheetVersionLabel("DRAFT")).toBe("Új és folyamatban");
-    expect(worksheetVersionLabel("AWAITING_SIGNATURE")).toBe("Elkészült");
-    expect(worksheetVersionLabel("SIGNED")).toBe("Lezárt");
-    expect(worksheetVersionLabel("REJECTED")).toBe("Folyamatban");
+  });
+
+  // a hibajegy alatti lap-kártya és a verziótörténet az ok nélkül nem mondhatja az elutasított lapot (barracuda, #2984): ott kell cselekedni
+  it("a változat szövege a közös szó AZ OKKAL: az elutasított lap Folyamatban · elutasítva, az aláírásra váró Elkészült · aláírásra vár", () => {
+    expect(worksheetVersionText("DRAFT")).toBe("Új és folyamatban");
+    expect(worksheetVersionText("AWAITING_SIGNATURE")).toBe(
+      "Elkészült · aláírásra vár",
+    );
+    expect(worksheetVersionText("SIGNED")).toBe("Lezárt");
+    expect(worksheetVersionText("REJECTED")).toBe("Folyamatban · elutasítva");
   });
 });
 

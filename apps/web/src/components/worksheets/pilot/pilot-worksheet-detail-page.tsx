@@ -43,7 +43,7 @@ import {
   formatLaborHours,
   worksheetCommonState,
   worksheetReasonText,
-  worksheetStatusLabel,
+  worksheetVersionText,
   worksheetStatusPilotVariant,
 } from "../worksheet-labels";
 import {
@@ -150,7 +150,7 @@ export const WORKSHEET_VERSION_COLUMNS: PilotTableColumn<WorksheetVersionRow>[] 
       width: "104px",
       cell: (version) => (
         <PilotBadge variant={worksheetStatusPilotVariant(version.status)}>
-          {worksheetStatusLabel[version.status]}
+          {worksheetVersionText(version.status)}
         </PilotBadge>
       ),
     },

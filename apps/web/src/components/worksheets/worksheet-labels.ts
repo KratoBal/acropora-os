@@ -139,6 +139,7 @@ export { worksheetDisplayStatus } from "@acropora/types";
 
 import {
   commonServiceReasonLabel,
+  commonServiceStateText,
   commonServiceStateTone,
   commonServiceStatusLabel,
   commonWorksheetStatus,
@@ -214,13 +215,15 @@ export function worksheetDisplayPilotVariant(
 }
 
 /**
- * A FELIRAT, AHOL A TÉTELSZÁM NEM ISMERT (a hibajegy alatti lap-kártya és a csatolható lapok listája): a piszkozat a mai „Új és folyamatban"
- * (a két megjelenített állapotot fedi, mint a fülek), minden más a közös szó.
+ * A VÁLTOZAT-ÁLLAPOT SZÖVEGE, AHOL A TÉTELSZÁM NEM ISMERT (a hibajegy alatti lap-kártya, a csatolható lapok listája, a verziótörténet): a
+ * piszkozat a mai „Új és folyamatban" (a két megjelenített állapotot fedi, mint a fülek), minden más a közös szó AZ OKKAL: „Elkészült ·
+ * aláírásra vár", „Lezárt", „Folyamatban · elutasítva". Az ok nem hagyható el: a hibajegyen ebből látszik, hogy az elutasított lapnál a javítás
+ * nálunk van, és cselekedni kell (barracuda, #2984).
  */
-export function worksheetVersionLabel(status: WorksheetVersionStatus): string {
+export function worksheetVersionText(status: WorksheetVersionStatus): string {
   return status === "DRAFT"
     ? worksheetStatusLabel.DRAFT
-    : worksheetDisplayLabel(status, 1);
+    : commonServiceStateText(commonWorksheetStatus(status, 1));
 }
 
 /**
