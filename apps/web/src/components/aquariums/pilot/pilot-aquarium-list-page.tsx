@@ -29,7 +29,7 @@ import {
   PilotAvatar,
   PilotBadge,
   PilotButton,
-  PilotSegmentedControl,
+  PilotSelect,
   PilotThemeRoot,
   pilotAvatarColor,
   pilotInitials,
@@ -45,12 +45,13 @@ const litersFormatter = new Intl.NumberFormat("hu-HU", {
   maximumFractionDigits: 0,
 });
 
-const OWNERSHIP_OPTIONS = ["Mind", "Saját", "Ügyfél"] as const;
-const WATER_BODY_OPTIONS = ["Mind", "Akvárium", "Tó"] as const;
-
 type AquariumRow = AquariumListResponse["items"][number];
 
-export const AQUARIUM_TABLE_MIN_WIDTH = 1240;
+/*
+  A TÁBLA 1440 PX-EN GÖRGETÉS NÉLKÜL ELFÉR (Picasso 3.15, acrobot 62134): a minimum 1240 volt, a tartalom szélessége 1440 px-en 1216, ezért a tábla vízszintesen görgetett, és az
+  "Utolsó vízmérés" oszlop a képernyő szélén, jobb oldali margó nélkül állt. A Név és az Ügyfél oszlop 20-20 px-szel keskenyebb (a hosszú név úgyis két sorba tör).
+*/
+export const AQUARIUM_TABLE_MIN_WIDTH = 1200;
 
 /** A lista rendezhető oszlopai: a táblázat oszlop-azonosítója -> a szerver rendezési mezeje (`AQUARIUM_LIST_SORT_FIELDS`). */
 export const AQUARIUM_SORT_COLUMNS = {
@@ -91,7 +92,7 @@ export const AQUARIUM_COLUMNS: PilotTableColumn<AquariumRow>[] = [
     id: "name",
     sortable: true,
     header: "Név",
-    width: "200px",
+    width: "180px",
     cell: (item) => (
       <>
         <span className="font-medium text-pilot-grey-900">{item.name}</span>
@@ -115,7 +116,7 @@ export const AQUARIUM_COLUMNS: PilotTableColumn<AquariumRow>[] = [
     id: "customer",
     sortable: true,
     header: "Ügyfél",
-    width: "170px",
+    width: "150px",
     cell: (item) => (
       <span className="text-pilot-grey-500">{item.customerName ?? "—"}</span>
     ),
@@ -284,19 +285,6 @@ export function PilotAquariumListPage() {
     next.set("page", String(page));
     router.replace(`${pathname}?${next}`);
   };
-  const ownershipFilter =
-    params.get("ownershipType") === "OWN"
-      ? "Saját"
-      : params.get("ownershipType") === "CUSTOMER"
-        ? "Ügyfél"
-        : "Mind";
-  const waterBodyFilter =
-    params.get("waterBodyType") === "AKVARIUM"
-      ? "Akvárium"
-      : params.get("waterBodyType") === "TO"
-        ? "Tó"
-        : "Mind";
-
   if (!canView)
     return (
       <Alert
@@ -347,40 +335,29 @@ export function PilotAquariumListPage() {
             className="w-72 rounded-md py-1.5 pl-8 pr-3 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-pilot-grey-400">
-            Tulajdon:
-          </span>
-          <PilotSegmentedControl
-            options={OWNERSHIP_OPTIONS}
-            value={ownershipFilter}
-            onChange={(value) =>
-              filter(
-                "ownershipType",
-                value === "Saját"
-                  ? "OWN"
-                  : value === "Ügyfél"
-                    ? "CUSTOMER"
-                    : "",
-              )
-            }
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-pilot-grey-400">
-            Típus:
-          </span>
-          <PilotSegmentedControl
-            options={WATER_BODY_OPTIONS}
-            value={waterBodyFilter}
-            onChange={(value) =>
-              filter(
-                "waterBodyType",
-                value === "Akvárium" ? "AKVARIUM" : value === "Tó" ? "TO" : "",
-              )
-            }
-          />
-        </div>
+        {/* SZEGMENTÁLT SZŰRŐK HELYETT LEGÖRDÜLŐK (Picasso 3.15): a többi lista így szűr; ugyanazok az URL-szűrők (ownershipType, waterBodyType), ugyanazok az értékek */}
+        <PilotSelect
+          chevron
+          aria-label="Tulajdon"
+          value={params.get("ownershipType") ?? ""}
+          onChange={(value) => filter("ownershipType", value)}
+          className="w-full shrink-0 sm:w-[160px]"
+        >
+          <option value="">Minden tulajdon</option>
+          <option value="OWN">Saját</option>
+          <option value="CUSTOMER">Ügyfél</option>
+        </PilotSelect>
+        <PilotSelect
+          chevron
+          aria-label="Típus"
+          value={params.get("waterBodyType") ?? ""}
+          onChange={(value) => filter("waterBodyType", value)}
+          className="w-full shrink-0 sm:w-[160px]"
+        >
+          <option value="">Minden típus</option>
+          <option value="AKVARIUM">Akvárium</option>
+          <option value="TO">Tó</option>
+        </PilotSelect>
       </div>
 
       {error ? (
