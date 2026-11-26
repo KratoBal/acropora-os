@@ -1,4 +1,5 @@
 import type { PilotBadgeVariant } from "@acropora/ui";
+import { ApiError } from "@/lib/api/client";
 import { formatDayHu } from "@/lib/format/date";
 import type {
   QuoteAcceptanceSourceValue,
@@ -108,6 +109,30 @@ export function dayAfter(days: number, now = new Date()): string {
 /** Az API hibája a felületre: a szerver magyar üzenete, vagy egy tartalék. */
 export function errorText(cause: unknown, fallback: string): string {
   return cause instanceof Error && cause.message ? cause.message : fallback;
+}
+
+/**
+ * A BLOKK MENTÉSÉNEK HIBÁJA A BLOKK SAJÁT GOMBJA ALATT (card fa6d7fa6, acrobot 62710): a szerver teljes szövege, és a két 409 esetnél az, hogy
+ * mit tegyen a felhasználó. A tanács a szerver ismert szövegéhez kötött (a kód üzenete: `quote-version-editor.ts`, `lockDraft`): más 409-hez nincs
+ * tanács, mert azt nem ismerjük.
+ */
+export function blockSaveError(cause: unknown): {
+  message: string;
+  hint: string | null;
+} {
+  const message = errorText(cause, "A blokk nem menthető.");
+  const conflict = cause instanceof ApiError && cause.status === 409;
+  if (conflict && message.startsWith("Publikált verzió nem módosítható"))
+    return {
+      message,
+      hint: "Nyiss új verziót az ajánlat adatlapján (Új verzió gomb), és ott szerkeszd tovább. A beírt szöveg ezen az oldalon megmarad, amíg el nem hagyod, érdemes kimásolni.",
+    };
+  if (conflict && message.startsWith("Lezárt ajánlat"))
+    return {
+      message,
+      hint: "Az ajánlat már lezárt állapotú. Az állapotát az ajánlat adatlapján látod. A beírt szöveg ezen az oldalon megmarad, amíg el nem hagyod, érdemes kimásolni.",
+    };
+  return { message, hint: null };
 }
 
 export const isAbort = (cause: unknown) =>
