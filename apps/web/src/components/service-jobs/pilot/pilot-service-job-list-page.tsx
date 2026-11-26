@@ -10,7 +10,7 @@ import {
   PilotSelect,
   type PilotTableColumn,
   PAGE_GUTTER_X,
-  sv,
+  ServiceListTabs,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -841,31 +841,22 @@ export function PilotServiceJobListPage() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-0.5 sm:gap-1" role="tablist">
-        {PILOT_TABS.map((entry) => (
-          <button
-            key={entry.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === entry.id}
-            onClick={() => selectTab(entry.id)}
-            // the lists' one tab shape (Picasso R9, acrobot 62497): the solid green pill
-            className={`cursor-pointer ${sv.pillTab} ${
-              tab === entry.id ? sv.pillTabActive : sv.pillTabIdle
-            }`}
-          >
-            {entry.label}
-            {/* A FÜL SZÁMA UGYANABBÓL A `commonCounts`-BÓL, mint a csempék (egy függvény, két megjelenítés: pilotTabCounts) */}
-            {counts ? (
-              <span
-                className={`${sv.pillTabCount} ${tab === entry.id ? sv.pillTabCountActive : sv.pillTabCountIdle}`}
-              >
-                {counts[entry.id]}
-              </span>
-            ) : null}
-          </button>
-        ))}
-      </div>
+      {/* the lists' one tab shape (Picasso R9) and the shared tab keyboard (arrows, Home, End; barracuda on #2991) */}
+      <ServiceListTabs
+        variant="pill"
+        label="Hibajegyek szűrése"
+        className="flex flex-wrap gap-0.5 sm:gap-1"
+        idPrefix="hibajegy-ful"
+        panelId="hibajegy-lista"
+        active={tab}
+        onSelect={(key) => selectTab(key as PilotTab)}
+        tabs={PILOT_TABS.map((entry) => ({
+          key: entry.id,
+          label: entry.label,
+          // A FÜL SZÁMA UGYANABBÓL A `commonCounts`-BÓL, mint a csempék (egy függvény, két megjelenítés: pilotTabCounts)
+          count: counts ? counts[entry.id] : undefined,
+        }))}
+      />
 
       <div className="flex flex-wrap items-center gap-3">
         <input
@@ -989,99 +980,111 @@ export function PilotServiceJobListPage() {
         />
       ) : null}
 
-      {loading && !data ? (
-        <div aria-label="Hibajegyek betöltése" className="space-y-3">
-          {[0, 1, 2].map((row) => (
-            <Skeleton key={row} className="h-20" />
-          ))}
-        </div>
-      ) : null}
+      {/* the panel the tabs show (aria-controls): the list's loading, empty and table states, one at a time */}
+      <div
+        id="hibajegy-lista"
+        role="tabpanel"
+        aria-labelledby={`hibajegy-ful-${tab}`}
+        className="empty:hidden"
+      >
+        {loading && !data ? (
+          <div aria-label="Hibajegyek betöltése" className="space-y-3">
+            {[0, 1, 2].map((row) => (
+              <Skeleton key={row} className="h-20" />
+            ))}
+          </div>
+        ) : null}
 
-      {data && data.items.length === 0 && !pageGone ? (
-        <PilotCard className="flex flex-col items-center justify-center gap-4 py-20">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-pilot-aqua-50">
-            <Icon name="clipboard" size={24} className="text-pilot-aqua-600" />
-          </div>
-          <div className="text-center">
-            <p className="mb-1 text-sm font-semibold text-pilot-grey-700">
-              {appliedSearch || hasActiveFilters
-                ? "Nincs találat"
-                : "Még nincs hibajegy"}
-            </p>
-            <p className="max-w-xs text-xs text-pilot-grey-400">
-              {appliedSearch || hasActiveFilters
-                ? emptyFilterSentence(
-                    appliedSearch,
-                    partner !== ALL_PARTNERS,
-                    location !== ALL_LOCATIONS,
-                  )
-                : "Hozz létre egy új hibajegyet a bejelentett problémák nyomon követéséhez."}
-            </p>
-          </div>
-          {appliedSearch || hasActiveFilters ? (
-            <PilotButton
-              variant="secondary"
-              onClick={() => {
-                setSearch("");
-                setAppliedSearch("");
-                setPartner(ALL_PARTNERS);
-                setLocation(ALL_LOCATIONS);
-              }}
-            >
-              Szűrők törlése
-            </PilotButton>
-          ) : null}
-          {!appliedSearch && !hasActiveFilters && canManage ? (
-            <Link href="/szerviz/hibajegyek/uj">
-              <PilotButton variant="primary" size="regular">
-                <Icon name="plus" size={14} />
-                Új hibajegy
+        {data && data.items.length === 0 && !pageGone ? (
+          <PilotCard className="flex flex-col items-center justify-center gap-4 py-20">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-pilot-aqua-50">
+              <Icon
+                name="clipboard"
+                size={24}
+                className="text-pilot-aqua-600"
+              />
+            </div>
+            <div className="text-center">
+              <p className="mb-1 text-sm font-semibold text-pilot-grey-700">
+                {appliedSearch || hasActiveFilters
+                  ? "Nincs találat"
+                  : "Még nincs hibajegy"}
+              </p>
+              <p className="max-w-xs text-xs text-pilot-grey-400">
+                {appliedSearch || hasActiveFilters
+                  ? emptyFilterSentence(
+                      appliedSearch,
+                      partner !== ALL_PARTNERS,
+                      location !== ALL_LOCATIONS,
+                    )
+                  : "Hozz létre egy új hibajegyet a bejelentett problémák nyomon követéséhez."}
+              </p>
+            </div>
+            {appliedSearch || hasActiveFilters ? (
+              <PilotButton
+                variant="secondary"
+                onClick={() => {
+                  setSearch("");
+                  setAppliedSearch("");
+                  setPartner(ALL_PARTNERS);
+                  setLocation(ALL_LOCATIONS);
+                }}
+              >
+                Szűrők törlése
               </PilotButton>
-            </Link>
-          ) : null}
-        </PilotCard>
-      ) : null}
-
-      {data && data.items.length > 0 ? (
-        <PilotCard className="overflow-hidden">
-          <PilotDataTable
-            columns={JOB_COLUMNS}
-            sort={sort}
-            onSort={onSort}
-            rows={data.items}
-            rowKey={(item) => item.id}
-            rowTestId="service-job-row"
-            minWidth={JOB_TABLE_MIN_WIDTH}
-            onRowActivate={(item) =>
-              router.push(`/szerviz/hibajegyek/${item.id}`)
-            }
-            rowLabel={(item) => `${item.jobNumber} ${item.title} megnyitása`}
-            rowClassName={(item) => (item.hidden ? "opacity-50" : "")}
-          />
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-pilot-grey-100 px-4 py-3 text-xs text-pilot-grey-500">
-            <span>
-              {/* a találatszám a SZŰRT halmazé (a szerver adja), a sor-tartomány az oldalé */}
-              {pageRange(data, page)} {PILOT_TAB_NOUN[tab]}
-            </span>
-            {/* a régi, lapozatlan válasz vágott jelzése: a lapozott kérésnél nincs, de a szerver alakja még ismeri */}
-            {data.truncated ? (
-              <span>
-                Csak az első 200 hibajegy látszik ezen a fülön. Szűkítsd a
-                keresést a további sorokhoz.
-              </span>
             ) : null}
-          </div>
-          {data.pagination && data.pagination.totalPages > 1 ? (
-            <Pagination
-              variant="directionF"
-              position="bottom"
-              page={data.pagination.page}
-              totalPages={data.pagination.totalPages}
-              onPageChange={goToPage}
+            {!appliedSearch && !hasActiveFilters && canManage ? (
+              <Link href="/szerviz/hibajegyek/uj">
+                <PilotButton variant="primary" size="regular">
+                  <Icon name="plus" size={14} />
+                  Új hibajegy
+                </PilotButton>
+              </Link>
+            ) : null}
+          </PilotCard>
+        ) : null}
+
+        {data && data.items.length > 0 ? (
+          <PilotCard className="overflow-hidden">
+            <PilotDataTable
+              columns={JOB_COLUMNS}
+              sort={sort}
+              onSort={onSort}
+              rows={data.items}
+              rowKey={(item) => item.id}
+              rowTestId="service-job-row"
+              minWidth={JOB_TABLE_MIN_WIDTH}
+              onRowActivate={(item) =>
+                router.push(`/szerviz/hibajegyek/${item.id}`)
+              }
+              rowLabel={(item) => `${item.jobNumber} ${item.title} megnyitása`}
+              rowClassName={(item) => (item.hidden ? "opacity-50" : "")}
             />
-          ) : null}
-        </PilotCard>
-      ) : null}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-pilot-grey-100 px-4 py-3 text-xs text-pilot-grey-500">
+              <span>
+                {/* a találatszám a SZŰRT halmazé (a szerver adja), a sor-tartomány az oldalé */}
+                {pageRange(data, page)} {PILOT_TAB_NOUN[tab]}
+              </span>
+              {/* a régi, lapozatlan válasz vágott jelzése: a lapozott kérésnél nincs, de a szerver alakja még ismeri */}
+              {data.truncated ? (
+                <span>
+                  Csak az első 200 hibajegy látszik ezen a fülön. Szűkítsd a
+                  keresést a további sorokhoz.
+                </span>
+              ) : null}
+            </div>
+            {data.pagination && data.pagination.totalPages > 1 ? (
+              <Pagination
+                variant="directionF"
+                position="bottom"
+                page={data.pagination.page}
+                totalPages={data.pagination.totalPages}
+                onPageChange={goToPage}
+              />
+            ) : null}
+          </PilotCard>
+        ) : null}
+      </div>
     </PilotThemeRoot>
   );
 }

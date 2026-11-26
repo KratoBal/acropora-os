@@ -25,12 +25,18 @@ describe("the lists' one tab shape", () => {
     it(`${list}: the solid green pill, no tab shape of its own`, () => {
       const source = readFileSync(join(here, file), "utf8");
       expect(
-        source.includes("sv.pillTabActive") || /variant="solid"/.test(source),
+        // the pill drawn here, the link tabs' solid variant, or the shared tab row in its pill variant (with the keyboard)
+        source.includes("sv.pillTabActive") ||
+          /variant="solid"/.test(source) ||
+          /<ServiceListTabs[\s\S]{0,80}variant="pill"/.test(source),
       ).toBe(true);
       expect(source).not.toMatch(/whitespace-nowrap border-b-2/);
       expect(source).not.toContain(
         "bg-pilot-aqua-50 font-semibold text-pilot-aqua-700",
       );
-      expect(source).not.toMatch(/variant="(underline|pill)"/);
+      // the link tabs' old framed or underlined shapes (the shared tab row's "pill" IS the one shape)
+      expect(source).not.toMatch(
+        /<PilotLinkTabs[\s\S]{0,120}variant="(underline|pill)"/,
+      );
     });
 });
