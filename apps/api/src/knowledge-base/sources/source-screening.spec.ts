@@ -12,6 +12,8 @@ import {
 import { REQUIRED_PERMISSIONS_KEY } from "../../auth/decorators/require-permissions.decorator.js";
 import { SourceScreeningController } from "./source-screening.controller.js";
 import {
+  MAX_BULK,
+  parseBulkScreeningDecision,
   parseScreeningDecision,
   parseSourceListQuery,
   parseStudyTypeDecision,
@@ -29,7 +31,9 @@ import {
  * SOURCE SCREENING, WITHOUT A DATABASE (S4). WHAT TURNS IT RED: an exclusion
  * without a reason, "other" without a note, a reason on an inclusion, a
  * filter guessed instead of refused, the decision route without
- * knowledge.manage, or a MANAGER who may decide.
+ * knowledge.manage, or a MANAGER who may decide. The bulk decision (Picasso
+ * 3.26-b): a RESET, an empty or oversized id list, or a decision the one-row
+ * rules refuse, let through; the ids not reaching the store distinct.
  */
 describe("the list's query", () => {
   it("defaults to what waits for a decision, the first page of 25", () => {
@@ -169,6 +173,71 @@ describe("the study type's body (research-diagram-irany)", () => {
   });
 });
 
+describe("the bulk decision's body (Picasso 3.26-b)", () => {
+  it("ids and a decision under the one-row rules; the ids distinct, in order", () => {
+    assert.deepEqual(
+      parseBulkScreeningDecision({
+        ids: ["b", "a", "b", " c "],
+        decision: "EXCLUDE",
+        reason: "OTHER",
+        note: " édesvízi ",
+      }),
+      {
+        ok: true,
+        value: {
+          ids: ["b", "a", "c"],
+          decision: { status: "EXCLUDED", reason: "OTHER", note: "édesvízi" },
+        },
+      },
+    );
+    assert.deepEqual(
+      parseBulkScreeningDecision({ ids: ["a"], decision: "INCLUDE" }),
+      {
+        ok: true,
+        value: {
+          ids: ["a"],
+          decision: { status: "INCLUDED", reason: null, note: null },
+        },
+      },
+    );
+  });
+
+  it("refuses a reset, no ids, too many, a non-string id, and what one row's decision refuses", () => {
+    const ids = (n: number) => Array.from({ length: n }, (_, i) => `s${i}`);
+    for (const body of [
+      { ids: ["a"], decision: "RESET" },
+      { ids: [], decision: "INCLUDE" },
+      { decision: "INCLUDE" },
+      { ids: ids(MAX_BULK + 1), decision: "INCLUDE" },
+      { ids: ["a", 3], decision: "INCLUDE" },
+      { ids: ["a", " "], decision: "INCLUDE" },
+      { ids: ["a"], decision: "EXCLUDE" },
+      { ids: ["a"], decision: "EXCLUDE", reason: "OTHER" },
+      { ids: ["a"], decision: "INCLUDE", reason: "NOT_CORAL" },
+    ])
+      assert.equal(
+        parseBulkScreeningDecision(body).ok,
+        false,
+        JSON.stringify(body).slice(0, 80),
+      );
+    // the limit itself is taken
+    assert.equal(
+      parseBulkScreeningDecision({ ids: ids(MAX_BULK), decision: "INCLUDE" })
+        .ok,
+      true,
+    );
+    // a reset is refused in words, not by an empty list of problems
+    const reset = parseBulkScreeningDecision({ ids: ["a"], decision: "RESET" });
+    assert.ok(
+      !reset.ok &&
+        reset.problems.some((p) => p.includes("INCLUDE vagy EXCLUDE")),
+      JSON.stringify(reset),
+    );
+    const both = parseBulkScreeningDecision({ ids: [], decision: "EXCLUDE" });
+    assert.ok(!both.ok && both.problems.length === 2, "every problem at once");
+  });
+});
+
 describe("the screening service and its routes", () => {
   const USER = { id: "u-1" } as AuthenticatedUser;
   const status = async (p: Promise<unknown>) =>
@@ -193,6 +262,14 @@ describe("the screening service and its routes", () => {
       classify: async (id, decision, actor) => {
         calls.push(["classify", id, decision, actor]);
         return {} as never;
+      },
+      pendingIds: async (q) => {
+        calls.push(["pendingIds", q]);
+        return { ids: [], total: 0 };
+      },
+      decideMany: async (ids, decision, actor) => {
+        calls.push(["decideMany", ids, decision, actor]);
+        return { decided: ids.length, notPending: 0, missing: 0 };
       },
       ...over,
     };
@@ -226,6 +303,38 @@ describe("the screening service and its routes", () => {
     assert.equal(
       await status(missing.svc.decide("x", { decision: "INCLUDE" }, USER)),
       HttpStatus.NOT_FOUND,
+    );
+  });
+
+  it("a bulk decision goes to the store with the caller, its ids distinct; a bad body is a 400 before it", async () => {
+    const t = fake();
+    assert.equal(
+      await status(t.svc.decideMany({ ids: ["a"], decision: "RESET" }, USER)),
+      HttpStatus.BAD_REQUEST,
+    );
+    assert.equal(
+      await status(t.svc.pendingIds({ kind: "NOPE" })),
+      HttpStatus.BAD_REQUEST,
+    );
+    assert.deepEqual(t.calls, []);
+    assert.deepEqual(
+      await t.svc.decideMany(
+        { ids: ["a", "b", "a"], decision: "EXCLUDE", reason: "NOT_CORAL" },
+        USER,
+      ),
+      { decided: 2, notPending: 0, missing: 0 },
+    );
+    await t.svc.pendingIds({ kind: "REVIEW", status: "INCLUDED" });
+    assert.deepEqual(t.calls[0], [
+      "decideMany",
+      ["a", "b"],
+      { status: "EXCLUDED", reason: "NOT_CORAL", note: null },
+      "u-1",
+    ]);
+    assert.equal(
+      (t.calls[1]![1] as { kind: string }).kind,
+      "REVIEW",
+      "the list's filters reach the store",
     );
   });
 
@@ -292,6 +401,15 @@ describe("the screening service and its routes", () => {
     );
     assert.deepEqual(
       Reflect.getMetadata(REQUIRED_PERMISSIONS_KEY, proto.classify),
+      [PERMISSIONS.KNOWLEDGE_MANAGE],
+    );
+    // the bulk decision and its "select all" are a decider's (Picasso 3.26-b)
+    assert.deepEqual(
+      Reflect.getMetadata(REQUIRED_PERMISSIONS_KEY, proto.decideMany),
+      [PERMISSIONS.KNOWLEDGE_MANAGE],
+    );
+    assert.deepEqual(
+      Reflect.getMetadata(REQUIRED_PERMISSIONS_KEY, proto.pendingIds),
       [PERMISSIONS.KNOWLEDGE_MANAGE],
     );
   });

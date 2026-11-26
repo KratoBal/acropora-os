@@ -10,12 +10,18 @@ import type { Session, UserRole } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { KnowledgeSourceRow } from "@/lib/api/knowledge-base";
-import { SourceScreeningPage, sourceMeta } from "./source-screening-page";
+import {
+  SourceScreeningPage,
+  bulkResultText,
+  sourceMeta,
+} from "./source-screening-page";
 
 /**
  * A FORRÁSSZŰRÉS (Research & Knowledge Engine S4, Figma 3:68). A szerkesztő
  * befogad vagy okkal kizár; a gombok csak a knowledge.manage joggal látszanak;
- * a kizárás okot kér, az „egyéb” megjegyzést; billentyűvel is megy.
+ * a kizárás okot kér, az „egyéb” megjegyzést; billentyűvel is megy. Tömegesen
+ * (Picasso 3.26-b): jelölés soronként, oldalanként vagy a szűrt lista minden
+ * döntésre váró soráról, egy döntés megerősítés után; a soronkénti gombok maradnak.
  */
 vi.mock("next/font/local", () => ({
   default: () => ({ className: "pilot-inter-stub" }),
@@ -32,6 +38,8 @@ const api = vi.hoisted(() => ({
   screen: vi.fn(),
   uploadManualPdf: vi.fn(),
   classifySource: vi.fn(),
+  pendingSourceIds: vi.fn(),
+  screenMany: vi.fn(),
 }));
 vi.mock("@/lib/api/knowledge-base", () => ({ knowledgeBaseApi: api }));
 
@@ -114,6 +122,173 @@ beforeEach(() => {
   });
   api.screeningSummary.mockResolvedValue(SUMMARY);
   api.screen.mockResolvedValue(source("s1"));
+  api.screenMany.mockResolvedValue({ decided: 2, notPending: 0, missing: 0 });
+});
+
+const rowOf = async (title: string) =>
+  (await screen.findByText(title)).closest('[role="listitem"]') as HTMLElement;
+
+describe("Tömeges döntés (Picasso 3.26-b)", () => {
+  it("soronként jelöl, egy Befogad megerősítés után mindre megy; a soronkénti gombok maradnak", async () => {
+    render(<SourceScreeningPage />);
+    fireEvent.click(
+      within(await rowOf("Kitalált cikk s1")).getByRole("checkbox"),
+    );
+    fireEvent.click(
+      within(await rowOf("Kitalált cikk s2")).getByRole("checkbox"),
+    );
+    expect(screen.getByText("2 kijelölve")).toBeTruthy();
+    // the row's own buttons are still there
+    expect(
+      within(await rowOf("Kitalált cikk s1")).getByRole("button", {
+        name: "Befogad",
+      }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Befogad (2)" }));
+    expect(api.screenMany).not.toHaveBeenCalled();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "2 befogadása" }),
+    );
+    await waitFor(() =>
+      expect(api.screenMany).toHaveBeenCalledWith("token-1", {
+        decision: "INCLUDE",
+        ids: ["s1", "s2"],
+      }),
+    );
+    expect(await screen.findByText("2 forrás döntése mentve.")).toBeTruthy();
+    await waitFor(() => expect(api.sources).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText("2 kijelölve")).toBeNull();
+  });
+
+  it("a szűrt lista minden döntésre váró sorát kijelöli, oldalszám nélkül; a Kizár okot kér", async () => {
+    const ids = Array.from({ length: 510 }, (_, i) => `x${i}`);
+    api.pendingSourceIds.mockResolvedValue({ ids, total: 510 });
+    api.screenMany.mockResolvedValue({
+      decided: 507,
+      notPending: 3,
+      missing: 0,
+    });
+    render(<SourceScreeningPage />);
+    await screen.findByText("Kitalált cikk s1");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Mind kijelölése a szűrt listán" }),
+    );
+    expect(await screen.findByText("510 kijelölve")).toBeTruthy();
+    const params = api.pendingSourceIds.mock.calls[0]![1] as URLSearchParams;
+    expect([params.get("status"), params.has("page")]).toEqual([
+      "PENDING",
+      false,
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Kizár (510)" }));
+    const bar = screen.getByLabelText("Tömeges döntés");
+    fireEvent.change(within(bar).getByLabelText("Kizárás oka"), {
+      target: { value: "OTHER" },
+    });
+    const save = within(bar).getByRole("button", {
+      name: "Kizárás mentése (510)",
+    }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.change(within(bar).getByLabelText("Megjegyzés"), {
+      target: { value: "nem korall" },
+    });
+    fireEvent.click(save);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "510 kizárása" }),
+    );
+    await waitFor(() =>
+      expect(api.screenMany).toHaveBeenCalledWith("token-1", {
+        decision: "EXCLUDE",
+        reason: "OTHER",
+        note: "nem korall",
+        ids,
+      }),
+    );
+    expect(
+      await screen.findByText(
+        "507 forrás döntése mentve. 3 közben már döntést kapott, az változatlan maradt.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("ha a lista hosszabb, mint amennyi egyszerre kijelölhető, kimondja; szűrő-váltáskor a kijelölés elmúlik", async () => {
+    api.pendingSourceIds.mockResolvedValue({ ids: ["a", "b"], total: 1200 });
+    render(<SourceScreeningPage />);
+    await screen.findByText("Kitalált cikk s1");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Mind kijelölése a szűrt listán" }),
+    );
+    expect(
+      await screen.findByText(
+        "A szűrt listán 1200 döntésre váró forrás van; egyszerre 2 jelölhető ki.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("2 kijelölve")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Szűrők" }));
+    fireEvent.change(screen.getByLabelText("Típus"), {
+      target: { value: "REVIEW" },
+    });
+    await waitFor(() => expect(screen.queryByText("2 kijelölve")).toBeNull());
+  });
+
+  it("az oldal jelölője az oldal döntésre váró sorait jelöli; szóköz a kiválasztott sort", async () => {
+    render(<SourceScreeningPage />);
+    await screen.findByText("Kitalált cikk s1");
+    fireEvent.click(
+      screen.getByLabelText("Az oldal döntésre váró sorainak kijelölése"),
+    );
+    expect(screen.getByText("2 kijelölve")).toBeTruthy();
+    const list = screen.getByRole("list", {
+      name: "Döntésre váró publikációk",
+    });
+    fireEvent.keyDown(list, { key: " " });
+    expect(screen.getByText("1 kijelölve")).toBeTruthy();
+  });
+
+  it("a MANAGER nem jelöl és tömegesen sem dönt", async () => {
+    auth.role = "MANAGER";
+    render(<SourceScreeningPage />);
+    await screen.findByText("Kitalált cikk s1");
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByLabelText("Tömeges döntés")).toBeNull();
+  });
+
+  it("a döntött sornak nincs jelölője", async () => {
+    api.sources.mockResolvedValue({
+      items: [
+        source("s1"),
+        source("s3", {
+          screening: {
+            status: "INCLUDED",
+            reason: null,
+            note: null,
+            by: null,
+            at: null,
+          },
+        }),
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 25,
+    });
+    render(<SourceScreeningPage />);
+    await screen.findByText("Kitalált cikk s3");
+    // by name: the included row has the study type's "control group" box, which is no selection
+    expect(
+      screen.queryByRole("checkbox", { name: "Kitalált cikk s3 kijelölése" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("checkbox", { name: "Kitalált cikk s1 kijelölése" }),
+    ).toBeTruthy();
+  });
+
+  it("az eredmény-mondat csak azt mondja, ami történt", () => {
+    expect(bulkResultText({ decided: 4, notPending: 0, missing: 0 })).toBe(
+      "4 forrás döntése mentve.",
+    );
+    expect(bulkResultText({ decided: 0, notPending: 2, missing: 1 })).toBe(
+      "0 forrás döntése mentve. 2 közben már döntést kapott, az változatlan maradt. 1 forrás már nem létezik.",
+    );
+  });
 });
 
 describe("Forrásszűrés", () => {

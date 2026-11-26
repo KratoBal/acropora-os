@@ -67,6 +67,25 @@ export type ScreeningDecisionInput =
   | { decision: "EXCLUDE"; reason: ExclusionReason; note?: string }
   | { decision: "RESET" };
 
+/** One decision for many sources (Picasso 3.26-b); a reset stays on its row. */
+export type BulkScreeningInput = Exclude<
+  ScreeningDecisionInput,
+  { decision: "RESET" }
+> & { ids: string[] };
+
+/** decided now; decided in the meantime (kept as it was); no such source */
+export interface BulkScreeningResult {
+  decided: number;
+  notPending: number;
+  missing: number;
+}
+
+/** The filter's pending sources over every page; `total` above `ids.length`: the list is longer than one decision takes. */
+export interface PendingSourceIds {
+  ids: string[];
+  total: number;
+}
+
 export type OverviewStage =
   | "DISCOVERY"
   | "SCREENING"
@@ -895,6 +914,19 @@ export const knowledgeBaseApi = {
       token,
       { method: "POST", body: JSON.stringify(input) },
     );
+  },
+  /** "Select all": the screen's filters, every page, only what waits for a decision (Picasso 3.26-b). */
+  pendingSourceIds(token: string, params: URLSearchParams) {
+    return apiRequest<PendingSourceIds>(
+      `${base}/pending-ids?${params.toString()}`,
+      token,
+    );
+  },
+  screenMany(token: string, input: BulkScreeningInput) {
+    return apiRequest<BulkScreeningResult>(`${base}/screening`, token, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
   },
   /** The study type of an included source no anchor classifies (research-diagram-irany). */
   classifySource(token: string, sourceId: string, input: StudyTypeInput) {
