@@ -59,6 +59,7 @@ function snapshot(
         unitNetPrice: D("2000"),
         vatRatePercent: D("27"),
         isOptional: false,
+        replacesItemId: null,
       },
       {
         id: "qi-opt",
@@ -71,6 +72,7 @@ function snapshot(
         unitNetPrice: D("50000"),
         vatRatePercent: D("27"),
         isOptional: true,
+        replacesItemId: null,
       },
     ],
     selectedOptionalItemIds: ["qi-opt"],

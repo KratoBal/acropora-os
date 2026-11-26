@@ -23,6 +23,7 @@ import { createProjectMaterialRequest } from "../material-requests/material-requ
 import { queueShopStock } from "../purchasing/project-reservation.service.js";
 import { createProject } from "../purchasing/project.repository.js";
 import { handoffSummary, variantLabel } from "./quote-dto.mapper.js";
+import { acceptedItemIds } from "./quote-accepted-items.js";
 import {
   computeHandoffPlan,
   type HandoffPlanBomItem,
@@ -415,13 +416,13 @@ async function loadSubject(tx: Tx, quoteId: string): Promise<Subject> {
   // accepted, an accepted quote cannot publish another); said here plainly
   if (version.status !== "PUBLISHED") throw notAccepted();
 
-  const selected = new Set(acceptance.selectedOptionalItemIds);
   const items = await tx.quoteItem.findMany({
     where: { versionId },
     select: {
       id: true,
       position: true,
       isOptional: true,
+      replacesItemId: true,
       block: { select: { position: true } },
       bomItems: {
         orderBy: { position: "asc" },
@@ -446,13 +447,14 @@ async function loadSubject(tx: Tx, quoteId: string): Promise<Subject> {
   items.sort(
     (a, b) => a.block.position - b.block.position || a.position - b.position,
   );
+  const accepted = acceptedItemIds(items, acceptance.selectedOptionalItemIds);
   const bomItems: HandoffPlanBomItem[] = [];
   const variants = new Map<
     string,
     { sku: string; catalogAuthority: string | null }
   >();
   for (const item of items) {
-    if (item.isOptional && !selected.has(item.id)) continue;
+    if (!accepted.has(item.id)) continue;
     for (const bom of item.bomItems) {
       if (bom.variantId && bom.variant)
         variants.set(bom.variantId, {

@@ -34,6 +34,7 @@ const ACCEPTED_VERSION_SELECT = {
           unitNetPrice: true,
           vatRatePercent: true,
           isOptional: true,
+          replacesItemId: true,
         },
       },
     },

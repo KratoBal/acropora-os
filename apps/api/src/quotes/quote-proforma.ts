@@ -17,6 +17,7 @@ import { normalizeBillingDraft } from "../billing/billing-document-draft.js";
 import { insertBillingDraft } from "../billing/billing-documents.repository.js";
 import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
 import { allocateMilestone, milestoneProformaLines } from "./quote-billing.js";
+import { acceptedItemIds } from "./quote-accepted-items.js";
 import { proformaNote } from "./quote-proforma-text.js";
 
 type Tx = Prisma.TransactionClient;
@@ -95,20 +96,24 @@ export async function createMilestoneProforma(
     },
     select: { selectedOptionalItemIds: true },
   });
-  const selected = new Set(acceptance?.selectedOptionalItemIds ?? []);
   const items = await tx.quoteItem.findMany({
     where: { versionId: quote.acceptedVersionId },
     select: {
       id: true,
       isOptional: true,
+      replacesItemId: true,
       quantity: true,
       unitNetPrice: true,
       vatRatePercent: true,
     },
   });
+  const accepted = acceptedItemIds(
+    items,
+    acceptance?.selectedOptionalItemIds ?? [],
+  );
   const split = allocateMilestone(
     items
-      .filter((i) => !i.isOptional || selected.has(i.id))
+      .filter((i) => accepted.has(i.id))
       .map((i) => ({
         net: i.quantity.times(i.unitNetPrice),
         vatRatePercent: i.vatRatePercent,
