@@ -322,6 +322,31 @@ describe("a mentés", () => {
     });
   }
 
+  it("régi AI build (404 az előzmény-listára vagy a mentésre): a telepítés régi, nem 'nincs ilyen verzió'; egy konkrét verzió 404-e marad nincs ilyen verzió", async () => {
+    const old = fakeClient({
+      listVersions: async () => ({ ok: false, kind: "not-found" }),
+      save: async () => ({ ok: false, kind: "not-found" }),
+      readVersion: async () => ({ ok: false, kind: "not-found" }),
+    }).client;
+    const svc = service(old);
+    for (const attempt of [
+      () => svc.listVersions(),
+      () => svc.save(body(), "user-1"),
+    ]) {
+      await assert.rejects(attempt(), (error: unknown) => {
+        assert.ok(error instanceof ServiceUnavailableException);
+        assert.match(error.message, /régebbi verzió fut/);
+        assert.ok(!/Nincs ilyen verzió/.test(error.message));
+        return true;
+      });
+    }
+    await assert.rejects(svc.readVersion("9"), (error: unknown) => {
+      assert.ok(error instanceof NotFoundException);
+      assert.match(error.message, /Nincs ilyen verzió/);
+      return true;
+    });
+  });
+
   it("a 409 üzenete nevezi az aktív verziót, és megadja a számot is", async () => {
     const svc = service(
       fakeClient({

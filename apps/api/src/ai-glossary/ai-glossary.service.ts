@@ -84,7 +84,10 @@ export class AiGlossaryService {
   }
 
   /** What the AI service answered, in a person's words; the token and the service's own text never reach the answer. */
-  private fail(failure: AiGlossaryFailure): never {
+  private fail(
+    failure: AiGlossaryFailure,
+    what: "list" | "version" | "save",
+  ): never {
     switch (failure.kind) {
       case "conflict":
         throw new ConflictException({
@@ -99,7 +102,14 @@ export class AiGlossaryService {
       case "invalid":
         throw new BadRequestException(failure.message);
       case "not-found":
-        throw new NotFoundException("Nincs ilyen verzió.");
+        // A 404 on ONE version is "no such version". A 404 on the list or on the save means the AI service has no such ROUTE: an older build
+        // (the editor is on, the AI service was not deployed with the glossary write path yet). Saying "no such version" there was misleading
+        // (measured on the test OS, 2026-11-26).
+        if (what === "version")
+          throw new NotFoundException("Nincs ilyen verzió.");
+        throw new ServiceUnavailableException(
+          "Az AI szolgáltatás ezen a telepítésen még nem támogatja a szójegyzék szerkesztését (régebbi verzió fut). Frissíteni kell az AI szolgáltatást.",
+        );
       case "unauthorized":
         throw new BadGatewayException(
           "Az AI szolgáltatás nem fogadta el a kérést (hitelesítés).",
@@ -131,7 +141,7 @@ export class AiGlossaryService {
 
   async listVersions(): Promise<{ versions: AiGlossaryVersionInfo[] }> {
     const result = await this.requireAllowed().listVersions();
-    if (!result.ok) this.fail(result);
+    if (!result.ok) this.fail(result, "list");
     const name = await this.namesFor(
       result.value.map((version: RawGlossaryVersionInfo) => version.createdBy),
     );
@@ -148,7 +158,7 @@ export class AiGlossaryService {
     if (!/^[1-9][0-9]{0,8}$/.test(rawVersion))
       throw new BadRequestException("A verzió száma hibás.");
     const result = await client.readVersion(Number(rawVersion));
-    if (!result.ok) this.fail(result);
+    if (!result.ok) this.fail(result, "version");
     const version: RawGlossaryVersion = result.value;
     const name = await this.namesFor([
       version.createdBy,
@@ -174,7 +184,7 @@ export class AiGlossaryService {
     const parsed = parseAiGlossarySaveInput(rawBody);
     if (!parsed.ok) throw new BadRequestException(parsed.message);
     const result = await client.save({ ...parsed.value, createdBy: userId });
-    if (!result.ok) this.fail(result);
+    if (!result.ok) this.fail(result, "save");
     return result.value;
   }
 }
