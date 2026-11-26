@@ -35,6 +35,8 @@ import type { DocumentStore } from "../service-assets/document-store/document-st
 import { budapestDayKey } from "../dashboard/budapest-day.js";
 import {
   proformaPaidOf,
+  advanceRateUncovered,
+  grossByVatRate,
   webshopFinalInvoiceProblem,
   webshopFinalOrder,
   webshopOverbillingProblem,
@@ -336,6 +338,16 @@ export class BillingDocumentIssueService {
         )
       : null;
     if (webshopFinalProblem) throw new ConflictException(webshopFinalProblem);
+    // AZ ELŐLEG KULCSONKÉNT A VÉGSZÁMLÁN (barracuda N3b): egy előleg utáni rendelés-szerkesztés nem hagyhat negatív sort egy kulcson
+    if (finalOrder && row.referencedInvoice) {
+      const advance = await this.documents.find(row.referencedInvoice.id);
+      const uncovered = advanceRateUncovered(
+        advance ? grossByVatRate(advance.lines, advance.currency) : null,
+        grossByVatRate(row.lines, row.currency),
+        row.currency,
+      );
+      if (uncovered) throw new ConflictException(uncovered);
+    }
 
     // WHAT THE WINDOW SHOWED IS WHAT THE INVOICE CARRIES (card 7ba97e0d): the same summary again, the shown values
     // compared by their digest, the three dates checked by the shared rule and put into the invoice

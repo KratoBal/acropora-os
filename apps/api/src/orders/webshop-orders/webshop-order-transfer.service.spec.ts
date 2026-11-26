@@ -350,6 +350,9 @@ describe("Hátralék beérkezett (S3)", () => {
       balance?: boolean;
       exists?: boolean;
       total?: number;
+      /** Medusa's own order state (barracuda N3a) */
+      orderStatus?: string;
+      business?: string;
     } = {},
   ) {
     const created: Record<string, unknown>[] = [];
@@ -375,8 +378,13 @@ describe("Hátralék beérkezett (S3)", () => {
     const service = new WebshopOrderTransferService(
       {
         source: async () => ({
-          order: { id: "order_55", display_id: 55, total: over.total ?? 13000 },
-          status: { status: "pending_processing" },
+          order: {
+            id: "order_55",
+            display_id: 55,
+            total: over.total ?? 13000,
+            status: over.orderStatus ?? "pending",
+          },
+          status: { status: over.business ?? "pending_processing" },
         }),
         detail: async (id: string) => ({ id }) as WebshopOrderDetail,
         adminClient: async () => ({
@@ -444,6 +452,24 @@ describe("Hátralék beérkezett (S3)", () => {
     ]);
     assert.equal(notices.length, 1);
     assert.equal(notices[0]!.displayId, 55);
+  });
+
+  // barracuda N3a: on a cancelled order the money that came in is a refund case, not a balance
+  it("a lemondott vagy sikertelenül lezárt rendelésre nem rögzít, nem értesít, nem szól a webshopnak", async () => {
+    for (const over of [
+      { orderStatus: "canceled" },
+      { business: "closed_unsuccessfully" },
+    ]) {
+      const { service, created, notices, shopCalls } = balanceSetup(over);
+      let message = "";
+      try {
+        await service.recordBalanceManual("order_55", input, USER, NOW);
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      assert.match(message, /hátralék nem rögzíthető/, JSON.stringify(over));
+      assert.deepEqual([created, notices, shopCalls], [[], [], []]);
+    }
   });
 
   it("előleg nélkül nem rögzít: nincs beérkezés, vagy az egész díjbekérőé volt", async () => {
