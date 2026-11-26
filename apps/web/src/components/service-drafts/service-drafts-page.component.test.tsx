@@ -495,6 +495,16 @@ describe("Service draft review -- ticket mailbox drafts", () => {
     expect(mock.places).not.toHaveBeenCalled();
   });
 
+  // Picasso 3.17 (acrobot 62633): the mailboxes' processing state is at the page's end, after the source tabs, not above the work
+  it("puts the mailbox processing state after the drafts' source tabs", async () => {
+    render(<ServiceDraftsPage />);
+    const status = await screen.findByText(/Ticket postafiók feldolgozás/);
+    const tabs = screen.getByRole("tablist", { name: "Piszkozat forrása" });
+    expect(
+      tabs.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("shows the ticket mailbox intake status for the admins", async () => {
     mock.ticketMailStatus.mockResolvedValue({
       ...(await mock.ticketMailStatus()),

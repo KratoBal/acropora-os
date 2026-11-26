@@ -100,6 +100,23 @@ async function page() {
 
 const state = () => screen.getByTestId("aquarium-save-state").textContent;
 
+// Picasso 3.28 (acrobot 62633): Tulajdon is the segmented switch, and the chosen one is said (aria-pressed)
+describe("akvárium: a Tulajdon kapcsoló", () => {
+  it("egy választás nyomott, a másikra kattintva az lesz", async () => {
+    await page();
+    const own = screen.getByRole("button", { name: "Saját" });
+    const customer = screen.getByRole("button", { name: "Ügyfél" });
+    const pressed = [own, customer].filter(
+      (button) => button.getAttribute("aria-pressed") === "true",
+    );
+    expect(pressed).toHaveLength(1);
+    const other = pressed[0] === own ? customer : own;
+    fireEvent.click(other);
+    expect(other).toHaveAttribute("aria-pressed", "true");
+    expect(pressed[0]).toHaveAttribute("aria-pressed", "false");
+  });
+});
+
 describe("akvárium adatlap: egy mentés", () => {
   it("a karbantartó és a berendezés a lapon vár, a szerverre csak a Mentés viszi", async () => {
     await page();

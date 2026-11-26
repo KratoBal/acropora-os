@@ -551,53 +551,6 @@ export function ServiceDraftsPage() {
         title="Piszkozatok"
         description="A napi jelentőből és a ticket@ címre érkezett levelekből kiemelt kérések. Hibajegy csak az elfogadás után jön létre."
       />
-      {sync && (
-        <details className="text-xs text-pilot-grey-500">
-          <summary className="cursor-pointer">
-            Gmail feldolgozás:{" "}
-            {sync.enabled
-              ? "bekapcsolva"
-              : sync.switchReason === "UNRECOGNISED"
-                ? "ismeretlen kapcsolóérték"
-                : "kikapcsolva"}
-          </summary>
-          <p className="mt-2 break-words">
-            {sync.mailbox} · {sync.query} · {sync.intervalMinutes} perc
-          </p>
-          {!sync.configured && <p>A Gmail-hozzáférés nincs beállítva.</p>}
-          {sync.lastRunAt && (
-            <p>
-              Utolsó futás: {new Date(sync.lastRunAt).toLocaleString("hu-HU")}
-            </p>
-          )}
-          {sync.lastError && <p role="alert">{sync.lastError}</p>}
-        </details>
-      )}
-      {ticketSync && (
-        <details className="text-xs text-pilot-grey-500">
-          <summary className="cursor-pointer">
-            Ticket postafiók feldolgozás:{" "}
-            {ticketSync.enabled
-              ? "bekapcsolva"
-              : ticketSync.switchReason === "UNRECOGNISED"
-                ? "ismeretlen kapcsolóérték"
-                : "kikapcsolva"}
-          </summary>
-          <p className="mt-2 break-words">
-            {ticketSync.mailbox} · {ticketSync.intervalMinutes} perc
-          </p>
-          {!ticketSync.configured && (
-            <p>A ticket postafiók olvasó hozzáférése nincs beállítva.</p>
-          )}
-          {ticketSync.lastRunAt && (
-            <p>
-              Utolsó futás:{" "}
-              {new Date(ticketSync.lastRunAt).toLocaleString("hu-HU")}
-            </p>
-          )}
-          {ticketSync.lastError && <p role="alert">{ticketSync.lastError}</p>}
-        </details>
-      )}
       <div
         role="tablist"
         aria-label="Piszkozat forrása"
@@ -746,6 +699,57 @@ export function ServiceDraftsPage() {
         >
           További piszkozatok
         </PilotButton>
+      )}
+      {/*
+        THE TWO MAILBOXES' PROCESSING STATE STANDS AT THE END, NOT ABOVE THE WORK (Picasso 3.17, acrobot 62633): it is a status line for the
+        admin, and the drafts are the page. An error in it is still announced (role="alert").
+      */}
+      {sync && (
+        <details className="text-xs text-pilot-grey-500">
+          <summary className="cursor-pointer">
+            Gmail feldolgozás:{" "}
+            {sync.enabled
+              ? "bekapcsolva"
+              : sync.switchReason === "UNRECOGNISED"
+                ? "ismeretlen kapcsolóérték"
+                : "kikapcsolva"}
+          </summary>
+          <p className="mt-2 break-words">
+            {sync.mailbox} · {sync.query} · {sync.intervalMinutes} perc
+          </p>
+          {!sync.configured && <p>A Gmail-hozzáférés nincs beállítva.</p>}
+          {sync.lastRunAt && (
+            <p>
+              Utolsó futás: {new Date(sync.lastRunAt).toLocaleString("hu-HU")}
+            </p>
+          )}
+          {sync.lastError && <p role="alert">{sync.lastError}</p>}
+        </details>
+      )}
+      {ticketSync && (
+        <details className="text-xs text-pilot-grey-500">
+          <summary className="cursor-pointer">
+            Ticket postafiók feldolgozás:{" "}
+            {ticketSync.enabled
+              ? "bekapcsolva"
+              : ticketSync.switchReason === "UNRECOGNISED"
+                ? "ismeretlen kapcsolóérték"
+                : "kikapcsolva"}
+          </summary>
+          <p className="mt-2 break-words">
+            {ticketSync.mailbox} · {ticketSync.intervalMinutes} perc
+          </p>
+          {!ticketSync.configured && (
+            <p>A ticket postafiók olvasó hozzáférése nincs beállítva.</p>
+          )}
+          {ticketSync.lastRunAt && (
+            <p>
+              Utolsó futás:{" "}
+              {new Date(ticketSync.lastRunAt).toLocaleString("hu-HU")}
+            </p>
+          )}
+          {ticketSync.lastError && <p role="alert">{ticketSync.lastError}</p>}
+        </details>
       )}
     </PilotThemeRoot>
   );
