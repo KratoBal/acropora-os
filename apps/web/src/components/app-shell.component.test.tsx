@@ -190,20 +190,24 @@ describe("AppShell business navigation groups", () => {
   });
 
   // f0b70dbd: the 224 px menu cuts long names ("Raktár és bes...", "Eszköznyilvántar..."); the whole name is on hover
-  it("a menu heading and a menu item carry their whole name as a title, for the cut ones", () => {
+  // Picasso's inventory R2, acrobot 62463 (way B): the menu stays 224 px and a long name wraps; it is not cut
+  it("a long menu heading and menu item wrap instead of being cut", () => {
     render(<AppShell>Oldaltartalom</AppShell>);
     const heading = screen.getByRole("button", {
       name: "Raktár és beszerzés",
     });
-    expect(
-      within(heading).getByTitle("Raktár és beszerzés"),
-    ).toBeInTheDocument();
+    const headingLabel = within(heading).getByText("Raktár és beszerzés");
+    expect(headingLabel).not.toHaveClass("truncate");
+    expect(headingLabel).toHaveClass("break-words", "min-w-0", "flex-1");
+    expect(heading).toHaveClass("min-h-10");
+    expect(heading).not.toHaveClass("h-10");
     fireEvent.click(heading);
-    expect(
-      within(screen.getByRole("link", { name: "Beszerzés" })).getByTitle(
-        "Beszerzés",
-      ),
-    ).toBeInTheDocument();
+    const item = screen.getByRole("link", { name: "Beszerzés" });
+    const itemLabel = within(item).getByText("Beszerzés");
+    expect(itemLabel).not.toHaveClass("truncate");
+    expect(itemLabel).toHaveClass("break-words");
+    expect(item).toHaveClass("min-h-9");
+    expect(item).not.toHaveClass("h-9");
   });
 
   /*
@@ -369,6 +373,39 @@ describe("AppShell #1122 utáni regressziók", () => {
     auth.session = ownerSession;
     navigation.pathname = "/";
     window.localStorage.clear();
+  });
+
+  /*
+    THE MENU'S SCROLL HINT (Picasso's inventory R1). WHAT TURNS RED: no hint while there is menu below; the hint stays at the end
+    of the menu or when everything fits; it catches the clicks; a screen reader reads it.
+  */
+  it("a fade over the menu's bottom edge while there is more below, gone at the end", () => {
+    render(<AppShell>Oldaltartalom</AppShell>);
+    const nav = screen.getByRole("navigation", { name: "Fő navigáció" });
+    const box = (
+      scrollTop: number,
+      clientHeight: number,
+      scrollHeight: number,
+    ) => {
+      for (const [key, value] of Object.entries({
+        scrollTop,
+        clientHeight,
+        scrollHeight,
+      }))
+        Object.defineProperty(nav, key, { configurable: true, value });
+      fireEvent.scroll(nav);
+    };
+    const hint = () =>
+      nav.parentElement!.querySelector("[data-nav-scroll-hint]");
+
+    box(0, 719, 832);
+    expect(hint()).not.toBeNull();
+    expect(hint()).toHaveAttribute("aria-hidden", "true");
+    expect(hint()).toHaveClass("pointer-events-none");
+    box(113, 719, 832);
+    expect(hint()).toBeNull();
+    box(0, 900, 832);
+    expect(hint()).toBeNull();
   });
 
   it("a navigáció saját függőleges görgetést kap", () => {
