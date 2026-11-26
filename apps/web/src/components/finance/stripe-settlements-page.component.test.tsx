@@ -182,6 +182,27 @@ beforeEach(() => {
  * verziójával megy; ha a kikapcsolt behúzás oka nem látszik; ha olvasó jogosultsággal jóváhagyás vagy ellenőrzés kínálkozik.
  */
 describe("StripeSettlementsPage", () => {
+  /*
+    A RÉSZLET A LISTA HELYÉN ÁLL (ugyanaz az URL), ezért a nyíl GOMB, nem link: a kattintás a kijelölést törli, és sehova nem navigál.
+    MI PIROSÍT: ha a nyíl linkké válik (útvonalat kapna), ha a kattintás URL-t ír vagy lapot vált, ha a részlet a kattintás után is marad.
+  */
+  it("the arrow in the detail clears the selection and navigates nowhere", async () => {
+    render(createElement(StripeSettlementsPage));
+    fireEvent.click((await screen.findAllByTestId("stripe-kifizetes"))[0]!);
+    await screen.findByRole("heading", { name: /Stripe kifizetés ·/ });
+    const replaced = urlNavigation.replace.mock.calls.length;
+    expect(screen.queryByRole("link", { name: "Elszámolások" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Elszámolások" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("heading", { name: /Stripe kifizetés ·/ }),
+      ).toBeNull(),
+    );
+    expect(screen.getAllByTestId("stripe-kifizetes")[0]).toBeInTheDocument();
+    expect(urlNavigation.push).not.toHaveBeenCalled();
+    expect(urlNavigation.replace.mock.calls.length).toBe(replaced);
+  });
+
   it("lists each payout with what it paid out, the gross, the fee and the pairing", async () => {
     render(createElement(StripeSettlementsPage));
     const [row] = await screen.findAllByTestId("stripe-kifizetes");
