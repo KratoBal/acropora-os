@@ -16,11 +16,8 @@ import {
 import { normalizeBillingDraft } from "../billing/billing-document-draft.js";
 import { insertBillingDraft } from "../billing/billing-documents.repository.js";
 import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
-import { allocateMilestone } from "./quote-billing.js";
-import {
-  proformaLineDescription,
-  proformaNote,
-} from "./quote-proforma-text.js";
+import { allocateMilestone, milestoneProformaLines } from "./quote-billing.js";
+import { proformaNote } from "./quote-proforma-text.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -145,20 +142,11 @@ export async function createMilestoneProforma(
       }),
       sourceType: quote.project ? "PROJECT" : "MANUAL",
       sourceId: quote.project?.id ?? null,
-      lines: split.lines.map((line) => ({
-        productId: null,
-        description: proformaLineDescription({
-          label: milestone.label,
-          percent: milestone.percent,
-          quoteNumber: quote.quoteNumber,
-        }),
-        quantity: "1",
-        unit: "db",
-        unitNet: line.net,
-        vatRatePercent: line.vatRatePercent,
-        discountPercent: null,
-        comment: null,
-      })),
+      lines: milestoneProformaLines(split.lines, {
+        label: milestone.label,
+        percent: milestone.percent,
+        quoteNumber: quote.quoteNumber,
+      }),
     },
     randomUUID,
   );
