@@ -115,6 +115,21 @@ const candidate = (name: string) =>
   screen.getByRole("checkbox", { name: `${name} jelölése` });
 
 describe("PriceListSuggestionsPage", () => {
+  // the back-step is the shared small left arrow link to the supplier price lists (Picasso R12)
+  it("steps back to the supplier price lists with the shared arrow link", async () => {
+    render(<PriceListSuggestionsPage />);
+    // the tab row also has a link of that name: the back-step is the one with the shared arrow classes
+    const links = await screen.findAllByRole("link", {
+      name: "Beszállítói árlisták",
+    });
+    const back = links.find((link) =>
+      link.className.includes("text-xs text-pilot-grey-400"),
+    );
+    expect(back).toBeDefined();
+    expect(back!.getAttribute("href")).toBe("/beszerzes/arlistak");
+    expect(screen.queryByText(/Vissza a beszállítói árlistákhoz/)).toBeNull();
+  });
+
   it("shows each sku once with its candidates beneath, the score and what the suggestion rests on", async () => {
     render(<PriceListSuggestionsPage />);
     expect(
