@@ -17,7 +17,10 @@ import { listedSelect } from "@/test/listed-option";
 import { pickMonth } from "@/test/month-field";
 
 import { AttendanceSheetPage } from "./attendance-sheet-page";
-import { formatAttendanceHours } from "./attendance-sheet-table";
+import {
+  AttendanceSheetTable,
+  formatAttendanceHours,
+} from "./attendance-sheet-table";
 
 const api = vi.hoisted(() => ({
   employees: vi.fn(),
@@ -172,6 +175,12 @@ describe("AttendanceSheetPage", () => {
       .getByText(/2026\. 11\. 13\./)
       .closest("tr")!;
     expect(within(sick).getAllByText("B")).toHaveLength(2);
+    // Picasso 3.20: the paper codes say what they mean, on hover and to the screen reader
+    for (const code of within(sick).getAllByText("B")) {
+      expect(code.tagName).toBe("ABBR");
+      expect(code.getAttribute("title")).toBe("Betegség");
+      expect(code.getAttribute("aria-label")).toBe("Betegség");
+    }
     const monday = within(table)
       .getByText(/2026\. 11\. 02\./)
       .closest("tr")!;
@@ -458,5 +467,53 @@ describe("AttendanceSheetPage", () => {
       "2026-11-18",
       expect.anything(),
     );
+  });
+});
+
+describe("AttendanceSheetTable code letters (Picasso 3.20)", () => {
+  const row = (date: string, mark: string | null) =>
+    ({
+      date,
+      weekday: 1,
+      kind: mark ? "LEAVE" : "WORK",
+      start: null,
+      end: null,
+      mark,
+      minutes: 0,
+      future: false,
+      note: null,
+    }) as never;
+
+  it("SZ is Szabadság and B is Betegség on hover and for the screen reader, an unknown mark stays plain text", () => {
+    render(
+      <AttendanceSheetTable
+        sheet={
+          {
+            rows: [
+              row("2026-11-02", "SZ"),
+              row("2026-11-03", "B"),
+              row("2026-11-04", "X"),
+            ],
+            totalMinutes: 0,
+            sickDays: 1,
+            leaveDays: 1,
+          } as never
+        }
+        canEdit={() => false}
+        onEdit={() => {}}
+      />,
+    );
+    const sz = screen.getAllByText("SZ");
+    expect(sz).toHaveLength(2);
+    for (const code of sz) {
+      expect(code.tagName).toBe("ABBR");
+      expect(code.getAttribute("title")).toBe("Szabadság");
+    }
+    for (const code of screen.getAllByText("B")) {
+      expect(code.getAttribute("title")).toBe("Betegség");
+    }
+    for (const code of screen.getAllByText("X")) {
+      expect(code.tagName).not.toBe("ABBR");
+    }
   });
 });

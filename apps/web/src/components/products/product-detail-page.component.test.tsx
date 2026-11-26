@@ -433,6 +433,25 @@ describe("ProductDetailPage mirror ownership", () => {
     expect(field("Újrarendelési pont")).toBe("Újrarendelési pont3");
   });
 
+  // Picasso 3.21: an empty internal note read "Nincs belső megjegyzés" inside a warm (orange) box, which looks like a warning
+  it("üres belső megjegyzés nem meleg (narancs) kártyában áll", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      variants: detail.variants.map((variant) => ({
+        ...variant,
+        extension: variant.extension
+          ? { ...variant.extension, internalNote: null }
+          : variant.extension,
+      })),
+    } as typeof detail);
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+    const line = screen.getByText("Nincs belső megjegyzés.");
+    const card = line.closest("section");
+    expect(card?.querySelector("h2")?.textContent).toBe("Belső megjegyzés");
+    expect(card?.className).not.toContain("bg-pilot-accent-warm-soft");
+  });
+
   it("többváltozatos terméknél a készlet-kártya a Változatok kártyára utal, nem egy változat értékét adja ki", async () => {
     const first = detail.variants[0]!;
     api.detail.mockResolvedValue({

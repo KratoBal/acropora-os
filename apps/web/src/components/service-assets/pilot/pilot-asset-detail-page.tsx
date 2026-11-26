@@ -618,7 +618,17 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
 
               <PilotCard>
                 <PilotCardHeader title="Karbantartás" />
-                <div className="grid grid-cols-2 gap-x-8 gap-y-4 p-5">
+                {/* ÜRES KÁRTYATÖRZS HELYETT EGY MONDAT (Picasso 3.20): ha egy mező sincs kitöltve, a kártya felirat nélküli üres doboz volt */}
+                {!asset.installedAt &&
+                !asset.warrantyExpiresAt &&
+                !asset.serviceIntervalDays &&
+                !asset.nextServiceAt ? (
+                  <p className="p-5 text-sm text-pilot-grey-500">
+                    Még nincs karbantartási adat: telepítés, garancia és
+                    intervallum a szerkesztésben adható meg.
+                  </p>
+                ) : null}
+                <div className="grid grid-cols-2 gap-x-8 gap-y-4 p-5 empty:hidden">
                   <Field
                     label="Telepítés"
                     value={formatDate(asset.installedAt)}
