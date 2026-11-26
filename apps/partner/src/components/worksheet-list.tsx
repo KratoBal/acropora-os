@@ -20,6 +20,7 @@ import {
 } from "@acropora/types";
 
 import { partnerApi } from "@/lib/api";
+import { PHONE_CELL, PHONE_TITLE_CELL } from "@/lib/phone-table";
 
 /**
  * A MUNKALAP-LISTA -- FIGMA 9. KÖR (Partner Portál), a Make-terv
@@ -270,8 +271,8 @@ export function WorksheetList() {
 
       {data?.items.length ? (
         <div className="flex-1 overflow-x-auto">
-          <table className="w-full min-w-[820px] border-collapse text-sm">
-            <thead>
+          <table className="w-full border-collapse text-sm max-md:block md:min-w-[820px]">
+            <thead className="max-md:sr-only">
               <tr className="border-b border-pilot-grey-100">
                 {[
                   "Munkalap",
@@ -289,15 +290,15 @@ export function WorksheetList() {
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="max-md:block">
               {data.items.map((worksheet, index) => (
                 <tr
                   key={worksheet.id}
-                  className={`border-b border-pilot-grey-100 transition-colors hover:bg-pilot-aqua-50/40 ${
+                  className={`max-md:block max-md:px-5 max-md:py-3 border-b border-pilot-grey-100 transition-colors hover:bg-pilot-aqua-50/40 ${
                     index % 2 === 0 ? "bg-white" : "bg-pilot-grey-50/50"
                   }`}
                 >
-                  <td className="px-5 py-3">
+                  <td className={`px-5 py-3 ${PHONE_TITLE_CELL}`}>
                     <Link
                       href={`/munkalapok/${worksheet.id}`}
                       className="font-medium text-pilot-grey-900 hover:text-pilot-aqua-700"
@@ -311,12 +312,18 @@ export function WorksheetList() {
                         : ""}
                     </p>
                   </td>
-                  <td className="px-5 py-3 text-pilot-grey-500">
+                  <td
+                    data-label="Helyszín"
+                    className={`px-5 py-3 text-pilot-grey-500 ${PHONE_CELL}`}
+                  >
                     {worksheet.departmentPath?.length
                       ? worksheet.departmentPath.join(" / ")
                       : worksheet.departmentCode}
                   </td>
-                  <td className="px-5 py-3">
+                  <td
+                    data-label="Felelős"
+                    className={`px-5 py-3 ${PHONE_CELL}`}
+                  >
                     {worksheet.assigneeNames[0] ? (
                       <span className="flex items-center gap-2">
                         <PilotAvatar
@@ -334,7 +341,10 @@ export function WorksheetList() {
                       </span>
                     )}
                   </td>
-                  <td className="px-5 py-3">
+                  <td
+                    data-label="Állapot"
+                    className={`px-5 py-3 ${PHONE_CELL}`}
+                  >
                     <PilotBadge
                       variant={pilotBadgeVariantForTone(
                         worksheetDisplayStatusTone(
@@ -355,7 +365,10 @@ export function WorksheetList() {
                       }
                     </PilotBadge>
                   </td>
-                  <td className="whitespace-nowrap px-5 py-3 text-pilot-grey-500">
+                  <td
+                    data-label="Módosítva"
+                    className={`whitespace-nowrap px-5 py-3 text-pilot-grey-500 ${PHONE_CELL}`}
+                  >
                     {new Intl.DateTimeFormat("hu-HU", {
                       dateStyle: "short",
                       timeStyle: "short",

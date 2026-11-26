@@ -18,6 +18,7 @@ import {
 import { eszkozAzonosito } from "@/lib/eszkoz-azonosito";
 import { partnerApi } from "@/lib/api";
 import { useAuth } from "./auth";
+import { PHONE_CELL, PHONE_TITLE_CELL } from "@/lib/phone-table";
 
 /**
  * AZ ESZKÖZLISTA -- FIGMA 9. KÖR (Partner Portál), a Make-terv
@@ -312,8 +313,8 @@ export function AssetList() {
 
       {data?.items.length ? (
         <div className="flex-1 overflow-x-auto">
-          <table className="w-full min-w-[980px] border-collapse text-sm">
-            <thead>
+          <table className="w-full border-collapse text-sm max-md:block md:min-w-[980px]">
+            <thead className="max-md:sr-only">
               <tr className="border-b border-pilot-grey-100">
                 {[
                   "Eszköz",
@@ -332,15 +333,15 @@ export function AssetList() {
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="max-md:block">
               {data.items.map((asset, index) => (
                 <tr
                   key={asset.id}
                   className={`border-b border-pilot-grey-100 transition-colors hover:bg-pilot-aqua-50/40 ${
                     index % 2 === 0 ? "bg-white" : "bg-pilot-grey-50/50"
-                  }`}
+                  } max-md:block max-md:px-5 max-md:py-3`}
                 >
-                  <td className="px-5 py-3">
+                  <td className={`px-5 py-3 ${PHONE_TITLE_CELL}`}>
                     <Link
                       href={`/eszkozok/${asset.id}`}
                       className="font-medium text-pilot-grey-900 hover:text-pilot-aqua-700"
@@ -359,12 +360,18 @@ export function AssetList() {
                       </p>
                     ) : null}
                   </td>
-                  <td className="px-5 py-3 text-pilot-grey-500">
+                  <td
+                    data-label="Elhelyezés"
+                    className={`px-5 py-3 text-pilot-grey-500 ${PHONE_CELL}`}
+                  >
                     {asset.unit
                       ? `${asset.unit.path.join(" / ")} (${asset.unit.code})`
                       : (asset.address?.formatted ?? "Nincs pontosítva.")}
                   </td>
-                  <td className="px-5 py-3 text-xs text-pilot-grey-600">
+                  <td
+                    data-label="Hierarchia"
+                    className={`px-5 py-3 text-xs text-pilot-grey-600 ${PHONE_CELL}`}
+                  >
                     {asset.parent ? (
                       <span>
                         Része: <strong>{asset.parent.name}</strong>
@@ -375,15 +382,24 @@ export function AssetList() {
                       "Önálló eszköz"
                     )}
                   </td>
-                  <td className="px-5 py-3 text-pilot-grey-600">
+                  <td
+                    data-label="Kategória"
+                    className={`px-5 py-3 text-pilot-grey-600 ${PHONE_CELL}`}
+                  >
                     {asset.category ?? "—"}
                   </td>
-                  <td className="px-5 py-3 font-mono text-xs text-pilot-grey-500">
+                  <td
+                    data-label="Műszaki azonosító"
+                    className={`px-5 py-3 font-mono text-xs text-pilot-grey-500 ${PHONE_CELL}`}
+                  >
                     {[asset.manufacturer, asset.model, asset.serialNumber]
                       .filter(Boolean)
                       .join(" · ") || "—"}
                   </td>
-                  <td className="px-5 py-3">
+                  <td
+                    data-label="Státusz"
+                    className={`px-5 py-3 ${PHONE_CELL}`}
+                  >
                     <PilotBadge
                       variant={pilotBadgeVariantForTone(
                         assetStatusTone[asset.status],

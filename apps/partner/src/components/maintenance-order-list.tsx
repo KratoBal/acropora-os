@@ -16,6 +16,7 @@ import {
 
 import { partnerApi } from "@/lib/api";
 import { Message } from "./ticket-list";
+import { PHONE_CELL, PHONE_TITLE_CELL } from "@/lib/phone-table";
 
 /**
  * A MEGRENDELÉSEK LISTÁJA -- Balázs sorrendjének (emlék 1840) 5. része,
@@ -100,8 +101,8 @@ export function MaintenanceOrderList() {
 
       {data?.items.length ? (
         <div className="overflow-x-auto rounded-xl bg-white ring-1 ring-pilot-grey-200">
-          <table className="w-full min-w-[720px] border-collapse text-sm">
-            <thead>
+          <table className="w-full border-collapse text-sm max-md:block md:min-w-[720px]">
+            <thead className="max-md:sr-only">
               <tr className="border-b border-pilot-grey-100">
                 {[
                   "Megrendelés száma",
@@ -119,16 +120,16 @@ export function MaintenanceOrderList() {
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="max-md:block">
               {data.items.map((order, index) => (
                 <tr
                   key={order.id}
                   onClick={() => router.push(`/megrendelesek/${order.id}`)}
-                  className={`group cursor-pointer border-b border-pilot-grey-100 transition-colors last:border-0 hover:bg-pilot-aqua-50/40 ${
+                  className={`max-md:block max-md:px-5 max-md:py-3 group cursor-pointer border-b border-pilot-grey-100 transition-colors last:border-0 hover:bg-pilot-aqua-50/40 ${
                     index % 2 === 0 ? "bg-white" : "bg-pilot-grey-50/50"
                   }`}
                 >
-                  <td className="px-5 py-3">
+                  <td className={`px-5 py-3 ${PHONE_TITLE_CELL}`}>
                     <span className="font-mono text-pilot-grey-900 transition-colors group-hover:text-pilot-aqua-700">
                       {order.number}
                     </span>
@@ -138,16 +139,28 @@ export function MaintenanceOrderList() {
                       </span>
                     ) : null}
                   </td>
-                  <td className="px-5 py-3 text-pilot-grey-500">
+                  <td
+                    data-label="Szerződés"
+                    className={`px-5 py-3 text-pilot-grey-500 ${PHONE_CELL}`}
+                  >
                     {order.contractNumber}
                   </td>
-                  <td className="px-5 py-3 text-pilot-grey-600">
+                  <td
+                    data-label="Helyszín"
+                    className={`px-5 py-3 text-pilot-grey-600 ${PHONE_CELL}`}
+                  >
                     {order.departmentName ?? "—"}
                   </td>
-                  <td className="px-5 py-3 text-pilot-grey-600">
+                  <td
+                    data-label="Időszak"
+                    className={`px-5 py-3 text-pilot-grey-600 ${PHONE_CELL}`}
+                  >
                     {order.period}
                   </td>
-                  <td className="px-5 py-3">
+                  <td
+                    data-label="Állapot"
+                    className={`px-5 py-3 ${PHONE_CELL}`}
+                  >
                     <PilotBadge
                       variant={pilotBadgeVariantForTone(
                         maintenanceOrderStatusTone[order.status],
