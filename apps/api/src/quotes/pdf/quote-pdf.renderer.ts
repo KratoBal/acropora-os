@@ -40,7 +40,8 @@ import {
  *     section's first item;
  *   - an item's description may run onto the next page (paragraph by
  *     paragraph), but its name and its price stay together;
- *   - an options block stays together when it fits on one page;
+ *   - an options block stays together when it fits on one page, and so does
+ *     a section's group of optional items;
  *   - the summary never breaks: if it does not fit, it starts a new page;
  *   - a block marked `startOnNewPage` (typically the terms) starts one;
  *   - every page carries the top bar, the footer (page number, quote number
@@ -119,6 +120,9 @@ const LABELS = {
     validUntil: "Érvényes:",
     options: "Opcionális tételek",
     optionsBand: "Nem részei a végösszegnek.",
+    optionalTag: "Opcionális",
+    optionalAddition: "kiegészítés",
+    withOptions: "Az opcionális tételekkel együtt",
     summary: "Összesítés",
     net: "Nettó összeg",
     vat: "ÁFA",
@@ -142,6 +146,9 @@ const LABELS = {
     validUntil: "Valid until:",
     options: "Optional items",
     optionsBand: "Not included in the total.",
+    optionalTag: "Optional",
+    optionalAddition: "addition",
+    withOptions: "Including the optional items",
     summary: "Summary",
     net: "Net amount",
     vat: "VAT",
@@ -321,6 +328,7 @@ const PARAGRAPH: TextStyle = { size: 8.6, color: BODY };
 const ITEM_NAME: TextStyle = { size: 9.3, color: NAVY, weight: "bold" };
 const ITEM_DESCRIPTION: TextStyle = { size: 8.35, color: BODY };
 const BAND: TextStyle = { size: 8, color: TEAL, weight: "bold" };
+const OPTIONAL_TAG: TextStyle = { size: 7.6, color: TEAL, weight: "bold" };
 const SUMMARY_LABEL: TextStyle = { size: 8.7, color: NAVY };
 const SUMMARY_VALUE: TextStyle = { size: 9, color: NAVY };
 const TOTAL_LABEL: TextStyle = { size: 9.5, color: NAVY, weight: "bold" };
@@ -520,7 +528,6 @@ function drawText(doc: PDFKit.PDFDocument, flow: Flow, block: QuotePdfBlock) {
 function rowCells(
   item: QuotePdfItem,
   input: QuotePdfInput,
-  prefix: string,
 ): {
   quantity: string;
   unit: string;
@@ -536,11 +543,8 @@ function rowCells(
   return {
     quantity: `${formatQuantity(item.quantity)} ${item.unit}`,
     unit: money(unit),
-    total: `${prefix}${money(gross ? lineGross(item) : lineNet(item))}`,
-    grossTotal:
-      input.priceDisplay === "BOTH"
-        ? `${prefix}${money(lineGross(item))}`
-        : null,
+    total: money(gross ? lineGross(item) : lineNet(item)),
+    grossTotal: input.priceDisplay === "BOTH" ? money(lineGross(item)) : null,
   };
 }
 
@@ -602,8 +606,22 @@ function drawTableHead(
 /** The height of a row's first line: what must stay together with the head and the next row. */
 function rowHeadHeight(doc: PDFKit.PDFDocument, item: QuotePdfItem): number {
   return (
-    Math.max(measure(doc, item.name, ITEM_NAME, NAME_WIDTH), ROW_HEIGHT) + 14
+    Math.max(measure(doc, item.name, ITEM_NAME, NAME_WIDTH), ROW_HEIGHT) +
+    (item.isOptional ? TAG_HEIGHT : 0) +
+    14
   );
+}
+
+/** The line under an optional item's name; it moves with the name. */
+const TAG_HEIGHT = 11;
+
+/**
+ * THE OPTIONAL ITEM'S TAG (card 2540d9d4, Luca 2026-11-26): "Opcionális · kiegészítés" under the name. Every optional item is an
+ * addition until an option can name the item it replaces; then this one line says which ("a 3. tétel helyett").
+ */
+// the item is not read yet: murena's replaced item (`replacesItemId`) adds "a X. tétel helyett" here, in this one place
+function optionalTagLine(labels: Labels, _item: QuotePdfItem): string {
+  return `${labels.optionalTag} · ${labels.optionalAddition}`;
 }
 
 function drawItem(
@@ -611,11 +629,12 @@ function drawItem(
   flow: Flow,
   input: QuotePdfInput,
   item: QuotePdfItem,
-  prefix = "",
+  tag: string | null,
 ) {
   const cols = tableColumns(input.priceDisplay);
-  const cells = rowCells(item, input, prefix);
-  const nameHeight = measure(doc, item.name, ITEM_NAME, NAME_WIDTH);
+  const cells = rowCells(item, input);
+  const nameHeight =
+    measure(doc, item.name, ITEM_NAME, NAME_WIDTH) + (tag ? TAG_HEIGHT : 0);
   const paragraphs = richTextParagraphs(item.description);
   const first = paragraphs[0];
   // the name and its prices together, with the first paragraph of the description
@@ -648,6 +667,16 @@ function drawItem(
       cols.grossTotal.width,
       "right",
     );
+  // the tag after the row's cells: drawn between the name and the quantity, it split them in the PDF's text order ("Opció1 db")
+  if (tag)
+    text(
+      doc,
+      tag,
+      NAME_X,
+      top + nameHeight - TAG_HEIGHT + 1,
+      OPTIONAL_TAG,
+      NAME_WIDTH,
+    );
   flow.y = top + Math.max(nameHeight, ROW_HEIGHT) + (first ? 3 : 0);
   // the description may continue on the next page, paragraph by paragraph
   drawParagraphs(
@@ -674,7 +703,6 @@ function drawTable(
   input: QuotePdfInput,
   labels: Labels,
   items: QuotePdfItem[],
-  prefixOf: (item: QuotePdfItem) => string,
 ) {
   if (!items.length) return;
   flow.ensure(TABLE_HEAD_HEIGHT + rowHeadHeight(doc, items[0]!));
@@ -686,12 +714,22 @@ function drawTable(
       drawTableHead(doc, flow, input, labels);
       headPage = flow.page;
     }
-    drawItem(doc, flow, input, item, prefixOf(item));
+    drawItem(
+      doc,
+      flow,
+      input,
+      item,
+      item.isOptional ? optionalTagLine(labels, item) : null,
+    );
     // a description that ran onto the next page leaves the cursor there: the
     // next row finds `flow.page` past `headPage` and draws the head first
   }
 }
 
+/**
+ * A SECTION: its offered items, then its optional ones apart at the bottom (card 2540d9d4, Luca 2026-11-26), in a group of their
+ * own under a band saying they are not part of the total. They used to stand among the offered rows with a "+" before the price.
+ */
 function drawSection(
   doc: PDFKit.PDFDocument,
   flow: Flow,
@@ -702,28 +740,89 @@ function drawSection(
 ) {
   const title = `${number}.  ${block.title ?? ""}`.trim();
   const intro = richTextParagraphs(block.content);
-  const first = block.items[0];
-  // the title moves with its first item (and the intro before it)
+  const offered = block.items.filter((item) => !item.isOptional);
+  const optional = block.items.filter((item) => item.isOptional);
+  // the title moves with its first row: the first offered item, or the optional group's head when there is none
+  const firstRow = offered[0]
+    ? TABLE_HEAD_HEIGHT + rowHeadHeight(doc, offered[0])
+    : optional[0]
+      ? optionalGroupHead + TABLE_HEAD_HEIGHT + rowHeadHeight(doc, optional[0])
+      : 0;
   flow.ensure(
     headingHeight(doc, title) +
       intro.reduce(
         (h, p) => h + paragraphHeight(doc, p, PARAGRAPH, CONTENT_WIDTH),
         0,
       ) +
-      (first ? TABLE_HEAD_HEIGHT + rowHeadHeight(doc, first) : 0),
+      firstRow,
   );
   drawHeading(doc, flow, title);
   if (intro.length) {
     drawParagraphs(doc, flow, intro, PARAGRAPH, LEFT, CONTENT_WIDTH);
     flow.y += 4;
   }
-  drawTable(doc, flow, input, labels, block.items, (item) =>
-    item.isOptional ? "+" : "",
-  );
+  drawTable(doc, flow, input, labels, offered);
+  if (optional.length) {
+    if (offered.length) flow.y += 4;
+    drawOptionalGroup(
+      doc,
+      flow,
+      input,
+      labels,
+      null,
+      `${labels.options} · ${labels.optionsBand}`,
+      optional,
+    );
+  }
   flow.y += 6;
 }
 
 const BAND_HEIGHT = 25;
+/** The band over an optional group and the gap under it. */
+const optionalGroupHead = BAND_HEIGHT + 9;
+
+/** An optional item's whole height in the table, for keeping a group together. */
+function itemHeight(doc: PDFKit.PDFDocument, item: QuotePdfItem) {
+  return (
+    Math.max(measure(doc, item.name, ITEM_NAME, NAME_WIDTH), ROW_HEIGHT) +
+    (item.isOptional ? TAG_HEIGHT : 0) +
+    richTextParagraphs(item.description).reduce(
+      (h, p) => h + paragraphHeight(doc, p, ITEM_DESCRIPTION, NAME_WIDTH - 3),
+      0,
+    ) +
+    13
+  );
+}
+
+/**
+ * An optional group: a heading if it has one, a band (what the group is) and its rows; the whole group together when it fits on
+ * one page, else at least its head with the first row.
+ */
+function drawOptionalGroup(
+  doc: PDFKit.PDFDocument,
+  flow: Flow,
+  input: QuotePdfInput,
+  labels: Labels,
+  heading: string | null,
+  band: string,
+  items: QuotePdfItem[],
+) {
+  const head =
+    (heading ? headingHeight(doc, heading) : 0) +
+    optionalGroupHead +
+    TABLE_HEAD_HEIGHT;
+  const total = head + items.reduce((h, item) => h + itemHeight(doc, item), 0);
+  if (total <= BOTTOM - CONTINUATION_TOP) flow.ensure(total);
+  else flow.ensure(head + (items[0] ? rowHeadHeight(doc, items[0]) : 0));
+  if (heading) drawHeading(doc, flow, heading);
+  doc
+    .roundedRect(LEFT, flow.y, CONTENT_WIDTH, BAND_HEIGHT, 3)
+    .fillColor(BOX)
+    .fill();
+  text(doc, band, LEFT + 11, flow.y + 7, BAND, CONTENT_WIDTH - 22);
+  flow.y += optionalGroupHead;
+  drawTable(doc, flow, input, labels, items);
+}
 
 function drawOptions(
   doc: PDFKit.PDFDocument,
@@ -732,37 +831,15 @@ function drawOptions(
   labels: Labels,
   block: QuotePdfBlock,
 ) {
-  const title = block.title ?? labels.options;
-  const itemHeight = (item: QuotePdfItem) =>
-    Math.max(measure(doc, item.name, ITEM_NAME, NAME_WIDTH), ROW_HEIGHT) +
-    richTextParagraphs(item.description).reduce(
-      (h, p) => h + paragraphHeight(doc, p, ITEM_DESCRIPTION, NAME_WIDTH - 3),
-      0,
-    ) +
-    13;
-  const head = headingHeight(doc, title) + BAND_HEIGHT + 9 + TABLE_HEAD_HEIGHT;
-  const total = head + block.items.reduce((h, item) => h + itemHeight(item), 0);
-  // the whole block together when it fits on one page
-  if (total <= BOTTOM - CONTINUATION_TOP) flow.ensure(total);
-  else
-    flow.ensure(
-      head + (block.items[0] ? rowHeadHeight(doc, block.items[0]) : 0),
-    );
-  drawHeading(doc, flow, title);
-  doc
-    .roundedRect(LEFT, flow.y, CONTENT_WIDTH, BAND_HEIGHT, 3)
-    .fillColor(BOX)
-    .fill();
-  text(
+  drawOptionalGroup(
     doc,
+    flow,
+    input,
+    labels,
+    block.title ?? labels.options,
     labels.optionsBand,
-    LEFT + 11,
-    flow.y + 7,
-    BAND,
-    CONTENT_WIDTH - 22,
+    block.items,
   );
-  flow.y += BAND_HEIGHT + 9;
-  drawTable(doc, flow, input, labels, block.items, () => "");
   flow.y += 6;
 }
 
@@ -774,7 +851,9 @@ const SUMMARY_PAD = 10;
  * rate that occurs, each on its own row, and the gross total under them, on
  * every quote whatever the price display (a net quote used to end on "net +
  * ÁFA" alone; Luca asked for the three amounts, the net table columns now say
- * which prices are net). "Without options" only when the quote has options.
+ * which prices are net). "Without options" only when the quote has options,
+ * and then one more row under the total: the gross with the optional items
+ * (card 2540d9d4, Luca 2026-11-26), so the customer sees both amounts.
  * The box ends where its last row ends (the brief: no empty space at the
  * bottom, a fault of the Figma frame). It never breaks.
  */
@@ -800,10 +879,14 @@ function drawSummary(
   ];
   const totalLabel = `${labels.grossTotal}${hasOptions ? ` · ${labels.withoutOptions}` : ""}`;
   const totalValue = money(totals.gross);
+  const withOptions = hasOptions
+    ? money(totals.gross.plus(totals.optionalGross))
+    : null;
   const boxHeight =
     SUMMARY_PAD +
     rows.length * SUMMARY_ROW +
     measure(doc, totalValue, TOTAL_VALUE, 156) +
+    (withOptions ? SUMMARY_ROW : 0) +
     SUMMARY_PAD;
   const heading = headingHeight(doc, title ?? labels.summary);
   // the summary never breaks
@@ -821,6 +904,11 @@ function drawSummary(
   }
   text(doc, totalLabel, labelX, y + 1, TOTAL_LABEL, 320);
   text(doc, totalValue, valueX, y - 1, TOTAL_VALUE, 156, "right");
+  if (withOptions) {
+    y += measure(doc, totalValue, TOTAL_VALUE, 156) + 4;
+    text(doc, labels.withOptions, labelX, y, SUMMARY_LABEL, 300);
+    text(doc, withOptions, valueX, y, SUMMARY_VALUE, 156, "right");
+  }
   flow.y = top + boxHeight + 20;
 }
 
