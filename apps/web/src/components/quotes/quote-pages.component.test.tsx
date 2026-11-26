@@ -2260,6 +2260,20 @@ describe("Törlés csak kérdés után", () => {
     );
   });
 
+  // Picasso 3.21 (acrobot 62633): the item's delete is the danger button, not a ghost like the edit beside it
+  it("a tétel Törlés gombja veszélyes-jelölésű, a Szerkesztés csendes", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    render(<QuoteEditorPage quoteId="q1" />);
+    const remove = await screen.findByRole("button", {
+      name: "Egyedi szűrő: törlés",
+    });
+    expect(remove.className).toContain("text-red-600");
+    expect(
+      screen.getByRole("button", { name: "Egyedi szűrő: szerkesztés" })
+        .className,
+    ).not.toContain("text-red-600");
+  });
+
   it("a BOM-sor törlése is kérdez; a Mégsem nem töröl", async () => {
     api.detail.mockResolvedValue(quote([version()]));
     render(<QuoteEditorPage quoteId="q1" />);

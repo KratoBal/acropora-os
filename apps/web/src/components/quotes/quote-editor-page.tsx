@@ -968,7 +968,8 @@ function BlockCard({
                       </PilotButton>
                     ) : null}
                     <PilotButton
-                      variant="ghost"
+                      // the delete looks dangerous, not like the quiet edit beside it (Picasso 3.21, acrobot 62633)
+                      variant="danger"
                       aria-label={`${item.name}: törlés`}
                       disabled={busy}
                       onClick={() => onDeleteItem(item)}
