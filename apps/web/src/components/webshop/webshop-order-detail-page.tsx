@@ -1,6 +1,10 @@
 "use client";
 
 import {
+  PilotBackLink,
+  backLinkLabel,
+} from "@/components/pilot/pilot-back-link";
+import {
   Alert,
   Badge,
   Button,
@@ -158,6 +162,9 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
 
   return (
     <div className="space-y-6">
+      <PilotBackLink href={backToList.href} flush>
+        {backLinkLabel(backToList, "Webshop")}
+      </PilotBackLink>
       <PageHeader
         title={detail ? detail.orderNumber : "Rendelés"}
         description="Webshop (UNAS) rendelés részletei"
@@ -172,9 +179,6 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
                 {refreshing ? "Frissítés…" : "Rendelés frissítése"}
               </Button>
             ) : null}
-            <Button variant="secondary" onClick={backToList.goBack}>
-              {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
-            </Button>
           </div>
         }
       />

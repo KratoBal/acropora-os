@@ -1,4 +1,5 @@
 "use client";
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import { OrderTaxCheck } from "./webshop-order-tax-check";
 import { Alert, ConfirmDialog, Icon, PageHeader, Skeleton } from "@acropora/ui";
 import {
@@ -721,12 +722,9 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
 
   return (
     <PilotThemeRoot className="space-y-6">
-      <Link
-        href="/webshop/rendelesek"
-        className="inline-flex items-center gap-1 text-xs font-medium text-pilot-accent-warm-text hover:underline"
-      >
-        ← Vissza a rendelésekhez
-      </Link>
+      <PilotBackLink href="/webshop/rendelesek" flush>
+        Rendelések
+      </PilotBackLink>
       {error ? (
         <Alert
           variant="danger"

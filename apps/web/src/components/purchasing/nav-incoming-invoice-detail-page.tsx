@@ -1,4 +1,8 @@
 "use client";
+import {
+  PilotBackLink,
+  backLinkLabel,
+} from "@/components/pilot/pilot-back-link";
 import { useAssistantEntity } from "../assistant/page-context";
 import {
   Alert,
@@ -195,14 +199,12 @@ export function NavIncomingInvoiceDetailPage({
 
   return (
     <PilotThemeRoot className="space-y-6">
+      <PilotBackLink href={backToList.href} flush>
+        {backLinkLabel(backToList, "NAV számlák")}
+      </PilotBackLink>
       <PilotPageHeader
         title="NAV számla részletei"
         description="A NAV Online Számla rendszerből lekért bejövő számla adatai és tételei."
-        actions={
-          <PilotButton variant="secondary" onClick={backToList.goBack}>
-            {backToList.fromWithinApp ? "Vissza" : "Vissza a NAV számlákhoz"}
-          </PilotButton>
-        }
       />
 
       {loading ? (

@@ -732,9 +732,13 @@ export function PilotWorksheetListPage() {
         />
       ) : null}
 
+      {/*
+        ON THE PHONE THE THREE TILES SHARE ONE ROW (Picasso R4, acrobot 62633): stacked, they took a screen before the first worksheet.
+        As the ticket list (#2885): smaller padding and text, the detail line from `sm` up.
+      */}
       <div
         aria-label="Munkalapok állapot szerint"
-        className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:max-w-[780px]"
+        className="grid grid-cols-3 gap-2 sm:gap-4 lg:max-w-[780px]"
       >
         {STAT_TILES.map((tile) => (
           <button
@@ -742,20 +746,22 @@ export function PilotWorksheetListPage() {
             type="button"
             aria-pressed={activeStatus === tile.key}
             onClick={() => selectStatus(tile.key)}
-            className={`cursor-pointer rounded-xl bg-white px-4 py-4 text-left ring-1 transition-colors ${
+            className={`cursor-pointer rounded-xl bg-white px-3 py-3 text-left ring-1 transition-colors sm:px-4 sm:py-4 ${
               activeStatus === tile.key
                 ? "ring-2 ring-pilot-aqua-500"
                 : "ring-pilot-grey-200 hover:ring-pilot-grey-300"
             }`}
           >
-            <span className="block text-sm text-pilot-grey-600">
+            <span className="block text-xs text-pilot-grey-600 sm:text-sm">
               {tile.label}
             </span>
-            <span className="mt-2 flex items-baseline gap-4">
+            <span className="mt-1 flex items-baseline gap-4 sm:mt-2">
               <span className={`text-2xl font-semibold ${tile.tone}`}>
                 {counts ? counts[tile.key] : "–"}
               </span>
-              <span className="text-xs text-pilot-grey-500">{tile.detail}</span>
+              <span className="hidden text-xs text-pilot-grey-500 sm:inline">
+                {tile.detail}
+              </span>
             </span>
           </button>
         ))}
