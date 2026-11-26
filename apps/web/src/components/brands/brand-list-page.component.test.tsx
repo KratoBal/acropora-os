@@ -112,6 +112,33 @@ describe("BrandListPage paging", () => {
     ]);
   });
 
+  // Picasso 3.19: a 500 px "Katalógus-műveletek" panel stood above the list and pushed the data below the fold; two pagers were one too many
+  it("the maintenance panel stands below the list, closed; the data comes first", async () => {
+    render(<BrandListPage />);
+    const row = (await screen.findAllByTestId("brand-row"))[0]!;
+    const details = document.querySelector("details")!;
+    expect(details).not.toBeNull();
+    expect(details.hasAttribute("open")).toBe(false);
+    expect(details.querySelector("summary")!.textContent).toBe(
+      "Karbantartó műveletek (katalógus)",
+    );
+    // document order: the list row first, the maintenance box after it
+    expect(
+      row.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("there is one pager (the bottom one), not two", async () => {
+    render(<BrandListPage />);
+    await screen.findAllByTestId("brand-row");
+    expect(
+      screen.queryByRole("navigation", { name: "Lapozás, felül" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("navigation", { name: "Lapozás, alul" }),
+    ).toBeInTheDocument();
+  });
+
   it("moves to the next page instead of returning to the first", async () => {
     render(<BrandListPage />);
     await screen.findByText("Tropic Marin");
