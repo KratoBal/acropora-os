@@ -28,6 +28,14 @@ csatolva van: a csatolási pont **üres** könyvtára ugyanolyan írható. Ha az
 alkalmazás letehetné a jelölőt, az egy nem csatolt könyvtárban is létrejönne, és
 az ellenőrzés soha nem tudna elbukni.
 
+**Egy kivétel, és miért nem gyengíti ezt** (kártya 0c122c27, 2026-11-26): ha a jelölő
+hiányzik, de a tároló gyökere a kernel csatolási táblája (`/proc/self/mountinfo`)
+szerint MAGA csatolási pont, az alkalmazás a jelölőt pótolja, és a naplóban
+figyelmeztet. Egy nem csatolt, üres könyvtár nem csatolási pont, tehát ott a
+válasz továbbra is `not-configured`, és az oka kimondja, hogy a gyökér nem kötet.
+A háttér: 2026-11-25-én a teszt OS jelölője egy újratelepítés után eltűnt, miközben
+a kötet és az adat megvolt, és root kellett a visszatételéhez.
+
 ---
 
 ## 1. A sorrend, és miért pont ez
