@@ -31,6 +31,29 @@ const weekLabel = (week: string | null) => {
   return Number.isFinite(number) ? `${number}. heti sorsolás` : "Heti sorsolás";
 };
 
+/** "2026-W45" as a number that orders weeks across years (2026 * 100 + 45); unreadable weeks go last. */
+const weekOrder = (week: string | null) => {
+  const [year, number] = (week ?? "").split("-W").map(Number);
+  return Number.isFinite(year) && Number.isFinite(number)
+    ? year * 100 + number
+    : -Infinity;
+};
+
+/**
+ * THE WEEKS NEWEST FIRST, AND THE ONE THAT GOES ON AIR MARKED (Picasso 3.26). The server orders by `opensAt`, and a week whose
+ * question was opened out of turn stood out of place. The mark goes on the newest week whose answers are closed: an open week has
+ * no final list of players yet, so it is not the one to draw.
+ */
+export function chooserWeeks(questions: GameQuestionView[], now: number) {
+  const sorted = [...questions].sort(
+    (a, b) => weekOrder(b.week) - weekOrder(a.week),
+  );
+  const latestClosed = sorted.find(
+    (question) => Date.parse(question.closesAt) <= now,
+  );
+  return { sorted, latestClosedId: latestClosed?.id ?? null };
+}
+
 const titleOf = (view: GameLiveDrawView) =>
   view.kind === "CHRISTMAS"
     ? "Karácsonyi fődíj sorsolás"
@@ -351,6 +374,7 @@ function Chooser({ token }: { token: string }) {
       alive = false;
     };
   }, [token]);
+  const weeks = chooserWeeks(questions ?? [], Date.now());
   return (
     <main className="live-draw live-draw-idle" data-testid="elo-sorsolas">
       <Brand />
@@ -364,16 +388,27 @@ function Chooser({ token }: { token: string }) {
             {error}
           </p>
         ) : null}
-        {(questions ?? []).map((question) => (
-          <a
-            key={question.id}
-            className="live-draw-choice"
-            href={`/sorsolas?kind=WEEKLY&kerdes=${encodeURIComponent(question.id)}`}
-          >
-            <strong>{weekLabel(question.week)}</strong>
-            <span>{question.prizeName ?? "nyeremény nélkül"}</span>
-          </a>
-        ))}
+        {weeks.sorted.map((question) => {
+          const latest = question.id === weeks.latestClosedId;
+          return (
+            <a
+              key={question.id}
+              className={
+                latest
+                  ? "live-draw-choice live-draw-choice-latest"
+                  : "live-draw-choice"
+              }
+              aria-current={latest ? "true" : undefined}
+              href={`/sorsolas?kind=WEEKLY&kerdes=${encodeURIComponent(question.id)}`}
+            >
+              <strong>
+                {weekLabel(question.week)}
+                {latest ? <em>legutóbb lezárult</em> : null}
+              </strong>
+              <span>{question.prizeName ?? "nyeremény nélkül"}</span>
+            </a>
+          );
+        })}
         <a className="live-draw-choice" href="/sorsolas?kind=CHRISTMAS">
           <strong>Karácsonyi fődíj sorsolás</strong>
           <span>az összes hét játékosai, súlyozva</span>
