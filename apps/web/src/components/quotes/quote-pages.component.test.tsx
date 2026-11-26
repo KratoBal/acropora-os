@@ -1700,6 +1700,66 @@ describe("Ajánlat szerkesztő (569:171)", () => {
     );
   });
 
+  /*
+    A BLOKK MENTÉSÉNEK HIBÁJA A BLOKK SAJÁT GOMBJA ALATT (card fa6d7fa6, acrobot 62710): a szerver teljes szövege ott, és a két 409 esetnél az, mit
+    tegyen a felhasználó. MI PIROSÍT: ha a hiba megint csak az oldal tetején állna; ha a szerver szövege csonkul; ha a publikált verzió 409-ének
+    nincs tanácsa (Új verzió), vagy más hibához odakerül az; ha a hiba a következő mentés indulásakor ott marad.
+  */
+  const saveWith = async (error: Error) => {
+    api.detail.mockResolvedValue(quote([version()]));
+    api.updateBlock.mockRejectedValue(error);
+    render(<QuoteEditorPage quoteId="q1" />);
+    fireEvent.change(await screen.findByLabelText("Fejezet címe"), {
+      target: { value: "Új cím" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Blokk mentése" }));
+    const alert = await screen.findByRole("alert");
+    return alert;
+  };
+
+  it("a blokk mentésének hibája a blokk gombja alatt áll, a szerver teljes szövegével, és az oldal tetején nincs másodszor", async () => {
+    const alert = await saveWith(
+      new ApiError("A cím legfeljebb 200 karakter lehet, ez túl hosszú.", 400),
+    );
+    expect(alert.textContent).toContain(
+      "A cím legfeljebb 200 karakter lehet, ez túl hosszú.",
+    );
+    expect(alert.textContent).not.toContain("Új verzió");
+    expect(
+      screen.getByRole("button", { name: "Blokk mentése" }).parentElement,
+    ).toContainElement(alert);
+    expect(screen.queryByText("Nem sikerült")).toBeNull();
+  });
+
+  it("publikált verzió 409-ére megmondja, hogy új verziót kell nyitni", async () => {
+    const alert = await saveWith(
+      new ApiError(
+        "Publikált verzió nem módosítható; új verziót kell nyitni.",
+        409,
+      ),
+    );
+    expect(alert.textContent).toContain(
+      "Publikált verzió nem módosítható; új verziót kell nyitni.",
+    );
+    expect(alert.textContent).toContain("Új verzió gomb");
+  });
+
+  it("lezárt ajánlat 409-ére megmondja, hol látja az állapotot", async () => {
+    const alert = await saveWith(
+      new ApiError("Lezárt ajánlat nem szerkeszthető.", 409),
+    );
+    expect(alert.textContent).toContain("Lezárt ajánlat nem szerkeszthető.");
+    expect(alert.textContent).toContain("lezárt állapotú");
+    expect(alert.textContent).not.toContain("Új verzió gomb");
+  });
+
+  it("a következő mentés indulásakor a régi hiba eltűnik, és sikernél a blokk menthető állapotba kerül", async () => {
+    await saveWith(new ApiError("Lezárt ajánlat nem szerkeszthető.", 409));
+    api.updateBlock.mockResolvedValue(quote([version()]));
+    fireEvent.click(screen.getByRole("button", { name: "Blokk mentése" }));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+
   it("költségjoggal a belső kalkuláció látszik, anélkül le sem kéri", async () => {
     api.detail.mockResolvedValue(quote([version()]));
     const { unmount } = render(<QuoteEditorPage quoteId="q1" />);
