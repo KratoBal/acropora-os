@@ -1,8 +1,8 @@
 "use client";
 
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import {
   Alert,
-  Icon,
   PageHeader,
   PilotButton,
   PilotInput,
@@ -21,7 +21,6 @@ import {
   type IncomingReadingField,
   type IncomingReadingValues,
 } from "@acropora/types";
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -213,13 +212,9 @@ export function BillingIncomingReviewPage({ itemId }: { itemId: string }) {
 
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
-      <Link
-        href={`${BILLING_LIST_PATH}?nezet=bejovo`}
-        className="inline-flex items-center gap-1.5 rounded-md bg-white px-3 py-2 text-sm font-medium text-pilot-grey-800 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50"
-      >
-        <Icon name="chevron-left" size={14} />
-        Vissza a listához
-      </Link>
+      <PilotBackLink href={`${BILLING_LIST_PATH}?nezet=bejovo`} flush>
+        Bejövő számlák
+      </PilotBackLink>
 
       <PageHeader
         eyebrow={`Bejövő számla · ${

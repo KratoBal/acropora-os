@@ -14,15 +14,28 @@ import type { ReactNode } from "react";
 export const PILOT_BACK_LINK_CLASSES =
   "mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700";
 
+/** Ugyanaz a link, alsó margó nélkül: ahol a szülő `space-y-*` már adja a távolságot a fejlécig (a számla-lapok gyökere). */
+export const PILOT_BACK_LINK_FLUSH_CLASSES = PILOT_BACK_LINK_CLASSES.replace(
+  "mb-3 ",
+  "",
+);
+
 export function PilotBackLink({
   href,
   children,
+  flush = false,
 }: {
   href: string;
   children: ReactNode;
+  flush?: boolean;
 }) {
   return (
-    <Link href={href} className={PILOT_BACK_LINK_CLASSES}>
+    <Link
+      href={href}
+      className={
+        flush ? PILOT_BACK_LINK_FLUSH_CLASSES : PILOT_BACK_LINK_CLASSES
+      }
+    >
       <Icon name="chevron-left" size={12} />
       {children}
     </Link>

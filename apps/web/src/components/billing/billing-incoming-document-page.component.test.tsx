@@ -155,7 +155,7 @@ describe("BillingIncomingDocumentPage", () => {
     expect(screen.getByText("Terhelés 2026. 09. 30.")).toBeInTheDocument();
     expect(screen.getByText("a legutóbbi a 2 közül")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /Vissza a listához/ }),
+      screen.getByRole("link", { name: "Bejövő számlák" }),
     ).toHaveAttribute("href", "/penzugy/szamlazas?nezet=bejovo");
     fireEvent.click(screen.getByRole("button", { name: "PDF megnyitása" }));
     await waitFor(() =>
