@@ -109,7 +109,7 @@ export function quoteFixture(): QuoteRow {
                 unitNetPrice: d("0.3333"),
                 vatRatePercent: d("27"),
                 isOptional: true,
-                replacesItemId: "item",
+                replacesItemId: null,
               },
             ],
           },
@@ -425,6 +425,7 @@ test("the PDF and the list agree on a mixed-VAT total: the same lines, the same 
 // KIVÁLTOTT TÉTEL (card 2540d9d4): a szerkesztő látja, melyik tételt váltja ki az opcionális; az ügyfél-DTO-ban nincs belső azonosító
 test("the writer's items name the replaced line, the customer's do not", () => {
   const row = quoteFixture();
+  row.versions[0]!.blocks[0]!.items[1]!.replacesItemId = "item";
   const internal = internalQuoteDto(row).versions[0]!.blocks[0]!.items;
   assert.deepEqual(
     internal.map((i) => [i.id, i.replacesItemId]),
@@ -647,6 +648,55 @@ test("the internal detail's gross totals are the PDF's: offered and optional apa
   assert.equal(version.grossTotal, "69595");
   // 2101.05 + 1269.9873 = 3371.0373 -> 3371
   assert.equal(version.optionalGrossTotal, "3371");
+});
+
+/*
+  AZ OPCIÓK HATÁSA AZ ÖSSZEGRE (Luca 2026-11-26, card 2540d9d4, a Belső kalkuláció): a helyükre lépő opció a kiváltott tétel árát VONJA LE, nem hozzáadódik.
+  Az alap: 100 000 + 50 000 nettó (190 500 bruttó). MI PIROSÍT: ha a kiváltott tétel az opciók összegéből nem esik ki (a régi 50 000, a helyes 0); ha egy
+  olcsóbb kiváltó opció nem negatív hatást ad; ha a kiváltás nélküli opció összege elmozdul; ha a bruttó nem ugyanígy követi a nettót.
+*/
+test("the options' total takes the replaced line off: a replacing option is not an addition", () => {
+  const sample = (optionalPrice: string, extra: boolean) => {
+    const row = quoteFixture();
+    const block = row.versions[0]!.blocks[0]!;
+    const template = block.items[0]!;
+    const make = (
+      id: string,
+      price: string,
+      isOptional: boolean,
+      replacesItemId: string | null,
+    ) => ({
+      ...template,
+      id,
+      position: 0,
+      quantity: new Prisma.Decimal("1"),
+      unitNetPrice: new Prisma.Decimal(price),
+      vatRatePercent: new Prisma.Decimal("27"),
+      isOptional,
+      replacesItemId,
+    });
+    block.items = [
+      make("a", "100000", false, null),
+      make("b", "50000", false, null),
+      make("o1", optionalPrice, true, "b"),
+      ...(extra ? [make("o2", "20000", true, null)] : []),
+    ].map((item, position) => ({ ...item, position }));
+    return internalQuoteDto(row).versions[0]!;
+  };
+  // 30 000 takes the place of 50 000, the 20 000 supplement adds: 30 000 + 20 000 - 50 000 = 0
+  const same = sample("30000", true);
+  assert.equal(same.netTotal, "150000.0000");
+  assert.equal(same.optionalNetTotal, "0.0000");
+  assert.equal(same.grossTotal, "190500");
+  assert.equal(same.optionalGrossTotal, "0");
+  // a dearer replacement adds the difference (80 000 - 50 000), a cheaper one is negative (20 000 - 50 000)
+  assert.equal(sample("80000", false).optionalNetTotal, "30000.0000");
+  assert.equal(sample("80000", false).optionalGrossTotal, "38100");
+  assert.equal(sample("20000", false).optionalNetTotal, "-30000.0000");
+  assert.equal(sample("20000", false).optionalGrossTotal, "-38100");
+  // without any replacement the options are the plain sum (the supplement alone)
+  const row = quoteFixture();
+  assert.equal(internalQuoteDto(row).versions[0]!.optionalNetTotal, "0.9999");
 });
 
 test("P1: a linked variant is named on the internal detail only", () => {

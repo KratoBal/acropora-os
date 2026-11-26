@@ -85,7 +85,18 @@ export const QUOTE_BLOCK_LABEL: Record<QuoteBlockKindValue, string> = {
  * A közös formázó (`@acropora/types`, T1.5) a megszokott néven; egy egységár (nettó egységár,
  * egységköltség, javasolt ár) `{ fractionDigits: 2 }`-vel hívja, mert ott a fillér valódi adat.
  */
+import { formatMoney } from "@acropora/types";
+
 export { formatMoney as formatQuoteMoney } from "@acropora/types";
+
+/**
+ * What the options add, with its sign (card 2540d9d4): "+30 000 Ft" when they add, "0 Ft" when a replacing option only takes the replaced line's
+ * place, "-10 000 Ft" when the replacing option is cheaper than the line it replaces.
+ */
+export function signedQuoteMoney(value: string, currency: string): string {
+  const text = formatMoney(value, currency);
+  return Number(value) > 0 ? `+${text}` : text;
+}
 
 /** `2026-11-06` → `2026. 11. 06.` (the one list date format, see `lib/format/date.ts`). */
 export function formatQuoteDay(value: string | null): string {
