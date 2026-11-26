@@ -52,7 +52,12 @@ import { ServiceJobDelete } from "../service-job-delete";
 import { CompletionCertificatePanel } from "../completion-certificate-panel";
 import { MaintenanceInvoicePanel } from "../maintenance-invoice-panel";
 import { MaintenancePackagePanel } from "../maintenance-package-panel";
-import { MaintenanceProcessSteps } from "../maintenance-process-steps";
+import {
+  MaintenanceProcessSteps,
+  maintenanceProcessSteps,
+  packageSendBlockedReason,
+  type StepInputs,
+} from "../maintenance-process-steps";
 import {
   serviceJobNoteDescription,
   completionCertificateBlockedReason,
@@ -358,6 +363,10 @@ export function PilotServiceJobDetailPage({
   const [certificateVersion, setCertificateVersion] = useState(0);
   // a számla-panel változása (piszkozat, kiállítás, törlés): a lépéssor újraolvas (a panelek maguktól nem szólnak egymásnak)
   const [invoiceVersion, setInvoiceVersion] = useState(0);
+  // what the maintenance step strip read (certificates, invoice): the page decides from the same data which step's panel can act
+  const [processData, setProcessData] = useState<
+    Pick<StepInputs, "certificates" | "invoice">
+  >({ certificates: null, invoice: undefined });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   /*
@@ -765,6 +774,22 @@ export function PilotServiceJobDetailPage({
   const commonReason = common ? commonReasonText(common, job.kind) : null;
   const closeBlocked = common ? closeBlockedSentence(common, worksheets) : null;
   const finished = !maintenance && isFinishedServiceJob(job.status);
+  /*
+    A KARBANTARTÁS LÉPÉSEI A PANELEKHEZ (Picasso 3.3, acrobot 62195): ugyanabból az adatból, amit a lépéssor olvasott. Egy lépés panelje akkor áll a lapon, ha a
+    lépés nem "várakozik" (a szerver ma elutasítaná); ilyenkor a lépéssor mondja meg, mire vár. Ismeretlen állapotnál (betöltés, hiba) a panel marad: a felület
+    nem találgat, a kapu a szerveren van.
+  */
+  const processSteps = maintenance
+    ? maintenanceProcessSteps({
+        worksheets,
+        ...processData,
+        certificateBlockedReason: completionCertificateBlockedReason(
+          job.source,
+        ),
+      })
+    : [];
+  const processStep = (key: "certificate" | "invoice") =>
+    processSteps.find((step) => step.key === key)?.tone !== "waiting";
 
   const creation = job.timeline.find(
     (entry) => entry.kind === "status" && entry.event.fromStatus === null,
@@ -916,7 +941,7 @@ export function PilotServiceJobDetailPage({
         onCancel={() => setMailOpen(false)}
       />
 
-      {/* A FOLYAMAT LÉPÉSSORA (Picasso 3.3, acrobot 62058): csak megjelenít, a gombok kapuja a szerveren marad */}
+      {/* A FOLYAMAT LÉPÉSSORA (Picasso 3.3, acrobot 62058, 62195): a kapu a szerveren marad; a lap a sor adatából csak azt dönti el, melyik lépés panelje áll (`processStep`) */}
       {maintenance ? (
         <MaintenanceProcessSteps
           serviceJobId={job.id}
@@ -925,6 +950,7 @@ export function PilotServiceJobDetailPage({
             job.source,
           )}
           refreshKey={certificateVersion + invoiceVersion}
+          onData={setProcessData}
         />
       ) : null}
 
@@ -1196,15 +1222,16 @@ export function PilotServiceJobDetailPage({
                 )}
               </div>
             ) : null}
+            {/* a saját és a hozzákapcsolt munkalapok EGY szakaszban (Picasso 3.3): a kapcsolódó lapok a kártya alsó része, nem külön kártya */}
+            {maintenance ? (
+              <PilotLinkedWorksheetsCard
+                token={token}
+                jobId={jobId}
+                canManage={canManage}
+                embedded
+              />
+            ) : null}
           </PilotCard>
-
-          {maintenance ? (
-            <PilotLinkedWorksheetsCard
-              token={token}
-              jobId={jobId}
-              canManage={canManage}
-            />
-          ) : null}
 
           <div id="hibajegy-eszkoz" className="scroll-mt-6">
             <PilotCard>
@@ -1576,7 +1603,7 @@ export function PilotServiceJobDetailPage({
             KISZOLGÁL -- lásd a fejléc "A ROUTE MAINTENANCE JEGYET IS
             KISZOLGÁL" szakaszát.
           */}
-          {job.kind === "MAINTENANCE" ? (
+          {job.kind === "MAINTENANCE" && processStep("certificate") ? (
             <CompletionCertificatePanel
               serviceJobId={job.id}
               blockedReason={completionCertificateBlockedReason(job.source)}
@@ -1587,7 +1614,7 @@ export function PilotServiceJobDetailPage({
             A PISZKOZAT-SZÁMLA (ADR-014, 4. szelet), VISSZAHOZVA (kártya 0baba3b9, acrobot 44712): a régi részletlapon
             állt, és a pilot lapra váltáskor csendben kimaradt. Ugyanaz a hely, mint ott: a teljesítési igazolás után.
           */}
-          {job.kind === "MAINTENANCE" ? (
+          {job.kind === "MAINTENANCE" && processStep("invoice") ? (
             <MaintenanceInvoicePanel
               serviceJobId={job.id}
               refreshKey={certificateVersion}
@@ -1598,6 +1625,10 @@ export function PilotServiceJobDetailPage({
             <MaintenancePackagePanel
               serviceJobId={job.id}
               jobNumber={job.jobNumber}
+              sendBlockedReason={packageSendBlockedReason({
+                worksheets,
+                ...processData,
+              })}
             />
           ) : null}
           {/*

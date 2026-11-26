@@ -16,6 +16,11 @@ import type { MaintenanceInvoiceSummary } from "@acropora/types";
  * maguk is használnak), és megjelöli az első teendőt. A gombok kapuja NEM ide került: az a szerveren marad, egy kapu két helyen két igazság lenne (acrobot döntése).
  *
  * Ahol az állapot nem ismert (betöltés, hiba), a lépés ezt mondja ki, nem találgat. A dokumentumcsomagnak nincs nyilvántartott állapota, ezért nincs állapot-jelzése.
+ *
+ * A SZERVER HÁROM KAPUJÁT A LÉPÉSSOR KIMONDJA (Picasso 3.3, acrobot 62195): a teljesítési igazolás csak akkor állítható ki, ha minden munkalap alá van írva
+ * (`CompletionCertificatesService.issue`), a piszkozat-számla csak az aláírt igazolás után készül, és a csomag KIKÜLDÉSE aláírt igazolást és kiállított számlát kér
+ * (`maintenance-package-gate.ts`). A csomag LETÖLTÉSE szándékosan nem vár rájuk (Luca, 2026-11-18: csak a lezárt munkalap a feltétel). A lap a "még nem lehetséges"
+ * paneleket ezek alapján nem rajzolja ki (`MaintenanceProcessSteps` `onData`), a kapu maga a szerveren marad.
  */
 export type StepTone = "done" | "open" | "waiting" | "unknown";
 
@@ -66,10 +71,11 @@ export function maintenanceProcessSteps(input: StepInputs): ProcessStep[] {
   const certificates = input.certificates;
   let certificate: Omit<ProcessStep, "next">;
   if (input.certificateBlockedReason) {
+    // the panel is not drawn for a waiting step (Picasso 3.3): the strip says the reason the panel used to say
     certificate = {
       key: "certificate",
       title: "Teljesítési igazolás",
-      state: "Ehhez a laphoz nem állítható ki",
+      state: input.certificateBlockedReason,
       tone: "waiting",
     };
   } else if (certificates === null) {
@@ -86,6 +92,14 @@ export function maintenanceProcessSteps(input: StepInputs): ProcessStep[] {
       state: "Az állapota nem tölthető be",
       tone: "unknown",
     };
+  } else if (certificates.length === 0 && signed < total) {
+    // the server issues a certificate only from signed worksheets (Balázs's rule: a signed sheet is done)
+    certificate = {
+      key: "certificate",
+      title: "Teljesítési igazolás",
+      state: "Előbb minden munkalap legyen aláírva",
+      tone: "waiting",
+    };
   } else if (certificates.length === 0) {
     certificate = {
       key: "certificate",
@@ -95,9 +109,7 @@ export function maintenanceProcessSteps(input: StepInputs): ProcessStep[] {
     };
   } else {
     const latest = certificates[0]!;
-    const hasSigned = latest.documents.some(
-      (doc) => doc.type === "SIGNED_FORM",
-    );
+    const hasSigned = certificateHasSignedForm(latest);
     certificate = {
       key: "certificate",
       title: "Teljesítési igazolás",
@@ -111,8 +123,18 @@ export function maintenanceProcessSteps(input: StepInputs): ProcessStep[] {
 
   // 3. számla
   const hasCertificate = Array.isArray(certificates) && certificates.length > 0;
+  const certificateSigned =
+    hasCertificate && certificateHasSignedForm(certificates[0]!);
   const invoice = input.invoice;
-  if (!hasCertificate) {
+  if (hasCertificate && !certificateSigned) {
+    // the draft invoice needs the signed copy of the certificate (the invoice panel says the same)
+    steps.push({
+      key: "invoice",
+      title: "Számla",
+      state: "Az aláírt teljesítési igazolás után",
+      tone: "waiting",
+    });
+  } else if (!hasCertificate) {
     steps.push({
       key: "invoice",
       title: "Számla",
@@ -181,16 +203,56 @@ export function maintenanceProcessSteps(input: StepInputs): ProcessStep[] {
     });
   }
 
-  // 4. dokumentumcsomag: nincs nyilvántartott állapota, csak a hely
+  // 4. dokumentumcsomag: nincs nyilvántartott állapota (soha nem "következő"), a mondata a kiküldés kapuját mondja ki
   steps.push({
     key: "package",
     title: "Dokumentumcsomag",
-    state: "Letöltés és kiküldés lent",
+    state: {
+      unknown: "Letöltés és kiküldés lent",
+      blocked:
+        "Kiküldés az aláírt igazolás és a kiállított számla után; letölteni most is lehet",
+      ready: "Kiküldhető; letölteni bármikor lehet",
+    }[packageSendState(input).state],
     tone: "waiting",
   });
 
   const nextIndex = steps.findIndex((step) => step.tone === "open");
   return steps.map((step, index) => ({ ...step, next: index === nextIndex }));
+}
+
+function certificateHasSignedForm(
+  certificate: CompletionCertificateSummary,
+): boolean {
+  return certificate.documents.some((doc) => doc.type === "SIGNED_FORM");
+}
+
+/**
+ * MIÉRT NEM KÜLDHETŐ KI A CSOMAG (a szerver kiküldési kapuja, `maintenance-package-gate.ts`): aláírt teljesítési igazolás és kiállított, nem sztornózott számla
+ * kell. `null`: kiküldhető, VAGY az állapot nem ismert (betöltés, hiba): ott a gomb él, és a szerver mondja meg az okot, a felület nem találgat.
+ */
+export function packageSendBlockedReason(input: StepInputs): string | null {
+  return packageSendState(input).reason;
+}
+
+function packageSendState(input: StepInputs): {
+  state: "unknown" | "blocked" | "ready";
+  reason: string | null;
+} {
+  const { certificates, invoice } = input;
+  const blocked = (reason: string) => ({ state: "blocked" as const, reason });
+  if (certificates === null || certificates === "error")
+    return { state: "unknown", reason: null };
+  if (certificates.length === 0)
+    return blocked("A kiküldéshez teljesítési igazolás kell.");
+  if (!certificateHasSignedForm(certificates[0]!))
+    return blocked(
+      "A kiküldéshez a teljesítési igazolás aláírt példánya kell.",
+    );
+  if (invoice === undefined || invoice === "error")
+    return { state: "unknown", reason: null };
+  if (invoice === null || invoice.status !== "ISSUED" || invoice.cancelled)
+    return blocked("A kiküldéshez kiállított számla kell.");
+  return { state: "ready", reason: null };
 }
 
 const TONE_CLASS: Record<StepTone, string> = {
@@ -206,11 +268,14 @@ export function MaintenanceProcessSteps({
   worksheets,
   certificateBlockedReason,
   refreshKey,
+  onData,
 }: {
   serviceJobId: string;
   worksheets: readonly WorksheetLike[];
   certificateBlockedReason?: string | null;
   refreshKey: number;
+  /** The certificates and the invoice the strip read: the page decides from the same data which panels can act (one read, one truth). */
+  onData?: (data: Pick<StepInputs, "certificates" | "invoice">) => void;
 }) {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -246,6 +311,12 @@ export function MaintenanceProcessSteps({
       live = false;
     };
   }, [serviceJobId, token, refreshKey]);
+
+  useEffect(() => {
+    onData?.({ certificates, invoice });
+    // the callback is the parent's setter; the data is what changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [certificates, invoice]);
 
   const steps = maintenanceProcessSteps({
     worksheets,

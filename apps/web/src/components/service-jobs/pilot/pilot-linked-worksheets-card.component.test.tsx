@@ -103,6 +103,27 @@ describe("a Kapcsolódó munkalapok kártya", () => {
     api.unlinkWorksheet.mockReset().mockResolvedValue({ ok: true });
   });
 
+  // Picasso 3.3: inside the Munkalapok card the same content stands as its lower section, not a second card
+  it("beágyazva a Munkalapok kártya szakasza: saját alcím és ugyanaz a tartalom, kártya-keret nélkül", async () => {
+    const { container } = render(
+      <PilotLinkedWorksheetsCard token="t" jobId="job-1" canManage embedded />,
+    );
+    const section = await screen.findByRole("region", {
+      name: "Kapcsolódó munkalapok",
+    });
+    expect(section.tagName).toBe("SECTION");
+    expect(
+      within(section).getByRole("heading", { name: "Kapcsolódó munkalapok" })
+        .tagName,
+    ).toBe("H3");
+    expect(await within(section).findByTestId("linked-worksheet")).toBeTruthy();
+    expect(
+      within(section).getByRole("button", { name: "Munkalap hozzákapcsolása" }),
+    ).toBeTruthy();
+    // the section is the outermost element: no card frame of its own
+    expect(container.firstElementChild).toBe(section);
+  });
+
   it("kimondja, hogy hivatkozás, és hogy a munkaóra és az ár nem számít bele", async () => {
     draw(false);
     const notice = await screen.findByTestId("linked-worksheets-notice");

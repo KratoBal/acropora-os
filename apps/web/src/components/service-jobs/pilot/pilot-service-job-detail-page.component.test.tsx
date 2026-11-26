@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -12,6 +13,7 @@ import {
   type ServiceJobDocumentSummary,
   type Session,
 } from "@acropora/types";
+import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { KULDES_KIHAGYAS_OKA } from "../handover-mail-skip-reason";
@@ -88,38 +90,64 @@ vi.mock("../maintenance-invoice-panel", () => ({
     </div>
   ),
 }));
-// the process strip at the top of a maintenance sheet (Picasso 3.3): its own component test reads the data; here only WHERE it shows and with what
-vi.mock("../maintenance-process-steps", () => ({
+// the process strip at the top of a maintenance sheet (Picasso 3.3): its own component test reads the data; here only WHERE it shows and with what.
+// The pure step rules stay real (the page decides the panels from them); the stub reports `stripData` the way the strip reports what it read.
+// a maintenance sheet WITH a source: its certificate can be issued, so the certificate panel stands (a sheet without one gets the reason in the strip)
+const CONTRACT_SOURCE: ServiceJobDetail["source"] = {
+  kind: "CONTRACT",
+  contract: { id: "c1", number: "SZ-2026-001", title: "Éves" },
+  itemDescriptions: ["Szűrőcsere", "Vízcsere"],
+};
+const stripData = vi.hoisted(() => ({
+  value: { certificates: null, invoice: undefined } as {
+    certificates: unknown;
+    invoice: unknown;
+  },
+}));
+vi.mock("../maintenance-process-steps", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../maintenance-process-steps")>()),
   MaintenanceProcessSteps: ({
     serviceJobId,
     worksheets,
     certificateBlockedReason,
     refreshKey,
+    onData,
   }: {
     serviceJobId: string;
     worksheets: readonly { status: string }[];
     certificateBlockedReason?: string | null;
     refreshKey: number;
-  }) => (
-    <div data-testid="process-steps-stub">
-      lépéssor ({serviceJobId}) lapok:{worksheets.length}
-      <span data-testid="steps-refresh-key">{refreshKey}</span>
-      <span data-testid="steps-blocked">
-        {certificateBlockedReason ?? "nincs ok"}
-      </span>
-    </div>
-  ),
+    onData?: (data: never) => void;
+  }) => {
+    useEffect(() => {
+      onData?.(stripData.value as never);
+    }, [onData]);
+    return (
+      <div data-testid="process-steps-stub">
+        lépéssor ({serviceJobId}) lapok:{worksheets.length}
+        <span data-testid="steps-refresh-key">{refreshKey}</span>
+        <span data-testid="steps-blocked">
+          {certificateBlockedReason ?? "nincs ok"}
+        </span>
+      </div>
+    );
+  },
 }));
 vi.mock("../maintenance-package-panel", () => ({
   MaintenancePackagePanel: ({
     serviceJobId,
     jobNumber,
+    sendBlockedReason,
   }: {
     serviceJobId: string;
     jobNumber: string;
+    sendBlockedReason?: string | null;
   }) => (
     <div data-testid="maintenance-package-panel-stub">
       karbantartási csomag panel ({serviceJobId}, {jobNumber})
+      <span data-testid="package-send-blocked">
+        {sendBlockedReason ?? "kiküldhető"}
+      </span>
     </div>
   ),
 }));
@@ -129,11 +157,16 @@ vi.mock("./pilot-linked-worksheets-card", () => ({
   PilotLinkedWorksheetsCard: ({
     jobId,
     canManage,
+    embedded,
   }: {
     jobId: string;
     canManage: boolean;
+    embedded?: boolean;
   }) => (
-    <div data-testid="linked-worksheets-card-stub">
+    <div
+      data-testid="linked-worksheets-card-stub"
+      data-embedded={String(Boolean(embedded))}
+    >
       kapcsolódó munkalapok ({jobId}, {canManage ? "kezelhet" : "csak olvas"})
     </div>
   ),
@@ -297,7 +330,9 @@ describe("PilotServiceJobDetailPage -- MAINTENANCE panelek", () => {
   });
 
   it("MAINTENANCE jegyen megjeleníti mindkét karbantartás-panelt", async () => {
-    api.detail.mockResolvedValue(detail({ kind: "MAINTENANCE" }));
+    api.detail.mockResolvedValue(
+      detail({ kind: "MAINTENANCE", source: CONTRACT_SOURCE }),
+    );
 
     render(<PilotServiceJobDetailPage jobId="job-1" />);
 
@@ -330,9 +365,17 @@ describe("PilotServiceJobDetailPage -- MAINTENANCE panelek", () => {
 
     render(<PilotServiceJobDetailPage jobId="job-1" />);
 
-    expect(
-      await screen.findByTestId("linked-worksheets-card-stub"),
-    ).toHaveTextContent("job-1, kezelhet");
+    const linkedCard = await screen.findByTestId("linked-worksheets-card-stub");
+    expect(linkedCard).toHaveTextContent("job-1, kezelhet");
+    // Picasso 3.3: one section for the sheet's own and the linked worksheets, embedded in the Munkalapok card (not a second card)
+    expect(linkedCard.getAttribute("data-embedded")).toBe("true");
+    expect(screen.getAllByTestId("linked-worksheets-card-stub")).toHaveLength(
+      1,
+    );
+    const worksheetsCard = screen
+      .getByRole("heading", { name: "Munkalapok" })
+      .closest("[class*='rounded']");
+    expect(worksheetsCard?.contains(linkedCard)).toBe(true);
   });
 
   /*
@@ -361,18 +404,42 @@ describe("PilotServiceJobDetailPage -- MAINTENANCE panelek", () => {
     expect(screen.queryByTestId("process-steps-stub")).toBeNull();
   });
 
-  it("az igazolás panel változása a számla-panel refreshKey-ét lépteti, a forrás nélküli lap okot ad át", async () => {
-    api.detail.mockResolvedValue(detail({ kind: "MAINTENANCE", source: null }));
+  it("az igazolás panel változása a számla-panel refreshKey-ét lépteti", async () => {
+    api.detail.mockResolvedValue(
+      detail({ kind: "MAINTENANCE", source: CONTRACT_SOURCE }),
+    );
 
     render(<PilotServiceJobDetailPage jobId="job-1" />);
 
     const key = await screen.findByTestId("invoice-refresh-key");
     expect(key).toHaveTextContent("0");
-    expect(screen.getByTestId("certificate-blocked")).toHaveTextContent(
-      /nincs megrendelőlapja/,
-    );
     fireEvent.click(screen.getByRole("button", { name: "igazolás változott" }));
     expect(screen.getByTestId("invoice-refresh-key")).toHaveTextContent("1");
+  });
+
+  // Picasso 3.3: a step that cannot act has no panel; the strip says why (the panel used to say it next to a disabled button)
+  it("a forrás nélküli lapon nincs igazolás-panel: az okot a lépéssor kapja", async () => {
+    // the strip read the list: no certificate (while it is still loading the invoice panel stays: the page does not guess)
+    stripData.value = { certificates: [], invoice: undefined };
+    api.detail.mockResolvedValue(detail({ kind: "MAINTENANCE", source: null }));
+
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+
+    expect(await screen.findByTestId("steps-blocked")).toHaveTextContent(
+      /nincs megrendelőlapja/,
+    );
+    // the strip reports its data in an effect: run it before reading the panels
+    await act(async () => {});
+    expect(
+      screen.queryByTestId("completion-certificate-panel-stub"),
+    ).toBeNull();
+    // nor the invoice: it waits for the certificate
+    expect(screen.queryByTestId("maintenance-invoice-panel-stub")).toBeNull();
+    // the package stays: its download does not wait (Luca, 2026-11-18)
+    expect(
+      screen.getByTestId("maintenance-package-panel-stub"),
+    ).toBeInTheDocument();
+    stripData.value = { certificates: null, invoice: undefined };
   });
 
   /*
@@ -1402,7 +1469,9 @@ describe("PilotServiceJobDetailPage -- a karbantartási adatlap nem hibajegy", (
   });
 
   it("the process strip stands on a maintenance sheet with its worksheets, and refreshes when the certificate OR the invoice panel changes (Picasso 3.3)", async () => {
-    api.detail.mockResolvedValue(maintenance(["SIGNED", "DRAFT"]));
+    api.detail.mockResolvedValue(
+      maintenance(["SIGNED", "DRAFT"], { source: CONTRACT_SOURCE }),
+    );
     render(<PilotServiceJobDetailPage jobId="job-1" route="karbantartas" />);
     const strip = await screen.findByTestId("process-steps-stub");
     expect(strip).toHaveTextContent("lapok:2");
@@ -1698,5 +1767,111 @@ describe("PilotServiceJobDetailPage -- a közös állapot és a két végállapo
     await panel();
     expect(screen.getByText("Ütemezve")).toBeInTheDocument();
     expect(screen.getByTestId("job-status")).not.toHaveTextContent("Ütemezve");
+  });
+});
+
+/*
+  A LÉPÉSSOR ADATA DÖNTI EL, MELYIK LÉPÉS PANELJE ÁLL A LAPON (Picasso 3.3, acrobot 62195). Ugyanaz az adat, amit a lépéssor olvasott (`onData`); a szabályok a
+  szerver kapui: TIG csak aláírt munkalapokból, piszkozat-számla csak aláírt TIG-gel, kiküldés aláírt TIG-gel és kiállított számlával. A letöltés nem vár.
+  MI PIROSÍT: ha egy várakozó lépés panelje mégis kirajzolódik; ha a csomag Kiküldése nem kapja meg az okot, vagy kiküldhető lapon is okot kap.
+*/
+describe("PilotServiceJobDetailPage -- a karbantartás lépései a panelekhez", () => {
+  const cert = (signed: boolean) => ({
+    id: "c1",
+    number: "TIG-2026-001",
+    issuedAt: "2026-11-20T10:00:00Z",
+    issuedByName: "Balázs",
+    documents: signed
+      ? [
+          {
+            id: "d1",
+            type: "SIGNED_FORM",
+            fileName: "alairt.pdf",
+            contentType: "application/pdf",
+            sizeBytes: 10,
+            createdAt: "2026-11-21T10:00:00Z",
+          },
+        ]
+      : [],
+  });
+  const sheetOf = (status: string, index: number) => ({
+    kind: "worksheet" as const,
+    at: "2026-11-20T10:00:00Z",
+    sortKey: `ws-${index}`,
+    worksheet: {
+      id: `ws-${index}`,
+      number: `ML-${index}`,
+      subject: `Lap ${index}`,
+      createdAt: "2026-11-20T10:00:00Z",
+      handedOverAt: null,
+      status,
+      lineCount: 1,
+      laborHours: "1",
+    },
+  });
+  const sheetWith = (statuses: string[]) =>
+    detail({
+      kind: "MAINTENANCE",
+      source: CONTRACT_SOURCE,
+      timeline: statuses.map(sheetOf) as ServiceJobDetail["timeline"],
+    });
+
+  beforeEach(() => {
+    auth.session = sessionAs("ADMIN");
+    stripData.value = { certificates: null, invoice: undefined };
+  });
+  /** Renders the page and runs the strip's effect: the first render is the unknown state, the assertions read the reported data. */
+  const drawWithStrip = async () => {
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    await screen.findByTestId("process-steps-stub");
+    await act(async () => {});
+  };
+
+  it("aláíratlan munkalap mellett nincs igazolás- és számla-panel, és a csomag kiküldése okot kap", async () => {
+    stripData.value = { certificates: [], invoice: undefined };
+    api.detail.mockResolvedValue(sheetWith(["SIGNED", "DRAFT"]));
+    await drawWithStrip();
+    expect(screen.getByTestId("package-send-blocked")).toHaveTextContent(
+      "A kiküldéshez teljesítési igazolás kell.",
+    );
+    expect(
+      screen.queryByTestId("completion-certificate-panel-stub"),
+    ).toBeNull();
+    expect(screen.queryByTestId("maintenance-invoice-panel-stub")).toBeNull();
+  });
+
+  it("minden munkalap aláírva, igazolás még nincs: az igazolás panelje áll, a számláé nem", async () => {
+    stripData.value = { certificates: [], invoice: undefined };
+    api.detail.mockResolvedValue(sheetWith(["SIGNED"]));
+    await drawWithStrip();
+    expect(
+      screen.getByTestId("completion-certificate-panel-stub"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("maintenance-invoice-panel-stub")).toBeNull();
+  });
+
+  it("aláírt igazolás és kiállított számla mellett a csomag kiküldhető", async () => {
+    stripData.value = {
+      certificates: [cert(true)],
+      invoice: {
+        id: "i1",
+        status: "ISSUED",
+        invoiceNumber: "ACR-2026-1",
+        currency: "HUF",
+        netAmount: "1000",
+        vatAmount: "270",
+        grossAmount: "1270",
+        createdAt: "2026-11-22T10:00:00Z",
+        issueEnabled: true,
+      },
+    };
+    api.detail.mockResolvedValue(sheetWith(["SIGNED"]));
+    await drawWithStrip();
+    expect(screen.getByTestId("package-send-blocked")).toHaveTextContent(
+      "kiküldhető",
+    );
+    expect(
+      screen.getByTestId("maintenance-invoice-panel-stub"),
+    ).toBeInTheDocument();
   });
 });

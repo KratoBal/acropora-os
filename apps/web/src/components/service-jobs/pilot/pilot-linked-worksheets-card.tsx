@@ -40,10 +40,16 @@ export function PilotLinkedWorksheetsCard({
   token,
   jobId,
   canManage,
+  embedded = false,
 }: {
   token: string;
   jobId: string;
   canManage: boolean;
+  /**
+   * A MUNKALAPOK KÁRTYA ALSÓ SZAKASZAKÉNT (picasso képernyő-leltár 3.3): a karbantartási lapon a saját és a hozzákapcsolt munkalapok
+   * egy szakaszban állnak, nem két külön kártyában. Ilyenkor nincs saját keret, csak egy elválasztó és egy alcím; a tartalom ugyanaz.
+   */
+  embedded?: boolean;
 }) {
   const [data, setData] = useState<ServiceJobLinkedWorksheetsResponse | null>(
     null,
@@ -111,22 +117,17 @@ export function PilotLinkedWorksheetsCard({
   const history = data?.history ?? [];
   const unlinkTarget = items.find((item) => item.worksheetId === toUnlink);
 
-  return (
-    <PilotCard>
-      <PilotCardHeader
-        title="Kapcsolódó munkalapok"
-        action={
-          canManage ? (
-            <PilotButton
-              variant="secondary"
-              disabled={busy}
-              onClick={() => setPicking((open) => !open)}
-            >
-              {picking ? "Bezárás" : "Munkalap hozzákapcsolása"}
-            </PilotButton>
-          ) : undefined
-        }
-      />
+  const action = canManage ? (
+    <PilotButton
+      variant="secondary"
+      disabled={busy}
+      onClick={() => setPicking((open) => !open)}
+    >
+      {picking ? "Bezárás" : "Munkalap hozzákapcsolása"}
+    </PilotButton>
+  ) : undefined;
+  const body = (
+    <>
       <p
         className="border-b border-pilot-grey-50 px-5 py-3 text-xs text-pilot-grey-500"
         data-testid="linked-worksheets-notice"
@@ -261,6 +262,26 @@ export function PilotLinkedWorksheetsCard({
         }}
         onCancel={() => setToUnlink(null)}
       />
+    </>
+  );
+
+  return embedded ? (
+    <section
+      aria-label="Kapcsolódó munkalapok"
+      className="border-t border-pilot-grey-100"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-4">
+        <h3 className="text-sm font-semibold text-pilot-grey-900">
+          Kapcsolódó munkalapok
+        </h3>
+        {action}
+      </div>
+      {body}
+    </section>
+  ) : (
+    <PilotCard>
+      <PilotCardHeader title="Kapcsolódó munkalapok" action={action} />
+      {body}
     </PilotCard>
   );
 }

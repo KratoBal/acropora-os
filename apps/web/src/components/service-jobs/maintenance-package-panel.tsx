@@ -29,9 +29,15 @@ import { MaintenancePackageMailDialog } from "./maintenance-package-mail-dialog"
 export function MaintenancePackagePanel({
   serviceJobId,
   jobNumber,
+  sendBlockedReason = null,
 }: {
   serviceJobId: string;
   jobNumber: string;
+  /**
+   * Ha meg van adva, a Kiküldés tiltott, és az ok alatta áll (Picasso 3.3): a szerver kiküldési kapuja (`maintenance-package-gate.ts`)
+   * úgyis elutasítaná. A Letöltés ettől független, és szándékosan él (Luca, 2026-11-18). `null`: kiküldhető, vagy az állapot nem ismert.
+   */
+  sendBlockedReason?: string | null;
 }) {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -125,8 +131,21 @@ export function MaintenancePackagePanel({
         >
           {downloading ? "Letöltés…" : "Csomag letöltése"}
         </PilotButton>
-        <PilotButton onClick={openMailDialog}>Kiküldés</PilotButton>
+        <PilotButton
+          disabled={Boolean(sendBlockedReason)}
+          aria-describedby={
+            sendBlockedReason ? "csomag-kikuldes-akadaly" : undefined
+          }
+          onClick={openMailDialog}
+        >
+          Kiküldés
+        </PilotButton>
       </div>
+      {sendBlockedReason ? (
+        <p id="csomag-kikuldes-akadaly" className="mt-2 text-sm text-muted">
+          {sendBlockedReason} Letölteni most is lehet.
+        </p>
+      ) : null}
 
       <MaintenancePackageMailDialog
         open={dialogOpen}
