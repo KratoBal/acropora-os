@@ -351,9 +351,10 @@ describe("FoxpostSettlementsPage", () => {
     render(createElement(FoxpostSettlementsPage));
     await answered(api.reports);
 
-    await screen.findByLabelText("A riport hónapja, év");
-    // The picker opens on the latest report, not on the calendar month.
-    expectMonth("A riport hónapja", "2026-08");
+    // The picker opens on the latest report, not on the calendar month. The field is drawn empty before the page's three
+    // calls (list, reports, sync status) have all answered, and the month is set after the last one: wait for the value, not
+    // for the field (card f94126d9: the field-only wait raced on a loaded runner and read an empty year).
+    await waitFor(() => expectMonth("A riport hónapja", "2026-08"));
     const download = screen.getByRole("button", { name: "XLSX letöltése" });
     expect(download).toBeEnabled();
     expect(screen.getByText(/Utalt 280 000 Ft/)).toBeInTheDocument();
