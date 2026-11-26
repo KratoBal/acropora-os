@@ -65,7 +65,10 @@ import {
   requireClosedSheetLabel,
   worksheetSheetDocument,
 } from "./worksheet-sheet-document.js";
-import { worksheetSheetInput } from "./worksheet-sheet-mapping.js";
+import {
+  entriesUpToClose,
+  worksheetSheetInput,
+} from "./worksheet-sheet-mapping.js";
 import { worksheetCreatedRange } from "./worksheet-created-range.js";
 import { worksheetJobKindWhere } from "./worksheet-job-kind-filter.js";
 import {
@@ -1828,10 +1831,13 @@ export class WorksheetsRepository extends Repository {
       worksheetSheetInput(
         detail,
         detail.currentVersion,
-        entries?.rows.map((entry) => ({
+        entriesUpToClose(
+          entries?.rows ?? [],
+          detail.currentVersion.closedAt,
+        ).map((entry) => ({
           body: entry.body,
           authorName: entry.authorName,
-        })) ?? [],
+        })),
         row.assignees.map((assignee) => personLegalName(assignee.user)),
         (row.documents ?? []).flatMap((document) =>
           document.thumbnail
