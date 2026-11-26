@@ -1518,3 +1518,15 @@ describe("AssetEditorPage mezők egysége", () => {
     ).toBe("kW");
   });
 });
+
+describe("AssetEditorPage visszalépés", () => {
+  it("a nyíl az eszközök listájára visz, a közös nyíl-linkkel", async () => {
+    api.detail.mockResolvedValue(asset as unknown as AssetDetail);
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    const back = await screen.findByRole("link", { name: "Eszközök" });
+    expect(back.getAttribute("href")).toBe("/szerviz/eszkozok");
+  });
+});

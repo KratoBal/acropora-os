@@ -45,14 +45,8 @@ const MEG_ATALLITANDO = [
   "components/content/content-results-summary-page.tsx",
   "components/content/teaching-source-list-page.tsx",
   "components/content/teaching-source-page.tsx",
-  "components/contracts/pilot/pilot-contract-detail-page.tsx",
   "components/knowledge-base/claim-store-page.tsx",
   "components/messages/messages-page.tsx",
-  "components/partner-orders/partner-order-detail-page.tsx",
-  "components/quotes/quote-pdf-page.tsx",
-  "components/service-assets/asset-editor-page.tsx",
-  "components/suppliers/pilot/pilot-supplier-editor-page.tsx",
-  "components/worksheets/worksheet-entry-page.tsx",
 ];
 
 /** MÁS JELENTÉSŰ „Vissza ..." SZÖVEGEK (nem oldal-visszalépés), indokkal: ezeken a guard nem kér komponenst. */
@@ -138,11 +132,26 @@ describe("a visszalépés egy alakja", () => {
       "components/pos/pilot/pilot-pos-sale-detail-page.tsx",
       "components/pos/pilot/pilot-pos-summary-page.tsx",
       "components/pos/pos-sale-detail-page.tsx",
+      "components/contracts/pilot/pilot-contract-detail-page.tsx",
+      "components/partner-orders/partner-order-detail-page.tsx",
+      "components/quotes/quote-pdf-page.tsx",
+      "components/service-assets/asset-editor-page.tsx",
+      "components/worksheets/worksheet-entry-page.tsx",
     ]) {
       const f = MIND.find((x) => x.ut === ut);
       expect(f, ut).toBeDefined();
       expect(f!.forras, ut).toMatch(/<PilotBack(Link|Button)\b/);
       expect(f!.forras, ut).not.toContain("Vissza a listához");
     }
+  });
+
+  // a beszállító-szerkesztő lapon a MENTÉS-SOR „Vissza" gombja szándékosan marad (a terv két gombot ad a sorban, az R11 lapja); az oldal TETEJE a nyíl
+  it("a beszállító-szerkesztő teteje a közös nyíl, a mentés-sor gombja marad", () => {
+    const f = MIND.find(
+      (x) =>
+        x.ut === "components/suppliers/pilot/pilot-supplier-editor-page.tsx",
+    );
+    expect(f).toBeDefined();
+    expect(f!.forras).toContain("<PilotBackLink");
   });
 });

@@ -26,6 +26,10 @@ import {
 } from "@/components/vies/vies-conflicts";
 import { ViesMissingDetails } from "@/components/vies/vies-missing-details";
 import { useReturnTo } from "@/components/navigation-history";
+import {
+  PilotBackLink,
+  backLinkLabel,
+} from "@/components/pilot/pilot-back-link";
 import { PilotPartnerDeleteButton } from "./pilot-partner-delete-button";
 import {
   COUNTRY_OPTIONS,
@@ -473,32 +477,29 @@ export function PilotSupplierEditorPage({
   return (
     <PilotThemeRoot bleed>
       <div className="flex min-h-full flex-col">
-        <PageHeader
-          className={`${PAGE_GUTTER_X} pt-6`}
-          eyebrow="Partnerek"
-          title={supplier ? supplier.name : "Új felvitele"}
-          description="Törzsadatok, bankszámla és kapcsolattartó a beszerzési számlák rögzítéséhez."
-          meta={
-            supplier ? (
-              <PilotBadge variant={supplier.isActive ? "success" : "grey"}>
-                {supplier.isActive ? "Aktív" : "Inaktív"}
-              </PilotBadge>
-            ) : null
-          }
-          actions={
-            /*
-              Oda vissza, ahonnan a kolléga jött - egy partner adatlapjára a
-              munkalap felől is be lehet lépni, és onnan a partner-lista nem
-              "vissza", hanem egy harmadik hely. Ha nincs honnan jönni
-              (közvetlen cím, újratöltés), a lista a tartalék, ahogy eddig.
-            */
-            <Link href={backToList.href}>
-              <PilotButton type="button" variant="secondary">
-                {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
-              </PilotButton>
-            </Link>
-          }
-        />
+        <div className={`${PAGE_GUTTER_X} pt-6`}>
+          {/*
+            Oda vissza, ahonnan a kolléga jött - egy partner adatlapjára a
+            munkalap felől is be lehet lépni, és onnan a partner-lista nem
+            "vissza", hanem egy harmadik hely. Ha nincs honnan jönni
+            (közvetlen cím, újratöltés), a lista a tartalék, ahogy eddig.
+          */}
+          <PilotBackLink href={backToList.href}>
+            {backLinkLabel(backToList, "Partnerek")}
+          </PilotBackLink>
+          <PageHeader
+            eyebrow="Partnerek"
+            title={supplier ? supplier.name : "Új felvitele"}
+            description="Törzsadatok, bankszámla és kapcsolattartó a beszerzési számlák rögzítéséhez."
+            meta={
+              supplier ? (
+                <PilotBadge variant={supplier.isActive ? "success" : "grey"}>
+                  {supplier.isActive ? "Aktív" : "Inaktív"}
+                </PilotBadge>
+              ) : null
+            }
+          />
+        </div>
 
         <div className={`flex flex-1 flex-col gap-4 ${PAGE_GUTTER_X} py-6`}>
           {error ? (

@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { UnsavedChangesGuard } from "@/components/common/unsaved-changes-guard";
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import {
   keepsContractJobOperationId,
   newContractJobOperationId,
@@ -786,22 +787,12 @@ export function PilotContractDetailPage({
     <PilotThemeRoot bleed>
       <div className="flex min-h-full flex-col">
         <div className={`${PAGE_GUTTER_X} pt-6`}>
-          <Link
-            href="/partnerek/szerzodesek"
-            className="mb-0.5 block text-xs text-pilot-grey-400 hover:text-pilot-grey-700"
-          >
-            ← Szerződések
-          </Link>
+          <PilotBackLink href="/partnerek/szerzodesek">
+            Szerződések
+          </PilotBackLink>
           <PageHeader
             title={contract.number}
             description={contract.customer.displayName}
-            actions={
-              <Link href="/partnerek/szerzodesek">
-                <PilotButton type="button" variant="secondary">
-                  ← Vissza
-                </PilotButton>
-              </Link>
-            }
           />
         </div>
 
