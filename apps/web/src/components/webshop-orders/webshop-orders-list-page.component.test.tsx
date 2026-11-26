@@ -149,6 +149,45 @@ beforeEach(() => {
 const row = async (name: RegExp) => screen.findByRole("row", { name });
 
 describe("WebshopOrdersListPage", () => {
+  // Picasso 3.11: a hosszú vevőnév nem csonkul értelmetlenül, a számlálók egy sorba tömörülnek, a sorok sűrűek
+  it("a long customer name wraps on two lines and keeps its full text as a tooltip instead of being cut to one", async () => {
+    const name = "Átállítás Mérés Kereskedelmi és Szolgáltató Betéti Társaság";
+    api.list.mockResolvedValue(
+      response([order({ customer: { ...order().customer, name } })]),
+    );
+    render(createElement(WebshopOrdersListPage));
+    const cell = (await row(/#38 megnyitása$/)).querySelector(
+      `[title="${name}"]`,
+    ) as HTMLElement;
+    expect(cell).not.toBeNull();
+    expect(cell.className).toContain("line-clamp-2");
+    expect(cell.className).not.toContain("truncate");
+  });
+
+  it("the counters are compact chips (label and number side by side), not tall stacked cards", async () => {
+    api.list.mockResolvedValue(response([order()]));
+    render(createElement(WebshopOrdersListPage));
+    const counters = await screen.findByRole("group", {
+      name: "Feldolgozási számlálók",
+    });
+    const chips = within(counters).getAllByRole("button");
+    expect(chips).toHaveLength(6);
+    for (const chip of chips) {
+      expect(chip.className).toContain("items-baseline");
+      expect(chip.className).not.toContain("py-3");
+      expect(chip.innerHTML).not.toContain("text-2xl");
+    }
+  });
+
+  it("the table uses the dense row height", async () => {
+    api.list.mockResolvedValue(response([order()]));
+    render(createElement(WebshopOrdersListPage));
+    expect((await row(/#38 megnyitása$/)).className).toContain("md:h-[44px]");
+    expect((await row(/#38 megnyitása$/)).className).not.toContain(
+      "md:h-[72px]",
+    );
+  });
+
   it("shows a row the way the design does, and marks the stale one", async () => {
     api.list.mockResolvedValue(
       response([
@@ -185,7 +224,8 @@ describe("WebshopOrdersListPage", () => {
     expect(fresh.className).not.toContain("bg-pilot-amber-50");
 
     const stale = await row(/#37 megnyitása, elavult/);
-    expect(stale.className).toContain("!bg-pilot-amber-50");
+    // the warning is the words in the status cell, NOT a tint on the whole row: when most of a list is stale (the test data: 107 of 120) a tinted row warns nobody
+    expect(stale.className).not.toContain("amber");
     expect(within(stale).getByText("12 órája · elavult")).toBeTruthy();
 
     const counters = screen.getByRole("group", {
@@ -533,10 +573,11 @@ describe("WebshopOrdersListPage", () => {
     const card = within(cards).getByRole("button", { name: "#38 megnyitása" });
     expect(within(card).getByText("Nagy Emese")).toBeTruthy();
     expect(within(card).getByText("Számlára vár")).toBeTruthy();
-    expect(
-      within(cards).getByRole("button", { name: "#37 megnyitása, elavult" })
-        .className,
-    ).toContain("bg-pilot-amber-50");
+    const staleCard = within(cards).getByRole("button", {
+      name: "#37 megnyitása, elavult",
+    });
+    expect(staleCard.className).not.toContain("amber");
+    expect(within(staleCard).getByText(/· elavult/)).toBeTruthy();
     fireEvent.click(card);
     expect(nav.push).toHaveBeenCalledWith("/webshop/rendelesek/order_38");
   });
