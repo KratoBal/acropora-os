@@ -12,7 +12,8 @@ import {
   ROLE_PERMISSIONS,
   type Session,
 } from "@acropora/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import http from "node:http";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "./app-shell";
 import { allNavigationPages } from "./navigation";
@@ -47,6 +48,29 @@ const favoritesApiMock = vi.hoisted(() => ({
   remove: vi.fn(),
 }));
 vi.mock("@/lib/api/favorites", () => ({ favoritesApi: favoritesApiMock }));
+/*
+  NO NETWORK IN THIS FILE (card e0ef2124; barracuda's sweep 2026-11-26): the shell's task count (`dashboardApi.summary`) and the
+  assistant's switch (`assistantApi.config`) went to localhost:3000 in every render, about 200 refused connections per run.
+  Both answer as the refused call did: no task count, no assistant. The last test below fails if any request goes out.
+*/
+vi.mock("@/lib/api/dashboard", () => ({
+  dashboardApi: { summary: vi.fn().mockResolvedValue({}) },
+}));
+vi.mock("@/lib/api/assistant", () => ({
+  assistantApi: {
+    config: vi.fn().mockResolvedValue({ enabled: false }),
+    ask: vi.fn(),
+  },
+}));
+const outgoing = vi.spyOn(http, "request");
+afterAll(() => {
+  expect(
+    outgoing.mock.calls.map(([target]) => {
+      const to = target as unknown as { href?: string; path?: string } | string;
+      return typeof to === "string" ? to : (to.href ?? to.path ?? "?");
+    }),
+  ).toEqual([]);
+});
 vi.mock("./auth/user-menu", () => ({
   UserMenu: () => <div>Felhasználói menü</div>,
 }));
