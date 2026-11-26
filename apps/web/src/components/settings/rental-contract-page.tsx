@@ -21,6 +21,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { rentalSettingsApi } from "@/lib/api/rental-settings";
 
+import { RentalContractPreview } from "./rental-contract-preview";
+
 /**
  * The late-fee multiplier as typed: a comma or a point, at most two decimals, in range; empty is "not set yet" (`null`).
  * `undefined` when the text is not a valid value, so the page can say so instead of sending it.
@@ -202,13 +204,24 @@ export function RentalContractPage() {
             A „## ” kezdetű sor fejléc, az üres sor új bekezdés, a [[alairas]]
             sor a két aláírásvonal.
           </p>
-          <Textarea
-            aria-label="A szerződés szövege"
-            rows={24}
-            value={template}
-            maxLength={RENTAL_CONTRACT_LIMITS.template.max}
-            onChange={(event) => setTemplate(event.target.value)}
-          />
+          {/* the raw text and its preview side by side on a wide screen, the preview under it on a narrow one (Picasso 3.28) */}
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <Textarea
+              aria-label="A szerződés szövege"
+              rows={24}
+              value={template}
+              maxLength={RENTAL_CONTRACT_LIMITS.template.max}
+              onChange={(event) => setTemplate(event.target.value)}
+            />
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-dusk-800">
+                Előnézet (a mezők helyén a nevük)
+              </p>
+              <div className="xl:max-h-[38rem] xl:overflow-y-auto">
+                <RentalContractPreview template={template} />
+              </div>
+            </div>
+          </div>
           {unknown.length > 0 ? (
             <Alert
               variant="danger"
