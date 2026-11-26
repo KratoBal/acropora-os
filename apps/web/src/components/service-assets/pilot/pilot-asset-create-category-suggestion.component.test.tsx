@@ -401,7 +401,7 @@ describe("a létrehozó űrlap gombsora", () => {
     // the missing-fields text is in the left part, a sibling BEFORE the buttons
     const left = bar.firstElementChild!;
     expect(left).not.toBe(right);
-    expect(left.textContent).toContain("Kötelező:");
+    expect(left.textContent).toContain("Hiányzik:");
     expect(
       left.compareDocumentPosition(right) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
