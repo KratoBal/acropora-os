@@ -160,6 +160,15 @@ describe("FoxpostSettlementsPage", () => {
     expect(
       screen.getByText(/se nem true, se nem false.*Gmail ellenőrzése most/),
     ).toBeInTheDocument();
+    // one line, not two (Picasso 3.22): the name leads the sentence in the same paragraph
+    const name = screen.getByText(
+      "Az automatikus Gmail-behúzás ki van kapcsolva",
+    );
+    expect(name.tagName).toBe("SPAN");
+    expect(name.parentElement!.tagName).toBe("P");
+    expect(name.parentElement!.textContent).toMatch(
+      /^Az automatikus Gmail-behúzás ki van kapcsolva\. Ok: /,
+    );
     expect(
       screen.getByRole("button", { name: "Gmail ellenőrzése most" }),
     ).toBeInTheDocument();

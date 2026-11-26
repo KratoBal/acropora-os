@@ -46,6 +46,7 @@ import {
   errorText,
   formatQuantity,
   formatQuoteMoney,
+  signedQuoteMoney,
   isAbort,
   QUOTE_BLOCK_LABEL,
   QUOTE_PRICE_DISPLAY,
@@ -683,7 +684,7 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
                     />
                     <Fact
                       label="Kiválasztott opciók"
-                      value={formatQuoteMoney(v.optionalNetTotal, v.currency)}
+                      value={signedQuoteMoney(v.optionalNetTotal, v.currency)}
                       detail={
                         v.optionalGrossTotal
                           ? `bruttó ${formatQuoteMoney(v.optionalGrossTotal, v.currency)}`
