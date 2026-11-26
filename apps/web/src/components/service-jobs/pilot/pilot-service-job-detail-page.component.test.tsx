@@ -657,33 +657,55 @@ describe("PilotServiceJobDetailPage -- redesign", () => {
     },
   };
 
-  it("keeps the internal and the partner's status as two badges", async () => {
+  // Picasso 3.2: the state once (the badge), the partner's word once, in small text next to it; no second badge, no data row
+  it("says the state once, and the partner's word once, in small text", async () => {
     api.detail.mockResolvedValue(detail());
     render(<PilotServiceJobDetailPage jobId="job-1" />);
     expect(
-      await screen.findByText("Partner: Feldolgozás alatt"),
+      await screen.findByText("A partner ezt látja: Feldolgozás alatt"),
     ).toBeInTheDocument();
+    expect(screen.getAllByText(/Feldolgozás alatt/)).toHaveLength(1);
+    expect(screen.queryByText(/^Partner: /)).toBeNull();
+    expect(screen.queryByText(/^Jelenleg:/)).toBeNull();
     // the stored TRIAGED reads as the common Folyamatban; the old Felmérve is gone from the header
     expect(screen.getByTestId("job-status")).toHaveTextContent("Folyamatban");
     expect(screen.queryByText("Felmérve")).toBeNull();
   });
 
-  it("draws one button per step the server allows, and no other", async () => {
-    api.detail.mockResolvedValue(detail());
+  it("draws one primary button for the main step, the other allowed steps behind További lépések, and no other", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        allowedSteps: ["IN_PROGRESS", "WAITING_FOR_PARTS", "CANCELLED"],
+      }),
+    );
     render(<PilotServiceJobDetailPage jobId="job-1" />);
     const panel = await screen.findByRole("region", {
       name: "Következő lépés",
     });
-    const buttons = Array.from(panel.querySelectorAll("button")).map(
-      (button) => button.textContent,
+    // Picasso 3.2: exactly one primary button in the box, the first allowed step (a verb, card 7f23785c)
+    const primary = Array.from(panel.querySelectorAll("button")).filter(
+      (button) => button.className.includes("bg-pilot-aqua-600"),
     );
-    // the labels are verbs (card 7f23785c, picasso point 3), not state names
-    expect(buttons).toEqual(["Munka megkezdése", "Meghiúsultnak jelölés"]);
-    // f0b70dbd: one primary button, the main step; the others stay, as secondary
-    const primary = Array.from(panel.querySelectorAll("button")).map((button) =>
-      button.className.includes("bg-pilot-aqua-600"),
+    expect(primary.map((button) => button.textContent)).toEqual([
+      "Munka megkezdése",
+    ]);
+    // the rest are not separate buttons: they open from the drop-down, in the server's order
+    expect(
+      within(panel).queryByRole("button", {
+        name: "Várakoztatás: alkatrészre",
+      }),
+    ).toBeNull();
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "További lépések" }),
     );
-    expect(primary).toEqual([true, false]);
+    const more = within(panel).getByRole("group", {
+      name: "A többi megengedett lépés",
+    });
+    expect(
+      within(more)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["Várakoztatás: alkatrészre", "Meghiúsultnak jelölés"]);
   });
 
   it("says there is no further step when the server allows none", async () => {
@@ -1033,6 +1055,7 @@ describe("PilotServiceJobDetailPage -- a régi lapról áthozott őrök", () => 
     await answered(api.move);
 
     // the failure is an end state: it asks first, and the note check runs on the confirmed step
+    fireEvent.click(screen.getByRole("button", { name: "További lépések" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Meghiúsultnak jelölés" }),
     );
@@ -1405,7 +1428,7 @@ describe("PilotServiceJobDetailPage -- a karbantartási adatlap nem hibajegy", (
       screen.getByRole("region", { name: "Következő lépés" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Kezelés")).toBeInTheDocument();
-    expect(screen.getByText("A partner ezt látja")).toBeInTheDocument();
+    expect(screen.getByText(/^A partner ezt látja: /)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Csomag letöltése/ }),
     ).toBeInTheDocument();
@@ -1533,13 +1556,17 @@ describe("PilotServiceJobDetailPage -- a közös állapot és a két végállapo
     expect(screen.getByTestId("job-status").textContent).toBe(
       "Elkészültaláírásra vár",
     );
-    expect(region.textContent).toContain("Jelenleg: Elkészült · aláírásra vár");
+    // the state is said once, by the badge; the box does not repeat it
+    expect(region.textContent).not.toContain("aláírásra vár");
     const close = within(region).getByRole("button", { name: "Lezárás" });
     expect(close).toBeDisabled();
     expect(region.textContent).toContain(
       "Még nem zárható le: 2 munkalap nincs aláírva.",
     );
-    // the waits stay usable
+    // the waits stay usable, behind További lépések
+    fireEvent.click(
+      within(region).getByRole("button", { name: "További lépések" }),
+    );
     expect(
       within(region).getByRole("button", { name: "Várakoztatás: alkatrészre" }),
     ).not.toBeDisabled();
@@ -1625,9 +1652,17 @@ describe("PilotServiceJobDetailPage -- a közös állapot és a két végállapo
     );
     render(<PilotServiceJobDetailPage jobId="job-1" />);
     const region = await panel();
+    fireEvent.click(
+      within(region).getByRole("button", { name: "További lépések" }),
+    );
     expect(
       Array.from(region.querySelectorAll("button")).map((b) => b.textContent),
-    ).toEqual(["Folytatás", "Várakoztatás: ügyfélre", "Meghiúsultnak jelölés"]);
+    ).toEqual([
+      "Folytatás",
+      "További lépések",
+      "Várakoztatás: ügyfélre",
+      "Meghiúsultnak jelölés",
+    ]);
     expect(screen.getByTestId("job-status").textContent).toBe(
       "Vár valamirealkatrészre",
     );
