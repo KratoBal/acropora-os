@@ -246,6 +246,13 @@ describe("MissingInvoicesPage", () => {
     expect(
       screen.getByRole("button", { name: "Kivonat feltöltése" }),
     ).toBeInTheDocument();
+    // Picasso 3.18 (acrobot 62633): the upload is the page's one primary action, Javasolt számlák stays secondary
+    expect(
+      screen.getByRole("button", { name: "Kivonat feltöltése" }).className,
+    ).toContain("bg-pilot-aqua-600");
+    expect(
+      screen.getByRole("button", { name: "Javasolt számlák" }).className,
+    ).not.toContain("bg-pilot-aqua-600");
     const csv = new File(["a;b"], "export-24.csv", { type: "text/csv" });
     fireEvent.change(screen.getByLabelText("Bankkivonat CSV"), {
       target: { files: [csv] },

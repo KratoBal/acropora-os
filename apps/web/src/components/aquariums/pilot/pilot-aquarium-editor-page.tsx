@@ -532,23 +532,17 @@ export function PilotAquariumEditorPage({
             <PilotCard>
               <PilotCardHeader title="Tulajdon" />
               <div className="flex flex-col gap-4 p-5">
-                <div className="flex gap-2">
-                  <PilotButton
-                    type="button"
-                    variant={ownershipType === "OWN" ? "primary" : "secondary"}
-                    onClick={() => setOwnershipType("OWN")}
-                  >
-                    {OWNERSHIP_LABEL.OWN}
-                  </PilotButton>
-                  <PilotButton
-                    type="button"
-                    variant={
-                      ownershipType === "CUSTOMER" ? "primary" : "secondary"
+                {/* a choice of two is the segmented switch, as the next control on the form (Picasso 3.28, acrobot 62633) */}
+                <div>
+                  <PilotSegmentedControl
+                    options={[OWNERSHIP_LABEL.OWN, OWNERSHIP_LABEL.CUSTOMER]}
+                    value={OWNERSHIP_LABEL[ownershipType]}
+                    onChange={(label) =>
+                      setOwnershipType(
+                        label === OWNERSHIP_LABEL.CUSTOMER ? "CUSTOMER" : "OWN",
+                      )
                     }
-                    onClick={() => setOwnershipType("CUSTOMER")}
-                  >
-                    {OWNERSHIP_LABEL.CUSTOMER}
-                  </PilotButton>
+                  />
                 </div>
                 {ownershipType === "CUSTOMER" ? (
                   <>

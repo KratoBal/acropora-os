@@ -142,6 +142,13 @@ const UNTOUCHED = {
 };
 
 describe("HomepageContentEditorPage", () => {
+  // Picasso 3.18 (acrobot 62633): the line above the title is the menu entry, Webshop / Kezdőlap, not "Beállítások"
+  it("HP-ED-EYEBROW: the line above the title is its menu entry", async () => {
+    render(<HomepageContentEditorPage />);
+    expect(await screen.findByText("Webshop / Kezdőlap")).toBeTruthy();
+    expect(screen.queryByText("Beállítások")).toBeNull();
+  });
+
   it("HP-ED-DEFAULT: shows the starting value and the sample tag, nothing edited", async () => {
     render(<HomepageContentEditorPage />);
     expect(

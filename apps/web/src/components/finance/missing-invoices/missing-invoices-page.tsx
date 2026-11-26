@@ -140,7 +140,8 @@ export function MissingInvoicesPage() {
             </PilotButton>
             {canManage ? (
               <PilotButton
-                variant="secondary"
+                // the page's own work is the statement: its upload is the one primary action (Picasso 3.18, acrobot 62633)
+                variant="primary"
                 size="regular"
                 disabled={uploading}
                 onClick={() => statementInput.current?.click()}

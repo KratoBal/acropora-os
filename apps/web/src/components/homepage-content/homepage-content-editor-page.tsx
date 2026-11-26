@@ -54,6 +54,7 @@ import { HomepageNewsletterEditor } from "./homepage-newsletter-editor";
 import { HomepagePreview } from "./homepage-preview";
 import { previewRecord } from "./homepage-preview-protocol";
 import { HomepageSlidesEditor } from "./homepage-slides-editor";
+import { menuEyebrow } from "@/components/navigation";
 
 /**
  * THE WEB SHOP'S HOME PAGE ADMIN, "Beállítások / Kezdőlap" (Balázs, 2026-10-20;
@@ -358,7 +359,8 @@ export function HomepageContentEditorPage() {
   return (
     <PilotThemeRoot className="space-y-6">
       <PageHeader
-        eyebrow="Beállítások"
+        // the line above the title is the page's menu entry (Picasso 3.18, acrobot 62633): Webshop / Kezdőlap, not "Beállítások"
+        eyebrow={menuEyebrow("/admin/kezdolap") ?? undefined}
         title="Kezdőlap"
         description="A webshop kezdőlapjának tartalma és megjelenése."
       />
