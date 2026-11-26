@@ -1,5 +1,7 @@
 import { Prisma } from "@acropora/database";
 
+import { proformaLineDescription } from "./quote-proforma-text.js";
+
 /**
  * A MILESTONE'S PROFORMA, SPLIT BY VAT RATE (#1582 P7, plan C10), a pure
  * function. The 40% is not taken of the gross total but per VAT rate, so the
@@ -86,4 +88,24 @@ export function allocateMilestone(
       .filter((b) => b.net.lessThan(0))
       .map((b) => b.rate.toString()),
   };
+}
+
+/**
+ * A MÉRFÖLDKŐ-DÍJBEKÉRŐ SORAI: ÁFA-kulcsonként egy "1 db" sor a kulcs nettójával (szándékos összevonás, lásd ADR-018). Kiemelve a
+ * `createQuoteProforma`-ból, hogy a forrás-sortól a Számlázz.hu tételig menő teszt (barracuda számla-sor söprése, L8) ugyanezt hívja.
+ */
+export function milestoneProformaLines(
+  lines: readonly ProformaRateLine[],
+  text: Parameters<typeof proformaLineDescription>[0],
+) {
+  return lines.map((line) => ({
+    productId: null,
+    description: proformaLineDescription(text),
+    quantity: "1",
+    unit: "db",
+    unitNet: line.net,
+    vatRatePercent: line.vatRatePercent,
+    discountPercent: null,
+    comment: null,
+  }));
 }

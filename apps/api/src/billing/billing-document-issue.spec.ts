@@ -17,6 +17,13 @@ import {
 } from "./billing-document-issue.js";
 import { toSzamlazzAgentInput } from "./billing-document-szamlazz.adapter.js";
 import { finalLineOfQuoteItem } from "./billing-final-lines.js";
+import { draftLinesOf } from "./billing-draft-lines.js";
+import {
+  allocateMilestone,
+  milestoneProformaLines,
+} from "../quotes/quote-billing.js";
+import { invoiceDraftOf } from "../orders/webshop-orders/webshop-order-invoice.rules.js";
+import type { MedusaOrderDetailRow } from "../integrations/medusa/medusa-admin.client.js";
 import type { BillingDocumentRow } from "./billing-documents.repository.js";
 
 const d = (value: string) => new Prisma.Decimal(value);
@@ -588,6 +595,213 @@ describe("a forrás-sortól az XML tételig (L8)", () => {
         afakulcs: "5",
       },
     ]);
+  });
+
+  /*
+    A TÖBBI ÚT (kártya c37ea343, acrobot 62362): a díjbekérő -> előlegszámla és a kiállított -> másolat (mindkettő `draftLinesOf`),
+    az árajánlat mérföldkő-díjbekérője (`milestoneProformaLines`) és a webshop számla (`invoiceDraftOf`). Mindegyik a valódi
+    forrás-függvényen megy át, utána a közös csövön az XML-ig.
+  */
+  /** Egy vázlat-sor bizonylat-sorként, a nettó, ÁFA és bruttó a sor saját számaiból. */
+  const lineOfDraft = (
+    draft: {
+      description: string;
+      quantity: string;
+      unit: string | null;
+      unitNet: string;
+      vatRatePercent: string;
+      comment?: string | null;
+    },
+    position: number,
+  ) => {
+    const net = d(draft.quantity).times(d(draft.unitNet));
+    const vat = net.times(d(draft.vatRatePercent)).dividedBy(100);
+    return line({
+      id: `line-${position}`,
+      position,
+      description: draft.description,
+      quantity: d(draft.quantity),
+      unit: draft.unit,
+      unitNet: d(draft.unitNet),
+      vatRatePercent: d(draft.vatRatePercent),
+      netAmount: net.toDecimalPlaces(4),
+      vatAmount: vat.toDecimalPlaces(4),
+      grossAmount: net.plus(vat).toDecimalPlaces(4),
+      comment: draft.comment ?? null,
+    });
+  };
+  /** Amit a forrás-sor mond a négy tagról, a Számlázz.hu alakjában (a záró nullák nélkül). */
+  const expected = (draft: {
+    quantity: string;
+    unit: string | null;
+    unitNet: string;
+    vatRatePercent: string;
+  }) => ({
+    mennyiseg: d(draft.quantity).toString(),
+    mennyisegiEgyseg: draft.unit,
+    nettoEgysegar: d(draft.unitNet).toString(),
+    afakulcs: d(draft.vatRatePercent).toString(),
+  });
+
+  it("a díjbekérő sora az előlegszámlán és a másolaton: a mennyiség, az egység, az egységár és a kulcs a díjbekérőé", () => {
+    const proforma = row({
+      status: "ISSUED",
+      documentType: "PROFORMA",
+      lines: [
+        line({
+          quantity: d("3.000000"),
+          unit: "zsák",
+          unitNet: d("1566.9300"),
+          vatRatePercent: d("27.00"),
+        }),
+        line({
+          id: "line-2",
+          position: 1,
+          description: "Szerelési díj",
+          quantity: d("1.500000"),
+          unit: "óra",
+          unitNet: d("9000.0000"),
+          vatRatePercent: d("5.00"),
+        }),
+      ],
+    }) as BillingDocumentRow;
+    const drafts = draftLinesOf(proforma);
+    assert.equal(
+      drafts.length,
+      2,
+      "positive control: both item lines come over",
+    );
+    for (const documentType of ["ADVANCE_INVOICE", "INVOICE"] as const) {
+      const xml = xmlOf(row({ documentType, lines: drafts.map(lineOfDraft) }));
+      assert.deepEqual(tetelek(xml), drafts.map(expected), documentType);
+      assert.deepEqual(
+        tetelek(xml).map((t) => t.mennyisegiEgyseg),
+        ["zsák", "óra"],
+      );
+    }
+  });
+
+  it("az árajánlat mérföldkő-díjbekérője: kulcsonként egy 1 db sor, a kulcs nettójának a mérföldkő szerinti részével", () => {
+    const split = allocateMilestone(
+      [
+        { net: d("2002"), vatRatePercent: d("27") },
+        { net: d("500"), vatRatePercent: d("5") },
+      ],
+      d("40"),
+    );
+    const drafts = milestoneProformaLines(split.lines, {
+      label: "Előleg",
+      percent: d("40"),
+      quoteNumber: "AJ-2026-0011",
+    });
+    assert.equal(drafts.length, 2, "positive control: one line per rate");
+    const xml = xmlOf(
+      // as createQuoteProforma makes it: a proforma has no invoice format
+      row({
+        documentType: "PROFORMA",
+        invoiceFormat: null,
+        lines: drafts.map(lineOfDraft),
+      }),
+    );
+    // 40% of 2502 = 1000.8 -> 1001 in all; the rates' lines round down (800 + 200) and the 1 Ft remainder goes to the rate with
+    // the largest net (allocateMilestone's rule), so 27% carries 801
+    assert.deepEqual(tetelek(xml), drafts.map(expected));
+    assert.deepEqual(tetelek(xml), [
+      {
+        mennyiseg: "1",
+        mennyisegiEgyseg: "db",
+        nettoEgysegar: "801",
+        afakulcs: "27",
+      },
+      {
+        mennyiseg: "1",
+        mennyisegiEgyseg: "db",
+        nettoEgysegar: "200",
+        afakulcs: "5",
+      },
+    ]);
+  });
+
+  it("a webshop számla: a Medusa mennyisége, db, a bruttóból visszaszámolt nettó egységár és a tétel kulcsa, a szállítás és a díj is", () => {
+    const order = {
+      id: "order_38",
+      display_id: 38,
+      created_at: "2026-10-05T11:21:00.000Z",
+      email: "vevo@example.hu",
+      currency_code: "huf",
+      customer_id: null,
+      metadata: null,
+      total: 21340,
+      subtotal: 19850,
+      discount_total: 0,
+      shipping_total: 1490,
+      shipping_address: null,
+      billing_address: {
+        first_name: "Emese",
+        last_name: "Nagy",
+        address_1: "Fehérvári út 24.",
+        city: "Budapest",
+        postal_code: "1117",
+        country_code: "hu",
+        phone: null,
+      },
+      items: [
+        {
+          id: "i1",
+          title: "Coral Food",
+          product_title: "Coral Food",
+          variant_title: "100 ml",
+          variant_sku: "CF-100",
+          quantity: 3,
+          unit_price: 6300,
+          total: 18900,
+          metadata: null,
+          tax_lines: [{ rate: 27 }],
+        },
+        {
+          id: "fee",
+          title: "Utánvét kezelési díj",
+          product_title: null,
+          variant_title: null,
+          variant_sku: null,
+          quantity: 1,
+          unit_price: 950,
+          total: 950,
+          metadata: { acropora_line_item_kind: "fee" },
+          tax_lines: [{ rate: 27 }],
+        },
+      ],
+      shipping_methods: [
+        {
+          name: "Foxpost csomagpont",
+          data: null,
+          total: 1490,
+          tax_lines: [{ rate: 27 }],
+        },
+      ],
+      payment_collections: [],
+    } as unknown as MedusaOrderDetailRow;
+    const draft = invoiceDraftOf(order, {
+      customerId: "cust-1",
+      now: new Date("2026-10-05T21:30:00.000Z"),
+    });
+    assert.ok(draft.ok, draft.ok ? "" : draft.message);
+    const drafts = draft.draft.lines;
+    assert.equal(
+      drafts.length,
+      3,
+      "positive control: the item, the fee and the shipping",
+    );
+    const xml = xmlOf(
+      row({
+        sourceType: "WEBSHOP_ORDER",
+        sourceId: "order_38",
+        lines: drafts.map(lineOfDraft),
+      }),
+    );
+    assert.deepEqual(tetelek(xml), drafts.map(expected));
+    // the item: Medusa's quantity, not one line of 1
+    assert.equal(tetelek(xml)[0]!.mennyiseg, "3");
   });
 });
 

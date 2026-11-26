@@ -34,6 +34,7 @@ import {
   BillingDocumentsRepository,
   type BillingDocumentRow,
 } from "./billing-documents.repository.js";
+import { draftLinesOf } from "./billing-draft-lines.js";
 import { budapestDayKey } from "../dashboard/budapest-day.js";
 import {
   finalInvoiceNoticeOf,
@@ -640,25 +641,3 @@ const FINAL_ONLY_FROM_ADVANCE =
 /** Az OS-ben kiállított sztornója van-e (a kapcsolat előtti sorokon hiányzik). */
 const stornoed = (row: BillingDocumentRow) =>
   (row.correctionInvoices ?? []).some((storno) => storno.status === "ISSUED");
-
-/**
- * Egy bizonylat tételei vázlat-bemenetként. Csak a tételek: a kedvezmény-sort
- * a normalizálás a tétel százalékából újraépíti, egyszer.
- */
-function draftLinesOf(row: BillingDocumentRow) {
-  return row.lines
-    .filter((line) => line.kind === "ITEM")
-    .map((line) => ({
-      productId: line.productId,
-      variantId: line.variantId,
-      // a díjbekérő -> előleg -> végszámla lánc a szerződés-tételt is viszi
-      contractItemId: line.contractItemId,
-      description: line.description,
-      quantity: line.quantity.toString(),
-      unit: line.unit,
-      unitNet: line.unitNet.toString(),
-      vatRatePercent: line.vatRatePercent.toString(),
-      discountPercent: line.discountPercent?.toString() ?? null,
-      comment: line.comment,
-    }));
-}
