@@ -8,6 +8,7 @@ import type {
   PartnerOrderTotalsDto,
   QuoteRichText,
 } from "@acropora/types";
+import { acceptedItemIds } from "../quotes/quote-accepted-items.js";
 
 /** One line of a quote version as stored (the fields the order needs). */
 export interface QuoteItemSource {
@@ -22,6 +23,8 @@ export interface QuoteItemSource {
   unitNetPrice: Prisma.Decimal;
   vatRatePercent: Prisma.Decimal;
   isOptional: boolean;
+  /** a nem opcionális tétel, amelynek a helyére ez lép (kiváltott tétel), vagy null */
+  replacesItemId: string | null;
 }
 
 const ZERO = new Prisma.Decimal(0);
@@ -81,10 +84,10 @@ export function selectOrderItems(
   selectedOptionalIds: readonly string[],
   currency: string,
 ): PartnerOrderLineDto[] {
-  const selected = new Set(selectedOptionalIds);
+  const accepted = acceptedItemIds(items, selectedOptionalIds);
   const decimals = currencyDecimals(currency);
   return items
-    .filter((item) => !item.isOptional || selected.has(item.id))
+    .filter((item) => accepted.has(item.id))
     .slice()
     .sort(
       (a, b) => a.blockPosition - b.blockPosition || a.position - b.position,

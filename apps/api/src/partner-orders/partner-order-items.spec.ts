@@ -23,11 +23,33 @@ function item(
     unitNetPrice: new Prisma.Decimal(1000),
     vatRatePercent: new Prisma.Decimal(27),
     isOptional: false,
+    replacesItemId: null,
     ...over,
   };
 }
 
 describe("selectOrderItems", () => {
+  // KIVÁLTOTT TÉTEL (card 2540d9d4): a kiválasztott opcionális tétel a kiváltott sor HELYÉRE lép; MI PIROSÍT: ha a kiváltott sor a megrendelésen marad,
+  // vagy ha a ki nem választott opcionális kiszorítja
+  it("a chosen optional line replaces the line it stands for, and a line it does not stand for stays", () => {
+    const items = [
+      item("a", { position: 1 }),
+      item("b", { position: 2 }),
+      item("opt", { position: 3, isOptional: true, replacesItemId: "b" }),
+    ];
+    const chosen = selectOrderItems(items, ["opt"], "HUF");
+    assert.deepEqual(
+      chosen.map((line) => line.quoteItemId),
+      ["a", "opt"],
+    );
+    assert.equal(chosen[1]!.wasOptional, true);
+    const notChosen = selectOrderItems(items, [], "HUF");
+    assert.deepEqual(
+      notChosen.map((line) => line.quoteItemId),
+      ["a", "b"],
+    );
+  });
+
   it("keeps every non-optional line and only the chosen optional ones", () => {
     const lines = selectOrderItems(
       [

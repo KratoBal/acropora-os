@@ -111,6 +111,7 @@ export type PartnerOrderIssuanceSnapshot = {
     unitNetPrice: Prisma.Decimal;
     vatRatePercent: Prisma.Decimal;
     isOptional: boolean;
+    replacesItemId: string | null;
   }[];
   selectedOptionalItemIds: string[];
   /** a rögzített ajánlat-verzió pénzneme (a TIG forintban készül) */
@@ -344,6 +345,7 @@ export class CompletionCertificatesRepository {
               unitNetPrice: true,
               vatRatePercent: true,
               isOptional: true,
+              replacesItemId: true,
             },
           }),
           tx.completionCertificateLineItem.findMany({

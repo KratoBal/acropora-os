@@ -11271,6 +11271,12 @@ model QuoteItem {
   unitNetPrice   Decimal         @db.Decimal(19, 4)
   vatRatePercent Decimal         @db.Decimal(5, 2)
   isOptional     Boolean
+  /// KIVÁLTOTT TÉTEL (Luca 2026-11-26): az opcionális tétel, amelyik ennek a (nem opcionális) tételnek a HELYÉRE lép, ha az ügyfél kiválasztja.
+  /// Null: kiegészítés (hozzáadódik). Csak opcionális tételen áll (CHECK), ugyanazon verzión belül (összetett FK), és egy tételt legfeljebb
+  /// egy opcionális vált ki (egyedi). Hogy a kiváltott nem opcionális, azt az alkalmazás őrzi.
+  replacesItemId String?
+  replacesItem   QuoteItem?      @relation("QuoteItemReplaces", fields: [replacesItemId, versionId], references: [id, versionId], onDelete: Restrict)
+  replacedBy     QuoteItem?      @relation("QuoteItemReplaces")
   version        QuoteVersion    @relation(fields: [versionId], references: [id], onDelete: Restrict)
   /// Composite FK prevents an item from referring to a block in another version.
   block          QuoteBlock      @relation(fields: [blockId, versionId], references: [id, versionId], onDelete: Restrict)
@@ -11281,6 +11287,7 @@ model QuoteItem {
 
   @@unique([blockId, position])
   @@unique([id, versionId])
+  @@unique([replacesItemId, versionId])
   @@index([versionId])
 }
 

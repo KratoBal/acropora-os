@@ -37,6 +37,7 @@ const item = (
   id,
   name,
   isOptional: false,
+  replacesItemId: null,
   quantity: d("1"),
   unit: "db",
   unitNetPrice: d("1000"),
@@ -62,6 +63,26 @@ describe("quoteBasisFrom", () => {
     assert.deepEqual(
       basis.items.map((i) => i.name),
       ["Akvárium", "Szűrő", "Szállítás"],
+    );
+  });
+
+  // KIVÁLTOTT TÉTEL (card 2540d9d4): a végszámla alapja is a kiváltott sor nélkül számol; MI PIROSÍT: ha a kiváltott sor a számlán marad
+  it("a chosen optional item that replaces a line takes its place on the invoice basis, in the quote's order", () => {
+    const items = [
+      item("a", "Akvárium"),
+      item("b", "Régi szűrő"),
+      item("opt", "Új szűrő", { isOptional: true, replacesItemId: "b" }),
+      item("c", "Szállítás"),
+    ];
+    const chosen = quoteBasisFrom(milestone(), ["opt"], items);
+    assert.deepEqual(
+      chosen?.items.map((i) => i.name),
+      ["Akvárium", "Új szűrő", "Szállítás"],
+    );
+    const notChosen = quoteBasisFrom(milestone(), [], items);
+    assert.deepEqual(
+      notChosen?.items.map((i) => i.name),
+      ["Akvárium", "Régi szűrő", "Szállítás"],
     );
   });
 

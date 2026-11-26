@@ -80,6 +80,7 @@ export function orderBody(order: OrderContentRow) {
         unitNetPrice: item.unitNetPrice,
         vatRatePercent: item.vatRatePercent,
         isOptional: item.isOptional,
+        replacesItemId: item.replacesItemId,
       })),
     ),
     order.acceptance.selectedOptionalItemIds,
