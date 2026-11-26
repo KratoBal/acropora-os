@@ -109,6 +109,30 @@ describe("RentalEquipmentPage", () => {
     expect(screen.getByText(/30\s000 Ft/)).toBeTruthy();
   });
 
+  // Picasso 3.24 (acrobot 62633): a longer list gets the settings lists' search, and each row's buttons name their device
+  it("over eight devices a search filters the list by name or serial; the row buttons name their device", async () => {
+    api.list.mockResolvedValue({
+      items: Array.from({ length: 9 }, (_, i) => ({
+        ...device,
+        id: `eq-${i}`,
+        name: `Eszköz ${i}`,
+        serialNumber: `SN-${i}`,
+      })),
+    });
+    render(<RentalEquipmentPage />);
+    const search = await screen.findByLabelText("Keresés a listában");
+    expect(
+      screen.getByRole("button", { name: "Szerkesztés: Eszköz 3" }),
+    ).toBeTruthy();
+    fireEvent.change(search, { target: { value: "sn-7" } });
+    expect(screen.getByText(/Eszköz 7 · SN-7/)).toBeTruthy();
+    expect(screen.queryByText(/Eszköz 3 · SN-3/)).toBeNull();
+    fireEvent.change(search, { target: { value: "nincs ilyen" } });
+    expect(
+      screen.getByText("Nincs a keresésnek megfelelő eszköz."),
+    ).toBeTruthy();
+  });
+
   it("creates a new device from the form", async () => {
     render(<RentalEquipmentPage />);
     await screen.findByText(/SN-1/);
@@ -141,7 +165,7 @@ describe("RentalEquipmentPage", () => {
     render(<RentalEquipmentPage />);
     await screen.findByText(/SN-1/);
 
-    fireEvent.click(screen.getByRole("button", { name: "Szerkesztés" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Szerkesztés: / }));
     fireEvent.change(screen.getByLabelText("Napi bérleti díj (Ft)"), {
       target: { value: "3000" },
     });
@@ -157,7 +181,9 @@ describe("RentalEquipmentPage", () => {
 
     // the save's answer reloads the list, and the list is hidden while it loads: the button is the reloaded one
     await answered(api.update);
-    fireEvent.click(await screen.findByRole("button", { name: "Kivezetés" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /^Kivezetés: / }),
+    );
     await waitFor(() =>
       expect(api.update).toHaveBeenLastCalledWith("token-1", "eq-1", {
         isActive: false,
