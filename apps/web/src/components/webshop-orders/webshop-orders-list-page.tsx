@@ -171,11 +171,7 @@ function OrderCard({
         type="button"
         aria-label={`${orderNumber(item.displayId)} megnyitása${item.status.stale ? ", elavult" : ""}`}
         onClick={() => onOpen(item)}
-        className={`block w-full rounded-xl border p-4 text-left transition-colors hover:border-pilot-accent-warm ${
-          item.status.stale
-            ? "border-pilot-amber-100 bg-pilot-amber-50"
-            : "border-pilot-grey-200 bg-white"
-        }`}
+        className="block w-full rounded-xl border border-pilot-grey-200 bg-white p-4 text-left transition-colors hover:border-pilot-accent-warm"
       >
         <span className="flex items-start justify-between gap-3">
           <span className="font-semibold text-pilot-grey-900">
@@ -455,7 +451,7 @@ export function WebshopOrdersListPage() {
     {
       id: "number",
       header: sortHeader("number", "Rendelésszám"),
-      width: "150px",
+      width: "120px",
       cell: (item) => (
         <span className="block">
           <span className="font-semibold text-pilot-grey-900">
@@ -492,9 +488,13 @@ export function WebshopOrdersListPage() {
     {
       id: "customer",
       header: sortHeader("customer", "Vevő"),
+      width: "190px",
       cell: (item) => (
         <span className="block min-w-0">
-          <span className="block truncate font-semibold text-pilot-grey-900">
+          <span
+            title={item.customer.name ?? item.customer.email}
+            className="line-clamp-2 break-words font-semibold text-pilot-grey-900"
+          >
             {item.customer.name ?? item.customer.email}
           </span>
           <CustomerMarkers item={item} />
@@ -504,7 +504,7 @@ export function WebshopOrdersListPage() {
     {
       id: "total",
       header: sortHeader("total", "Összeg"),
-      width: "112px",
+      width: "104px",
       cell: (item) => (
         <span className="font-semibold text-pilot-grey-900">
           {formatMoney(item.total, item.currency, { fractionDigits: 2 })}
@@ -523,7 +523,7 @@ export function WebshopOrdersListPage() {
     {
       id: "payment",
       header: "Fizetés",
-      width: "150px",
+      width: "160px",
       cell: (item) => (
         <span className="text-[13px] text-pilot-grey-700">
           {paymentText(item)}
@@ -558,7 +558,7 @@ export function WebshopOrdersListPage() {
     {
       id: "invoice",
       header: "Számla",
-      width: "130px",
+      width: "120px",
       cell: (item) =>
         item.invoiceNumber ? (
           <span className="text-xs text-pilot-grey-600">
@@ -575,7 +575,7 @@ export function WebshopOrdersListPage() {
     {
       id: "status",
       header: sortHeader("status", "Státusz"),
-      width: "200px",
+      width: "170px",
       cell: (item) => <StatusCell item={item} now={now} />,
     },
   ];
@@ -608,7 +608,7 @@ export function WebshopOrdersListPage() {
       <div
         role="group"
         aria-label="Feldolgozási számlálók"
-        className="grid grid-cols-2 gap-3 md:grid-cols-6"
+        className="grid grid-cols-2 gap-2 md:grid-cols-6"
       >
         {WEBSHOP_ORDER_STAGES.map((key) => {
           const active = stage === key;
@@ -618,14 +618,14 @@ export function WebshopOrdersListPage() {
               type="button"
               aria-pressed={active}
               onClick={() => setParam("stage", active ? "" : key)}
-              className={`rounded-xl border bg-white px-4 py-3 text-left transition-colors hover:border-pilot-accent-warm ${active ? "border-pilot-accent-warm" : "border-pilot-grey-200"}`}
+              className={`flex items-baseline justify-between gap-2 rounded-lg border bg-white px-3 py-2 text-left transition-colors hover:border-pilot-accent-warm ${active ? "border-pilot-accent-warm" : "border-pilot-grey-200"}`}
             >
               <span
-                className={`block text-xs font-semibold ${key === "stale" ? "text-pilot-accent-warm-text" : "text-pilot-grey-700"}`}
+                className={`text-xs font-semibold ${key === "stale" ? "text-pilot-accent-warm-text" : "text-pilot-grey-700"}`}
               >
                 {WEBSHOP_ORDER_STAGE_LABELS[key]}
               </span>
-              <span className="mt-1 block text-2xl font-semibold text-pilot-grey-900">
+              <span className="text-lg font-semibold leading-6 text-pilot-grey-900">
                 {data ? data.counters[key] : "–"}
               </span>
             </button>
@@ -635,12 +635,12 @@ export function WebshopOrdersListPage() {
           type="button"
           aria-pressed={shortageFilter}
           onClick={() => setParam("shortage", shortageFilter ? "" : "active")}
-          className={`rounded-xl border bg-white px-4 py-3 text-left transition-colors hover:border-pilot-accent-warm ${shortageFilter ? "border-pilot-accent-warm" : "border-pilot-grey-200"}`}
+          className={`flex items-baseline justify-between gap-2 rounded-lg border bg-white px-3 py-2 text-left transition-colors hover:border-pilot-accent-warm ${shortageFilter ? "border-pilot-accent-warm" : "border-pilot-grey-200"}`}
         >
-          <span className="block text-xs font-semibold text-pilot-amber-700">
+          <span className="text-xs font-semibold text-pilot-amber-700">
             Készlethiány
           </span>
-          <span className="mt-1 block text-2xl font-semibold text-pilot-grey-900">
+          <span className="text-lg font-semibold leading-6 text-pilot-grey-900">
             {data ? data.shortageOrders : "–"}
           </span>
         </button>
@@ -842,9 +842,7 @@ export function WebshopOrdersListPage() {
                 rowLabel={(item) =>
                   `${orderNumber(item.displayId)} megnyitása${item.status.stale ? ", elavult" : ""}`
                 }
-                rowClassName={(item) =>
-                  item.status.stale ? "!bg-pilot-amber-50" : ""
-                }
+                dense
                 onRowActivate={openOrder}
                 minWidth={1080}
               />
