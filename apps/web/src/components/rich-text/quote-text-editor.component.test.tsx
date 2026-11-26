@@ -22,6 +22,11 @@ interface Peldany {
     selectAll(): boolean;
     toggleBold(): boolean;
     toggleOrderedList(): boolean;
+    toggleBulletList(): boolean;
+    toggleItalic(): boolean;
+    splitBlock(): boolean;
+    setHardBreak(): boolean;
+    setTextSelection(range: { from: number; to: number }): boolean;
     insertContent(
       tartalom: string,
       opciok?: { applyInputRules?: boolean },
@@ -97,6 +102,55 @@ describe("az ajánlati szöveg szerkesztője", () => {
       expect(editor().schema.marks[mark]).toBeUndefined();
     for (const node of ["heading", "blockquote", "codeBlock", "horizontalRule"])
       expect(editor().schema.nodes[node]).toBeUndefined();
+  });
+
+  /*
+    URGENT BUG HUNT (card fa6d7fa6, Luca 2026-11-26): what the editor sends for the formatting changes the report names (one bold letter, a
+    new paragraph, a bullet list, mixed formatting) passes the shared schema, which the server applies to the save. The same shapes were
+    measured in a real browser on the test OS (all 200). WHAT TURNS IT RED: if any of these editor outputs is outside the subset.
+  */
+  it("egy betű félkövér: a kimenet átmegy a sémán, és csak az a betű jelölt", () => {
+    const { editor, utolso } = megjelenit();
+    act(() => {
+      editor().commands.insertContent("alma");
+      editor().commands.setTextSelection({ from: 2, to: 3 });
+      editor().commands.toggleBold();
+    });
+    const { raw, parsed } = utolso();
+    expect(validateQuoteRichText(parsed).ok).toBe(true);
+    expect(raw).toContain(
+      '{"type":"text","text":"l","marks":[{"type":"bold"}]}',
+    );
+    expect(szoveg(raw)).toBe("alma");
+  });
+
+  it("új bekezdés és felsorolás: a kimenet átmegy a sémán, a szöveg megmarad", () => {
+    const { editor, utolso } = megjelenit();
+    act(() => {
+      editor().commands.insertContent("alma");
+      editor().commands.splitBlock();
+      editor().commands.insertContent("körte");
+      editor().commands.toggleBulletList();
+    });
+    const { raw, parsed } = utolso();
+    expect(validateQuoteRichText(parsed).ok).toBe(true);
+    expect(raw).toContain('"type":"bulletList"');
+    expect(szoveg(raw)).toBe("almakörte");
+  });
+
+  it("vegyes formázás (félkövér, dőlt, sortörés, felsorolás): a kimenet átmegy a sémán", () => {
+    const { editor, utolso } = megjelenit();
+    act(() => {
+      editor().commands.insertContent("alma");
+      editor().commands.selectAll();
+      editor().commands.toggleBold();
+      editor().commands.toggleItalic();
+      editor().commands.toggleBulletList();
+    });
+    const { raw, parsed } = utolso();
+    expect(validateQuoteRichText(parsed).ok).toBe(true);
+    expect(raw).toContain('"marks":[{"type":"bold"},{"type":"italic"}]');
+    expect(raw).not.toContain("attrs");
   });
 
   it("a számozott lista attribútumai nem kerülnek a kimenetbe", () => {
