@@ -274,7 +274,7 @@ export function WorksheetDetail({ id }: { id: string }) {
         ) : null}
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-6 px-8 py-6 lg:grid-cols-[1fr_280px]">
+      <div className="grid grid-cols-1 items-start gap-6 px-8 py-6 lg:grid-cols-[1fr_340px]">
         <div className="flex flex-col gap-5">
           <PilotCard>
             <PilotCardHeader title="A munka leírása" />
@@ -412,6 +412,7 @@ export function WorksheetDetail({ id }: { id: string }) {
             <PilotCardHeader title="Munkalap adatai" />
             <div className="px-5 py-2">
               <PilotDataRow
+                labelWidth="110px"
                 label={
                   worksheet.serviceJob?.kind === "MAINTENANCE"
                     ? "Karbantartási lap"
@@ -448,17 +449,32 @@ export function WorksheetDetail({ id }: { id: string }) {
                 bízzuk (az a `0`-t is hiányként kezelné).
               */}
               <PilotDataRow
+                labelWidth="110px"
                 label="Összes munkaóra"
                 value={`${current.laborHours} óra`}
               />
-              <PilotDataRow label="Keltezés" value={datum(current.issueDate)} />
               <PilotDataRow
+                labelWidth="110px"
+                label="Keltezés"
+                value={datum(current.issueDate)}
+              />
+              <PilotDataRow
+                labelWidth="110px"
                 label="Teljesítés"
                 value={datum(current.fulfillmentDate)}
               />
-              <PilotDataRow label="Határidő" value={datum(current.dueDate)} />
-              <PilotDataRow label="Felvette" value={worksheet.createdByName} />
               <PilotDataRow
+                labelWidth="110px"
+                label="Határidő"
+                value={datum(current.dueDate)}
+              />
+              <PilotDataRow
+                labelWidth="110px"
+                label="Felvette"
+                value={worksheet.createdByName}
+              />
+              <PilotDataRow
+                labelWidth="110px"
                 label="Verzió"
                 value={`${current.version}. verzió`}
               />

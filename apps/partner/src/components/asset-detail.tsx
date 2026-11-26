@@ -155,7 +155,7 @@ export function AssetDetail({ id }: { id: string }) {
       <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
         <VisszaLink />
         <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-pilot-grey-400">
-          ESZKÖZ
+          {asset.assetNumber}
         </p>
         <h1 className="text-xl font-semibold text-pilot-grey-900">
           {asset.name}
@@ -166,11 +166,11 @@ export function AssetDetail({ id }: { id: string }) {
           >
             {assetStatusLabel[asset.status]}
           </PilotBadge>
-          <span className="font-mono text-xs text-pilot-grey-400">
-            {asset.partnerInternalCode
-              ? `${asset.assetNumber} · ${asset.partnerInternalCode}`
-              : asset.assetNumber}
-          </span>
+          {asset.partnerInternalCode ? (
+            <span className="font-mono text-xs text-pilot-grey-400">
+              {asset.partnerInternalCode}
+            </span>
+          ) : null}
         </div>
       </div>
 
