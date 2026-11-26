@@ -5,7 +5,12 @@ import { describe, it } from "node:test";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
 import { REQUIRED_PERMISSIONS_KEY } from "../auth/decorators/require-permissions.decorator.js";
-import { UnasStockSyncOutboxController } from "./unas-stock-sync-outbox.controller.js";
+import {
+  MAX_OUTBOX_OFFSET,
+  parseLimit,
+  parseOffset,
+  UnasStockSyncOutboxController,
+} from "./unas-stock-sync-outbox.controller.js";
 import type { UnasStockSyncOutboxRepository } from "./unas-stock-sync-outbox.repository.js";
 import type { UnasStockSyncOutboxScheduler } from "./unas-stock-sync-outbox.scheduler.js";
 
@@ -75,5 +80,50 @@ describe("UnasStockSyncOutboxController delegation", () => {
 
     assert.equal(await controller.run(), "DISABLED");
     assert.equal(called, true);
+  });
+});
+
+/*
+  A LAPOZÁS KEZDETE (Picasso 3.27, acrobot 62278). MI PIROSÍT: ha a lista `limit` egyedül már nem az első oldalt adja; ha egy hibás `offset` (szöveg, tört, negatív) hibát dob az első oldal helyett;
+  ha egy óriási `offset` korlát nélkül megy a lekérdezésbe; ha az `offset` nem jut el a tárolóig.
+*/
+describe("UnasStockSyncOutboxController paging", () => {
+  it("the limit is 50 by default and 200 at most, as it always was", () => {
+    assert.equal(parseLimit(undefined), 50);
+    assert.equal(parseLimit("abc"), 50);
+    assert.equal(parseLimit("0"), 50);
+    assert.equal(parseLimit("-3"), 50);
+    assert.equal(parseLimit("25"), 25);
+    assert.equal(parseLimit("9999"), 200);
+  });
+
+  it("the offset is a non-negative whole number; anything else is the first page, not an error", () => {
+    assert.equal(parseOffset(undefined), 0);
+    assert.equal(parseOffset(""), 0);
+    assert.equal(parseOffset("abc"), 0);
+    assert.equal(parseOffset("-5"), 0);
+    assert.equal(parseOffset("1.5"), 0);
+    assert.equal(parseOffset("0"), 0);
+    assert.equal(parseOffset("50"), 50);
+    assert.equal(parseOffset("999999999999"), MAX_OUTBOX_OFFSET);
+  });
+
+  it("list() passes the status, the limit and the offset to the repository", () => {
+    let captured: unknown;
+    const controller = new UnasStockSyncOutboxController(
+      {
+        list: (params: unknown) => {
+          captured = params;
+          return [];
+        },
+      } as unknown as UnasStockSyncOutboxRepository,
+      {} as UnasStockSyncOutboxScheduler,
+    );
+
+    controller.list("FAILED", "25", "50");
+    assert.deepEqual(captured, { status: "FAILED", limit: 25, offset: 50 });
+    // an old caller: only the limit; the offset is the first page
+    controller.list(undefined, "10", undefined);
+    assert.deepEqual(captured, { status: undefined, limit: 10, offset: 0 });
   });
 });
