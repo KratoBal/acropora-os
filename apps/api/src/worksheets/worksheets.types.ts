@@ -5,6 +5,7 @@ import {
 } from "./worksheet-labor.js";
 import { describeSignerSource } from "./worksheet-signer.js";
 import {
+  commonWorksheetStatus,
   formatWorksheetVersionLabel,
   personDisplayName,
   type WorksheetAssignee,
@@ -12,6 +13,7 @@ import {
   type WorksheetListItem,
   type WorksheetSignatureDetail,
   type WorksheetVersionDetail,
+  type WorksheetVersionStatus,
   type WorksheetVersionSummary,
 } from "@acropora/types";
 
@@ -358,6 +360,18 @@ export function currentVersionRow(
 export type WorksheetHandover =
   { handedOver: true; at: Date; byUserId: string } | { handedOver: false };
 
+/**
+ * A KÖZÖS ÁLLAPOT A VÁLASZBAN (kártya 7f23785c, acrobot 62402): a legutolsó változat állapotából és tételszámából, a közös szótár függvényével
+ * (`commonWorksheetStatus`), a listán és az adatlapon UGYANAZ a hívás. A hibajegy `statusFields`-ének párja.
+ */
+function commonStatusFields(
+  status: WorksheetVersionStatus,
+  lineCount: number,
+): Pick<WorksheetListItem, "commonStatus" | "commonReason"> {
+  const state = commonWorksheetStatus(status, lineCount);
+  return { commonStatus: state.status, commonReason: state.reason };
+}
+
 export function toWorksheetDetail(row: WorksheetDetailRow): WorksheetDetail {
   const current = currentVersionRow(row);
   return {
@@ -417,6 +431,7 @@ export function toWorksheetDetail(row: WorksheetDetailRow): WorksheetDetail {
     continues: row.continues ?? null,
     continuedBy: row.continuedBy,
     currentVersion: toVersionDetail(current, row.number),
+    ...commonStatusFields(current.status, current.lines.length),
     versions: row.versions.map((version) =>
       toVersionSummary(version, row.number),
     ),
@@ -448,6 +463,7 @@ export function toWorksheetListItem(
     status: current.status,
     sentForSignature: current.sentForSignatureAt !== null,
     lineCount: current._count.lines,
+    ...commonStatusFields(current.status, current._count.lines),
     version: current.version,
     versionCount: row._count.versions,
     grossAmount: current.grossAmount.toString(),
