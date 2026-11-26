@@ -274,6 +274,11 @@ export interface QuoteListItemDto {
     publishedAt: string | null;
     /** the offered (non-optional) lines' net total of this version (P1) */
     netTotal: string;
+    /**
+     * the offered lines' GROSS total as the PDF counts it (each line's own VAT rate, summed unrounded, rounded once: forint whole, other
+     * currencies two places). Optional: an older answer has none (Luca 2026-11-26, the list's gross column).
+     */
+    grossTotal?: string;
   } | null;
 }
 export interface QuoteListResponse {
