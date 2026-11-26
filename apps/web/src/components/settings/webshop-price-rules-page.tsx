@@ -245,9 +245,12 @@ export function WebshopPriceRulesPage() {
         : null}
 
       {rules && draft ? (
-        <PilotButton disabled={busy} onClick={() => void save()}>
-          Mentés
-        </PilotButton>
+        /* A MENTÉS JOBB OLDALT (Picasso 3.20; acrobot 62278: a közös űrlap-minta) */
+        <div className="flex justify-end">
+          <PilotButton disabled={busy} onClick={() => void save()}>
+            Mentés
+          </PilotButton>
+        </div>
       ) : null}
     </PilotThemeRoot>
   );

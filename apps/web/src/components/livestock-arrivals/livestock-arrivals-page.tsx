@@ -423,36 +423,33 @@ export function LivestockArrivalsPage() {
         aria-label="Szűrők"
         data-testid="livestock-arrival-filters"
       >
-        <PilotFormField label="Állapot">
-          <PilotSelect
-            value={status}
-            onChange={(value) =>
-              setStatus(value as "" | LivestockArrivalStatus)
-            }
-            aria-label="Állapot szűrő"
-          >
-            <option value="">Minden állapot</option>
-            {LIVESTOCK_ARRIVAL_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {LIVESTOCK_ARRIVAL_STATUS_LABELS[s]}
-              </option>
-            ))}
-          </PilotSelect>
-        </PilotFormField>
-        <PilotFormField label="Fajta">
-          <PilotSelect
-            value={kind}
-            onChange={(value) => setKind(value as "" | LivestockArrivalKind)}
-            aria-label="Fajta szűrő"
-          >
-            <option value="">Minden fajta</option>
-            {LIVESTOCK_ARRIVAL_KINDS.map((k) => (
-              <option key={k} value={k}>
-                {LIVESTOCK_ARRIVAL_KIND_LABELS[k]}
-              </option>
-            ))}
-          </PilotSelect>
-        </PilotFormField>
+        {/* A SZŰRŐ CÍMKÉJE BELÜL ÁLL (Picasso 3.20; acrobot 62278: a közös lista-minta): "Minden állapot", "Minden fajta" az első opció, nem egy külön felirat a mező fölött */}
+        <PilotSelect
+          value={status}
+          onChange={(value) => setStatus(value as "" | LivestockArrivalStatus)}
+          aria-label="Állapot szűrő"
+          className="mb-1"
+        >
+          <option value="">Minden állapot</option>
+          {LIVESTOCK_ARRIVAL_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {LIVESTOCK_ARRIVAL_STATUS_LABELS[s]}
+            </option>
+          ))}
+        </PilotSelect>
+        <PilotSelect
+          value={kind}
+          onChange={(value) => setKind(value as "" | LivestockArrivalKind)}
+          aria-label="Fajta szűrő"
+          className="mb-1"
+        >
+          <option value="">Minden fajta</option>
+          {LIVESTOCK_ARRIVAL_KINDS.map((k) => (
+            <option key={k} value={k}>
+              {LIVESTOCK_ARRIVAL_KIND_LABELS[k]}
+            </option>
+          ))}
+        </PilotSelect>
         <label className="flex items-center gap-2 pb-2 text-sm">
           <input
             type="checkbox"

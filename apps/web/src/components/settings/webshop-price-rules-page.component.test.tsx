@@ -159,3 +159,12 @@ describe("WebshopPriceRulesPage", () => {
     expect(api.get).not.toHaveBeenCalled();
   });
 });
+
+describe("WebshopPriceRulesPage save position (Picasso 3.20)", () => {
+  it("the Mentés button is on the right, as on the shared form pattern", async () => {
+    api.get.mockResolvedValue(rules());
+    render(createElement(WebshopPriceRulesPage));
+    const save = await screen.findByRole("button", { name: "Mentés" });
+    expect(save.parentElement!.className).toContain("justify-end");
+  });
+});

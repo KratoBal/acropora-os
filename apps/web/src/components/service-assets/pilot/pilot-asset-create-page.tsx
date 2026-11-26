@@ -1053,24 +1053,29 @@ export function PilotAssetCreatePage() {
             </Alert>
           ) : null}
 
-          <div className="flex items-center gap-4 pb-8">
-            <Link href={backToList.href}>
-              <PilotButton variant="secondary" disabled={busy}>
-                Mégse
+          {/* A GOMBSOR A KÖZÖS ŰRLAP-MINTA SZERINT (Picasso 3.20; acrobot 62278): bal oldalt a hiányzó mezők, jobb oldalt a Mégse és a mentés, mint a hibajegy, a munkalap és a karbantartás űrlapján */}
+          <div className="flex flex-col gap-3 pb-8 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-h-5 sm:flex-1">
+              {missing.length > 0 ? (
+                <p className="text-xs text-pilot-grey-400">
+                  Kötelező: {missing.join(", ")}
+                </p>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-4 sm:justify-end">
+              <Link href={backToList.href}>
+                <PilotButton variant="secondary" disabled={busy}>
+                  Mégse
+                </PilotButton>
+              </Link>
+              <PilotButton
+                type="submit"
+                variant="primary"
+                disabled={busy || loadingOptions || missing.length > 0}
+              >
+                {busy ? "Mentés…" : "Eszköz létrehozása"}
               </PilotButton>
-            </Link>
-            <PilotButton
-              type="submit"
-              variant="primary"
-              disabled={busy || loadingOptions || missing.length > 0}
-            >
-              {busy ? "Mentés…" : "Eszköz létrehozása"}
-            </PilotButton>
-            {missing.length > 0 ? (
-              <p className="text-xs text-pilot-grey-400">
-                Kötelező: {missing.join(", ")}
-              </p>
-            ) : null}
+            </div>
           </div>
         </form>
       </div>

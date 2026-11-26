@@ -272,18 +272,19 @@ export function AiChatSettingsPage() {
               {problem}
             </p>
           ) : null}
-          <div className="flex items-center gap-3">
+          {/* A MENTÉS JOBB OLDALT (Picasso 3.20; acrobot 62278: a közös űrlap-minta): a "Mentve." jelzés mellette, balra */}
+          <div className="flex items-center justify-end gap-3">
+            {saved ? (
+              <span role="status" className="text-sm text-pilot-grey-600">
+                Mentve.
+              </span>
+            ) : null}
             <PilotButton
               disabled={busy || Boolean(problem)}
               onClick={() => void save()}
             >
               Mentés
             </PilotButton>
-            {saved ? (
-              <span role="status" className="text-sm text-pilot-grey-600">
-                Mentve.
-              </span>
-            ) : null}
           </div>
         </PilotCard>
       ) : null}

@@ -111,6 +111,24 @@ describe("a lista", () => {
     expect(screen.getByText("a futár hívja")).toBeInTheDocument();
   });
 
+  // Picasso 3.20 (acrobot 62278): the filter's name is inside the select (its first option), not a separate label above the field, as on the other lists
+  it("a szűrők címkéje a mezőn belül áll: az első opció, nem külön felirat fölötte", async () => {
+    render(<LivestockArrivalsPage />);
+    await screen.findByTestId("livestock-arrival-list");
+    const filters = screen.getByTestId("livestock-arrival-filters");
+    for (const [name, first] of [
+      ["Állapot szűrő", "Minden állapot"],
+      ["Fajta szűrő", "Minden fajta"],
+    ] as const) {
+      const select = screen.getByLabelText(name) as HTMLSelectElement;
+      expect(select.options[0]!.textContent).toBe(first);
+      expect(select.value).toBe("");
+      // no visible <label> text above the select inside the filter row
+      expect(select.closest("label")).toBeNull();
+    }
+    expect(filters.querySelectorAll("label")).toHaveLength(2); // only the two checkboxes
+  });
+
   it("a szűrők a kéréshez mennek: állapot, fajta, csak előjegyezhető, és a közelgők kikapcsolása", async () => {
     render(<LivestockArrivalsPage />);
     await screen.findByTestId("livestock-arrival-list");
