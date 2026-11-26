@@ -1239,6 +1239,8 @@ export interface MedusaAdminClient {
       amount: number;
       /** An advance proforma's transfer (commerce #908): only then may it be below the order. */
       advance?: boolean;
+      /** With an advance: the proforma's number, which the guest page asks the customer to name on the balance (commerce #914). */
+      balance_reference?: string;
     },
   ): Promise<{ recorded: boolean; payment_id: string }>;
   releaseHold(
@@ -2514,6 +2516,8 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       amount: number;
       /** An advance proforma's transfer (commerce #908): only then may it be below the order. */
       advance?: boolean;
+      /** With an advance: the proforma's number, which the guest page asks the customer to name on the balance (commerce #914). */
+      balance_reference?: string;
     },
   ): Promise<{ recorded: boolean; payment_id: string }> {
     return this.request(

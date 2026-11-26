@@ -46,6 +46,27 @@ export const transferAmountText = (amount: Prisma.Decimal, currency: string) =>
  * szerep birtokosait. Számlát NEM állít ki, és a Számlázz.hu-ba sem ír: a
  * számla útja Balázs válaszán áll (acrobot 27131).
  */
+
+/** The shop's shape of a balance reference (commerce #914): a document number, letters, digits, "/", "-", "_", ".", at most 40. */
+const BALANCE_REFERENCE = /^[A-Za-z0-9][A-Za-z0-9/._-]{0,39}$/;
+
+/** The shop's 400 for a receipt field it does not know (Medusa's validator: "Unrecognized fields: 'balance_reference'"). */
+export function refusesBalanceReference(error: unknown): boolean {
+  return (
+    error instanceof MedusaAdminHttpError &&
+    error.status === 400 &&
+    /Unrecognized fields: '[^']*\bbalance_reference\b/.test(error.body)
+  );
+}
+
+/** The advance proforma's number as the shop takes it, or null (no number, or one it would refuse). */
+export function balanceReferenceOf(
+  number: string | null | undefined,
+): string | null {
+  const trimmed = number?.trim() ?? "";
+  return BALANCE_REFERENCE.test(trimmed) ? trimmed : null;
+}
+
 @Injectable()
 export class WebshopOrderTransferService {
   private readonly logger = new Logger(WebshopOrderTransferService.name);
@@ -276,15 +297,38 @@ export class WebshopOrderTransferService {
     );
     if (!receipt) return "Nincs rögzített beérkezés.";
     // the shop takes a transfer below the order as an advance only when it is told so (commerce #908): an advance proforma's
-    const advance = await this.repository.receiptProformaIsAdvance(orderId);
+    const advanceProforma =
+      await this.repository.receiptAdvanceProforma(orderId);
+    const advance = advanceProforma !== null;
+    // and its number goes along for the guest page's balance line (commerce #914), only in the shape the shop accepts: a number it
+    // would refuse would fail the whole receipt, so such a number stays home and the page leaves the sentence out
+    const balanceReference = balanceReferenceOf(advanceProforma?.number);
     try {
       const client = await this.orders.adminClient();
-      await client.recordTransferReceipt(orderId, {
+      const base = {
         reference: receipt.reference,
         received_at: receipt.receivedOn,
         amount: Number(receipt.amount),
         ...(advance ? { advance: true } : {}),
-      });
+      };
+      try {
+        await client.recordTransferReceipt(orderId, {
+          ...base,
+          ...(balanceReference ? { balance_reference: balanceReference } : {}),
+        });
+      } catch (error) {
+        /*
+          A SHOP WITHOUT commerce #914 (acrobot 63083): the live OS goes out daily, the live shop only on Balázs's word, so the two
+          can stand on different versions. Such a shop refuses the unknown field with a 400 naming it, and the advance would stay
+          open there. Then the receipt goes once more without the number: the advance closes, only the page's sentence stays out.
+          Any other refusal is the shop's answer, as before.
+        */
+        if (!(balanceReference && refusesBalanceReference(error))) throw error;
+        this.logger.warn(
+          `Előre utalás: a webshop nem ismeri a díjbekérő számát (${orderId}), nélküle küldöm`,
+        );
+        await client.recordTransferReceipt(orderId, base);
+      }
       return null;
     } catch (error) {
       const raw = error instanceof Error ? error.message : String(error);

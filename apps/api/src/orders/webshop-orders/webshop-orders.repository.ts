@@ -1028,16 +1028,28 @@ export class WebshopOrdersRepository {
 
   /** Whether the order's recorded transfer paid an advance proforma (the document's own mark, `WEBSHOP_ADVANCE_TAG`). */
   async receiptProformaIsAdvance(orderId: string): Promise<boolean> {
+    return (await this.receiptAdvanceProforma(orderId)) !== null;
+  }
+
+  /**
+   * The advance proforma the order's recorded transfer paid, with its Számlázz.hu number (card d31a66a3, acrobot 63071: the guest
+   * page names it for the balance's transfer). `null`: no recorded transfer, or not an advance proforma's.
+   */
+  async receiptAdvanceProforma(
+    orderId: string,
+  ): Promise<{ number: string | null } | null> {
     const receipt = await prisma.webshopTransferReceipt.findUnique({
       where: { orderId },
       select: { proformaId: true },
     });
-    if (!receipt) return false;
+    if (!receipt) return null;
     const proforma = await prisma.invoice.findUnique({
       where: { id: receipt.proformaId },
-      select: { tags: true },
+      select: { tags: true, invoiceNumber: true },
     });
-    return proforma?.tags.includes(WEBSHOP_ADVANCE_TAG) ?? false;
+    return proforma?.tags.includes(WEBSHOP_ADVANCE_TAG)
+      ? { number: proforma.invoiceNumber }
+      : null;
   }
 
   /**
