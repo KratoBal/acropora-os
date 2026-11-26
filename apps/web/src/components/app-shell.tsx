@@ -19,7 +19,7 @@ import {
 } from "@acropora/types";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 
 import {
   allNavigationPages,
@@ -52,6 +52,68 @@ const NAVIGATION_COUNTER_ARIA: Record<NavigationCounterId, string> = {
   "material-requests-pending": "teendő anyagigény",
 };
 
+/**
+ * A MENU LABEL WRAPS, IT IS NOT CUT (Picasso's screen inventory 2026-11-25, R2; acrobot 62463, way B): the menu stays 224 px, so
+ * the content beside it keeps its width (the aquarium and product tables were fitted to 1440 px), and a long name goes on two
+ * lines, at a space or a hyphen. No hyphenation inside a word (a menu name split by syllable reads worse than a whole word on the
+ * next line); only a word longer than the whole row breaks, rather than spill out of the menu. Measured with Inter on the
+ * 2026-11-26 menu: the longest single word, "Eszköznyilvántartás", is 125 px at 13 px, and a nested row leaves it 127 px.
+ */
+const NAVIGATION_LABEL_WRAP =
+  "min-w-0 flex-1 break-words [overflow-wrap:anywhere]";
+
+/**
+ * THE MENU'S SCROLL HINT (Picasso's screen inventory 2026-11-25, R1, as murena measured it: the menu scrolls, 832 px in 719 at
+ * 1440 x 900, but nothing says so, and the next main entry under an open group is a cut strip). While there is more menu below
+ * the visible part, a fade lies over the bottom edge; at the end, or when everything fits, it is gone. It is measured on a
+ * scroll, a window resize, and a change of the menu's own height (a group opened or closed). The fade's colour is the sidebar's:
+ * white, and in the dark theme its surface (`--pilot-surface`, which the theme maps `bg-white` to).
+ */
+function ScrollHintNavigation({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLElement>(null);
+  const [moreBelow, setMoreBelow] = useState(false);
+
+  useEffect(() => {
+    const nav = ref.current;
+    if (!nav) return;
+    const measure = () =>
+      setMoreBelow(nav.scrollTop + nav.clientHeight < nav.scrollHeight - 1);
+    measure();
+    nav.addEventListener("scroll", measure, { passive: true });
+    window.addEventListener("resize", measure);
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(measure);
+    observer?.observe(nav);
+    if (nav.firstElementChild) observer?.observe(nav.firstElementChild);
+    return () => {
+      nav.removeEventListener("scroll", measure);
+      window.removeEventListener("resize", measure);
+      observer?.disconnect();
+    };
+  }, []);
+
+  return (
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <nav
+        ref={ref}
+        aria-label="Fő navigáció"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+      >
+        {children}
+      </nav>
+      {moreBelow ? (
+        <div
+          aria-hidden="true"
+          data-nav-scroll-hint=""
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[var(--pilot-surface,#ffffff)] to-transparent"
+        />
+      ) : null}
+    </div>
+  );
+}
+
 interface NavigationGroupProps {
   active: boolean;
   children: ReactNode;
@@ -81,7 +143,7 @@ function NavigationGroup({
       <button
         type="button"
         className={[
-          "group flex h-10 w-full items-center gap-2.5 text-sm font-semibold transition-colors",
+          "group flex min-h-10 w-full items-center gap-2.5 py-2 text-sm font-semibold leading-5 transition-colors",
           level === 1 ? "px-2" : "px-3",
           active
             ? "bg-pilot-aqua-50 text-pilot-aqua-700"
@@ -95,10 +157,8 @@ function NavigationGroup({
         >
           {icon}
         </span>
-        {/* the 224 px width is the design's; a cut name shows whole on hover (picasso, f0b70dbd) */}
-        <span title={label} className="min-w-0 flex-1 truncate text-left">
-          {label}
-        </span>
+        {/* the 224 px width is the design's; a long name wraps instead of being cut (Picasso's inventory R2, acrobot 62463) */}
+        <span className={`${NAVIGATION_LABEL_WRAP} text-left`}>{label}</span>
         <Icon
           name="chevron-down"
           size={16}
@@ -133,7 +193,10 @@ function NavigationItem({
       onClick={onChoose}
       className={[
         "flex items-center gap-2.5 font-semibold transition-colors",
-        nested ? "h-9 px-2 text-[13px]" : "h-10 px-3 text-sm",
+        // the nested row's right padding is 6 px: with the 16 px indent below, "Eszköznyilvántartás" (one word) fits whole
+        nested
+          ? "min-h-9 py-1.5 pl-2 pr-1.5 text-[13px] leading-[18px]"
+          : "min-h-10 px-3 py-2 text-sm leading-5",
         active
           ? "bg-pilot-aqua-50 text-pilot-aqua-700"
           : "text-pilot-grey-600 hover:bg-pilot-grey-100 hover:text-pilot-grey-900",
@@ -144,9 +207,7 @@ function NavigationItem({
         size={nested ? 16 : 18}
         className={active ? "text-pilot-aqua-700" : "text-pilot-grey-500"}
       />
-      <span title={item.label} className="min-w-0 flex-1 truncate">
-        {item.label}
-      </span>
+      <span className={NAVIGATION_LABEL_WRAP}>{item.label}</span>
       {badge}
     </a>
   );
@@ -320,7 +381,7 @@ export function AppShell({
           active={visibleChildren.some((item) => isActive(item))}
           defaultOpen={entry.defaultOpen}
         >
-          <div className="ml-5 mt-1 space-y-1 border-l border-pilot-grey-200 pl-2">
+          <div className="ml-4 mt-1 space-y-1 border-l border-pilot-grey-200 pl-2">
             {visibleChildren.map((item, index) => (
               <Fragment key={item.href}>
                 {/*
@@ -344,10 +405,7 @@ export function AppShell({
   };
 
   const navigation = (
-    <nav
-      aria-label="Fő navigáció"
-      className="flex min-h-0 flex-1 flex-col overflow-y-auto"
-    >
+    <ScrollHintNavigation>
       <div className="space-y-1">
         {/*
           A KEDVENCEK AZ ÁTTEKINTÉS FÖLÖTT áll (Balázs, 2026-10-27), és csak
@@ -357,7 +415,7 @@ export function AppShell({
         {favoriteMenu ? renderGroup(favoriteMenu) : null}
         {mainNavigation.map(renderGroup)}
       </div>
-    </nav>
+    </ScrollHintNavigation>
   );
 
   /*
