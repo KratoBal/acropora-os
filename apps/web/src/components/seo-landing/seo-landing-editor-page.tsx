@@ -305,6 +305,9 @@ export function SeoLandingEditorPage({ landingId }: { landingId?: string }) {
               onChange={(event) => setIsPublished(event.target.checked)}
             />
             Közzétéve a webshopban
+            <span className="text-xs text-dusk-500">
+              Bekapcsolva a válogatás a mentéskor megjelenik a webshopban.
+            </span>
           </label>
           <Button type="submit" disabled={busy}>
             {page ? "Mentés" : "Létrehozás"}
@@ -341,7 +344,15 @@ function ChoiceList({
         onChange={(event) => onSearch(event.target.value)}
         placeholder="Keresés"
       />
-      <ul className="max-h-72 space-y-1 overflow-y-auto rounded-md border p-2 text-sm">
+      <ul className="max-h-72 space-y-1 overflow-y-auto rounded-md border border-pilot-grey-200 p-2 text-sm">
+        {/* ÜRES LISTA = EGY MONDAT, NEM EGY FELIRAT NÉLKÜLI KERET (Picasso 3.23) */}
+        {items.length === 0 ? (
+          <li className="text-dusk-500">
+            {search.trim()
+              ? "Nincs a keresésnek megfelelő elem."
+              : `Nincs elérhető ${label.toLowerCase().replace("ák", "a")}.`}
+          </li>
+        ) : null}
         {items.map((item) => (
           <li key={item.id}>
             <label

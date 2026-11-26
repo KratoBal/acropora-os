@@ -1,8 +1,18 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { Session, UnasProductSyncRun } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { UnasProductSyncPage } from "./unas-product-sync-page";
+import {
+  groupRuns,
+  isIdleRun,
+  UnasProductSyncPage,
+} from "./unas-product-sync-page";
 
 const api = vi.hoisted(() => ({ listRuns: vi.fn(), run: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
@@ -180,5 +190,113 @@ describe("UnasProductSyncPage", () => {
     expect(
       await screen.findByRole("button", { name: "Kapcsolat beállításai" }),
     ).toBeInTheDocument();
+  });
+});
+
+/*
+  A FUTÁSOK TÁBLÁJA (Picasso 3.23): húsz majdnem azonos "Sikeres, Inkrementális, 0, 0, 0" sor közt elveszett a két érdemi futás, és az "Új" meg a "Frissített" érték összeolvadt ("13 1556"), mert
+  a cellák között nem volt kitöltés. MI PIROSÍT: ha az üres futás nem üres (változás, hiba, kihagyás, elveszett kapcsolat); ha két üres futás is összevonódik; ha az összevonás a sorrendet vagy az
+  érdemi futást érinti; ha a gomb nem nyit; ha a cellák kitöltés nélkül maradnak.
+*/
+const idle = (id: string, at: string): UnasProductSyncRun => ({
+  ...run,
+  id,
+  startedAt: at,
+  completedAt: at,
+  productsSeen: 0,
+  createdCount: 0,
+  updatedCount: 0,
+  unchangedCount: 0,
+  missingCount: 0,
+});
+
+describe("üres futások összevonása", () => {
+  it("üres futás: sikeres, és semmi nem történt benne; bármi más nem üres", () => {
+    expect(isIdleRun(idle("a", "2026-11-26T10:00:00.000Z"))).toBe(true);
+    for (const change of [
+      { status: "FAILED" },
+      { productsSeen: 1 },
+      { createdCount: 1 },
+      { updatedCount: 1 },
+      { missingCount: 1 },
+      { skippedSourceChangedCount: 1 },
+      { similarReferencesUnresolved: 1 },
+      { accessoryReferencesUnresolved: 1 },
+      { errorCode: "E_X" },
+    ]) {
+      expect(
+        isIdleRun({
+          ...idle("a", "2026-11-26T10:00:00.000Z"),
+          ...change,
+        } as never),
+        JSON.stringify(change),
+      ).toBe(false);
+    }
+  });
+
+  it("kettőnél több egymás utáni üres futás egy sor, az érdemi futás és a sorrend marad", () => {
+    const meaningful = { ...run, id: "big", productsSeen: 1919 };
+    const rows = groupRuns([
+      idle("i1", "2026-11-26T12:00:00.000Z"),
+      idle("i2", "2026-11-26T11:00:00.000Z"),
+      idle("i3", "2026-11-26T10:00:00.000Z"),
+      meaningful,
+      idle("j1", "2026-11-25T12:00:00.000Z"),
+      idle("j2", "2026-11-25T11:00:00.000Z"),
+    ]);
+    expect(
+      rows.map((r) => (r.kind === "idle" ? `idle:${r.runs.length}` : r.run.id)),
+    ).toEqual(["idle:3", "big", "j1", "j2"]);
+  });
+
+  it("a lapon az összevont sor egy gomb, ami kinyitja a futásokat, és vissza is csukja", async () => {
+    api.listRuns.mockResolvedValue([
+      idle("i1", "2026-11-26T12:00:00.000Z"),
+      idle("i2", "2026-11-26T11:00:00.000Z"),
+      idle("i3", "2026-11-26T10:00:00.000Z"),
+      {
+        ...run,
+        id: "big",
+        productsSeen: 1919,
+        createdCount: 13,
+        updatedCount: 1556,
+      },
+    ]);
+    render(<UnasProductSyncPage />);
+    const toggle = await screen.findByRole("button", {
+      name: /3 üres futás \(nem volt változás\)/,
+    });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    // the table has the merged row and the meaningful run only
+    expect(screen.getAllByRole("row")).toHaveLength(1 + 2);
+    expect(screen.getByText("big")).toBeTruthy();
+    fireEvent.click(toggle);
+    expect(screen.getAllByRole("row")).toHaveLength(1 + 1 + 3 + 1);
+    const hide = screen.getByRole("button", { name: "Üres futások elrejtése" });
+    fireEvent.click(hide);
+    expect(screen.getAllByRole("row")).toHaveLength(1 + 2);
+  });
+
+  it("a cellák között van kitöltés, így az Új és a Frissített érték nem olvad össze", async () => {
+    api.listRuns.mockResolvedValue([
+      {
+        ...run,
+        id: "big",
+        productsSeen: 1919,
+        createdCount: 13,
+        updatedCount: 1556,
+      },
+    ]);
+    render(<UnasProductSyncPage />);
+    const row = (await screen.findByText("big")).closest("tr")!;
+    const cells = within(row).getAllByRole("cell");
+    // every cell after the first has its own horizontal padding
+    for (const cell of cells.slice(1)) {
+      expect(cell.className, cell.textContent ?? "").toContain("px-3");
+    }
+    const headers = screen.getAllByRole("columnheader");
+    for (const header of headers.slice(1)) {
+      expect(header.className, header.textContent ?? "").toContain("px-3");
+    }
   });
 });
