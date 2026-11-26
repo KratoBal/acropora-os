@@ -600,6 +600,36 @@ describe(
       assert.equal(version.createdByNameAtClose, creator.createdBy.displayName);
     });
 
+    it("freezes the assignee names at closing time and the author name at writing time (card f450672c)", async () => {
+      const id = await createDraft(bioDepartmentId);
+      await prisma.worksheetAssignee.create({
+        data: { worksheetId: id, userId: technicianUserId },
+      });
+      const technician = await prisma.user.findUniqueOrThrow({
+        where: { id: technicianUserId },
+        select: { displayName: true },
+      });
+      await repository.addEntry({
+        worksheetId: id,
+        body: "Szivattyú zajos.",
+        authorId: technicianUserId,
+      });
+      assert.deepEqual(await repository.close(id, actorUserId, new Date()), {
+        ok: true,
+      });
+
+      const version = await prisma.worksheetVersion.findFirstOrThrow({
+        where: { worksheetId: id },
+        select: { assigneeNamesAtClose: true },
+      });
+      assert.deepEqual(version.assigneeNamesAtClose, [technician.displayName]);
+      const entry = await prisma.worksheetEntry.findFirstOrThrow({
+        where: { worksheetId: id },
+        select: { authorName: true },
+      });
+      assert.equal(entry.authorName, technician.displayName);
+    });
+
     /**
      * A LEZÁRÁS ELŐ IS ÁLLÍTJA A LAPOT -- ÉS EZ AZ ÁLLÍTÁS A `close()`-T
      * INDÍTJA EL, NEM A KÖZÖS TÖRZSET.

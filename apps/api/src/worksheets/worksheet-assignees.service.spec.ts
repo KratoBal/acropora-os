@@ -59,6 +59,7 @@ function versionRow(): WorksheetVersionRow {
     closedAt: null,
     closedById: null,
     createdByNameAtClose: null,
+    assigneeNamesAtClose: [],
     /*
       A KET UJ OSZLOP 2026-09-21 OTA KOTELEZO A DUPLAN IS, es ezt a FORDITO
       kenyszeritette ki -- nem en vettem eszre. A mezok `DateTime?` es `String?`

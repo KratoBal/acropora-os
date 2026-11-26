@@ -74,6 +74,8 @@ import {
   type RegenerateIssuedSheetResult,
 } from "./worksheet-sheet-regeneration.js";
 import {
+  entryAuthorName,
+  sheetAssigneeNames,
   toWorksheetDetail,
   type WorksheetHandover,
   toWorksheetListItem,
@@ -1546,6 +1548,11 @@ export class WorksheetsRepository extends Repository {
               createdBy: { select: { displayName: true } },
             },
           },
+          // the names the sheet freezes at close (card f450672c): same order and same name as the live list
+          assignees: {
+            select: { user: { select: { displayName: true } } },
+            orderBy: [{ assignedAt: "asc" }, { userId: "asc" }],
+          },
         },
       });
       if (!worksheet) return { ok: false, reason: "NOT_FOUND" } as const;
@@ -1583,6 +1590,9 @@ export class WorksheetsRepository extends Repository {
           closedById: actorUserId,
           // Freeze the creator's name (card f450672c): the sheet PDF must not follow a later rename or a deleted account.
           createdByNameAtClose: current.createdBy?.displayName ?? null,
+          assigneeNamesAtClose: worksheet.assignees.map(
+            (assignee) => assignee.user.displayName,
+          ),
         },
       });
       if (claimed.count !== 1)
@@ -1832,7 +1842,7 @@ export class WorksheetsRepository extends Repository {
           body: entry.body,
           authorName: entry.authorName,
         })) ?? [],
-        row.assignees.map((assignee) => personLegalName(assignee.user)),
+        sheetAssigneeNames(row),
         (row.documents ?? []).flatMap((document) =>
           document.thumbnail
             ? [{ thumbnail: document.thumbnail, caption: document.caption }]
@@ -2500,6 +2510,7 @@ export class WorksheetsRepository extends Repository {
             body: true,
             createdAt: true,
             updatedAt: true,
+            authorName: true,
             author: { select: { displayName: true } },
           },
         },
@@ -2513,7 +2524,7 @@ export class WorksheetsRepository extends Repository {
       rows: worksheet.entries.map((row) => ({
         id: row.id,
         body: row.body,
-        authorName: row.author?.displayName ?? null,
+        authorName: entryAuthorName(row),
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       })),
@@ -2568,11 +2579,17 @@ export class WorksheetsRepository extends Repository {
     body: string;
     authorId: string;
   }): Promise<void> {
+    const author = await this.database.user.findUnique({
+      where: { id: input.authorId },
+      select: { displayName: true },
+    });
     await this.database.worksheetEntry.create({
       data: {
         worksheetId: input.worksheetId,
         body: input.body,
         authorId: input.authorId,
+        // frozen at writing time (card f450672c)
+        authorName: author?.displayName ?? null,
       },
     });
   }
