@@ -91,6 +91,12 @@ beforeEach(() => {
   column or missing, or the table showing no total row.
 */
 describe("PilotPosSummaryPage", () => {
+  it("steps back to the till with the shared arrow link", async () => {
+    render(createElement(PilotPosSummaryPage));
+    const back = await screen.findByRole("link", { name: "Pénztár" });
+    expect(back).toHaveAttribute("href", "/pos");
+  });
+
   it("opens on today and shows Kassza as its own column with the total row", async () => {
     render(createElement(PilotPosSummaryPage));
 

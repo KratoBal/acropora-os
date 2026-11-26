@@ -104,6 +104,13 @@ beforeEach(() => {
 });
 
 describe("PilotPosSaleDetailPage", () => {
+  it("visszalép a pénztárhoz a közös nyíl-linkkel", async () => {
+    api.getSale.mockResolvedValue(saleDetail);
+    render(createElement(PilotPosSaleDetailPage, { saleId: "sale-1" }));
+    const back = await screen.findByRole("link", { name: "Pénztár" });
+    expect(back).toHaveAttribute("href", "/pos");
+  });
+
   it("orders.view jogosultság nélkül megtagadja a hozzáférést, és nem indul API-hívás", () => {
     auth.session = null;
 
