@@ -79,6 +79,7 @@ describe(
         put: async (key: unknown) => void stored.push(key),
       } as unknown as DocumentStore,
       new BillingDocumentStockRepository(),
+      { of: async () => null } as never,
       client,
       { BILLING_ISSUE_ENABLED: "true" },
     );
