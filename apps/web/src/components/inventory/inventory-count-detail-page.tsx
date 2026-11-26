@@ -1,6 +1,10 @@
 "use client";
 
 import {
+  PilotBackLink,
+  backLinkLabel,
+} from "@/components/pilot/pilot-back-link";
+import {
   Alert,
   PageHeader,
   Skeleton,
@@ -431,15 +435,15 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={detail ? detail.countNumber : "Leltár"}
-        description={detail ? `Raktár: ${detail.warehouseName}` : undefined}
-        actions={
-          <PilotButton variant="secondary" onClick={backToList.goBack}>
-            {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
-          </PilotButton>
-        }
-      />
+      <div>
+        <PilotBackLink href={backToList.href}>
+          {backLinkLabel(backToList, "Raktár")}
+        </PilotBackLink>
+        <PageHeader
+          title={detail ? detail.countNumber : "Leltár"}
+          description={detail ? `Raktár: ${detail.warehouseName}` : undefined}
+        />
+      </div>
 
       {loading ? (
         <PilotCard className="p-5">

@@ -1,5 +1,6 @@
 "use client";
 
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import {
   Alert,
   PilotDataGrid,
@@ -19,7 +20,7 @@ import {
   type ProductExtensionDetail,
   type ProductExtensionUpdateInput,
 } from "@acropora/types";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { FilterXSS, type IFilterXSSOptions } from "xss";
 
@@ -648,7 +649,6 @@ function ProductExtensionEditor({
 
 export function ProductDetailPage({ productId }: { productId: string }) {
   const { session } = useAuth();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = searchParams.get("returnTo");
   const listHref = returnTo ? `/products?${returnTo}` : "/products";
@@ -1225,26 +1225,19 @@ export function ProductDetailPage({ productId }: { productId: string }) {
 
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
-      <PilotPageHeader
-        eyebrow={product.primarySku ?? "Nincs SKU"}
-        title={product.name}
-        meta={
-          <>
-            {originBadge}
-            {statusBadge}
-          </>
-        }
-        actions={
-          <PilotButton
-            size="regular"
-            variant="secondary"
-            onClick={() => router.push(listHref)}
-          >
-            <span aria-hidden="true">←</span>
-            Vissza a listához
-          </PilotButton>
-        }
-      />
+      <div>
+        <PilotBackLink href={listHref}>Termékek</PilotBackLink>
+        <PilotPageHeader
+          eyebrow={product.primarySku ?? "Nincs SKU"}
+          title={product.name}
+          meta={
+            <>
+              {originBadge}
+              {statusBadge}
+            </>
+          }
+        />
+      </div>
 
       {/*
         A PÁROS SOROK (a brief 6. pontja): minden bal kártya mellett a párja,

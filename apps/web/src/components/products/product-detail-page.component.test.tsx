@@ -679,18 +679,19 @@ describe("ProductDetailPage mirror ownership", () => {
     render(<ProductDetailPage productId="product-1" />);
     await screen.findByText("UNAS terméktükör");
 
-    fireEvent.click(screen.getByRole("button", { name: "Vissza a listához" }));
-
-    expect(navigation.push).toHaveBeenCalledWith("/products?q=reef&page=3");
+    // a visszalépés a bal felső nyíl-link (a közös alak, picasso R12): a cél a szűrt lista
+    expect(
+      screen.getByRole("link", { name: "Termékek" }).getAttribute("href"),
+    ).toBe("/products?q=reef&page=3");
   });
 
   it("returnTo paraméter nélkül az alap lista URL-re lép vissza", async () => {
     render(<ProductDetailPage productId="product-1" />);
     await screen.findByText("UNAS terméktükör");
 
-    fireEvent.click(screen.getByRole("button", { name: "Vissza a listához" }));
-
-    expect(navigation.push).toHaveBeenCalledWith("/products");
+    expect(
+      screen.getByRole("link", { name: "Termékek" }).getAttribute("href"),
+    ).toBe("/products");
   });
 
   it("a termékleírást a Képek kártya fölött, külön kártyában jeleníti meg", async () => {

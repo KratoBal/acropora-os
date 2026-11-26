@@ -1,5 +1,9 @@
 "use client";
 import {
+  PilotBackLink,
+  backLinkLabel,
+} from "@/components/pilot/pilot-back-link";
+import {
   Alert,
   Button,
   Card,
@@ -9,7 +13,6 @@ import {
   Select,
 } from "@acropora/ui";
 import { hasPermission, PERMISSIONS } from "@acropora/types";
-import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo } from "@/components/navigation-history";
@@ -193,17 +196,15 @@ export function CustomerEditorPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Új vevő"
-        description="Kézzel rögzített partner felvétele. A UNAS webshopból érkező vevők automatikusan szinkronizálódnak."
-        actions={
-          <Link href={backToList.href}>
-            <Button variant="secondary">
-              {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
-            </Button>
-          </Link>
-        }
-      />
+      <div>
+        <PilotBackLink href={backToList.href}>
+          {backLinkLabel(backToList, "Vevők")}
+        </PilotBackLink>
+        <PageHeader
+          title="Új vevő"
+          description="Kézzel rögzített partner felvétele. A UNAS webshopból érkező vevők automatikusan szinkronizálódnak."
+        />
+      </div>
       {error ? (
         <Alert
           variant="danger"
