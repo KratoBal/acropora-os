@@ -63,6 +63,19 @@ const szoveg = (raw: string) =>
   [...raw.matchAll(/"text":"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]).join("");
 
 describe("az ajánlati szöveg szerkesztője", () => {
+  // Picasso 3.21 (acrobot 62633): an empty quote text block is about four lines tall, not a 192 px box; the mails keep the taller area
+  it("üresen négy sornyi magas (min-h-24), a levél-szerkesztő marad a magasabb", async () => {
+    megjelenit();
+    const box = await screen.findByLabelText("Ajánlat szöveg");
+    expect(box.className).toContain("min-h-24");
+    expect(box.className).not.toContain("min-h-48");
+    render(
+      <RichTextEditor aria-label="Levél törzse" value="" onChange={vi.fn()} />,
+    );
+    const mail = await screen.findByLabelText("Levél törzse");
+    expect(mail.className).toContain("min-h-48");
+  });
+
   it("`# ` és `> ` beírás után a kimenet átmegy a sémán, a szöveg megmarad", () => {
     const { editor, utolso } = megjelenit();
     act(() => {

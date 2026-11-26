@@ -78,7 +78,7 @@ describe("quoteItemColumns", () => {
     open.unmount();
     renderItems([optional], { canChoose: false });
     expect(screen.queryByRole("checkbox")).toBeNull();
-    expect(screen.getByText("(opcionális)")).toBeTruthy();
+    expect(screen.getByText("Opcionális · kiegészítés")).toBeTruthy();
   });
 
   it("adds and removes the item id in the chosen list", () => {

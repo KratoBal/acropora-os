@@ -37,6 +37,24 @@ async function failure(response: Response, fallback: string): Promise<string> {
 
 type QuoteItem = PublicQuoteDto["items"][number];
 
+/**
+ * THE TAG UNDER AN OPTIONAL ITEM'S NAME (card 2540d9d4, Luca 2026-11-26), as on the PDF. Every optional item is an addition until
+ * an option can name the item it replaces; murena's replaced item (`replacesItemId`) adds "a X. tétel helyett" here, in this one
+ * place. The item is not read yet.
+ */
+export function optionalItemLabel(_item: QuoteItem): string {
+  return "Opcionális · kiegészítés";
+}
+
+/** The tag as a line of its own under the name. */
+function OptionalTag({ item }: { item: QuoteItem }) {
+  return (
+    <span className="block text-xs font-semibold text-pilot-aqua-700">
+      {optionalItemLabel(item)}
+    </span>
+  );
+}
+
 export const QUOTE_ITEM_TABLE_MIN_WIDTH = 640;
 
 /*
@@ -63,7 +81,7 @@ export function quoteItemColumns({
       cell: (item) => (
         <span className="text-pilot-grey-900">
           {item.isOptional && item.id && canChoose ? (
-            <label className="flex items-center gap-2">
+            <label className="flex items-start gap-2">
               <input
                 type="checkbox"
                 checked={chosen.includes(item.id)}
@@ -78,17 +96,15 @@ export function quoteItemColumns({
                   );
                 }}
               />
-              {item.name}
-              <span className="text-xs text-pilot-grey-500">(opcionális)</span>
+              <span>
+                {item.name}
+                <OptionalTag item={item} />
+              </span>
             </label>
           ) : (
             <>
               {item.name}
-              {item.isOptional ? (
-                <span className="ml-2 text-xs text-pilot-grey-500">
-                  (opcionális)
-                </span>
-              ) : null}
+              {item.isOptional ? <OptionalTag item={item} /> : null}
             </>
           )}
         </span>
@@ -177,6 +193,17 @@ export function PublicQuotePage({ token }: { token: string }) {
     }
   };
 
+  const offered = quote?.items.filter((item) => !item.isOptional) ?? [];
+  const optional = quote?.items.filter((item) => item.isOptional) ?? [];
+  const columns = quoteItemColumns({
+    currency: quote?.currency ?? "HUF",
+    canChoose: quote?.state === "OPEN",
+    chosen,
+    setChosen,
+  });
+  const rowKey = (item: QuoteItem) =>
+    item.id ?? `${quote?.items.indexOf(item)}-${item.name}`;
+
   return (
     <PilotThemeRoot
       theme="light"
@@ -215,30 +242,59 @@ export function PublicQuotePage({ token }: { token: string }) {
             </a>
           </header>
 
+          {/*
+            THE OPTIONAL ITEMS APART (card 2540d9d4, Luca 2026-11-26), as on the PDF: the offered items first, then the optional ones
+            in a group of their own that says they are not part of the total, each tagged; under the total, the one with them.
+          */}
           <section className="rounded-xl bg-white ring-1 ring-pilot-grey-200">
-            <PilotDataTable
-              columns={quoteItemColumns({
-                currency: quote.currency,
-                canChoose: quote.state === "OPEN",
-                chosen,
-                setChosen,
-              })}
-              rows={quote.items}
-              rowKey={(item) =>
-                item.id ?? `${quote.items.indexOf(item)}-${item.name}`
-              }
-              rowTestId="quote-item-row"
-              minWidth={QUOTE_ITEM_TABLE_MIN_WIDTH}
-            />
+            {offered.length ? (
+              <PilotDataTable
+                columns={columns}
+                rows={offered}
+                rowKey={rowKey}
+                rowTestId="quote-item-row"
+                minWidth={QUOTE_ITEM_TABLE_MIN_WIDTH}
+              />
+            ) : null}
+            {optional.length ? (
+              <div
+                className={
+                  offered.length ? "border-t border-pilot-grey-100" : undefined
+                }
+              >
+                <div className="px-4 pt-4">
+                  <h2 className="text-sm font-semibold text-pilot-grey-900">
+                    Opcionális tételek
+                  </h2>
+                  <p className="text-xs text-pilot-grey-600">
+                    Nem részei a végösszegnek.
+                    {quote.state === "OPEN"
+                      ? " Jelöld be, amelyiket kéred."
+                      : ""}
+                  </p>
+                </div>
+                <PilotDataTable
+                  columns={columns}
+                  rows={optional}
+                  rowKey={rowKey}
+                  rowTestId="quote-item-row"
+                  minWidth={QUOTE_ITEM_TABLE_MIN_WIDTH}
+                />
+              </div>
+            ) : null}
             <div className="space-y-1 border-t border-pilot-grey-100 px-4 py-3 text-right text-sm">
               <p className="font-semibold text-pilot-grey-900">
                 Nettó összesen:{" "}
                 {formatQuoteMoney(quote.netTotal, quote.currency)} + ÁFA
               </p>
-              {Number(quote.optionalNetTotal) > 0 ? (
+              {optional.length ? (
                 <p className="text-pilot-grey-600">
-                  Opcionális tételek: +
-                  {formatQuoteMoney(quote.optionalNetTotal, quote.currency)}
+                  Az opcionális tételekkel együtt:{" "}
+                  {formatQuoteMoney(
+                    Number(quote.netTotal) + Number(quote.optionalNetTotal),
+                    quote.currency,
+                  )}{" "}
+                  + ÁFA
                 </p>
               ) : null}
             </div>
