@@ -1,3 +1,5 @@
+import { ServiceUnavailableException } from "@nestjs/common";
+
 /**
  * A DOKUMENTUM-TÁROLÓ PORTJA: az a felület, amin át a szolgáltatás elér egy
  * eszközhöz tartozó fájlt, anélkül hogy tudná, hol van.
@@ -101,6 +103,23 @@ export type DocumentStoreStatus =
   | { state: "ready" }
   | { state: "not-configured"; reason: string }
   | { state: "broken"; reason: string };
+
+/**
+ * THE STORE REFUSED A WRITE BECAUSE IT IS NOT READY (card 3e5e85d0; barracuda on #3057): a write into a root that is not the
+ * marked volume (an unmounted mount point, a wrong or new volume) would land where the next redeploy takes it, or split the
+ * documents across two volumes. A 503 with the store's own reason: a caller that does not catch it answers with a sentence,
+ * and the callers whose outside step already happened (an invoice issued at Számlázz.hu) catch it and keep that step.
+ */
+export class DocumentStoreNotReadyError extends ServiceUnavailableException {
+  constructor(
+    readonly storeStatus: Exclude<DocumentStoreStatus, { state: "ready" }>,
+  ) {
+    super(
+      `A dokumentumtár nem írható, a fájl nem került mentésre: ${storeStatus.reason}`,
+    );
+    this.name = "DocumentStoreNotReadyError";
+  }
+}
 
 export interface DocumentStore {
   put(key: DocumentKey, bytes: Uint8Array): Promise<void>;
