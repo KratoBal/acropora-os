@@ -91,6 +91,61 @@ describe("quote rich text on the server (decision 5)", () => {
     assert.deepEqual(richTextInput(value), value);
   });
 
+  /*
+    LUCA 2026-11-26 (card fa6d7fa6, AJ-2026-0021): a pasted bold paragraph with line breaks arrives with the bold mark ON the hardBreak node
+    (ProseMirror applies the pasted <b> to the <br>). The whole block was refused. A line break carries no formatting: the mark is dropped,
+    the text keeps its own. WHAT TURNS IT RED: if that shape is refused again, if the mark reaches the stored JSON, if the text loses its bold,
+    or if a mark on any OTHER non-text node is let through.
+  */
+  it("accepts a pasted bold line break, stores it without the mark, and keeps the text's bold", () => {
+    const pasted = doc({
+      type: "paragraph",
+      content: [
+        { type: "text", text: "elso", marks: [{ type: "bold" }] },
+        { type: "hardBreak", marks: [{ type: "bold" }] },
+        { type: "text", text: "masodik", marks: [{ type: "bold" }] },
+      ],
+    });
+    for (const kind of ["TEXT", "TERMS", "SECTION"] as const)
+      assert.deepEqual(
+        blockContent(kind, pasted),
+        doc({
+          type: "paragraph",
+          content: [
+            { type: "text", text: "elso", marks: [{ type: "bold" }] },
+            { type: "hardBreak" },
+            { type: "text", text: "masodik", marks: [{ type: "bold" }] },
+          ],
+        }),
+      );
+  });
+
+  for (const [name, value] of [
+    [
+      "a mark on a paragraph",
+      doc({ type: "paragraph", marks: [{ type: "bold" }] }),
+    ],
+    [
+      "a mark on a list item",
+      doc({
+        type: "bulletList",
+        content: [
+          { type: "listItem", marks: [{ type: "bold" }], content: [para("x")] },
+        ],
+      }),
+    ],
+    [
+      "a non-array mark list on a line break",
+      doc({
+        type: "paragraph",
+        content: [{ type: "hardBreak", marks: "bold" }],
+      }),
+    ],
+  ] as Array<[string, unknown]>)
+    it(`still refuses ${name}`, () => {
+      assert.throws(() => richTextInput(value), { status: 400 } as object);
+    });
+
   // what a paste or a shortcut could bring in: none may reach the stored JSON
   for (const [name, value] of [
     [

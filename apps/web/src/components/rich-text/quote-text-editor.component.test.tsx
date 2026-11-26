@@ -153,6 +153,27 @@ describe("az ajánlati szöveg szerkesztője", () => {
     expect(raw).not.toContain("attrs");
   });
 
+  /*
+    LUCA 2026-11-26 (card fa6d7fa6, AJ-2026-0021 Feltételek blokk): egy BEILLESZTETT, FÉLKÖVÉR bekezdés sortörésekkel. A ProseMirror a beillesztett
+    `<b>` jelölését a benne lévő `<br>`-re is ráteszi (`{"type":"hardBreak","marks":[bold]}`), a közös séma pedig csak a szöveg csomópontnak enged
+    jelölést: a szerver az egész dokumentumot elutasította ("A szöveg nem megengedett formázást tartalmaz"), a blokk nem volt menthető.
+    MI PIROSÍT: ha a kimenetben egy sortörés jelölést visel; ha a félkövér szöveg jelölése a sortörés miatt elvész; ha a kimenet nem megy át a sémán.
+  */
+  it("beillesztett félkövér szövegben a sortörés nem visel jelölést, a szöveg jelölése megmarad, és a kimenet átmegy a sémán", () => {
+    const { editor, utolso } = megjelenit();
+    act(() => {
+      editor().view.pasteHTML(
+        "<p><strong>első sor<br>második sor<br><br>negyedik sor</strong></p>",
+      );
+    });
+    const { raw, parsed } = utolso();
+    expect(raw).toContain('{"type":"hardBreak"}');
+    expect(raw).not.toMatch(/"type":"hardBreak","marks"/);
+    expect(raw).toContain('"text":"második sor","marks":[{"type":"bold"}]');
+    expect(szoveg(raw)).toBe("első sormásodik sornegyedik sor");
+    expect(validateQuoteRichText(parsed).ok).toBe(true);
+  });
+
   it("a számozott lista attribútumai nem kerülnek a kimenetbe", () => {
     const { editor, utolso } = megjelenit();
     act(() => {
