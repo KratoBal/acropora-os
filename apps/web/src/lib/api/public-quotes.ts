@@ -1,4 +1,7 @@
-import type { PublicQuoteAcceptInput } from "@acropora/types";
+import type {
+  PublicQuoteAcceptInput,
+  PublicQuoteTotalInput,
+} from "@acropora/types";
 
 import { API_PREFIX } from "./api-prefix";
 
@@ -20,6 +23,15 @@ export const publicQuotesApi = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
+    });
+  },
+  /** a kiválasztás végösszege, a szerveren számolva (kiváltott tétel): a lap csak mutatja */
+  total(token: string, input: PublicQuoteTotalInput) {
+    return fetch(`${API_PREFIX}/public/quotes/${id(token)}/total`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+      cache: "no-store",
     });
   },
   /** the stored PDF's address, for a link the browser opens */

@@ -1942,6 +1942,8 @@ export type {
   QuoteAcceptanceLinkIssuedDto,
   PublicQuoteDto,
   PublicQuoteAcceptInput,
+  PublicQuoteTotalDto,
+  PublicQuoteTotalInput,
   QuoteCloseReasonValue,
   QuoteAcceptanceDto,
   RecordQuoteAcceptanceInput,

@@ -1,10 +1,19 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
-import type { PublicQuoteAcceptInput, PublicQuoteDto } from "@acropora/types";
+import type {
+  PublicQuoteAcceptInput,
+  PublicQuoteDto,
+  PublicQuoteTotalDto,
+} from "@acropora/types";
 
 import { QuoteAcceptanceService } from "../quote-acceptance.service.js";
 import { linkTokenHash } from "../quote-link.service.js";
 import { QuotePublishService } from "../quote-publish.service.js";
+import { selectionTotals, withAllOptionals } from "./quote-public-selection.js";
 
 /**
  * ONE ANSWER FOR EVERY LINK THAT DOES NOT WORK: unknown, revoked and expired
@@ -82,7 +91,7 @@ export class QuotePublicService {
         },
         acceptances: {
           where: { revokedAt: null },
-          select: { acceptedAt: true },
+          select: { acceptedAt: true, selectedOptionalItemIds: true },
         },
         blocks: {
           orderBy: { position: "asc" },
@@ -97,6 +106,7 @@ export class QuotePublicService {
                 unitNetPrice: true,
                 vatRatePercent: true,
                 isOptional: true,
+                replacesItemId: true,
               },
             },
           },
@@ -110,7 +120,13 @@ export class QuotePublicService {
       rows
         .reduce((total, item) => total.plus(net(item)), new Prisma.Decimal(0))
         .toFixed(2);
-    const accepted = version.acceptances[0]?.acceptedAt ?? null;
+    const acceptance = version.acceptances[0] ?? null;
+    const accepted = acceptance?.acceptedAt ?? null;
+    // KIVÁLTOTT TÉTEL: az elfogadott kiválasztás összege és jelölései, a szerveren (ugyanaz a döntés, mint a megrendelésnél és a számlán)
+    const settled = acceptance
+      ? selectionTotals(items, acceptance.selectedOptionalItemIds)
+      : null;
+    const withOptionals = withAllOptionals(items);
     const snapshot = version.customerSnapshot as Record<string, unknown> | null;
     return {
       quoteNumber: version.quote.quoteNumber,
@@ -121,7 +137,7 @@ export class QuotePublicService {
       priceDisplay: version.priceDisplay,
       customerName:
         typeof snapshot?.displayName === "string" ? snapshot.displayName : null,
-      items: items.map((item) => ({
+      items: items.map((item, index) => ({
         id: item.isOptional ? item.id : null,
         name: item.name,
         quantity: item.quantity.toString(),
@@ -130,9 +146,17 @@ export class QuotePublicService {
         vatRatePercent: item.vatRatePercent.toString(),
         netTotal: net(item).toFixed(2),
         isOptional: item.isOptional,
+        // a kiváltott (nem opcionális) tétel neve az opcionális tételen: "a X. tétel helyett" (a PDF és az oldal ezt írja ki)
+        replacesName:
+          items.find((other) => other.id === item.replacesItemId)?.name ?? null,
+        // az ELFOGADOTT kiválasztás szerint: a kiváltott tétel (áthúzva), és a választott opcionális tétel
+        replaced: settled?.replacedIndexes.includes(index) ?? false,
+        chosen: settled?.chosenIndexes.includes(index) ?? false,
       })),
       netTotal: sum(items.filter((item) => !item.isOptional)),
       optionalNetTotal: sum(items.filter((item) => item.isOptional)),
+      netTotalWithOptionals: withOptionals.net.toFixed(2),
+      acceptedNetTotal: settled ? settled.net.toFixed(2) : null,
       // a version that is not the published one any more is not open,
       // whatever the quote's status says (acrobot 28224)
       state: accepted
@@ -141,6 +165,44 @@ export class QuotePublicService {
           ? "OPEN"
           : "CLOSED",
       acceptedAt: accepted ? accepted.toISOString().slice(0, 10) : null,
+    };
+  }
+
+  /**
+   * A VÉGÖSSZEG EGY KIVÁLASZTÁSRA, A SZERVEREN (Luca 2026-11-26): a lap bejelöléskor ezt kérdezi, nem számol maga. A kiválasztás ugyanazt a
+   * szabályt követi, mint az elfogadás: csak ennek a verziónak az opcionális tételei lehetnek benne, különben 400.
+   */
+  async total(
+    token: string,
+    selected: string[] | undefined,
+  ): Promise<PublicQuoteTotalDto> {
+    const link = await this.link(token);
+    const items = await this.database.quoteItem.findMany({
+      where: { versionId: link.quoteVersionId },
+      orderBy: [{ block: { position: "asc" } }, { position: "asc" }],
+      select: {
+        id: true,
+        isOptional: true,
+        replacesItemId: true,
+        quantity: true,
+        unitNetPrice: true,
+      },
+    });
+    const chosen = selected ?? [];
+    const optional = new Set(
+      items.filter((item) => item.isOptional).map((item) => item.id),
+    );
+    if (
+      !Array.isArray(chosen) ||
+      chosen.length > 500 ||
+      new Set(chosen).size !== chosen.length ||
+      chosen.some((id) => typeof id !== "string" || !optional.has(id))
+    )
+      throw new BadRequestException("Érvénytelen opcionális tétel-lista.");
+    const totals = selectionTotals(items, chosen);
+    return {
+      netTotal: totals.net.toFixed(2),
+      replacedItems: totals.replacedIndexes,
     };
   }
 
