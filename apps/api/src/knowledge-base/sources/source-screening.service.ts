@@ -9,6 +9,7 @@ import {
 import type { AuthenticatedUser } from "@acropora/types";
 
 import {
+  parseBulkScreeningDecision,
   parseScreeningDecision,
   parseSourceListQuery,
   parseStudyTypeDecision,
@@ -17,6 +18,8 @@ import {
   SourceClassifyRefused,
   SourceNotFound,
   SourceScreeningRepository,
+  type BulkScreeningResult,
+  type PendingIds,
   type ScreeningSummary,
   type SourceList,
   type SourceRow,
@@ -29,7 +32,7 @@ export const SOURCE_SCREENING_REPOSITORY = Symbol(
 
 export type SourceScreeningStore = Pick<
   SourceScreeningRepository,
-  "list" | "summary" | "decide" | "classify"
+  "list" | "summary" | "decide" | "classify" | "pendingIds" | "decideMany"
 >;
 
 @Injectable()
@@ -68,6 +71,26 @@ export class SourceScreeningService {
         throw new NotFoundException("Nincs ilyen forrás.");
       throw error;
     }
+  }
+
+  /** The filter's pending sources as ids, for "select all" (the list's own filters; page and status do not apply). */
+  async pendingIds(query: Record<string, unknown>): Promise<PendingIds> {
+    const parsed = parseSourceListQuery(query);
+    if (!parsed.ok) throw new BadRequestException(parsed.problems);
+    return this.repository.pendingIds(parsed.value);
+  }
+
+  async decideMany(
+    body: unknown,
+    user: AuthenticatedUser,
+  ): Promise<BulkScreeningResult> {
+    const parsed = parseBulkScreeningDecision(body);
+    if (!parsed.ok) throw new BadRequestException(parsed.problems);
+    return this.repository.decideMany(
+      parsed.value.ids,
+      parsed.value.decision,
+      user.id,
+    );
   }
 
   async classify(

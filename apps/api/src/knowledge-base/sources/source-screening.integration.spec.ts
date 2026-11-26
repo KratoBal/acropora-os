@@ -411,6 +411,129 @@ describe(
       );
     });
 
+    it("BULK (Picasso 3.26-b): select-all takes the filter's pending sources over every page; one decision decides only those still pending, each with its own AuditLog row", async () => {
+      // a year no other suite uses: the filter sees only these rows
+      for (const key of ["b1", "b2", "b3", "b4"])
+        ids[key] = (
+          await prisma.knowledgeSource.create({
+            data: {
+              kind: "BOOK",
+              doi: `${DOI_PREFIX}${suffix}-${key}`,
+              title: `Kitalált ${key}`,
+              discoveredVia: "OPENALEX",
+              year: 1601,
+              authors: [],
+            },
+          })
+        ).id;
+      await repo.decide(
+        ids.b4!,
+        { status: "INCLUDED", reason: null, note: "korábban" },
+        userId,
+      );
+      // "Mind" on the screen: every status listed, only the pending ones selected
+      const all = await repo.pendingIds(
+        query({
+          kind: "BOOK",
+          yearFrom: "1601",
+          yearTo: "1601",
+          status: "ALL",
+          page: "2",
+        }),
+      );
+      assert.deepEqual(
+        [[...all.ids].sort(), all.total],
+        [[ids.b1!, ids.b2!, ids.b3!].sort(), 3],
+        "every pending row of the filter, whatever the page; the included one not",
+      );
+      assert.deepEqual(
+        await repo.pendingIds(
+          query({
+            kind: "BOOK",
+            yearFrom: "1601",
+            yearTo: "1601",
+            status: "INCLUDED",
+          }),
+        ),
+        { ids: [], total: 0 },
+        "on the included list there is nothing to select",
+      );
+
+      const result = await repo.decideMany(
+        [ids.b1!, ids.b2!, ids.b4!, "nincs-ilyen"],
+        { status: "EXCLUDED", reason: "NOT_CORAL", note: "tömegesen" },
+        userId,
+      );
+      assert.deepEqual(result, { decided: 2, notPending: 1, missing: 1 });
+      const rows = await prisma.knowledgeSource.findMany({
+        where: { id: { in: [ids.b1!, ids.b2!, ids.b3!, ids.b4!] } },
+        select: {
+          id: true,
+          screeningStatus: true,
+          exclusionReason: true,
+          screeningNote: true,
+          screenedById: true,
+        },
+      });
+      const by = (id: string) => rows.find((r) => r.id === id)!;
+      for (const id of [ids.b1!, ids.b2!])
+        assert.deepEqual(
+          [
+            by(id).screeningStatus,
+            by(id).exclusionReason,
+            by(id).screeningNote,
+            by(id).screenedById,
+          ],
+          ["EXCLUDED", "NOT_CORAL", "tömegesen", userId],
+        );
+      assert.equal(by(ids.b3!).screeningStatus, "PENDING", "not in the bulk");
+      assert.deepEqual(
+        [by(ids.b4!).screeningStatus, by(ids.b4!).screeningNote],
+        ["INCLUDED", "korábban"],
+        "decided before: kept, not overwritten",
+      );
+      const audit = await prisma.auditLog.findMany({
+        where: {
+          entityType: "KnowledgeSource",
+          entityId: { in: [ids.b1!, ids.b2!, ids.b4!] },
+          action: "KNOWLEDGE_SOURCE_SCREENED",
+        },
+        select: { entityId: true, userId: true, metadata: true },
+      });
+      assert.deepEqual(
+        audit
+          .filter((a) => a.entityId !== ids.b4)
+          .map((a) => [a.entityId, a.userId, a.metadata])
+          .sort(),
+        [ids.b1!, ids.b2!].sort().map((id) => [
+          id,
+          userId,
+          {
+            before: { status: "PENDING", reason: null, note: null },
+            after: {
+              status: "EXCLUDED",
+              reason: "NOT_CORAL",
+              note: "tömegesen",
+            },
+            bulk: true,
+          },
+        ]),
+      );
+      assert.equal(
+        audit.filter((a) => a.entityId === ids.b4).length,
+        1,
+        "the kept row has only its own earlier log row",
+      );
+      assert.deepEqual(
+        (
+          await repo.pendingIds(
+            query({ kind: "BOOK", yearFrom: "1601", yearTo: "1601" }),
+          )
+        ).ids,
+        [ids.b3!],
+      );
+    });
+
     it("an unknown source is reported as such", async () => {
       await assert.rejects(
         repo.decide(

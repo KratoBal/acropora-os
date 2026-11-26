@@ -26,6 +26,23 @@ export class SourceScreeningController {
     return this.screening.summary();
   }
 
+  /** What "select all" takes: the filter's pending sources, every page (Picasso 3.26-b). Only a decider selects. */
+  @Get("pending-ids")
+  @RequirePermissions(PERMISSIONS.KNOWLEDGE_MANAGE)
+  pendingIds(@Query() query: Record<string, unknown>) {
+    return this.screening.pendingIds(query);
+  }
+
+  /** One decision for many sources; each keeps its own AuditLog row (Picasso 3.26-b). */
+  @Post("screening")
+  @RequirePermissions(PERMISSIONS.KNOWLEDGE_MANAGE)
+  decideMany(
+    @Body() body: Record<string, unknown>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.screening.decideMany(body, user);
+  }
+
   @Post(":id/screening")
   @RequirePermissions(PERMISSIONS.KNOWLEDGE_MANAGE)
   decide(

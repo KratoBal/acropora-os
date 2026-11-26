@@ -1,12 +1,13 @@
 import { Prisma, prisma } from "@acropora/database";
 
-import type {
-  ExclusionReason,
-  ScreeningDecision,
-  ScreeningStatus,
-  SourceKind,
-  SourceListQuery,
-  StudyTypeDecision,
+import {
+  MAX_BULK,
+  type ExclusionReason,
+  type ScreeningDecision,
+  type ScreeningStatus,
+  type SourceKind,
+  type SourceListQuery,
+  type StudyTypeDecision,
 } from "./source-screening.js";
 
 /**
@@ -74,6 +75,18 @@ export interface ScreeningSummary {
   included: number;
   excluded: number;
   excludedByReason: Record<ExclusionReason, number>;
+}
+
+export interface PendingIds {
+  ids: string[];
+  total: number;
+}
+
+/** A bulk decision's outcome: decided now; decided before (kept as it was); no such source. */
+export interface BulkScreeningResult {
+  decided: number;
+  notPending: number;
+  missing: number;
 }
 
 export class SourceNotFound extends Error {
@@ -311,6 +324,96 @@ export class SourceScreeningRepository {
       });
       return row(updated);
     });
+  }
+
+  /**
+   * THE PENDING SOURCES OF A FILTER, AS IDS (Picasso 3.26-b): what "select all" takes, over every page, not only the one on
+   * the screen. The screen's filters, its status too, AND waiting for a decision: on "Mind" the pending ones, on "Befogadva"
+   * none (a status filter is never replaced by PENDING). At most `MAX_BULK`; `total` says how many there are, so a longer
+   * list is never cut silently.
+   */
+  async pendingIds(q: SourceListQuery): Promise<PendingIds> {
+    const filter: Prisma.KnowledgeSourceWhereInput = {
+      AND: [where(q), { screeningStatus: "PENDING" }],
+    };
+    const [rows, total] = await prisma.$transaction([
+      prisma.knowledgeSource.findMany({
+        where: filter,
+        select: { id: true },
+        orderBy: [{ year: { sort: "desc", nulls: "last" } }, { id: "asc" }],
+        take: MAX_BULK,
+      }),
+      prisma.knowledgeSource.count({ where: filter }),
+    ]);
+    return { ids: rows.map((r) => r.id), total };
+  }
+
+  /**
+   * ONE DECISION FOR MANY SOURCES (Picasso 3.26-b), in one transaction: all or none. Each source gets what one row's
+   * decision gives it, and its own AuditLog row with the state it really replaced. Only a source still waiting for a decision
+   * is decided: one decided in the meantime (another editor, another tab) keeps its decision and is counted, never
+   * overwritten; an id that is no source is counted too.
+   */
+  async decideMany(
+    ids: readonly string[],
+    decision: Exclude<ScreeningDecision, { status: "PENDING" }>,
+    actorUserId: string,
+  ): Promise<BulkScreeningResult> {
+    return prisma.$transaction(
+      async (tx) => {
+        // locked in id order: two bulk decisions over the same rows wait for each other instead of deadlocking, and a
+        // row's decision (`decide`) waits for the whole bulk
+        const locked = await tx.$queryRaw<
+          {
+            id: string;
+            status: string;
+            reason: string | null;
+            note: string | null;
+          }[]
+        >`SELECT "id", "screeningStatus"::text AS "status", "exclusionReason"::text AS "reason", "screeningNote" AS "note"
+          FROM "KnowledgeSource" WHERE "id" = ANY(${[...ids]}::text[]) ORDER BY "id" FOR UPDATE`;
+        const pending = locked.filter((r) => r.status === "PENDING");
+        if (pending.length) {
+          await tx.knowledgeSource.updateMany({
+            where: {
+              id: { in: pending.map((r) => r.id) },
+              screeningStatus: "PENDING",
+            },
+            data: {
+              screeningStatus: decision.status,
+              exclusionReason: decision.reason,
+              screeningNote: decision.note,
+              screenedById: actorUserId,
+              screenedAt: new Date(),
+            },
+          });
+          await tx.auditLog.createMany({
+            data: pending.map((r) => ({
+              userId: actorUserId,
+              action: "KNOWLEDGE_SOURCE_SCREENED",
+              entityType: "KnowledgeSource",
+              entityId: r.id,
+              metadata: {
+                before: { status: r.status, reason: r.reason, note: r.note },
+                after: {
+                  status: decision.status,
+                  reason: decision.reason,
+                  note: decision.note,
+                },
+                bulk: true,
+              } satisfies Prisma.JsonObject,
+            })),
+          });
+        }
+        return {
+          decided: pending.length,
+          notPending: locked.length - pending.length,
+          missing: ids.length - locked.length,
+        };
+      },
+      // a thousand rows and their log rows: the default five seconds is a guess about one row
+      { timeout: 30_000 },
+    );
   }
 
   /**

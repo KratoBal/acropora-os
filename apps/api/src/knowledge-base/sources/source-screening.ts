@@ -167,6 +167,50 @@ export function parseScreeningDecision(
   }
 }
 
+/** The most sources one bulk decision takes (Picasso 3.26-b: the whole filtered pending list, 510 on stage). */
+export const MAX_BULK = 1000;
+
+export interface BulkScreeningDecision {
+  /** Distinct, in the order given. */
+  ids: string[];
+  decision: Exclude<ScreeningDecision, { status: "PENDING" }>;
+}
+
+/**
+ * THE BULK DECISION'S BODY (Picasso 3.26-b): `{ ids, decision: INCLUDE | EXCLUDE, reason?, note? }`, the decision under the
+ * same rules as one row's. RESET is not taken here: a decision is undone on its row, where the editor sees what is undone.
+ */
+export function parseBulkScreeningDecision(
+  body: unknown,
+): Parsed<BulkScreeningDecision> {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const problems: string[] = [];
+  const ids = b.ids;
+  if (
+    !Array.isArray(ids) ||
+    ids.length === 0 ||
+    ids.length > MAX_BULK ||
+    !ids.every((id) => typeof id === "string" && id.trim() !== "")
+  )
+    problems.push(`ids: 1 és ${MAX_BULK} közötti számú forrás-azonosító.`);
+  if (b.decision === "RESET")
+    problems.push(
+      "decision: tömegesen csak INCLUDE vagy EXCLUDE; a döntés a során vonható vissza.",
+    );
+  const decision = parseScreeningDecision(b);
+  if (!decision.ok && b.decision !== "RESET")
+    problems.push(...decision.problems);
+  if (problems.length || !decision.ok || decision.value.status === "PENDING")
+    return { ok: false, problems };
+  return {
+    ok: true,
+    value: {
+      ids: [...new Set((ids as string[]).map((id) => id.trim()))],
+      decision: decision.value,
+    },
+  };
+}
+
 /**
  * THE EDITOR'S CLASSIFICATION OF A SOURCE WITHOUT AN ANCHOR (research-diagram-
  * irany; acrobot 39340). A claim's evidence level comes from its source's
