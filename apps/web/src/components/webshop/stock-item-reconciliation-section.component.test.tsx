@@ -157,6 +157,6 @@ describe("the itemised reconciliation nobody could see", () => {
       { page: 2, pageSize: 25 },
       expect.anything(),
     );
-    expect(screen.getByText(/2\. oldal, 1 sor a 60-ből/)).toBeTruthy();
+    expect(screen.getByText("2. oldal: 1 sor, összesen 60.")).toBeTruthy();
   });
 });

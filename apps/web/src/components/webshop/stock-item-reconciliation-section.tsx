@@ -171,8 +171,8 @@ export function StockItemReconciliationSection() {
             {page.totalPages > 1 ? (
               <div className="flex flex-col gap-2 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-dusk-500">
-                  {page.page}. oldal, {page.items.length} sor a{" "}
-                  {page.totalItems.toLocaleString("hu-HU")}-ből.
+                  {page.page}. oldal: {page.items.length} sor, összesen{" "}
+                  {page.totalItems.toLocaleString("hu-HU")}.
                 </p>
                 <Pagination
                   variant="directionF"
