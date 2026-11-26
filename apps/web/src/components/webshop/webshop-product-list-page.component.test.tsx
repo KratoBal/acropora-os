@@ -139,14 +139,36 @@ describe("WebshopProductListPage", () => {
     search.params = new URLSearchParams();
   });
 
-  it("shows the channel status as it arrives, without inventing a meaning", async () => {
+  // the words come only from the documented codes (docs/M2.1-UNAS-API-DISCOVERY.md); a code it does not name stays as it arrives
+  it("shows a documented status in words and an undocumented one as it arrives, without inventing a meaning", async () => {
+    api.list.mockResolvedValue(
+      response([
+        reefSalt,
+        {
+          ...reefSalt,
+          id: "p-odd",
+          name: "Furcsa termék",
+          unasListing: {
+            channel: "UNAS" as const,
+            externalStatus: "7",
+            isPublished: false,
+            slug: null,
+            productUrl: null,
+            seoTitle: null,
+            backorderAllowed: false,
+          },
+        },
+      ]),
+    );
     render(<WebshopProductListPage />);
 
-    expect(await screen.findByText("3")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Webshopban" })).toHaveAttribute(
-      "href",
-      "https://shop.example/reef-salt",
-    );
+    expect(
+      await screen.findByText("Aktív, nem vásárolható"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("7")).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", { name: "Webshopban" })[0],
+    ).toHaveAttribute("href", "https://shop.example/reef-salt");
   });
 
   it("the fixed column widths leave the name at least 150 px of the table minimum", () => {
@@ -162,6 +184,14 @@ describe("WebshopProductListPage", () => {
 
   // The list is the shared table: on the phone every row is a card, each cell labelled with its
   // column, so the price, the stock and the channel status do not disappear at 390 px.
+  // Picasso 3.19 (acrobot 62278): the status is a word, the raw code is the tooltip
+  it("shows the UNAS status in words with the raw code as the tooltip", async () => {
+    render(<WebshopProductListPage />);
+    await screen.findByText("Reef Salt 4 kg");
+    const word = screen.getByText("Aktív, nem vásárolható");
+    expect(word.getAttribute("title")).toBe("UNAS státuszkód: 3");
+  });
+
   it("labels every cell with its column for the phone card view", async () => {
     render(<WebshopProductListPage />);
     await screen.findByText("Reef Salt 4 kg");
