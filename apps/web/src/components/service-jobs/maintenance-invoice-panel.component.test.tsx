@@ -186,6 +186,17 @@ describe("MaintenanceInvoicePanel", () => {
     expect(
       screen.getByRole("button", { name: "Előnézet letöltése" }),
     ).toBeTruthy();
+    // Picasso 3.29 (acrobot 62594): the reason stands beside the disabled button, before Piszkozat törlése, and the button names it
+    const why = screen.getByText("A kiállítás még nincs bekapcsolva.");
+    expect(issueButton.getAttribute("aria-describedby")).toBe(why.id);
+    const remove = screen.getByRole("button", { name: /Piszkozat törlése/ });
+    expect(
+      issueButton.compareDocumentPosition(why) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      why.compareDocumentPosition(remove) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   /* the TIG invoice's confirmation window (card 7ba97e0d, S3): what the server's summary says */

@@ -8,7 +8,7 @@ import {
   type MaintenanceInvoiceIssueResult,
   type MaintenanceInvoiceSummary,
 } from "@acropora/types";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import {
@@ -58,6 +58,8 @@ export function MaintenanceInvoicePanel({
 }) {
   const { session } = useAuth();
   const token = session?.token ?? "";
+  // the explanation beside a disabled Kiállítás, which the button points to (aria-describedby)
+  const issueWhyId = useId();
   const canIssue = Boolean(
     session && hasPermission(session.user, PERMISSIONS.FINANCE_MANAGE),
   );
@@ -259,6 +261,9 @@ export function MaintenanceInvoicePanel({
               <>
                 <PilotButton
                   disabled={!invoice.issueEnabled || !canIssue || issuing.busy}
+                  aria-describedby={
+                    !invoice.issueEnabled || !canIssue ? issueWhyId : undefined
+                  }
                   onClick={() => {
                     setError(null);
                     void issuing.start();
@@ -266,6 +271,22 @@ export function MaintenanceInvoicePanel({
                 >
                   {issuing.busy ? "Kiállítás…" : "Kiállítás"}
                 </PilotButton>
+                {/*
+                  LÁTHATÓ FELIRAT, NEM CSAK `title`: egy tiltott gomb
+                  `pointer-events: none` szabállyal jár (lásd a `PilotButton`
+                  stílusát), ami a böngésző hover-buborékát is megakadályozhatja.
+                  A GOMB MELLETT ÁLL, NEM A TÖRLÉS UTÁN (Picasso leltár 3.29, acrobot 62594): az olvasás sorrendje "Kiállítás, miért nem,
+                  Piszkozat törlése", és a gomb a mondatra hivatkozik (`aria-describedby`).
+                */}
+                {!invoice.issueEnabled ? (
+                  <span id={issueWhyId} className="text-sm text-muted">
+                    A kiállítás még nincs bekapcsolva.
+                  </span>
+                ) : !canIssue ? (
+                  <span id={issueWhyId} className="text-sm text-muted">
+                    A kiállításhoz pénzügyi jogosultság kell.
+                  </span>
+                ) : null}
                 <MaintenanceInvoiceDraftDelete
                   token={token}
                   invoiceId={invoice.id}
@@ -281,20 +302,6 @@ export function MaintenanceInvoicePanel({
                     void load();
                   }}
                 />
-                {/*
-                  LÁTHATÓ FELIRAT, NEM CSAK `title`: egy tiltott gomb
-                  `pointer-events: none` szabállyal jár (lásd a `PilotButton`
-                  stílusát), ami a böngésző hover-buborékát is megakadályozhatja.
-                */}
-                {!invoice.issueEnabled ? (
-                  <span className="text-sm text-muted">
-                    A kiállítás még nincs bekapcsolva.
-                  </span>
-                ) : !canIssue ? (
-                  <span className="text-sm text-muted">
-                    A kiállításhoz pénzügyi jogosultság kell.
-                  </span>
-                ) : null}
               </>
             ) : null}
           </div>
