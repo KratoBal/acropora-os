@@ -25,6 +25,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { PilotBackButton } from "@/components/pilot/pilot-back-link";
 import {
   PilotBadge,
   PilotButton,
@@ -456,27 +457,22 @@ export function FoxpostSettlementsPage() {
     ];
     return (
       <PilotThemeRoot className="space-y-6">
+        <PilotBackButton onClick={() => setSelected(null)} flush>
+          Elszámolások
+        </PilotBackButton>
         <PilotPageHeader
           title={`Foxpost elszámolás · ${selected.settlementCode ?? "ismeretlen"}`}
           description={`${formatDate(selected.periodStart)} – ${formatDate(selected.periodEnd)} · heti XLSX + Foxpost díjszámla`}
           actions={
-            <>
-              {canManage && selected.status !== "COMPLETED" ? (
-                <PilotButton
-                  variant="secondary"
-                  onClick={() => void reprocess()}
-                  disabled={working}
-                >
-                  Újrafeldolgozás
-                </PilotButton>
-              ) : null}
+            canManage && selected.status !== "COMPLETED" ? (
               <PilotButton
                 variant="secondary"
-                onClick={() => setSelected(null)}
+                onClick={() => void reprocess()}
+                disabled={working}
               >
-                Vissza a listához
+                Újrafeldolgozás
               </PilotButton>
-            </>
+            ) : null
           }
         />
         <SettlementTabs />

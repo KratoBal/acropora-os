@@ -42,6 +42,31 @@ export function PilotBackLink({
   );
 }
 
+/**
+ * A NYÍL GOMB-VÁLTOZATA: ugyanaz a megjelenés, de nem útvonalra visz, hanem egy ugyanazon az URL-en élő nézetből lép ki (az elszámolás-lapok
+ * részlete a lista helyén áll, a „vissza" a kijelölést törli). Csak ott használd, ahol nincs cél-útvonal; ahol van, az `PilotBackLink`.
+ */
+export function PilotBackButton({
+  onClick,
+  children,
+  flush = false,
+}: {
+  onClick: () => void;
+  children: ReactNode;
+  flush?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${flush ? PILOT_BACK_LINK_FLUSH_CLASSES : PILOT_BACK_LINK_CLASSES} cursor-pointer`}
+    >
+      <Icon name="chevron-left" size={12} />
+      {children}
+    </button>
+  );
+}
+
 /** A felirat: „Vissza", ha az előző lapról jöttünk (a cél az a lap), különben a lista neve (a tartalék cél). */
 export function backLinkLabel(
   back: { fromWithinApp: boolean },
