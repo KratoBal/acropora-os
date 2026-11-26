@@ -12,6 +12,7 @@ import {
 } from "@acropora/ui";
 
 import { saveBlob, showBlob, type FileSurface } from "@/lib/file-download";
+import { FilePick } from "./file-pick";
 import { Message } from "./ticket-list";
 
 /**
@@ -208,7 +209,7 @@ export function DocumentPanel<T extends DocumentItem>({
                         Letöltés
                       </PilotButton>
                       <PilotButton
-                        variant="ghost"
+                        variant="secondary"
                         disabled={busy === item.id}
                         onClick={() => void fetchFile(item, "open")}
                         aria-label={`${item.fileName} megnyitása új lapon`}
@@ -237,15 +238,15 @@ export function DocumentPanel<T extends DocumentItem>({
           </p>
         )}
         <form className="mt-4 flex flex-col gap-3" onSubmit={submit}>
-          <label className="flex flex-col gap-1 text-sm font-medium text-pilot-grey-700">
-            Fájl
-            <input
-              type="file"
+          {/* saját gomb a natív fájlválasztó helyett (picasso P3): a választás neve mellette áll, feltöltés után ürül */}
+          <PilotFormField label="Fájl">
+            <FilePick
               accept={uploadAccept(["jpeg", "png", "pdf"])}
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-              className="cursor-pointer text-sm text-pilot-grey-600 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-pilot-aqua-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-pilot-aqua-700"
+              files={file ? [file] : []}
+              onChange={(picked) => setFile(picked[0] ?? null)}
+              disabled={uploading}
             />
-          </label>
+          </PilotFormField>
           <PilotFormField label="Felirat">
             <PilotInput
               value={caption}

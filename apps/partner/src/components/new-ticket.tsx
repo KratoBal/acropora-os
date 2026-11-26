@@ -22,6 +22,7 @@ import { eszkozAzonosito } from "@/lib/eszkoz-azonosito";
 import { helyszinFa } from "@/lib/helyszin-fa";
 import { partnerApi } from "@/lib/api";
 import { useAuth } from "./auth";
+import { FilePick } from "./file-pick";
 import { Message } from "./ticket-list";
 
 /**
@@ -341,14 +342,12 @@ export function NewTicket() {
               nem letezett: csatolni csak a MAR LETREJOTT jegy adatlapjan lehetett,
               tehat a bejelentonek ket lepesben kellett elmondania ugyanazt.
             */}
-            <input
-              type="file"
+            {/* saját gomb a natív fájlválasztó helyett (picasso P3), ugyanaz, mint az adatlapok feltöltőjén */}
+            <FilePick
               multiple
               accept={uploadAccept(["jpeg", "png", "pdf"])}
-              onChange={(event) =>
-                setFiles(Array.from(event.target.files ?? []))
-              }
-              className="cursor-pointer text-sm text-pilot-grey-600 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-pilot-aqua-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-pilot-aqua-700"
+              files={files}
+              onChange={setFiles}
             />
             <p className="text-xs text-pilot-grey-400">
               Nem kötelező. A kép a bejelentés elküldése után kerül fel, és

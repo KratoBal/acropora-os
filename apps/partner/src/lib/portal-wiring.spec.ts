@@ -247,10 +247,17 @@ describe("a bejelentő űrlap fájl-melléklete", () => {
       csak a MÁR LÉTREJÖTT jegy adatlapján lehetett, tehát a bejelentőnek két
       lépésben kellett elmondania ugyanazt.
 
-      A MINTA A MEZŐ ALAKJÁRA ILLESZT (`type="file"`), nem a "file" szóra: az
-      utóbbit egy komment vagy egy változónév zölden tartaná.
+      A MINTA A MEZŐ ALAKJÁRA ILLESZT, nem a "file" szóra: az utóbbit egy
+      komment vagy egy változónév zölden tartaná. 2026-11-26 óta a mező a
+      saját fájlválasztó (`FilePick`, picasso P3) mögött áll: a bejelentő
+      űrlapja a komponenst teszi ki, a komponens a rejtett `type="file"`
+      mezőt (fajl-valaszto-wiring.spec.ts).
     */
-    assert.match(olvas(BEJELENTO), /type="file"/);
+    assert.match(olvas(BEJELENTO), /<FilePick\b[^]*?multiple/);
+    assert.match(
+      readFileSync("src/components/file-pick.tsx", "utf8"),
+      /type="file"/,
+    );
   });
 
   it("a feltöltés a MÁR LÉTREJÖTT jegy azonosítójára megy", () => {
