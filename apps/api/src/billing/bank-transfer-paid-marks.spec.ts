@@ -1162,3 +1162,89 @@ describe("an invoice NAV alone holds (CASHMAN's)", () => {
     assert.equal(decision.detail, "ACRW-2026/00084");
   });
 });
+
+/*
+  A BARE NUMBER OF SEVERAL SERIES, AND THE CREDIT'S AMOUNT (2026-11-26, live after #3044, acrobot 63087: the Állatkert's 34 671 Ft
+  named `2026/00058`, and the page said "2026/00058 több"; a NAV-only invoice has no payments, so the open-or-paid narrowing
+  never drops it). WHAT TURNS THIS RED: the one candidate whose gross is the credit is not chosen; one is chosen when two have that
+  gross, when none has it, or when the text names several invoices (then the credit is their sum); the mark does not say why.
+*/
+describe("a bare number of several series, chosen by the credit's amount", () => {
+  const allatkert = credit({
+    id: "bt-allatkert",
+    amount: "34671.00",
+    bookingDate: "2026-11-12",
+    narrative: "HCUT/2026/003814 2026/00058 S/2026/0005034",
+  });
+  const cashman = invoice("x", "34671.00", {
+    documentNumber: "2026/00058",
+    onlyInNav: true,
+    paymentsKnown: null,
+  });
+
+  it("the Állatkert: of a CASHMAN invoice and another series' open one, the CASHMAN one by the amount, and it is said so", () => {
+    for (const other of [
+      invoice("00058", "12000.00", { customerName: "Más Vevő Kft." }),
+      invoice("00058", "12000.00", { onlyInNav: true, paymentsKnown: null }),
+    ]) {
+      const decision = decideBankTransfer(allatkert, [other, cashman]);
+      assert.equal(decision.markable, false);
+      if (decision.markable) return;
+      assert.equal(decision.refusal, "OTHER_PROGRAM");
+      assert.equal(decision.detail, "2026/00058");
+    }
+  });
+
+  it("a Számlázz.hu invoice chosen by the amount is marked, and the mark says the amount chose it", () => {
+    const decision = decideBankTransfer(
+      credit({ amount: "20000.00", narrative: "2026/00084" }),
+      [
+        invoice("00084", "7000.00"),
+        invoice("x", "20000.00", { documentNumber: "2026/00084" }),
+      ],
+    );
+    assert.equal(decision.markable, true);
+    if (!decision.markable) return;
+    assert.deepEqual(
+      decision.marks.map((m) => m.invoiceNumber),
+      ["2026/00084"],
+    );
+    assert.match(
+      decision.marks[0]!.note,
+      /; előtag nélküli szám, az összeg szerint$/,
+    );
+    assert.ok(
+      decision.marks[0]!.note.length <= 90,
+      `${decision.marks[0]!.note.length} karakter`,
+    );
+  });
+
+  it("two with the credit's gross, none with it, or a text naming several invoices: a person decides", () => {
+    const two = decideBankTransfer(allatkert, [
+      invoice("00058", "34671.00", { onlyInNav: true, paymentsKnown: null }),
+      cashman,
+    ]);
+    assert.equal(!two.markable && two.detail, "2026/00058 több");
+
+    const none = decideBankTransfer(allatkert, [
+      invoice("00058", "12000.00", { onlyInNav: true, paymentsKnown: null }),
+      invoice("x", "15000.00", {
+        documentNumber: "2026/00058",
+        onlyInNav: true,
+        paymentsKnown: null,
+      }),
+    ]);
+    assert.equal(!none.markable && none.detail, "2026/00058 több");
+
+    // "2026/00058,59": the credit is the two invoices' sum, so one invoice's gross says nothing
+    const several = decideBankTransfer(
+      { ...allatkert, narrative: "2026/00058,59" },
+      [
+        invoice("00058", "12000.00", { onlyInNav: true, paymentsKnown: null }),
+        cashman,
+        invoice("x", "1.00", { documentNumber: "2026/00059" }),
+      ],
+    );
+    assert.equal(!several.markable && several.detail, "2026/00058 több");
+  });
+});

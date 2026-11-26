@@ -206,6 +206,27 @@ const couldBeThisTransfers = (day: string) => (invoice: FeedInvoice) => {
 };
 
 /**
+ * OF SERIES SHARING A BARE NUMBER, THE ONE WHOSE GROSS IS THE CREDIT (2026-11-26, the Állatkert's 34 671 Ft naming `2026/00058`:
+ * after #3044 a NAV-only invoice counts too, and it carries no payments, so the open-or-paid narrowing can never drop it, and the
+ * credit stood as "2026/00058 több"). Only when the text names ONE invoice (then the credit is that invoice's whole payment), and
+ * only when exactly one candidate's gross is the credit to the fillér, in its currency: otherwise every candidate stays, and the
+ * reference stays ambiguous for a person. The choice is a narrowing like the one above, and the mark says so (`narrowed`).
+ */
+const grossIsTheCredit = (
+  candidates: FeedInvoice[],
+  credit: BankCredit,
+): FeedInvoice[] => {
+  const amount = moneyCents(credit.amount);
+  const exact = candidates.filter(
+    (invoice) =>
+      amount !== null &&
+      invoice.currency === credit.currency &&
+      moneyCents(invoice.grossAmount) === amount,
+  );
+  return exact.length === 1 ? exact : candidates;
+};
+
+/**
  * THE CREDITS THAT ARE NOT AN INVOICE'S PAYMENT, by the sender and the text (the survey of 2026-11-18, acrobot 55708): our own
  * company's name (transfers between our accounts, EUR->HUF exchange), the OTP card-acquiring settlement (KELFO) and the SimplePay
  * settlement. Only a credit whose text names none of our invoices is asked: a reference always wins. The match is accent- and
@@ -412,6 +433,8 @@ export function decideBankTransfer(
   const named: FeedInvoice[] = [];
   /** invoices a bare number named only after the narrowing chose among series: the mark says so (barracuda, #2216 b) */
   const narrowed = new Set<string>();
+  /** of those, the ones the credit's amount chose (`grossIsTheCredit`): their mark names that reason */
+  const byAmount = new Set<string>();
   const unresolved: string[] = [];
   /** the payable invoices the texts name that only NAV knows (CASHMAN's): found, said, never written */
   const otherProgram: string[] = [];
@@ -425,14 +448,19 @@ export function decideBankTransfer(
         refMatchesInvoiceNumber(ref, invoice.documentNumber),
     );
     // a bare number fits every series (`2026/00083` and `ACRW-2026/00083`): of two, only one can be this transfer's
-    const candidates =
+    const waiting =
       hits.length > 1 ? hits.filter(couldBeThisTransfers(day)) : hits;
+    const candidates =
+      waiting.length > 1 && refs.length === 1
+        ? grossIsTheCredit(waiting, credit)
+        : waiting;
     if (candidates.length === 1 && candidates[0]!.onlyInNav) {
       if (!otherProgram.includes(candidates[0]!.documentNumber))
         otherProgram.push(candidates[0]!.documentNumber);
     } else if (candidates.length === 1) {
       if (!named.includes(candidates[0]!)) named.push(candidates[0]!);
       if (hits.length > 1) narrowed.add(candidates[0]!.documentNumber);
+      if (waiting.length > 1) byAmount.add(candidates[0]!.documentNumber);
     } else if (hits.length > 1) unresolved.push(`${refLabel(ref)} több`);
     else {
       // the line says WHY there is none (2026-11-05 12:04: "2026/000436 nincs" could not tell a missing feed row from
@@ -562,7 +590,11 @@ export function decideBankTransfer(
       title: "átutalás",
       note: narrowed.has(invoice.documentNumber)
         ? // short: the Agent's `leiras` limit is not known (the xsd is not in the repo), the longest note so far was ~60
-          `Banki átutalás ${day}, egy utalás ${named.length} számlára; előtag nélküli szám, a nyitott számlához`
+          `Banki átutalás ${day}, egy utalás ${named.length} számlára; előtag nélküli szám, ${
+            byAmount.has(invoice.documentNumber)
+              ? "az összeg szerint"
+              : "a nyitott számlához"
+          }`
         : `Banki átutalás ${day}, egy utalás ${named.length} számlára`,
       sourceRef: credit.id,
     })),
