@@ -9,7 +9,10 @@ vi.mock("next/font/local", () => ({
 }));
 const api = vi.hoisted(() => ({ settings: vi.fn(), saveSettings: vi.fn() }));
 vi.mock("@/lib/api/partner-orders", () => ({ partnerOrdersApi: api }));
-const auth = vi.hoisted(() => ({ role: "ADMIN" as string }));
+const auth = vi.hoisted(() => ({
+  role: "ADMIN" as string,
+  permissions: undefined as string[] | undefined,
+}));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({
     session: {
@@ -21,6 +24,7 @@ vi.mock("@/components/auth/auth-provider", () => ({
         email: "u@acropora.local",
         displayName: "Balázs",
         role: auth.role,
+        permissions: auth.permissions,
         customerId: null,
         supplierId: null,
       },
@@ -37,6 +41,7 @@ describe("PartnerOrderBacklogSettingsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     auth.role = "ADMIN";
+    auth.permissions = undefined;
     api.settings.mockResolvedValue({ backlogDays: 14 });
   });
 
@@ -102,5 +107,29 @@ describe("PartnerOrderBacklogSettingsPage", () => {
       await screen.findByText("A beállítás nem tölthető be."),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Hátralék napjai")).toBeDisabled();
+  });
+
+  it("shows the limit read-only to someone who may view but not manage orders", async () => {
+    auth.permissions = ["quotes.view"];
+    render(<PartnerOrderBacklogSettingsPage />);
+    const field = (await screen.findByLabelText(
+      "Hátralék napjai",
+    )) as HTMLInputElement;
+    await waitFor(() => expect(field.value).toBe("14"));
+    expect(field).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Mentés" })).toBeNull();
+    expect(
+      screen.getByText("A beállítást a megrendelések kezelője módosíthatja."),
+    ).toBeInTheDocument();
+  });
+
+  it("does not read the setting at all without the right to view orders", () => {
+    auth.permissions = [];
+    render(<PartnerOrderBacklogSettingsPage />);
+    expect(
+      screen.getByText("Nincs hozzáférésed a megrendelésekhez"),
+    ).toBeInTheDocument();
+    expect(api.settings).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Hátralék napjai")).toBeNull();
   });
 });
