@@ -72,13 +72,17 @@ export class QuotesService {
   ): Promise<QuoteListResponse> {
     permission(user);
     const result = await this.repository.list(page, pageSize, filter);
-    const totals = await this.repository.netTotals(
-      result.items.flatMap((row) => row.versions.map((v) => v.id)),
+    const versionIds = result.items.flatMap((row) =>
+      row.versions.map((v) => v.id),
     );
+    const [totals, grossTotals] = await Promise.all([
+      this.repository.netTotals(versionIds),
+      this.repository.grossTotals(versionIds),
+    ]);
     return {
       total: result.total,
       items: result.items.map((row) =>
-        quoteListItemDto(row, totals, result.expired.has(row.id)),
+        quoteListItemDto(row, totals, grossTotals, result.expired.has(row.id)),
       ),
       page,
       pageSize,
@@ -147,9 +151,11 @@ export class QuotesService {
     try {
       const row = await this.repository.update(id, clean, user.id);
       if (!row) throw new NotFoundException("Az ajánlat nem található.");
+      const versionIds = row.versions.map((v) => v.id);
       return quoteListItemDto(
         row,
-        await this.repository.netTotals(row.versions.map((v) => v.id)),
+        await this.repository.netTotals(versionIds),
+        await this.repository.grossTotals(versionIds),
       );
     } catch (e) {
       writeError(e);

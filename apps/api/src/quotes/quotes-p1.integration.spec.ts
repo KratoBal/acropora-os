@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 import { Module, type INestApplication } from "@nestjs/common";
 import { APP_GUARD, NestFactory } from "@nestjs/core";
-import { prisma } from "@acropora/database";
+import { Prisma, prisma } from "@acropora/database";
 import {
   PERMISSIONS,
   type AuthenticatedUser,
@@ -13,6 +13,7 @@ import {
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { configureApp } from "../app.configuration.js";
 import { PermissionGuard } from "../auth/guards/permission.guard.js";
+import { quoteMoneyFixed, quoteTotals } from "./pdf/quote-pdf-layout.js";
 import { QuotesModule } from "./quotes.module.js";
 
 const gate = integrationDatabaseGate(process.env);
@@ -576,6 +577,88 @@ describe(
       const row = (list.body.items as Json[]).find((i) => i.id === quoteId)!;
       assert.equal(row.latestVersion.netTotal, "53000.0000", "LIST-NET-TOTAL");
       assert.equal(row.createdByName, "Quote P1 test");
+    });
+
+    /*
+      THE LIST'S GROSS TOTAL IS THE PDF'S GROSS TOTAL (Luca 2026-11-26, acrobot 62637), ON A MIXED-VAT QUOTE: every other fixture line is 27 %, so a
+      5 % line (3 x 333.3333 = 999.9999 net, 1049.999895 gross) and a 0 % line are added for this check and taken out again. The expected value
+      comes from the PDF's own functions over the stored items (`quoteTotals`, rounded by `quoteMoneyFixed`), not from a formula of this test.
+      WHAT TURNS IT RED: a list gross computed with one rate for all lines; a gross rounded per line or twice; a sum that includes the optional line.
+    */
+    it("the list's gross total equals the PDF's gross total on a mixed-VAT quote", async () => {
+      const added: string[] = [];
+      for (const [name, quantity, unitNetPrice, vatRatePercent] of [
+        ["Vegyes ÁFA 5%", "3", "333.3333", "5"],
+        ["Vegyes ÁFA 0%", "1", "1234.5678", "0"],
+      ] as const) {
+        const res = await request(v(`/blocks/${blockId}/items`), "POST", {
+          source: "STANDALONE",
+          name,
+          quantity,
+          unit: "db",
+          unitNetPrice,
+          vatRatePercent,
+        });
+        assert.equal(res.status, 201, name);
+        const item = (
+          version(res.body).blocks as {
+            items: { id: string; name: string }[];
+          }[]
+        )
+          .flatMap((b) => b.items)
+          .find((i) => i.name === name)!;
+        added.push(item.id);
+      }
+      try {
+        const stored = await prisma.quoteItem.findMany({
+          where: { versionId },
+          select: {
+            name: true,
+            quantity: true,
+            unitNetPrice: true,
+            vatRatePercent: true,
+            isOptional: true,
+          },
+        });
+        const expected = quoteMoneyFixed(
+          quoteTotals([
+            {
+              items: stored.map((item) => ({
+                ...item,
+                description: null,
+                unit: "db",
+              })),
+            },
+          ] as never).gross,
+          "HUF",
+        );
+        const list = await request(
+          `/quotes?q=${encodeURIComponent("P1 editor")}&page=1&pageSize=5`,
+          "GET",
+          undefined,
+          WRITER,
+        );
+        const row = (list.body.items as Json[]).find((i) => i.id === quoteId)!;
+        assert.equal(
+          row.latestVersion.grossTotal,
+          expected,
+          "LIST-GROSS-TOTAL",
+        );
+        // the mixed rates are really in the sum: all-27 % would give another number
+        const flat27 = quoteMoneyFixed(
+          stored
+            .filter((item) => !item.isOptional)
+            .reduce(
+              (sum, item) =>
+                sum.plus(item.quantity.times(item.unitNetPrice).times(1.27)),
+              new Prisma.Decimal(0),
+            ),
+          "HUF",
+        );
+        assert.notEqual(expected, flat27, "the check needs mixed rates");
+      } finally {
+        for (const id of added) await request(v(`/items/${id}`), "DELETE");
+      }
     });
 
     it("a later receipt does not move a stored snapshot", async () => {

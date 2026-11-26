@@ -205,8 +205,8 @@ function NumberInput({
   suffix?: string;
 }) {
   return (
-    <label className="flex min-w-0 flex-col gap-1 text-xs">
-      <span className="text-[10px] font-medium text-pilot-grey-500">
+    <label className="flex min-w-0 flex-col gap-1 text-[13px]">
+      <span className="text-[13px] font-medium text-pilot-grey-500">
         {label}
       </span>
       <div className="relative">
@@ -217,12 +217,12 @@ function NumberInput({
           value={value}
           aria-label={ariaLabel}
           onChange={(event) => onChange(Number(event.target.value))}
-          className={`h-[38px] w-full min-w-0 rounded-lg bg-white px-3 py-2 text-right text-xs text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 ${
+          className={`h-[38px] w-full min-w-0 rounded-lg bg-white px-3 py-2 text-right text-[13px] text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 ${
             suffix ? "pr-7" : ""
           }`}
         />
         {suffix ? (
-          <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-pilot-grey-300">
+          <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[13px] text-pilot-grey-300">
             {suffix}
           </span>
         ) : null}
@@ -634,7 +634,7 @@ export function PilotPosTerminalPage() {
         type="button"
         aria-pressed={selected}
         onClick={() => setPaymentMethod(value)}
-        className={`h-12 cursor-pointer rounded-lg py-2.5 text-[11px] font-semibold ring-1 transition-colors ${selected ? "bg-pilot-aqua-600 text-white ring-pilot-aqua-600" : "bg-white text-pilot-grey-900 ring-pilot-grey-200 hover:bg-pilot-grey-50"}`}
+        className={`h-12 cursor-pointer rounded-lg py-2.5 text-[13px] font-semibold ring-1 transition-colors ${selected ? "bg-pilot-aqua-600 text-white ring-pilot-aqua-600" : "bg-white text-pilot-grey-900 ring-pilot-grey-200 hover:bg-pilot-grey-50"}`}
       >
         {label}
       </button>
@@ -676,14 +676,14 @@ export function PilotPosTerminalPage() {
             <button
               type="button"
               onClick={() => router.push("/pos/osszesito")}
-              className="text-[11px] font-semibold text-pilot-aqua-700 hover:underline"
+              className="text-[13px] font-semibold text-pilot-aqua-700 hover:underline"
             >
               Összesítő fizetési módonként
             </button>
             <button
               type="button"
               onClick={() => router.push("/pos/belso-felhasznalas")}
-              className="text-[11px] font-semibold text-pilot-aqua-700 hover:underline"
+              className="text-[13px] font-semibold text-pilot-aqua-700 hover:underline"
             >
               Belső felhasználás havonta
             </button>
@@ -785,9 +785,9 @@ export function PilotPosTerminalPage() {
                 ).map(([field, label, type]) => (
                   <label
                     key={field}
-                    className="flex min-w-0 flex-col gap-1 text-xs"
+                    className="flex min-w-0 flex-col gap-1 text-[13px]"
                   >
-                    <span className="text-[10px] font-medium text-pilot-grey-500">
+                    <span className="text-[13px] font-medium text-pilot-grey-500">
                       {label}
                     </span>
                     <input
@@ -803,12 +803,12 @@ export function PilotPosTerminalPage() {
                             : current,
                         )
                       }
-                      className="h-[38px] w-full min-w-0 rounded-lg bg-white px-3 py-2 text-xs text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                      className="h-[38px] w-full min-w-0 rounded-lg bg-white px-3 py-2 text-[13px] text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
                     />
                   </label>
                 ))}
-                <label className="flex min-w-0 flex-col gap-1 text-xs">
-                  <span className="text-[10px] font-medium text-pilot-grey-500">
+                <label className="flex min-w-0 flex-col gap-1 text-[13px]">
+                  <span className="text-[13px] font-medium text-pilot-grey-500">
                     ÁFA
                   </span>
                   <PilotSelect
@@ -830,13 +830,13 @@ export function PilotPosTerminalPage() {
                     ))}
                   </PilotSelect>
                 </label>
-                <p className="text-[10px] text-pilot-grey-600 sm:col-span-4">
+                <p className="text-[13px] text-pilot-grey-600 sm:col-span-4">
                   Készletet nem von le; a végösszegben és a számlán benne van.
                 </p>
                 {manualTried && manualProblem ? (
                   <p
                     role="alert"
-                    className="text-[11px] text-pilot-red-700 sm:col-span-4"
+                    className="text-[13px] text-pilot-red-700 sm:col-span-4"
                   >
                     {manualProblem}
                   </p>
@@ -869,7 +869,7 @@ export function PilotPosTerminalPage() {
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Cikkszám, terméknév vagy vonalkód…"
                 aria-label="Termék keresése"
-                className="h-[50px] w-full min-w-0 rounded-lg bg-white pl-10 pr-3 text-xs text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-500 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                className="h-[50px] w-full min-w-0 rounded-lg bg-white pl-10 pr-3 text-[13px] text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-500 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
               />
             </div>
             {/*
@@ -880,7 +880,7 @@ export function PilotPosTerminalPage() {
             <p
               role="status"
               aria-live="polite"
-              className={`mt-3 flex h-[50px] items-center rounded-lg px-3 text-[11px] text-pilot-aqua-700 ${
+              className={`mt-3 flex h-[50px] items-center rounded-lg px-3 text-[13px] text-pilot-aqua-700 ${
                 lastAdded ? "bg-pilot-aqua-50" : ""
               }`}
             >
@@ -906,7 +906,8 @@ export function PilotPosTerminalPage() {
                 <Skeleton className="h-4 w-1/2" />
               </div>
             ) : searchResults.length === 0 ? (
-              <p className="px-5 py-8 text-xs text-pilot-grey-500">
+              /* an empty card is one line, not a tall box (Picasso 3.19, acrobot 62633; the same below for the day's sales and internal uses) */
+              <p className="px-5 py-3 text-[13px] text-pilot-grey-500">
                 {searchTerm.trim()
                   ? "Nincs találat."
                   : "Keress cikkszám, terméknév vagy vonalkód alapján."}
@@ -923,7 +924,7 @@ export function PilotPosTerminalPage() {
                     <span className="block break-words text-[13px] font-semibold text-pilot-grey-900">
                       {product.productName}
                     </span>
-                    <span className="mt-1 block break-all text-[10px] text-pilot-grey-500">
+                    <span className="mt-1 block break-all text-[13px] text-pilot-grey-500">
                       {product.sku}
                     </span>
                   </span>
@@ -936,7 +937,7 @@ export function PilotPosTerminalPage() {
                         : "Nincs ár"}
                     </span>
                     <span
-                      className={`mt-1 block text-[10px] tabular-nums ${Number(product.currentStock) <= 0 ? "text-pilot-amber-700" : "text-pilot-grey-600"}`}
+                      className={`mt-1 block text-[13px] tabular-nums ${Number(product.currentStock) <= 0 ? "text-pilot-amber-700" : "text-pilot-grey-600"}`}
                     >
                       Készlet: {product.currentStock} {product.unit}
                     </span>
@@ -956,7 +957,7 @@ export function PilotPosTerminalPage() {
             <PilotCardHeader
               title="Mai eladások"
               action={
-                <span className="text-[10px] text-pilot-grey-500">
+                <span className="text-[13px] text-pilot-grey-500">
                   Csak a mai nap · legfeljebb 10
                 </span>
               }
@@ -966,7 +967,7 @@ export function PilotPosTerminalPage() {
                 <Skeleton className="h-4 w-1/3" />
               </div>
             ) : recentSales.length === 0 ? (
-              <p className="px-5 py-8 text-center text-xs text-pilot-grey-500">
+              <p className="px-5 py-3 text-[13px] text-pilot-grey-500">
                 Ma még nem történt eladás.
               </p>
             ) : (
@@ -979,10 +980,10 @@ export function PilotPosTerminalPage() {
                     className="grid w-full grid-cols-[minmax(0,1fr)_auto_12px] items-center gap-3 border-b border-pilot-grey-100 py-4 text-left last:border-0 hover:bg-pilot-grey-50"
                   >
                     <span className="min-w-0">
-                      <span className="block break-all text-xs font-semibold text-pilot-grey-900">
+                      <span className="block break-all text-[13px] font-semibold text-pilot-grey-900">
                         {sale.orderNumber}
                       </span>
-                      <span className="mt-1 block text-[10px] text-pilot-grey-500">
+                      <span className="mt-1 block text-[13px] text-pilot-grey-500">
                         {new Date(sale.createdAt).toLocaleTimeString("hu-HU", {
                           hour: "2-digit",
                           minute: "2-digit",
@@ -994,7 +995,7 @@ export function PilotPosTerminalPage() {
                         · {sale.lineCount} tétel
                       </span>
                     </span>
-                    <span className="whitespace-nowrap text-xs font-semibold tabular-nums text-pilot-grey-900">
+                    <span className="whitespace-nowrap text-[13px] font-semibold tabular-nums text-pilot-grey-900">
                       {formatMoney(sale.totalGross, "HUF", {
                         fractionDigits: 2,
                       })}
@@ -1012,13 +1013,13 @@ export function PilotPosTerminalPage() {
             <PilotCardHeader
               title="Mai belső felhasználások"
               action={
-                <span className="text-[10px] text-pilot-grey-500">
+                <span className="text-[13px] text-pilot-grey-500">
                   Nem eladás · beszerzési áron
                 </span>
               }
             />
             {recentInternalUses.length === 0 ? (
-              <p className="px-5 py-8 text-center text-xs text-pilot-grey-500">
+              <p className="px-5 py-3 text-[13px] text-pilot-grey-500">
                 Ma még nem volt belső felhasználás.
               </p>
             ) : (
@@ -1029,21 +1030,21 @@ export function PilotPosTerminalPage() {
                     className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-pilot-grey-100 py-4 last:border-0"
                   >
                     <span className="min-w-0">
-                      <span className="block break-all text-xs font-semibold text-pilot-grey-900">
+                      <span className="block break-all text-[13px] font-semibold text-pilot-grey-900">
                         {item.number}
                       </span>
-                      <span className="mt-1 block text-[10px] text-pilot-grey-500">
+                      <span className="mt-1 block text-[13px] text-pilot-grey-500">
                         {new Date(item.occurredAt).toLocaleTimeString("hu-HU", {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}{" "}
                         · {item.performedByName ?? "—"} · {item.lineCount} tétel
                       </span>
-                      <span className="mt-1 block break-words text-[11px] text-pilot-grey-700">
+                      <span className="mt-1 block break-words text-[13px] text-pilot-grey-700">
                         {item.note}
                       </span>
                     </span>
-                    <span className="whitespace-nowrap text-xs font-semibold tabular-nums text-pilot-grey-900">
+                    <span className="whitespace-nowrap text-[13px] font-semibold tabular-nums text-pilot-grey-900">
                       {item.totalCost === null
                         ? "ár nélkül"
                         : formatMoney(item.totalCost, "HUF", {
@@ -1073,7 +1074,7 @@ export function PilotPosTerminalPage() {
               {cart.length === 0 ? (
                 <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
                   <Icon name="cart" size={24} className="text-pilot-grey-500" />
-                  <p className="text-xs text-pilot-grey-500">
+                  <p className="text-[13px] text-pilot-grey-500">
                     A kosár üres. Keress rá egy termékre a hozzáadáshoz.
                   </p>
                 </div>
@@ -1092,7 +1093,7 @@ export function PilotPosTerminalPage() {
                           <p className="break-words text-[13px] font-semibold leading-4 text-pilot-grey-900">
                             {line.productName}
                           </p>
-                          <p className="mt-0.5 break-all text-[10px] leading-[14px] text-pilot-grey-500">
+                          <p className="mt-0.5 break-all text-[13px] leading-[14px] text-pilot-grey-500">
                             {line.manual
                               ? `Kézi tétel · ${line.vatRate}% ÁFA · készlet nélkül`
                               : line.sku}
@@ -1139,7 +1140,7 @@ export function PilotPosTerminalPage() {
                           }
                         />
                       </div>
-                      <p className="mt-1 text-right text-xs font-semibold leading-4 tabular-nums text-pilot-grey-900">
+                      <p className="mt-1 text-right text-[13px] font-semibold leading-4 tabular-nums text-pilot-grey-900">
                         {formatMoney(
                           line.unitGross *
                             line.quantity *
@@ -1167,7 +1168,7 @@ export function PilotPosTerminalPage() {
                   min={0}
                   onChange={(value) => setDiscountPercent(clampDiscount(value))}
                 />
-                <div className="flex items-center justify-end gap-2 text-[11px]">
+                <div className="flex items-center justify-end gap-2 text-[13px]">
                   <span className="text-pilot-grey-600">Részösszeg</span>
                   <span className="whitespace-nowrap font-medium tabular-nums text-pilot-grey-900">
                     {formatMoney(subtotalGross, "HUF", { fractionDigits: 2 })}
@@ -1176,7 +1177,7 @@ export function PilotPosTerminalPage() {
               </div>
               {internalUse ? (
                 <p
-                  className="rounded-lg bg-pilot-grey-100 px-3 py-3 text-[11px] text-pilot-grey-700"
+                  className="rounded-lg bg-pilot-grey-100 px-3 py-3 text-[13px] text-pilot-grey-700"
                   data-testid="pos-internal-use-notice"
                 >
                   Belső felhasználás: nem eladás, nincs fizetés, és a bevételbe
@@ -1185,28 +1186,30 @@ export function PilotPosTerminalPage() {
                 </p>
               ) : (
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-pilot-grey-600">Fizetendő</span>
+                  <span className="text-[13px] text-pilot-grey-600">
+                    Fizetendő
+                  </span>
                   <p className="text-[26px] font-semibold leading-tight tabular-nums text-pilot-grey-900">
                     {formatMoney(payableGross, "HUF", { fractionDigits: 2 })}
                   </p>
                 </div>
               )}
               <div>
-                <p className="mb-2 text-[11px] text-pilot-grey-600">
+                <p className="mb-2 text-[13px] text-pilot-grey-600">
                   Fizetési mód
                 </p>
                 <div
-                  className={`grid ${checkoutOptions.length === 3 ? "grid-cols-3" : "grid-cols-2"} gap-2 text-[11px] font-semibold`}
+                  className={`grid ${checkoutOptions.length === 3 ? "grid-cols-3" : "grid-cols-2"} gap-2 text-[13px] font-semibold`}
                 >
                   {checkoutOptions.map(renderCheckoutOption)}
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] font-semibold">
+                <div className="mt-2 grid grid-cols-2 gap-2 text-[13px] font-semibold">
                   {renderCheckoutOption(CASH_DESK_OPTION)}
                   {renderCheckoutOption(INTERNAL_USE_OPTION)}
                 </div>
               </div>
               {internalUse ? (
-                <label className="block text-[11px] text-pilot-grey-700">
+                <label className="block text-[13px] text-pilot-grey-700">
                   <span className="mb-1 block font-semibold">
                     Miért vették ki? (kötelező)
                   </span>
@@ -1215,10 +1218,10 @@ export function PilotPosTerminalPage() {
                     onChange={(event) => setInternalNote(event.target.value)}
                     maxLength={POS_INTERNAL_USE_NOTE_MAX}
                     rows={3}
-                    className="w-full rounded-lg border border-pilot-grey-200 bg-white px-3 py-2 text-xs text-pilot-grey-900 focus:border-pilot-aqua-600 focus:outline-none"
+                    className="w-full rounded-lg border border-pilot-grey-200 bg-white px-3 py-2 text-[13px] text-pilot-grey-900 focus:border-pilot-aqua-600 focus:outline-none"
                     placeholder="Például: a bemutató akváriumba, műhely, csere a vevőnek"
                   />
-                  <span className="mt-1 block text-right text-[10px] text-pilot-grey-500">
+                  <span className="mt-1 block text-right text-[13px] text-pilot-grey-500">
                     {internalNote.length} / {POS_INTERNAL_USE_NOTE_MAX}
                   </span>
                 </label>
@@ -1226,7 +1229,7 @@ export function PilotPosTerminalPage() {
               {internalUse && internalUseManualLines.length > 0 ? (
                 <Alert
                   variant="danger"
-                  className="!px-3 !py-2 [&_p]:!text-[10px]"
+                  className="!px-3 !py-2 [&_p]:!text-[13px]"
                   title="Kézi tétel nem lehet belső felhasználás"
                   description={`Csak termék rögzíthető így; vedd ki a kosárból: ${internalUseManualLines.map((line) => line.productName).join(", ")}.`}
                 />
@@ -1236,20 +1239,20 @@ export function PilotPosTerminalPage() {
                   <Alert
                     variant="info"
                     role="alert"
-                    className="!border-pilot-amber-100 !bg-pilot-amber-50 !text-pilot-amber-700 !px-3 !py-2 [&_p]:!text-[10px]"
+                    className="!border-pilot-amber-100 !bg-pilot-amber-50 !text-pilot-amber-700 !px-3 !py-2 [&_p]:!text-[13px]"
                     title="A mennyiség meghaladja a készletet"
                     description={`${stockWarnings[0]!.sku}: kosár ${stockWarnings[0]!.quantity} ${stockWarnings[0]!.unit}, készlet ${stockWarnings[0]!.currentStock} ${stockWarnings[0]!.unit}${stockWarnings.length > 1 ? `; további ${stockWarnings.length - 1} termék` : ""}. Eladás engedélyezett; keresési készlet alapján becslés.`}
                   />
                 </div>
               ) : (
-                <p className="rounded-lg bg-pilot-grey-100 px-3 py-4 text-[10px] text-pilot-grey-600">
+                <p className="rounded-lg bg-pilot-grey-100 px-3 py-4 text-[13px] text-pilot-grey-600">
                   Negatív készlet engedélyezett, figyelmeztetéssel.
                 </p>
               )}
               {missingVat.length > 0 ? (
                 <Alert
                   variant="danger"
-                  className="!px-3 !py-2 [&_p]:!text-[10px]"
+                  className="!px-3 !py-2 [&_p]:!text-[13px]"
                   title="Hiányzó ÁFA kulcs"
                   description={`Nincs beállítva ÁFA kulcs ehhez a termékhez: ${missingVat[0]!.sku}${missingVat.length > 1 ? ` (+${missingVat.length - 1} termék)` : ""}.`}
                 />
@@ -1257,7 +1260,7 @@ export function PilotPosTerminalPage() {
               {error ? (
                 <Alert
                   variant="danger"
-                  className="!px-3 !py-2 [&_p]:!text-[10px]"
+                  className="!px-3 !py-2 [&_p]:!text-[13px]"
                   title="Hiba történt"
                   description={error}
                   action={
@@ -1272,7 +1275,7 @@ export function PilotPosTerminalPage() {
                 />
               ) : null}
               {invoicing && canInvoice ? (
-                <div className="text-xs font-semibold [&_button]:!h-[42px] [&_button]:!rounded-lg">
+                <div className="text-[13px] font-semibold [&_button]:!h-[42px] [&_button]:!rounded-lg">
                   <PilotButton
                     variant="primary"
                     size="regular"
@@ -1284,7 +1287,7 @@ export function PilotPosTerminalPage() {
                   </PilotButton>
                 </div>
               ) : internalUse && canManage ? (
-                <div className="text-xs font-semibold [&_button]:!h-[42px] [&_button]:!rounded-lg">
+                <div className="text-[13px] font-semibold [&_button]:!h-[42px] [&_button]:!rounded-lg">
                   <PilotButton
                     variant="primary"
                     size="regular"
@@ -1303,7 +1306,7 @@ export function PilotPosTerminalPage() {
                   </PilotButton>
                 </div>
               ) : !invoicing && canManage ? (
-                <div className="text-xs font-semibold [&_button]:!h-[42px] [&_button]:!rounded-lg">
+                <div className="text-[13px] font-semibold [&_button]:!h-[42px] [&_button]:!rounded-lg">
                   <PilotButton
                     variant="primary"
                     size="regular"
