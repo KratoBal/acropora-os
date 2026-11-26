@@ -966,6 +966,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
     currency: "business",
     changeReason: "freeText",
     createdByNameAtClose: "personName",
+    assigneeNamesAtClose: "personName",
   },
   WorksheetLine: {
     description: "freeText",
@@ -974,6 +975,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
   },
   WorksheetEntry: {
     body: "freeText",
+    authorName: "personName",
   },
   MaterialRequest: {
     note: "freeText",
