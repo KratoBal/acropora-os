@@ -5,6 +5,7 @@ import {
   hasPermission,
   PERMISSIONS,
   servedNavigationFeatures,
+  type ProductQualityQueuePage,
   type ProductQualityQueueRow,
 } from "@acropora/types";
 import { useEffect, useMemo, useState } from "react";
@@ -13,7 +14,6 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { PilotButton, PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { productApi } from "@/lib/api/products";
 
-import { JevDisabledAction } from "./jev-decision-action";
 import {
   catalogQueueState,
   CATALOG_QUEUE_MESSAGE,
@@ -38,9 +38,10 @@ import { JevQualityFilters, JevQualityQueueTable } from "./jev-quality-queue";
  * Whether to ask at all comes from the menu the server served
  * (`servedNavigationFeatures`), so a user off the pilot list sends nothing.
  *
- * Disabled, with the reason in words: Új ellenőrzés indítása (a run is
- * started by hand on the server, `jev:enrich`), Export. Left out until
- * designed and backed (§9.5): the KPI cards. Nothing on this page writes.
+ * THE HEADER HAS NO ACTION (Picasso 3.27, acrobot's decision 2026-11-26, card f0b70dbd): the two disabled buttons (Új ellenőrzés
+ * indítása, Export) stood there with a tiny reason each and did nothing; they come back when they work. The counts the server already
+ * sends with every page (`summary`, `checkedProducts`) stand on the filters and under them, so the total no longer needs scrolling.
+ * Left out until designed and backed (§9.5): the KPI cards. Nothing on this page writes.
  */
 export function JevCatalogQualityPage() {
   const { session } = useAuth();
@@ -49,11 +50,13 @@ export function JevCatalogQualityPage() {
   const [load, setLoad] = useState<QueueLoad>({ kind: "loading" });
   const [rows, setRows] = useState<ProductQualityQueueRow[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
+  // the last counts the server sent: kept while another filter loads, so the pills do not blink to nothing
+  const [counts, setCounts] = useState<{
+    summary: ProductQualityQueuePage["summary"];
+    checkedProducts: number;
+  } | null>(null);
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PRODUCTS_VIEW),
-  );
-  const canManage = Boolean(
-    session && hasPermission(session.user, PERMISSIONS.PRODUCTS_MANAGE),
   );
   const features = useMemo(
     () => servedNavigationFeatures(session?.navigation),
@@ -71,6 +74,10 @@ export function JevCatalogQualityPage() {
         if (!active) return;
         setLoad({ kind: "ready", page });
         setRows(page.rows);
+        setCounts({
+          summary: page.summary,
+          checkedProducts: page.checkedProducts,
+        });
       })
       .catch(() => active && setLoad({ kind: "error" }));
     return () => {
@@ -110,22 +117,17 @@ export function JevCatalogQualityPage() {
         eyebrow="Termékek / JEV"
         title="Katalógus adatminőség"
         description="JEV · a termékadatok forrásalapú ellenőrzési sora"
-        actions={
-          <div className="flex flex-wrap items-start gap-3">
-            <JevDisabledAction
-              label="Új ellenőrzés indítása"
-              canManage={canManage}
-              reason="Az ellenőrzést egyelőre kézzel, a szerveren indítjuk."
-            />
-            <JevDisabledAction
-              label="Export"
-              canManage={canManage}
-              reason="Az export még nincs engedélyezve."
-            />
-          </div>
-        }
       />
-      <JevQualityFilters value={filter} onChange={setFilter} />
+      <JevQualityFilters
+        value={filter}
+        onChange={setFilter}
+        counts={counts?.summary ?? null}
+      />
+      {counts && counts.checkedProducts > 0 ? (
+        <p className="text-sm text-pilot-grey-600">
+          {counts.checkedProducts} termék ellenőrizve
+        </p>
+      ) : null}
       {state === "loading" ? (
         <div
           aria-busy="true"

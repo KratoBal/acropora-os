@@ -155,7 +155,7 @@ describe("JevCatalogQualityPage", () => {
     render(<JevCatalogQualityPage />);
     await screen.findByRole("table");
     api.qualityQueue.mockResolvedValue(page({ filter: "conflict", rows: [] }));
-    fireEvent.click(screen.getByRole("button", { name: "Ütközés" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Ütközés/ }));
     await waitFor(() =>
       expect(api.qualityQueue).toHaveBeenLastCalledWith(
         "token-1",
@@ -203,18 +203,37 @@ describe("JevCatalogQualityPage", () => {
     expect(screen.getByText("Kitalált pumpa")).toBeInTheDocument();
   });
 
-  it("az indítás és az export letiltva, az okuk szövegben", async () => {
+  /*
+    Picasso 3.27 (acrobot's decision 2026-11-26): the two disabled header buttons are gone until they work, and the counts the server
+    sends stand on the filters, with the number of checked products under them. What turns this red: a dead button back in the
+    header; a filter without its count, or a count computed from the shown rows instead of the server's summary.
+  */
+  it("a fejlécben nincs nem működő gomb, a szűrőkön a szerver darabszáma áll", async () => {
     auth.session = session("OWNER", SERVED);
-    api.qualityQueue.mockResolvedValue(page());
+    // the summary differs from the two shown rows: the pills must say the server's numbers
+    api.qualityQueue.mockResolvedValue(
+      page({
+        summary: { ...SUMMARY, all: 40, missing: 17 },
+        checkedProducts: 9,
+      }),
+    );
     render(<JevCatalogQualityPage />);
     await screen.findByRole("table");
     expect(
-      screen.getByRole("button", { name: "Új ellenőrzés indítása" }),
-    ).toBeDisabled();
+      screen.queryByRole("button", { name: /Új ellenőrzés indítása/ }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Export/ })).toBeNull();
+    const filters = screen.getByRole("group", { name: "Szűrés" });
     expect(
-      screen.getByText("Az ellenőrzést egyelőre kézzel, a szerveren indítjuk."),
+      within(filters).getByRole("button", { name: "Összes 40" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Export" })).toBeDisabled();
+    expect(
+      within(filters).getByRole("button", { name: "Hiányzó adat 17" }),
+    ).toBeInTheDocument();
+    expect(
+      within(filters).getByRole("button", { name: "Javaslat 0" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("9 termék ellenőrizve")).toBeInTheDocument();
     expect(screen.queryByText(/%/)).not.toBeInTheDocument();
   });
 
