@@ -33,7 +33,7 @@ const weekLabel = (week: string | null) => {
 
 /** "2026-W45" as a number that orders weeks across years (2026 * 100 + 45); unreadable weeks go last. */
 const weekOrder = (week: string | null) => {
-  const [year, number] = (week ?? "").split("-W").map(Number);
+  const [year = NaN, number = NaN] = (week ?? "").split("-W").map(Number);
   return Number.isFinite(year) && Number.isFinite(number)
     ? year * 100 + number
     : -Infinity;

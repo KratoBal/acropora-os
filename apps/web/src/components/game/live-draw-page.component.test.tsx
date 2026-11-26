@@ -297,8 +297,8 @@ describe("the live draw page", () => {
     expect(marked.map((link) => link.getAttribute("href"))).toEqual([
       "/sorsolas?kind=WEEKLY&kerdes=q46",
     ]);
-    expect(marked[0].className).toContain("live-draw-choice-latest");
-    expect(marked[0].textContent).toContain("legutóbb lezárult");
+    expect(marked[0]!.className).toContain("live-draw-choice-latest");
+    expect(marked[0]!.textContent).toContain("legutóbb lezárult");
     expect(screen.getAllByText("legutóbb lezárult")).toHaveLength(1);
   });
 
