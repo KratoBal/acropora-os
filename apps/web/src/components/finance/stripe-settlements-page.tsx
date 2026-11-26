@@ -26,6 +26,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { PilotBackButton } from "@/components/pilot/pilot-back-link";
 import {
   PilotBadge,
   PilotButton,
@@ -411,14 +412,12 @@ export function StripeSettlementsPage() {
     ];
     return (
       <PilotThemeRoot className="space-y-6">
+        <PilotBackButton onClick={() => setSelected(null)} flush>
+          Elszámolások
+        </PilotBackButton>
         <PilotPageHeader
           title={`Stripe kifizetés · ${formatDate(selected.arrivalDate)}`}
           description={`${selected.stripePayoutId} · ${selected.lineCount} tétel`}
-          actions={
-            <PilotButton variant="secondary" onClick={() => setSelected(null)}>
-              Vissza a listához
-            </PilotButton>
-          }
         />
         <SettlementTabs />
         {alerts}

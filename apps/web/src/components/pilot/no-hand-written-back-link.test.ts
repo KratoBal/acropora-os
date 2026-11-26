@@ -46,10 +46,6 @@ const MEG_ATALLITANDO = [
   "components/content/teaching-source-list-page.tsx",
   "components/content/teaching-source-page.tsx",
   "components/contracts/pilot/pilot-contract-detail-page.tsx",
-  "components/finance/foxpost-settlements-page.tsx",
-  "components/finance/gls-settlements-page.tsx",
-  "components/finance/simplepay-settlements-page.tsx",
-  "components/finance/stripe-settlements-page.tsx",
   "components/knowledge-base/claim-store-page.tsx",
   "components/messages/messages-page.tsx",
   "components/partner-orders/partner-order-detail-page.tsx",
@@ -132,6 +128,10 @@ describe("a visszalépés egy alakja", () => {
       "components/purchasing/price-list-suggestions-page.tsx",
       "components/webshop/webshop-order-detail-page.tsx",
       "components/webshop-orders/webshop-order-detail-page.tsx",
+      "components/finance/foxpost-settlements-page.tsx",
+      "components/finance/gls-settlements-page.tsx",
+      "components/finance/simplepay-settlements-page.tsx",
+      "components/finance/stripe-settlements-page.tsx",
       "components/finance/missing-invoices/missing-invoices-month-page.tsx",
       "components/finance/missing-invoices/missing-invoices-suggestions-page.tsx",
       "components/pos/pilot/pilot-pos-internal-use-page.tsx",
@@ -141,7 +141,7 @@ describe("a visszalépés egy alakja", () => {
     ]) {
       const f = MIND.find((x) => x.ut === ut);
       expect(f, ut).toBeDefined();
-      expect(f!.forras, ut).toContain("<PilotBackLink");
+      expect(f!.forras, ut).toMatch(/<PilotBack(Link|Button)\b/);
       expect(f!.forras, ut).not.toContain("Vissza a listához");
     }
   });

@@ -3,6 +3,7 @@ import type {
   ServiceJobPartnerStatus,
   ServiceJobStatusValue,
 } from "./service-job-management.js";
+import { PARTNER_STATUS_LABELS } from "./service-job-management.js";
 import type { WorksheetVersionStatus } from "./worksheet-management.js";
 
 /**
@@ -301,3 +302,49 @@ export function partnerStatusFromCommon(
         : null,
   };
 }
+
+/**
+ * A PARTNER MUNKALAPJA, A KÖZÖSBŐL RÖVIDÍTVE (kártya 7f23785c; acrobot 62704).
+ *
+ * A partner a hibajegyen a négy partner-szót látja, a munkalapon 2026-11-26-ig
+ * a belső megjelenített állapotot (Új, Folyamatban, Elkészült, Lezárva,
+ * Elutasítva): ugyanaz a munka a jegyen Feldolgozás alatt, a lapján
+ * Folyamatban volt. Mostantól a lap is a közös állapotból rövidít, ugyanazzal
+ * a táblával, mint a jegy. Az elutasított lap Feldolgozás alatt (a javítás
+ * nálunk van), és a `rejected` kimondja, hogy a partner adatlapja és
+ * lista-sora második sorként rajzolja, ahogy a jegyen a Nem teljesült áll.
+ */
+export interface PartnerWorksheetState {
+  status: ServiceJobPartnerStatus;
+  rejected: boolean;
+}
+
+export function partnerWorksheetState(
+  versionStatus: WorksheetVersionStatus,
+  lineCount: number,
+): PartnerWorksheetState {
+  const state = commonWorksheetStatus(versionStatus, lineCount);
+  return {
+    status: PARTNER_FROM_COMMON[state.status],
+    rejected: state.reason === "REJECTED",
+  };
+}
+
+/** Az elutasított lap második sora a partner lapján. */
+export const partnerWorksheetRejectedLabel = "Elutasítva";
+
+/**
+ * A VERZIÓ-ÁLLAPOT FELIRATA A PARTNERNEK, ahol a tételszám nem ismert (fülek,
+ * csempék, a változat-előzmény, a jegy munkalap-kártyája). A piszkozat két
+ * partner-állapotot fed, ezért mindkettőt mondja, ahogy a belső
+ * `worksheetStatusLabel` is; a szavak a négy partner-szó.
+ */
+export const partnerWorksheetVersionLabel: Record<
+  WorksheetVersionStatus,
+  string
+> = {
+  DRAFT: `${PARTNER_STATUS_LABELS.NEW} és ${PARTNER_STATUS_LABELS.IN_PROGRESS.toLowerCase()}`,
+  AWAITING_SIGNATURE: PARTNER_STATUS_LABELS.COMPLETED,
+  SIGNED: PARTNER_STATUS_LABELS.CLOSED,
+  REJECTED: partnerWorksheetRejectedLabel,
+};

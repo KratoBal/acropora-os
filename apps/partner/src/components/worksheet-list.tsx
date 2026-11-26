@@ -6,21 +6,18 @@ import {
   Icon,
   Pagination,
   PilotAvatar,
-  PilotBadge,
   PilotThemeRoot,
-  pilotBadgeVariantForTone,
   pilotInitials,
 } from "@acropora/ui";
 import {
-  worksheetDisplayStatus,
-  worksheetDisplayStatusLabel,
-  worksheetDisplayStatusTone,
-  worksheetStatusLabel,
+  partnerWorksheetVersionLabel,
   type WorksheetListResponse,
 } from "@acropora/types";
 
 import { partnerApi } from "@/lib/api";
 import { PHONE_CELL, PHONE_TITLE_CELL } from "@/lib/phone-table";
+
+import { PartnerWorksheetStatus } from "./partner-worksheet-status";
 
 /**
  * A MUNKALAP-LISTA -- FIGMA 9. KÖR (Partner Portál), a Make-terv
@@ -61,12 +58,16 @@ import { PHONE_CELL, PHONE_TITLE_CELL } from "@/lib/phone-table";
  * döntése (#809), nem partneri szűkítés.
  */
 
+// the partner's words for the version filters, as on the tiles (card 7f23785c, acrobot 62704)
 const TABS = [
   { key: "ALL", label: "Összes" },
-  { key: "DRAFT", label: worksheetStatusLabel.DRAFT },
-  { key: "AWAITING_SIGNATURE", label: worksheetStatusLabel.AWAITING_SIGNATURE },
-  { key: "SIGNED", label: worksheetStatusLabel.SIGNED },
-  { key: "REJECTED", label: "Elutasítva" },
+  { key: "DRAFT", label: partnerWorksheetVersionLabel.DRAFT },
+  {
+    key: "AWAITING_SIGNATURE",
+    label: partnerWorksheetVersionLabel.AWAITING_SIGNATURE,
+  },
+  { key: "SIGNED", label: partnerWorksheetVersionLabel.SIGNED },
+  { key: "REJECTED", label: partnerWorksheetVersionLabel.REJECTED },
 ] as const;
 
 const PAGE_SIZE = 25;
@@ -121,19 +122,19 @@ export function WorksheetList() {
       [
         {
           key: "DRAFT",
-          label: worksheetStatusLabel.DRAFT,
+          label: partnerWorksheetVersionLabel.DRAFT,
           value: counts?.DRAFT ?? null,
           icon: "clipboard",
         },
         {
           key: "AWAITING_SIGNATURE",
-          label: worksheetStatusLabel.AWAITING_SIGNATURE,
+          label: partnerWorksheetVersionLabel.AWAITING_SIGNATURE,
           value: counts?.AWAITING_SIGNATURE ?? null,
           icon: "pencil",
         },
         {
           key: "SIGNED",
-          label: worksheetStatusLabel.SIGNED,
+          label: partnerWorksheetVersionLabel.SIGNED,
           value: counts?.SIGNED ?? null,
           icon: "pencil",
         },
@@ -345,25 +346,10 @@ export function WorksheetList() {
                     data-label="Állapot"
                     className={`px-5 py-3 ${PHONE_CELL}`}
                   >
-                    <PilotBadge
-                      variant={pilotBadgeVariantForTone(
-                        worksheetDisplayStatusTone(
-                          worksheetDisplayStatus(
-                            worksheet.status,
-                            worksheet.lineCount ?? 0,
-                          ),
-                        ),
-                      )}
-                    >
-                      {
-                        worksheetDisplayStatusLabel[
-                          worksheetDisplayStatus(
-                            worksheet.status,
-                            worksheet.lineCount ?? 0,
-                          )
-                        ]
-                      }
-                    </PilotBadge>
+                    <PartnerWorksheetStatus
+                      status={worksheet.status}
+                      lineCount={worksheet.lineCount ?? 0}
+                    />
                   </td>
                   <td
                     data-label="Módosítva"

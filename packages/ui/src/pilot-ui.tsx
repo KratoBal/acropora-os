@@ -391,6 +391,8 @@ export function PilotSegmentedControl({
         <button
           key={opt}
           type="button"
+          // the chosen one is said, not only shown (the switch was silent to a screen reader)
+          aria-pressed={value === opt}
           onClick={() => onChange(opt)}
           className={`cursor-pointer rounded px-3 py-1 text-sm font-medium transition-all duration-100 ${
             value === opt

@@ -26,6 +26,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { PilotBackButton } from "@/components/pilot/pilot-back-link";
 import {
   PilotBadge,
   PilotButton,
@@ -466,27 +467,22 @@ export function GlsSettlementsPage() {
     const open = selected.lineCount - selected.resolvedLineCount;
     return (
       <PilotThemeRoot className="space-y-6">
+        <PilotBackButton onClick={() => setSelected(null)} flush>
+          Elszámolások
+        </PilotBackButton>
         <PilotPageHeader
           title={`GLS utalás · ${formatDate(selected.transferDate)}`}
           description={`${selected.fileName} · heti utánvét-részletező`}
           actions={
-            <>
-              {canManage && selected.status !== "COMPLETED" ? (
-                <PilotButton
-                  variant="secondary"
-                  onClick={() => void reprocess()}
-                  disabled={working}
-                >
-                  Újrafeldolgozás
-                </PilotButton>
-              ) : null}
+            canManage && selected.status !== "COMPLETED" ? (
               <PilotButton
                 variant="secondary"
-                onClick={() => setSelected(null)}
+                onClick={() => void reprocess()}
+                disabled={working}
               >
-                Vissza a listához
+                Újrafeldolgozás
               </PilotButton>
-            </>
+            ) : null
           }
         />
         <SettlementTabs />

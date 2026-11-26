@@ -348,6 +348,9 @@ export {
   commonWorksheetStatus,
   partnerClosedReasonLabel,
   partnerStatusFromCommon,
+  partnerWorksheetRejectedLabel,
+  partnerWorksheetState,
+  partnerWorksheetVersionLabel,
 } from "./common-service-status.js";
 export type {
   CommonJobWorksheetFacts,
@@ -357,6 +360,7 @@ export type {
   CommonServiceTone,
   PartnerClosedReason,
   PartnerCommonState,
+  PartnerWorksheetState,
 } from "./common-service-status.js";
 export {
   worksheetStatusLabel,
