@@ -11,7 +11,6 @@ import {
   PAGE_GUTTER_X,
 } from "@acropora/ui";
 import {
-  commonServiceStateText,
   hasPermission,
   isFinishedServiceJob,
   PERMISSIONS,
@@ -70,6 +69,7 @@ import {
   commonStateOf,
   serviceJobStepLabel,
 } from "../common-status-view";
+import { PilotMoreMenu } from "@/components/pilot/pilot-more-menu";
 import {
   PilotBadge,
   PilotButton,
@@ -266,6 +266,64 @@ function TimelineIcon({ kind }: { kind: ServiceJobTimelineEntry["kind"] }) {
         <path d={path} />
       </svg>
     </span>
+  );
+}
+
+/**
+ * THE NEXT STEP'S BUTTONS (Picasso 3.2): the first allowed step is the one primary button, the rest sit behind "További lépések".
+ * A blocked Lezárás is dimmed wherever it stands, and the sentence under it says what is missing.
+ */
+function NextStepButtons({
+  status,
+  steps,
+  stepping,
+  closeBlocked,
+  onChoose,
+}: {
+  status: ServiceJobStatusValue;
+  steps: readonly ServiceJobStatusValue[];
+  stepping: boolean;
+  closeBlocked: string | null;
+  onChoose: (to: ServiceJobStatusValue) => void;
+}) {
+  const [main, ...rest] = steps;
+  const blockedOf = (to: ServiceJobStatusValue) =>
+    to === "COMPLETED" ? closeBlocked : null;
+  const blocked =
+    (main ? blockedOf(main) : null) ??
+    rest.map(blockedOf).find((reason) => reason) ??
+    null;
+  return (
+    <>
+      {main ? (
+        <PilotButton
+          variant={main === "CANCELLED" ? "danger" : "primary"}
+          size="regular"
+          fullWidth
+          disabled={stepping || blockedOf(main) !== null}
+          aria-describedby={blocked ? "pilot-lezaras-akadaly" : undefined}
+          onClick={() => onChoose(main)}
+        >
+          {serviceJobStepLabel(status, main)}
+        </PilotButton>
+      ) : null}
+      {blocked ? (
+        <p id="pilot-lezaras-akadaly" className="text-xs text-pilot-grey-600">
+          {blocked}
+        </p>
+      ) : null}
+      <PilotMoreMenu
+        label="További lépések"
+        groupLabel="A többi megengedett lépés"
+        items={rest.map((to) => ({
+          key: to,
+          label: serviceJobStepLabel(status, to),
+          danger: to === "CANCELLED",
+          disabled: stepping || blockedOf(to) !== null,
+          onSelect: () => onChoose(to),
+        }))}
+      />
+    </>
   );
 }
 
@@ -774,10 +832,11 @@ export function PilotServiceJobDetailPage({
                   </PilotBadge>
                 )}
               </span>
+              {/* A PARTNER ÁLLAPOTA EGYSZER, KIS BETŰVEL (picasso leltár 3.2): nem második jelvény, hanem a jelvény melletti megjegyzés */}
               {maintenance ? null : (
-                <PilotBadge variant="blue">
-                  Partner: {job.partnerStatusLabel}
-                </PilotBadge>
+                <span className="text-xs text-pilot-grey-500">
+                  A partner ezt látja: {job.partnerStatusLabel}
+                </span>
               )}
               {job.hidden ? (
                 <PilotBadge variant="amber">Rejtett</PilotBadge>
@@ -1303,14 +1362,6 @@ export function PilotServiceJobDetailPage({
               <p className="mt-1 text-xs text-pilot-grey-600">
                 Csak a megengedett átmenetek jelennek meg.
               </p>
-              <p className="mt-3 text-sm text-pilot-grey-900">
-                Jelenleg:{" "}
-                <span className="font-semibold">
-                  {common
-                    ? commonServiceStateText(common)
-                    : serviceJobStatusLabel[job.status]}
-                </span>
-              </p>
               {/*
                 AZ ELKÉSZÜLT MAGÁTÓL ÁLL BE, NINCS RÁ GOMB (picasso 2. pont): a lap kimondja, hogy a munka kész, és mi
                 a hátralévő lépés.
@@ -1354,53 +1405,27 @@ export function PilotServiceJobDetailPage({
                     </div>
                     <div className="flex flex-col gap-2">
                       {/*
-                        EGY ELSŐDLEGES GOMB (picasso képernyő-leltára, 2026-11-25, f0b70dbd): az első megengedett lépés a
-                        menet fő iránya (`service-job-transitions.ts`: előre áll elöl, a várakozás és a meghiúsulás utána),
-                        a többi lépés ugyanúgy megmarad, másodlagos gombként.
+                        EGY ELSŐDLEGES GOMB, A TÖBBI LENYÍLÓBAN (picasso képernyő-leltár 3.2; f0b70dbd): az első megengedett lépés
+                        a menet fő iránya (`service-job-transitions.ts`: előre áll elöl, a várakozás és a meghiúsulás utána), ez az
+                        egyetlen gomb. A többi megengedett lépés ugyanúgy megvan, a "További lépések" mögött (`PilotMoreMenu`), a
+                        meghiúsulás pirossal.
 
                         A FELIRAT IGE (kártya 7f23785c, picasso 3. pont), és a két végállapot (Lezárás, Meghiúsultnak
                         jelölés) megerősítő ablakon át megy, mert belőlük nincs visszaút (`service-job-transitions.ts`). A
                         Lezárás halvány, ahol a közös állapotból biztos, hogy a kapu nem engedi, és alatta a mondat
                         mondja meg, mi hiányzik (`closeBlockedSentence`).
                       */}
-                      {job.allowedSteps.map((to, index) => {
-                        const blocked =
-                          to === "COMPLETED" ? closeBlocked : null;
-                        return (
-                          <div key={to} className="flex flex-col gap-1">
-                            <PilotButton
-                              variant={
-                                to === "CANCELLED"
-                                  ? "danger"
-                                  : index === 0
-                                    ? "primary"
-                                    : "secondary"
-                              }
-                              size="regular"
-                              fullWidth
-                              disabled={stepping || blocked !== null}
-                              aria-describedby={
-                                blocked ? "pilot-lezaras-akadaly" : undefined
-                              }
-                              onClick={() =>
-                                to === "COMPLETED" || to === "CANCELLED"
-                                  ? setConfirmStep(to)
-                                  : void step(to)
-                              }
-                            >
-                              {serviceJobStepLabel(job.status, to)}
-                            </PilotButton>
-                            {blocked ? (
-                              <p
-                                id="pilot-lezaras-akadaly"
-                                className="text-xs text-pilot-grey-600"
-                              >
-                                {blocked}
-                              </p>
-                            ) : null}
-                          </div>
-                        );
-                      })}
+                      <NextStepButtons
+                        status={job.status}
+                        steps={job.allowedSteps}
+                        stepping={stepping}
+                        closeBlocked={closeBlocked}
+                        onChoose={(to) =>
+                          to === "COMPLETED" || to === "CANCELLED"
+                            ? setConfirmStep(to)
+                            : void step(to)
+                        }
+                      />
                     </div>
                   </>
                 ) : (
@@ -1454,13 +1479,6 @@ export function PilotServiceJobDetailPage({
                   value={formatDateTime(job.scheduledAt)}
                 />
               ) : null}
-              {maintenance ? null : (
-                <PilotDataRow
-                  label="A partner ezt látja"
-                  labelWidth="110px"
-                  value={job.partnerStatusLabel}
-                />
-              )}
             </div>
           </PilotCard>
 
