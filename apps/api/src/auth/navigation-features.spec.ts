@@ -81,6 +81,7 @@ describe("the production switches before the 40524dac release (acrobot 34365)", 
     assert.equal(off.has("webshop-price-rules"), false);
     assert.equal(off.has("webshop-customer-texts"), false);
     assert.equal(off.has("webshop-gift-cards"), false);
+    assert.equal(off.has("ai-glossary"), false);
     const on = navigationFeatures(
       {
         MEDUSA_PROJECT_HOMEPAGE_CONTENT: "true",
@@ -91,6 +92,7 @@ describe("the production switches before the 40524dac release (acrobot 34365)", 
         MEDUSA_WEBSHOP_PRICE_RULES: "true",
         MEDUSA_WEBSHOP_CUSTOMER_TEXTS: "true",
         MEDUSA_WEBSHOP_GIFT_CARDS: "true",
+        AI_GLOSSARY_EDITOR: "true",
       },
       "u1",
     );
@@ -101,6 +103,7 @@ describe("the production switches before the 40524dac release (acrobot 34365)", 
     assert.equal(on.has("webshop-price-rules"), true);
     assert.equal(on.has("webshop-customer-texts"), true);
     assert.equal(on.has("webshop-gift-cards"), true);
+    assert.equal(on.has("ai-glossary"), true);
     assert.equal(
       navigationFeatures(
         { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "false" },

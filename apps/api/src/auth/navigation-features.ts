@@ -4,6 +4,7 @@ import { homepageProjectionAllowed } from "../homepage-content/homepage-content.
 import { couponsAllowed } from "../webshop-coupons/webshop-coupons.service.js";
 import { shippingSettingsAllowed } from "../webshop-shipping-settings/webshop-shipping-settings.service.js";
 import { priceRulesAllowed } from "../webshop-price-rules/webshop-price-rules.service.js";
+import { aiGlossaryAllowed } from "../ai-glossary/ai-glossary.service.js";
 import { customerTextsAllowed } from "../webshop-customer-texts/webshop-customer-texts.service.js";
 import { giftCardsAllowed } from "../webshop-gift-cards/webshop-gift-cards.service.js";
 import {
@@ -50,6 +51,9 @@ export const NAVIGATION_ENV = Symbol("NAVIGATION_ENV");
  *   webshop-gift-cards       the web shop's gift cards: issuing, the list, the
  *                            ledger, disabling (`MEDUSA_WEBSHOP_GIFT_CARDS=true`).
  *                            The endpoints follow the same switch (404 off).
+ *   ai-glossary              the AI service's aquarium glossary editor: history,
+ *                            one version, save (`AI_GLOSSARY_EDITOR=true`). The
+ *                            endpoints follow the same switch (404 off).
  */
 export function navigationFeatures(
   env: NodeJS.ProcessEnv,
@@ -66,6 +70,7 @@ export function navigationFeatures(
   if (priceRulesAllowed(env)) features.add("webshop-price-rules");
   if (customerTextsAllowed(env)) features.add("webshop-customer-texts");
   if (giftCardsAllowed(env)) features.add("webshop-gift-cards");
+  if (aiGlossaryAllowed(env)) features.add("ai-glossary");
   return features;
 }
 
