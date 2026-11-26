@@ -171,7 +171,7 @@ function OrderCard({
         type="button"
         aria-label={`${orderNumber(item.displayId)} megnyitása${item.status.stale ? ", elavult" : ""}`}
         onClick={() => onOpen(item)}
-        className={`block w-full rounded-xl border p-4 text-left transition-colors hover:border-pilot-accent-warm ${"border-pilot-grey-200 bg-white"}`}
+        className="block w-full rounded-xl border border-pilot-grey-200 bg-white p-4 text-left transition-colors hover:border-pilot-accent-warm"
       >
         <span className="flex items-start justify-between gap-3">
           <span className="font-semibold text-pilot-grey-900">
