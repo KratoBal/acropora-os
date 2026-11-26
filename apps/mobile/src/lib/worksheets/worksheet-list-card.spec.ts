@@ -53,7 +53,7 @@ describe("a munkalap-lista csempéi", () => {
       [
         ["Új és folyamatban", 7],
         ["Elkészült", 2],
-        ["Lezárva", 31],
+        ["Lezárt", 31],
       ],
     );
   });

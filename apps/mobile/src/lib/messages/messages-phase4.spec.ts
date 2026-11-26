@@ -72,7 +72,20 @@ describe("messages phase 4 on the phone", () => {
   it("status labels by kind; an unknown status is not shown raw", () => {
     assert.equal(
       contextStatusLabel({ ...card, type: "WORKSHEET", status: "COMPLETED" }),
-      "Elkészült",
+      "Elkészült · aláírásra vár",
+    );
+    // a munkalap kártyája a közös szavakkal (kártya 7f23785c, acrobot 62402): Lezárt, nem Lezárva; az elutasított Folyamatban · elutasítva
+    assert.equal(
+      contextStatusLabel({ ...card, type: "WORKSHEET", status: "CLOSED" }),
+      "Lezárt",
+    );
+    assert.equal(
+      contextStatusLabel({ ...card, type: "WORKSHEET", status: "REJECTED" }),
+      "Folyamatban · elutasítva",
+    );
+    assert.equal(
+      contextStatusLabel({ ...card, type: "WORKSHEET", status: "toString" }),
+      null,
     );
     assert.equal(
       contextStatusLabel({ ...card, status: "CANCELLED" }),
@@ -83,7 +96,7 @@ describe("messages phase 4 on the phone", () => {
   });
 
   // a hibajegy kártyáján a KÖZÖS állapot az okkal (kártya 7f23785c, 5. szelet); munkalapon és régi válasznál a mai felirat
-  it("a hibajegy kártyáján a közös állapot az okkal áll, a munkalapén és régi válasznál nem", () => {
+  it("a hibajegy kártyáján a közös állapot az okkal áll, a munkalapén a megjelenített állapotból, régi válasznál a mai felirat", () => {
     const kozos = { commonStatus: "DONE", commonReason: "AWAITING_SIGNATURE" };
     assert.equal(
       contextStatusLabel({ ...card, status: "IN_PROGRESS", ...kozos }),
@@ -96,7 +109,8 @@ describe("messages phase 4 on the phone", () => {
         status: "COMPLETED",
         ...kozos,
       }),
-      "Elkészült",
+      // a munkalap kártyája a megjelenített állapot kulcsából dönt, a hibajegy közös mezőit nem olvassa
+      "Elkészült · aláírásra vár",
     );
     assert.equal(
       contextStatusLabel({ ...card, status: "IN_PROGRESS" }),

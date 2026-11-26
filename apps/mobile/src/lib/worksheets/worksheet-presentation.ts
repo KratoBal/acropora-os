@@ -1,6 +1,7 @@
 // RELATÍV ÚT, NEM `@/`: a teszt-fordító nem ismeri az aliast
 // (`tsconfig.test.json`-ban szándékosan nincs `paths`).
 import type { UserRole } from "../auth/types";
+import { COMMON_STATUS_LABELS } from "../service-jobs/common-status";
 import { jobWords } from "../service-jobs/job-words";
 import type { StatusTone } from "../theme/label-styles";
 import { atadasAllapota, ATADAS_NINCS_ROGZITVE } from "./worksheet-handover";
@@ -108,6 +109,17 @@ export const worksheetStatusLabel: Record<WorksheetStatus, string> = {
   AWAITING_SIGNATURE: "Elkészült",
   SIGNED: "Lezárva",
   REJECTED: "Elutasítva",
+};
+
+/**
+ * A VÁLTOZAT-ÁLLAPOT FELIRATA A TELEFON BELSŐ HELYEIN (kártya 7f23785c, acrobot 62402): szűrő-gombok, csempe, verziótörténet, az aláíró
+ * képernyő mondata. A fenti tábla a csomag szótárának forrásszöveg-egyező másolata (a partnerportál is azt olvassa: „Lezárva"), ezért nem
+ * ez változik, hanem ez az override: az aláírt változat „Lezárt", mint a sor jelvénye (a közös szó). A piszkozat az összevont „Új és
+ * folyamatban", az elutasított szűrő neve marad „Elutasítva" (a változat-állapot szerint szűr; a sor jelvénye „Folyamatban · elutasítva").
+ */
+export const worksheetVersionLabel: Record<WorksheetStatus, string> = {
+  ...worksheetStatusLabel,
+  SIGNED: COMMON_STATUS_LABELS.CLOSED,
 };
 
 /**
@@ -503,8 +515,8 @@ export const WORKSHEET_STATUS_FILTERS: readonly {
     value: "AWAITING_SIGNATURE",
     label: worksheetStatusLabel.AWAITING_SIGNATURE,
   },
-  { value: "SIGNED", label: worksheetStatusLabel.SIGNED },
-  { value: "REJECTED", label: worksheetStatusLabel.REJECTED },
+  { value: "SIGNED", label: worksheetVersionLabel.SIGNED },
+  { value: "REJECTED", label: worksheetVersionLabel.REJECTED },
 ];
 
 /**
@@ -527,7 +539,7 @@ export function worksheetFilterSummary(input: {
   parts.push(input.mineOnly ? "Rád kiosztva" : "Minden munkalap");
   const partner = input.partnerName?.trim();
   if (partner) parts.push(partner);
-  if (input.status) parts.push(worksheetStatusLabel[input.status]);
+  if (input.status) parts.push(worksheetVersionLabel[input.status]);
   const search = input.search?.trim();
   if (search) parts.push(`„${search}" keresésre`);
   return parts.join(" · ");

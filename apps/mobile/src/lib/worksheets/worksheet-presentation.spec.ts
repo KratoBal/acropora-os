@@ -15,6 +15,7 @@ import {
   worksheetDisplayLabel,
   worksheetDisplayStatusLabel,
   worksheetStatusLabel,
+  worksheetVersionLabel,
   worksheetStatusTone,
   worksheetFilterSummary,
   worksheetListStartsMineOnly,
@@ -162,14 +163,10 @@ describe("worksheetDisplayLabel", () => {
   it("the list and the detail screen pass the line count", () => {
     const lista = readFileSync("src/app/worksheets/index.tsx", "utf8");
     const adatlap = readFileSync("src/app/worksheets/[id].tsx", "utf8");
-    assert.match(
-      lista,
-      /worksheetDisplayLabel\(item\.status, item\.lineCount\)/,
-    );
-    assert.match(
-      adatlap,
-      /worksheetDisplayLabel\(\s*current\.status,\s*current\.lines\.length,?\s*\)/,
-    );
+    // a jelvény a közös állapotból áll elő (kártya 7f23785c): a lista a teljes sort adja át (a tételszámmal), az adatlap a saját tételszámát
+    assert.match(lista, /worksheetStateText\(item\)/);
+    assert.match(adatlap, /lineCount:\s*current\.lines\.length/);
+    assert.match(adatlap, /worksheetStateText\(state\)/);
   });
 
   it("without a line count it says the combined name, not 'Új'", () => {
@@ -527,7 +524,7 @@ describe("WORKSHEET_STATUS_FILTERS", () => {
   it("labels them exactly as the rows do", () => {
     for (const filter of WORKSHEET_STATUS_FILTERS)
       if (filter.value)
-        assert.equal(filter.label, worksheetStatusLabel[filter.value]);
+        assert.equal(filter.label, worksheetVersionLabel[filter.value]);
   });
 });
 

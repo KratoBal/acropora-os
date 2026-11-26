@@ -127,10 +127,12 @@ import {
   worksheetDetailRows,
   worksheetLabelOrDraft,
   worksheetLineSummary,
-  worksheetDisplayLabel,
-  worksheetStatusLabel,
-  worksheetStatusTone,
+  worksheetVersionLabel,
 } from "@/lib/worksheets/worksheet-presentation";
+import {
+  worksheetStateText,
+  worksheetStateTone,
+} from "@/lib/worksheets/worksheet-state";
 
 /**
  * MUNKALAP A HELYSZÍNEN.
@@ -937,9 +939,15 @@ export default function WorksheetDetailScreen() {
           </Text>
           {current
             ? (() => {
+                const state = {
+                  status: current.status,
+                  lineCount: current.lines.length,
+                  commonStatus: data?.commonStatus,
+                  commonReason: data?.commonReason,
+                };
                 const tone = statusToneColors(
                   tokens,
-                  worksheetStatusTone(current.status),
+                  worksheetStateTone(state),
                 );
                 return (
                   <View
@@ -949,10 +957,7 @@ export default function WorksheetDetailScreen() {
                     ]}
                   >
                     <Text style={[styles.statusText, { color: tone.text }]}>
-                      {worksheetDisplayLabel(
-                        current.status,
-                        current.lines.length,
-                      )}
+                      {worksheetStateText(state)}
                     </Text>
                   </View>
                 );
@@ -2447,7 +2452,7 @@ export default function WorksheetDetailScreen() {
                         {worksheetLabelOrDraft(version.label)}
                       </Text>
                       <Text style={styles.value}>
-                        {worksheetStatusLabel[version.status]}
+                        {worksheetVersionLabel[version.status]}
                       </Text>
                     </View>
                     {version.changeReason ? (

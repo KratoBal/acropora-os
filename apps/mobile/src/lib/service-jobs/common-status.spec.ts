@@ -56,6 +56,10 @@ describe("commonStateOf és commonStateText", () => {
       { commonStatus: null },
       { commonStatus: "" },
       { commonStatus: "ARCHIVED" },
+      // a prototípus-kulcs sem állapot (`Object.hasOwn`, nem `in`; barracuda, #2981)
+      { commonStatus: "toString" },
+      { commonStatus: "constructor" },
+      { commonStatus: "__proto__" },
     ]) {
       assert.equal(commonStateOf(item), null);
     }
@@ -71,6 +75,10 @@ describe("commonStateOf és commonStateText", () => {
     );
     assert.deepEqual(
       commonStateOf({ commonStatus: "DONE", commonReason: null }),
+      { status: "DONE", reason: null },
+    );
+    assert.deepEqual(
+      commonStateOf({ commonStatus: "DONE", commonReason: "toString" }),
       { status: "DONE", reason: null },
     );
   });

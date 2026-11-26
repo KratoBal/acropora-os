@@ -77,6 +77,13 @@ export interface WorksheetListItem {
    * kuldi, es akkor az osszevont nev latszik (`worksheetDisplayLabel`).
    */
   lineCount?: number;
+  /**
+   * A KÖZÖS ÁLLAPOT ÉS AZ OKA (kártya 7f23785c, acrobot 62402; API #2983): szöveg és elhagyható, mint a hibajegyé (`commonStatus` a
+   * `service-jobs/types.ts`-ben): a régi szerver nem küldi, egy újabb ismeretlen értéket küldhet; mindkettőnél a megjelenített állapot áll
+   * (`worksheetStateText`).
+   */
+  commonStatus?: string | null;
+  commonReason?: string | null;
   version: number;
   versionCount: number;
   grossAmount: string;
@@ -239,6 +246,9 @@ export interface WorksheetAssetLink {
 
 export interface WorksheetDetail {
   id: string;
+  /** A KÖZÖS ÁLLAPOT ÉS AZ OKA, mint a lista-soron (kártya 7f23785c); elhagyható. */
+  commonStatus?: string | null;
+  commonReason?: string | null;
   number: string | null;
   customer: {
     id: string;
