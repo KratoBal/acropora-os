@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { ThumbnailFallback } from "./entity-thumbnail-fallback";
 import { Icon } from "./icon";
 import { PageHeader, type PageHeaderProps } from "./page-header";
+import { sv } from "./service-theme";
 
 /**
  * ACROPORA OS, DIRECTION F: A KÖZÖS ÉPÍTŐELEMEK (Balázs briefje, 2026-09-30,
@@ -559,10 +560,11 @@ export function PilotLinkTabs({
   tabs: ReadonlyArray<{ href: string; label: string; active: boolean }>;
   label: string;
   /**
-   * `pill` (az eredeti, keretes gomb-fül) vagy `underline` (a közös fül-alak: aláhúzott aktív fül, mint a Számlázás és a hibajegy-lista füleinél; Picasso 3.17: a
-   * Tudásbázis nyolc füle a "hetedik fül-alak" volt). Alapból `pill`, tehát egyik meglévő hívó sem változik.
+   * `pill` (az eredeti, keretes gomb-fül), `underline` (aláhúzott aktív fül; Picasso 3.17) vagy `solid`: A LISTÁK EGY FÜL-ALAKJA (Picasso R9,
+   * acrobot 62497), a teli zöld pirula (`sv.pillTab`), mert Balázs 2026-10-01-én az aláhúzáson, 2026-11-02-án a halványzöld fülön nem látta,
+   * melyik fülön áll. Alapból `pill`, tehát a hívó maga választ.
    */
-  variant?: "pill" | "underline";
+  variant?: "pill" | "underline" | "solid";
   renderLink?: (tab: {
     href: string;
     className: string;
@@ -571,27 +573,32 @@ export function PilotLinkTabs({
   }) => ReactNode;
 }) {
   const underline = variant === "underline";
+  const solid = variant === "solid";
   return (
     <nav
       aria-label={label}
       className={
-        underline
-          ? "flex gap-0 overflow-x-auto border-b border-pilot-grey-200"
-          : "flex flex-wrap gap-2"
+        solid
+          ? sv.pillTabs
+          : underline
+            ? "flex gap-0 overflow-x-auto border-b border-pilot-grey-200"
+            : "flex flex-wrap gap-2"
       }
     >
       {tabs.map((tab) => {
-        const className = underline
-          ? `-mb-px whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-pilot-aqua-700 ${
-              tab.active
-                ? "border-pilot-aqua-600 text-pilot-aqua-700"
-                : "border-transparent text-pilot-grey-500 hover:text-pilot-grey-800"
-            }`
-          : `inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg px-3.5 text-sm transition-colors ${
-              tab.active
-                ? "bg-pilot-aqua-50 font-semibold text-pilot-aqua-700 ring-1 ring-pilot-aqua-600"
-                : "bg-white text-pilot-grey-600 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50 hover:text-pilot-grey-900"
-            }`;
+        const className = solid
+          ? `${sv.pillTab} outline-none focus-visible:ring-2 focus-visible:ring-pilot-aqua-700 ${tab.active ? sv.pillTabActive : sv.pillTabIdle}`
+          : underline
+            ? `-mb-px whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-pilot-aqua-700 ${
+                tab.active
+                  ? "border-pilot-aqua-600 text-pilot-aqua-700"
+                  : "border-transparent text-pilot-grey-500 hover:text-pilot-grey-800"
+              }`
+            : `inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg px-3.5 text-sm transition-colors ${
+                tab.active
+                  ? "bg-pilot-aqua-50 font-semibold text-pilot-aqua-700 ring-1 ring-pilot-aqua-600"
+                  : "bg-white text-pilot-grey-600 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50 hover:text-pilot-grey-900"
+              }`;
         const props = {
           href: tab.href,
           className,

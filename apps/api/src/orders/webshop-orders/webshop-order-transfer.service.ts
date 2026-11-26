@@ -17,6 +17,10 @@ import { MedusaAdminHttpError } from "../../integrations/medusa/medusa-admin.cli
 import { budapestDayKey } from "../../dashboard/budapest-day.js";
 import { NotificationsService } from "../../notifications/notifications.service.js";
 import { balanceDueOf } from "./webshop-order-detail.rules.js";
+import {
+  cancelledOrderOf,
+  cancelledOrderRefusal,
+} from "./webshop-order-invoice.rules.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import {
   BANK_TRANSFER_PROVIDER_ID,
@@ -146,7 +150,12 @@ export class WebshopOrderTransferService {
         "A beérkezés napja nem lehet a jövőben.",
       );
 
-    const { order } = await this.orders.source(orderId);
+    const { order, status } = await this.orders.source(orderId);
+    const cancelled = cancelledOrderOf(order, status?.status);
+    if (cancelled)
+      throw new ConflictException(
+        cancelledOrderRefusal(cancelled, "hátralék nem rögzíthető"),
+      );
     const receipt = (await this.repository.transferReceipts([orderId])).get(
       orderId,
     );

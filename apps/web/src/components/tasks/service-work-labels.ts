@@ -15,6 +15,7 @@ import {
   serviceJobStatusTone,
 } from "@/components/service-jobs/service-job-labels";
 import { serviceJobRef } from "@/components/worksheets/service-job-ref";
+import { commonStateOfDisplayStatus } from "@/components/worksheets/worksheet-labels";
 
 /**
  * A FELADATAIM SZERVIZES TÉTELEINEK SZÖVEGEI (kártya 041a3dd5, tervrajz:
@@ -44,8 +45,20 @@ function jobCommonState(item: MyServiceWorkItem): CommonServiceState | null {
     : null;
 }
 
+/**
+ * A MUNKALAP-TÉTEL KÖZÖS ÁLLAPOTA (kártya 7f23785c, acrobot 62402): a válasz a megjelenített állapot kulcsát hozza, a közös szótár ugyanazt a
+ * négy-öt állapotot mondja a hibajegyével azonos szavakkal és színnel („Elkészült · aláírásra vár", „Lezárt").
+ */
+function worksheetCommonState(
+  item: MyServiceWorkItem,
+): CommonServiceState | null {
+  return item.kind === "WORKSHEET"
+    ? commonStateOfDisplayStatus(item.status)
+    : null;
+}
+
 export function serviceWorkStatusLabel(item: MyServiceWorkItem): string {
-  const common = jobCommonState(item);
+  const common = jobCommonState(item) ?? worksheetCommonState(item);
   if (common) return commonServiceStateText(common);
   return item.kind === "SERVICE_JOB"
     ? serviceJobStatusLabel[item.status as ServiceJobStatusValue]
@@ -53,7 +66,7 @@ export function serviceWorkStatusLabel(item: MyServiceWorkItem): string {
 }
 
 export function serviceWorkStatusTone(item: MyServiceWorkItem): ServiceTone {
-  const common = jobCommonState(item);
+  const common = jobCommonState(item) ?? worksheetCommonState(item);
   if (common) return commonServiceStateTone(common);
   return item.kind === "SERVICE_JOB"
     ? serviceJobStatusTone(item.status as ServiceJobStatusValue)

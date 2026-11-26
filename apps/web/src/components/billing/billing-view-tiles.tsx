@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, type KeyboardEvent } from "react";
+import { sv } from "@acropora/ui";
 
 /**
  * A SZÁMLÁZÁS HÁROM NÉZETE (Balázs újraterv-promptja, acrobot 25869): a nézet
@@ -56,11 +57,7 @@ export function BillingViewTiles({
   };
 
   return (
-    <div
-      role="tablist"
-      aria-label="Számlázási nézet"
-      className="flex gap-0 overflow-x-auto border-b border-pilot-grey-200"
-    >
+    <div role="tablist" aria-label="Számlázási nézet" className={sv.pillTabs}>
       {BILLING_VIEWS.map((view, index) => {
         const selected = view === active;
         return (
@@ -76,10 +73,9 @@ export function BillingViewTiles({
             tabIndex={selected ? 0 : -1}
             onClick={() => onSelect(view)}
             onKeyDown={(event) => onKeyDown(event, index)}
-            className={`-mb-px cursor-pointer whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-pilot-aqua-700 ${
-              selected
-                ? "border-pilot-aqua-600 text-pilot-aqua-700"
-                : "border-transparent text-pilot-grey-500 hover:text-pilot-grey-800"
+            // the lists' one tab shape (Picasso R9, acrobot 62497): the solid green pill; the arrow keys stay
+            className={`cursor-pointer ${sv.pillTab} outline-none focus-visible:ring-2 focus-visible:ring-pilot-aqua-700 ${
+              selected ? sv.pillTabActive : sv.pillTabIdle
             }`}
           >
             {TITLES[view]}

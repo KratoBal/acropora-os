@@ -443,24 +443,29 @@ export function PilotAssetListPage() {
       <div
         className={`border-b border-pilot-grey-100 bg-white ${PAGE_GUTTER_X}`}
       >
-        <div className="flex gap-0 overflow-x-auto">
+        {/* the lists' one tab shape (Picasso R9, acrobot 62497): the solid green pill, as real tabs */}
+        <div
+          className="flex flex-wrap gap-1 py-3"
+          role="tablist"
+          aria-label="Eszközök szűrése"
+        >
           {TABS.map((t) => (
             <button
               key={t.key}
               type="button"
+              role="tab"
+              aria-selected={activeStatus === t.key}
               onClick={() => selectStatus(t.key)}
-              className={`flex cursor-pointer items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-all ${
-                activeStatus === t.key
-                  ? "border-pilot-aqua-600 text-pilot-aqua-700"
-                  : "border-transparent text-pilot-grey-500 hover:text-pilot-grey-800"
+              className={`cursor-pointer ${sv.pillTab} ${
+                activeStatus === t.key ? sv.pillTabActive : sv.pillTabIdle
               }`}
             >
               {t.label}
               <span
-                className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                className={`${sv.pillTabCount} ${
                   activeStatus === t.key
-                    ? "bg-pilot-aqua-100 text-pilot-aqua-700"
-                    : "bg-pilot-grey-100 text-pilot-grey-500"
+                    ? sv.pillTabCountActive
+                    : sv.pillTabCountIdle
                 }`}
               >
                 {tabCounts[t.key] ?? "…"}

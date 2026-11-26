@@ -100,6 +100,7 @@ describe(
       } as unknown as SzamlazzCredentialProvider,
       store,
       new BillingDocumentStockRepository(),
+      { of: async () => null } as never,
       client,
       { BILLING_ISSUE_ENABLED: "true" },
     );

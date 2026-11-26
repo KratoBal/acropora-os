@@ -35,6 +35,8 @@ import type { DocumentStore } from "../service-assets/document-store/document-st
 import { budapestDayKey } from "../dashboard/budapest-day.js";
 import {
   proformaPaidOf,
+  advanceRateUncovered,
+  grossByVatRate,
   webshopFinalInvoiceProblem,
   webshopFinalOrder,
   webshopOverbillingProblem,
@@ -51,6 +53,8 @@ import {
   BillingDocumentAdapterError,
   toSzamlazzAgentInput,
 } from "./billing-document-szamlazz.adapter.js";
+import { cancelledOrderRefusal } from "../orders/webshop-orders/webshop-order-invoice.rules.js";
+import { WebshopOrderCancellationService } from "./webshop-order-cancellation.service.js";
 import { BillingDocumentStockRepository } from "./billing-document-stock.repository.js";
 import {
   BillingDocumentsRepository,
@@ -111,6 +115,7 @@ export class BillingDocumentIssueService {
     private readonly credentials: SzamlazzCredentialProvider,
     @Inject(DOCUMENT_STORE) private readonly documentStore: DocumentStore,
     private readonly stock: BillingDocumentStockRepository,
+    private readonly cancellation: WebshopOrderCancellationService,
     @Optional()
     @Inject(BILLING_SZAMLAZZ_CLIENT)
     private readonly client: SzamlazzAgentClient = new HttpSzamlazzAgentClient(),
@@ -336,6 +341,28 @@ export class BillingDocumentIssueService {
         )
       : null;
     if (webshopFinalProblem) throw new ConflictException(webshopFinalProblem);
+    // A LEMONDOTT RENDELÉS VÉGSZÁMLÁJA A SZERKESZTŐBŐL SEM (kártya ba6b8256, barracuda a #2992-n): a lemondás előtt kész vázlat sem megy ki
+    if (finalOrder) {
+      const cancelled = await this.cancellation.of(finalOrder);
+      if (cancelled === "unreadable")
+        throw new ServiceUnavailableException(
+          "A webshop nem olvasható, ezért nem tudjuk, le van-e mondva a rendelés: a végszámla most nem megy ki. Próbáld újra, amikor a webshop elérhető.",
+        );
+      if (cancelled)
+        throw new ConflictException(
+          cancelledOrderRefusal(cancelled, "végszámla nem állítható ki"),
+        );
+    }
+    // AZ ELŐLEG KULCSONKÉNT A VÉGSZÁMLÁN (barracuda N3b): egy előleg utáni rendelés-szerkesztés nem hagyhat negatív sort egy kulcson
+    if (finalOrder && row.referencedInvoice) {
+      const advance = await this.documents.find(row.referencedInvoice.id);
+      const uncovered = advanceRateUncovered(
+        advance ? grossByVatRate(advance.lines, advance.currency) : null,
+        grossByVatRate(row.lines, row.currency),
+        row.currency,
+      );
+      if (uncovered) throw new ConflictException(uncovered);
+    }
 
     // WHAT THE WINDOW SHOWED IS WHAT THE INVOICE CARRIES (card 7ba97e0d): the same summary again, the shown values
     // compared by their digest, the three dates checked by the shared rule and put into the invoice
