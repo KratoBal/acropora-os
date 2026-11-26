@@ -641,6 +641,23 @@ describe("UserEditorPage fülei", () => {
     ).toBe("kezelés");
   });
 
+  it("név nélküli fióknál a cím az e-mail, nem üres", async () => {
+    vi.mocked(usersApi.detail).mockResolvedValue({
+      ...existing("VIEWER"),
+      firstName: "",
+      lastName: "",
+      displayName: "",
+      email: "flotta-smoke@acropora.local",
+    } as never);
+    render(<UserEditorPage userId="u1" />);
+    expect(
+      await screen.findByRole("heading", {
+        level: 1,
+        name: "flotta-smoke@acropora.local",
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("a Munkarend fül csak ott áll, ahol a szakasz megjelenne, és egy új felhasználónál nincs fül", async () => {
     vi.mocked(usersApi.detail).mockResolvedValue(existing("VIEWER") as never);
     const first = render(<UserEditorPage userId="u1" />);
