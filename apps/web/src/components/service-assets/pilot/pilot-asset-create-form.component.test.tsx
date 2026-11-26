@@ -252,3 +252,73 @@ describe("az új eszköz függő mezői", () => {
     ]);
   });
 });
+
+/**
+ * A HELYSZÍN A SZERVIZ PARTNERÉ (#3067): egy kiválasztott helyszín a tulajdonos cseréjekor eddig megmaradt, és a vevő eszközével ment
+ * el (a mező a várakozó alakban nem is látszik). MI PIROSÍT: ha a csere után a létrehozás még viszi a régi helyszínt.
+ */
+describe("tulajdonos-csere után a régi helyszín nem megy el", () => {
+  it("szerviz partner helyszínnel, majd vevő: a létrehozásban nincs departmentId", async () => {
+    api.owners.mockResolvedValue({
+      items: [
+        {
+          type: "SUPPLIER",
+          id: "supplier-1",
+          code: "FANK",
+          displayName: "Fánk Kft.",
+          isActive: true,
+          addresses: [],
+        },
+        {
+          type: "CUSTOMER",
+          id: "customer-1",
+          code: "VEVO",
+          displayName: "Vevő Kft.",
+          isActive: true,
+          addresses: [],
+        },
+      ],
+    });
+    suppliers.units.mockResolvedValue({
+      items: [
+        {
+          id: "dep-biodom",
+          name: "Biodóm",
+          code: "BIO",
+          parentId: null,
+          isActive: true,
+        },
+      ],
+    });
+    render(<PilotAssetCreatePage />);
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("Partner") as HTMLSelectElement).options.length,
+      ).toBe(3),
+    );
+    fireEvent.change(screen.getByLabelText("Partner"), {
+      target: { value: "SUPPLIER:supplier-1" },
+    });
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("Helyszín") as HTMLSelectElement).options.length,
+      ).toBe(2),
+    );
+    fireEvent.change(screen.getByLabelText("Helyszín"), {
+      target: { value: "dep-biodom" },
+    });
+    fireEvent.change(screen.getByLabelText("Partner"), {
+      target: { value: "CUSTOMER:customer-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Eszköz neve"), {
+      target: { value: "Felnyomó szivattyú" },
+    });
+    fireEvent.click(save());
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    expect(api.create.mock.calls[0]?.[1]).toMatchObject({
+      ownerType: "CUSTOMER",
+      ownerId: "customer-1",
+    });
+    expect(api.create.mock.calls[0]?.[1]?.departmentId).toBeUndefined();
+  });
+});
