@@ -58,6 +58,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   // the article images' public address base (2026-10-26): an origin, not a secret
   "ARTICLE_IMAGE_PUBLIC_BASE_URL",
   "ASSET_QR_BASE_URL",
+  // the switch of the AI service's glossary editor (card 7a5ea203, part C): exactly "true" turns it on, a boolean, not a secret
+  "AI_GLOSSARY_EDITOR",
   // the OCR of a scanned asset document (card 126f9b92): exactly "true" turns it on, a boolean, not a secret
   "ASSET_DOCUMENT_OCR",
   "BILLING_ISSUE_ENABLED",
