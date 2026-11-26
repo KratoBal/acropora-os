@@ -791,3 +791,45 @@ describe("AssetDetailPage karbantartás kártya", () => {
     expect(screen.queryByText(/Még nincs karbantartási adat/)).toBeNull();
   });
 });
+
+/**
+ * EGY MENTÉS (Picasso 3.20-a). Eddig az oldalsáv "Helyszíni állapot" kártyája a saját "Állapot mentése" gombjával írta a
+ * státuszt, a következő karbantartást és a belső megjegyzést, a szerkesztő pedig ugyanezt a hármat a többivel. Most csak a
+ * szerkesztő ír; az adatlap olvasva mutatja őket. Ami pirosra fordítja: egy második mentés-gomb vagy státusz-választó az
+ * adatlapon, a szerkesztőre vivő út hiánya, vagy egy elnyelt belső megjegyzés.
+ */
+describe("AssetDetailPage: egy mentés, a szerkesztőben", () => {
+  it("az adatlapon nincs külön állapot-mentés és státusz-választó; a módosítás a szerkesztőre visz", async () => {
+    render(<AssetDetailPage assetId="asset-1" />);
+    await screen.findByRole("heading", { level: 1 });
+    expect(
+      screen.queryByRole("button", { name: /Állapot mentése/ }),
+    ).toBeNull();
+    expect(screen.queryByText("Helyszíni állapot")).toBeNull();
+    expect(screen.queryByText("Eszköz státusza")).toBeNull();
+    expect(screen.queryAllByRole("option", { name: "Aktív" })).toHaveLength(0);
+    const edit = screen.getByRole("link", { name: /Eszköz módosítása/ });
+    expect(edit.getAttribute("href")).toBe(
+      "/szerviz/eszkozok/asset-1/szerkesztes",
+    );
+    expect(api.update).not.toHaveBeenCalled();
+  });
+
+  it("a belső megjegyzés olvasva látszik; üresen megmondja, hol adható meg", async () => {
+    api.detail.mockResolvedValue({ ...asset, notes: "A szűrő\nnegyedévente" });
+    const { unmount } = render(<AssetDetailPage assetId="asset-1" />);
+    expect(await screen.findByText(/A szűrő/)).toBeTruthy();
+    expect(
+      screen.queryByRole("textbox", { name: "Belső megjegyzés" }),
+    ).toBeNull();
+    unmount();
+
+    api.detail.mockResolvedValue({ ...asset, notes: null });
+    render(<AssetDetailPage assetId="asset-1" />);
+    expect(
+      await screen.findByText(
+        "Nincs belső megjegyzés; az Eszköz módosítása lapon adható meg.",
+      ),
+    ).toBeTruthy();
+  });
+});

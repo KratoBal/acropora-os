@@ -1530,3 +1530,35 @@ describe("AssetEditorPage visszalépés", () => {
     expect(back.getAttribute("href")).toBe("/szerviz/eszkozok");
   });
 });
+
+/**
+ * EGY MENTÉS (Picasso 3.20-a): az adatlap oldalsávja már nem ír, tehát a státusz, a következő karbantartás és a belső
+ * megjegyzés csak itt módosítható. Ami pirosra fordítja: ha a szerkesztő mentése bármelyiket nem viszi el, vagy kettéválik.
+ */
+describe("AssetEditorPage: a státusz a többi adattal egy mentésben", () => {
+  it("a státusz és a belső megjegyzés egy frissítésben megy el, a többi mezővel együtt", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+    api.detail.mockResolvedValue(asset);
+    api.update.mockResolvedValue({ ...asset, status: "IN_REPAIR" });
+    render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
+
+    const user = userEvent.setup();
+    await user.selectOptions(
+      await screen.findByLabelText("Eszköz státusza"),
+      "IN_REPAIR",
+    );
+    await user.type(screen.getByLabelText("Belső megjegyzés"), "szűrőcsere");
+    await user.click(
+      screen.getByRole("button", { name: "Módosítások mentése" }),
+    );
+
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    const body = api.update.mock.calls[0]?.[2];
+    expect([body?.status, body?.notes, body?.name]).toEqual([
+      "IN_REPAIR",
+      "szűrőcsere",
+      asset.name,
+    ]);
+  });
+});

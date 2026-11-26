@@ -15,7 +15,6 @@ import {
   type AssetDetail,
   type AssetDocumentType,
   type AssetQrCode,
-  type AssetStatus,
   ASSET_CURRENT_DRAW_UNIT,
   ASSET_POWER_CONSUMPTION_UNIT,
   assetPhaseConnectionLabel,
@@ -42,7 +41,6 @@ import {
   PilotCard,
   PilotCardHeader,
   PilotFormField,
-  PilotInput,
   PilotSelect,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
@@ -79,12 +77,16 @@ import {
  * tulajdonos lehet vevő vagy szállító partner, de nincs KÉT külön mező.
  * Ez a kártya ezért csak EGYSZER mutatja, "Tulajdonos" néven.
  *
- * === "KÖVETKEZŐ KARBANTARTÁS": SZERKESZTHETŐ, NEM CSAK OLVASHATÓ ===
+ * === EGY MENTÉS: AZ ÁLLAPOT IS AZ ADATLAP RÉSZE (Picasso 3.20-a) ===
  *
- * A Figma a "Karbantartás" kártyában olvasható mezőként kéri. A valóságban
- * ez a "Helyszíni állapot" kártya SZERKESZTHETŐ mezője (a mai adatlapon
- * is ott van, nem a műszaki rácsban) -- ott is marad, hogy a szerkesztés
- * ne szakadjon két helyre.
+ * Eddig két mentés volt: az "Eszköz módosítása" szerkesztője, és az oldalsáv
+ * "Helyszíni állapot" kártyája a saját "Állapot mentése" gombjával, ugyanarra
+ * a három mezőre (státusz, következő karbantartás, belső megjegyzés), amit a
+ * szerkesztő is ír. Most ezek CSAK a szerkesztőben módosíthatók, egy mentéssel;
+ * az adatlap olvasva mutatja őket: a státuszt a fejléc jelvénye, a következő
+ * karbantartást a "Karbantartás" kártya, a belső megjegyzést az oldalsáv.
+ * A státusz-váltás eseménye (STATUS_CHANGED) a szerver frissítésében
+ * keletkezik, akármelyik lap hívja, tehát a szerkesztő mentésével is megmarad.
  *
  * === TÖBBSZINTŰ HIERARCHIA, NEM CSAK EGY SZÜLŐ ===
  *
@@ -92,9 +94,6 @@ import {
  * a TELJES felmenő láncot adja (nem csak a közvetlen szülőt) -- ez a
  * képesség megmarad, nem szűkül egyetlen szülőre.
  */
-
-const inputDate = (value?: string) => (value ? value.slice(0, 10) : "");
-const isoDate = (value: string) => (value ? `${value}T00:00:00.000Z` : null);
 
 const documentTypeLabel: Record<AssetDocumentType, string> = {
   INVOICE: "Számla",
@@ -172,9 +171,6 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
 
   const [asset, setAsset] = useState<AssetDetail | null>(null);
   const [qr, setQr] = useState<AssetQrCode | null>(null);
-  const [status, setStatus] = useState<AssetStatus>("ACTIVE");
-  const [nextServiceAt, setNextServiceAt] = useState("");
-  const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingConfirm | null>(null);
@@ -205,9 +201,6 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
         ]);
         setAsset(detail);
         setQr(code);
-        setStatus(detail.status);
-        setNextServiceAt(inputDate(detail.nextServiceAt));
-        setNotes(detail.notes ?? "");
       } catch (cause) {
         if (!(cause instanceof DOMException && cause.name === "AbortError"))
           setError(
@@ -228,29 +221,6 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
     return () => controller.abort();
   }, [load]);
 
-  const save = async () => {
-    if (!asset || busy) return;
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const updated = await assetsApi.update(token, asset.id, {
-        status,
-        nextServiceAt: isoDate(nextServiceAt),
-        notes: notes.trim() || null,
-        expectedUpdatedAt: asset.updatedAt,
-      });
-      setAsset(updated);
-      setNotice("Az eszköz állapota és karbantartási adatai elmentve.");
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "A módosítás nem menthető.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const retire = async () => {
     if (!asset || busy) return;
     setPending(null);
@@ -263,9 +233,8 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
         expectedUpdatedAt: asset.updatedAt,
       });
       setAsset(updated);
-      setStatus("RETIRED");
       setNotice(
-        "Az eszköz kivezetve. Az aktív listákban nem jelenik meg, de megmaradt, és bármikor visszaállítható itt, az állapot mezőben.",
+        "Az eszköz kivezetve. Az aktív listákban nem jelenik meg, de megmaradt, és bármikor visszaállítható az Eszköz módosítása lapon, a Státusz mezőben.",
       );
     } catch (cause) {
       setError(
@@ -646,10 +615,9 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                     }
                   />
                   {/*
-                    A "KÖVETKEZŐ KARBANTARTÁS" NEM ITT SZERKESZTHETŐ -- lásd a
-                    fájl fejlécét: a jobb oldali "Helyszíni állapot" kártya
-                    mezője, hogy a szerkesztés ne szakadjon két helyre. Itt
-                    csak OLVASHATÓ formában jelenik meg, ha van érték.
+                    A "KÖVETKEZŐ KARBANTARTÁS" ITT CSAK OLVASHATÓ -- lásd a
+                    fájl fejlécét: az "Eszköz módosítása" szerkesztőjében
+                    módosítható, a többi adattal egy mentéssel.
                   */}
                   <Field
                     label="Következő karbantartás"
@@ -859,49 +827,20 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                 </div>
               </PilotCard>
 
+              {/* the internal note, read here and edited with the rest of the asset (Picasso 3.20-a); only for who edits, as before */}
               {canManage ? (
                 <PilotCard>
-                  <PilotCardHeader title="Helyszíni állapot" />
-                  <div className="flex flex-col gap-4 p-5">
-                    <PilotFormField label="Eszköz státusza">
-                      <PilotSelect
-                        value={status}
-                        onChange={(value) => setStatus(value as AssetStatus)}
-                      >
-                        {Object.entries(assetStatusLabel).map(
-                          ([value, label]) => (
-                            <option key={value} value={value}>
-                              {label}
-                            </option>
-                          ),
-                        )}
-                      </PilotSelect>
-                    </PilotFormField>
-                    <PilotFormField label="Következő karbantartás">
-                      <PilotInput
-                        type="date"
-                        value={nextServiceAt}
-                        onChange={setNextServiceAt}
-                      />
-                    </PilotFormField>
-                    <PilotFormField label="Belső megjegyzés (csak nekünk látható)">
-                      <textarea
-                        rows={3}
-                        aria-label="Belső megjegyzés"
-                        value={notes}
-                        onChange={(event) => setNotes(event.target.value)}
-                        placeholder="Megjegyzés…"
-                        className="w-full resize-none rounded-md px-3 py-2 text-sm text-pilot-grey-800 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
-                      />
-                    </PilotFormField>
-                    <PilotButton
-                      variant="primary"
-                      disabled={busy}
-                      onClick={() => void save()}
-                    >
-                      {busy ? "Mentés…" : "Állapot mentése"}
-                    </PilotButton>
-                  </div>
+                  <PilotCardHeader title="Belső megjegyzés" />
+                  <p
+                    className={`whitespace-pre-line p-5 text-sm ${
+                      asset.notes
+                        ? "text-pilot-grey-800"
+                        : "text-pilot-grey-500"
+                    }`}
+                  >
+                    {asset.notes ||
+                      "Nincs belső megjegyzés; az Eszköz módosítása lapon adható meg."}
+                  </p>
                 </PilotCard>
               ) : null}
 
