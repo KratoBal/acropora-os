@@ -33,6 +33,8 @@ import { WorksheetAssigneeEditor } from "../worksheet-assignee-editor";
 import { WorksheetDocuments } from "../worksheet-documents";
 import { serviceJobRef } from "../service-job-ref";
 import { WorksheetDelete } from "../worksheet-delete";
+import { handoverNote, worksheetProgressSteps } from "../worksheet-progress";
+import { PilotMoreMenu } from "@/components/pilot/pilot-more-menu";
 import {
   formatDate,
   formatDateTime,
@@ -235,11 +237,14 @@ export const WORKSHEET_VERSION_COLUMNS: PilotTableColumn<WorksheetVersionRow>[] 
  *   requests, the issued sheet with the attachments, and the versions.
  * - RIGHT: Összesítés, Munkalap adatai (now with the assignees' names, as
  *   the design lists them), the assignees' editor, the affected assets,
- *   "Helyszíni lezárás", and the two signature cards.
- * - "HELYSZÍNI LEZÁRÁS" holds the hand-over and the close, which used to sit
- *   in the header. The lines above its buttons are facts, not gates
- *   (decision E7): the close needs a draft and `service.manage`, nothing
- *   else, exactly as the server checks it.
+ *   and the customer's decision card.
+ * - ABOVE BOTH COLUMNS (picasso 3.1, 2026-11-26): the progress bar and the
+ *   "Következő lépés" box with ONE main button, the rest behind Továbbiak.
+ *   The box replaced the design's "Helyszíni lezárás" panel (it stood at the
+ *   bottom of the right column) and holds the hand-over, the close and the
+ *   send for signature. The lines above the close are facts, not gates
+ *   (decision E7): the close needs a draft with lines and `service.manage`,
+ *   exactly as the server checks it.
  * - THE ISSUED SHEET AND THE ATTACHMENTS still move together (one
  *   component, see below); the design's place for files is the left column,
  *   so both are there now.
@@ -262,10 +267,11 @@ export const WORKSHEET_VERSION_COLUMNS: PilotTableColumn<WorksheetVersionRow>[] 
  *
  * === EVERY ACTION STAYS, SOME MOVED ===
  *
- * Rejtés/Visszaállítás (`canHide`), Szerkesztés (`canManage && isDraft`) and
- * Folytatás új munkalapon (`canManage && isSigned`) stay in the header; the
- * hand-over (`canManage`) and Kiállítás és lezárás (`canManage && isDraft`)
- * are in "Helyszíni lezárás"; the conditions are unchanged.
+ * Rejtés/Visszaállítás (`canHide`) and Szerkesztés (`canManage && isDraft`,
+ * secondary since 3.1) stay in the header; the hand-over (`canManage`),
+ * Kiállítás és lezárás (`canManage && isDraft`), the send for signature and
+ * Folytatás új munkalapon (`canManage && isSigned`) are in the "Következő
+ * lépés" box; the conditions are unchanged.
  *
  * === A MEGJEGYZÉS MINDIG LÁTHATÓ (Balázs döntése, 2026-09-25 11:09) ===
  *
@@ -395,7 +401,41 @@ export function PilotWorksheetDetailPage({
   const current = worksheet.currentVersion;
   const isDraft = current.status === "DRAFT";
   const isSigned = current.status === "SIGNED";
+  const isAwaiting = current.status === "AWAITING_SIGNATURE";
   const osszMunkaorak = current.laborHours;
+  const progress = worksheetProgressSteps(
+    current.status,
+    current.lines.length,
+    Boolean(worksheet.handedOverAt),
+  );
+  const handover = handoverNote({
+    handedOver: Boolean(worksheet.handedOverAt),
+    serviceJob: worksheet.serviceJob,
+  });
+  // what the box says the next step is, by the state (the facts under it are facts, not gates: decision E7)
+  const nextStepSentence = isDraft
+    ? "Kiállítás és lezárás: utána következik az aláírás."
+    : isAwaiting
+      ? current.sentForSignatureAt
+        ? `Aláírásra vár. Kiküldve ${formatDateTime(current.sentForSignatureAt)}${
+            current.sentForSignatureToName
+              ? `: ${current.sentForSignatureToName}`
+              : ""
+          }. Ha a levél nem érkezett meg, küldd ki újra: új levél megy, az aláírás állapota nem változik.`
+        : "Aláírásra vár, de még nem küldtük ki. Amíg nem megy ki, az ügyfél a partnerportálon sem tudja aláírni."
+      : isSigned
+        ? (handover?.text ?? "A lap aláírva és átadva.")
+        : "Az ügyfél elutasította ezt a verziót.";
+  const toggleHandover = () =>
+    run(() =>
+      worksheetsApi.setHandedOver(token, worksheet.id, !worksheet.handedOverAt),
+    );
+  const continueOnNewSheet = () =>
+    run(async () => {
+      const created = await worksheetsApi.continueFrom(token, worksheet.id);
+      router.push(`/szerviz/munkalapok/${created.id}/szerkesztes`);
+      return created;
+    });
 
   const fieldRow = (label: string, value: ReactNode) => (
     <PilotDataRow label={label} labelWidth="96px" value={value} />
@@ -409,8 +449,8 @@ export function PilotWorksheetDetailPage({
       {/*
         THE HEADER OF THE SERVICE REDESIGN (Figma 423:662): back, the sheet's
         number, the subject as the title, the display status and where the
-        work is. Hiding and continuing stay here; handing over and closing
-        moved to the "Helyszíni lezárás" panel, where the design puts them.
+        work is. Hiding and editing stay here; the steps (closing, sending,
+        handing over, continuing) are in the "Következő lépés" box below.
       */}
       <div>
         <Link
@@ -475,33 +515,14 @@ export function PilotWorksheetDetailPage({
                   {worksheet.hidden ? "Visszaállítás" : "Elrejtés"}
                 </PilotButton>
               ) : null}
+              {/* a fő gomb a Következő lépés dobozé (picasso 3.1): a szerkesztés itt másodlagos */}
               {canManage && isDraft ? (
                 <Link href={`/szerviz/munkalapok/${worksheet.id}/szerkesztes`}>
-                  <PilotButton variant="primary">
+                  <PilotButton variant="secondary">
                     <Icon name="pencil" size={12} />
                     Szerkesztés
                   </PilotButton>
                 </Link>
-              ) : null}
-              {canManage && isSigned ? (
-                <PilotButton
-                  variant="primary"
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      const created = await worksheetsApi.continueFrom(
-                        token,
-                        worksheet.id,
-                      );
-                      router.push(
-                        `/szerviz/munkalapok/${created.id}/szerkesztes`,
-                      );
-                      return created;
-                    })
-                  }
-                >
-                  Folytatás új munkalapon
-                </PilotButton>
               ) : null}
             </>
           }
@@ -538,6 +559,178 @@ export function PilotWorksheetDetailPage({
         </div>
       ) : null}
 
+      {/*
+        A FOLYAMATSÁV ÉS A KÖVETKEZŐ LÉPÉS (picasso képernyő-leltár 3.1; acrobot 62182, 62184). Felül a lap útja (Folyamatban, Elkészült,
+        Lezárva, Átadva: a jelvény szavai, ugyanabból a forrásból, `worksheet-progress.ts`), alatta a következő lépés EGY fő gombbal, a
+        többi a közös "Továbbiak" menüben (`PilotMoreMenu`), mint a hibajegynél (3.2). A "Helyszíni lezárás" doboz eddig a jobb oszlop
+        legalján állt; a tartalma (a tények, az átadás, a kiállítás) ide került, és aláírásra váró lapon a kiküldés is.
+      */}
+      <ol
+        aria-label="A munkalap útja"
+        className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+      >
+        {progress.map((stepItem, index) => (
+          <li
+            key={stepItem.key}
+            aria-current={stepItem.state === "current" ? "step" : undefined}
+            data-state={stepItem.state}
+            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ring-1 ${
+              stepItem.state === "done"
+                ? "bg-pilot-aqua-50 text-pilot-aqua-700 ring-pilot-aqua-200"
+                : stepItem.state === "current"
+                  ? "bg-white font-semibold text-pilot-grey-900 ring-2 ring-pilot-aqua-500"
+                  : stepItem.state === "rejected"
+                    ? "bg-pilot-red-50 font-semibold text-pilot-red-700 ring-pilot-red-100"
+                    : "bg-white text-pilot-grey-500 ring-pilot-grey-200"
+            }`}
+          >
+            <span
+              aria-hidden="true"
+              className="flex size-5 shrink-0 items-center justify-center rounded-full bg-white text-xs ring-1 ring-current"
+            >
+              {stepItem.state === "done" ? "✓" : index + 1}
+            </span>
+            {stepItem.label}
+          </li>
+        ))}
+      </ol>
+
+      {canManage ? (
+        <section
+          aria-label="Következő lépés"
+          className="rounded-xl bg-pilot-aqua-50 px-5 py-5 ring-1 ring-pilot-aqua-200"
+        >
+          <h2 className="text-base font-semibold text-pilot-grey-900">
+            Következő lépés
+          </h2>
+          <p className="mt-1 text-sm text-pilot-grey-700">{nextStepSentence}</p>
+          {isDraft ? (
+            <ul className="mt-3 space-y-1 text-sm text-pilot-grey-800">
+              <li>
+                Tételek:{" "}
+                {current.lines.length
+                  ? `${current.lines.length} rögzítve`
+                  : "még nincs"}
+              </li>
+              <li>
+                Felelős:{" "}
+                {worksheet.assignees.length ? "megadva" : "nincs kiosztva"}
+              </li>
+              <li>
+                Átadás:{" "}
+                {worksheet.handedOverAt ? "rögzítve" : "még nincs rögzítve"}
+              </li>
+            </ul>
+          ) : null}
+          {isAwaiting ? (
+            <div className="mt-3 max-w-md">
+              <PilotFormField label="Kinek küldjük ki">
+                <PilotSelect
+                  value={sendToUserId}
+                  onChange={setSendToUserId}
+                  aria-label="Kinek küldjük ki"
+                >
+                  <option value="">Válassz aláírót</option>
+                  {signers?.items.map((jelolt) => (
+                    <option key={jelolt.id} value={jelolt.id}>
+                      {jelolt.name}
+                    </option>
+                  ))}
+                </PilotSelect>
+                {signers?.emptyReason ? (
+                  <p className="mt-1 text-xs text-pilot-grey-400">
+                    {signers.emptyReason}
+                  </p>
+                ) : null}
+              </PilotFormField>
+            </div>
+          ) : null}
+          <div className="mt-4 flex flex-wrap items-start gap-2">
+            {isDraft ? (
+              <PilotButton
+                variant="primary"
+                size="regular"
+                disabled={busy || current.lines.length === 0}
+                aria-describedby={
+                  current.lines.length === 0
+                    ? "munkalap-lezaras-akadaly"
+                    : undefined
+                }
+                onClick={() =>
+                  void run(() => worksheetsApi.close(token, worksheet.id))
+                }
+              >
+                Kiállítás és lezárás
+              </PilotButton>
+            ) : null}
+            {isAwaiting ? (
+              <PilotButton
+                variant="primary"
+                size="regular"
+                disabled={busy || sendToUserId === ""}
+                onClick={() =>
+                  void run(() =>
+                    worksheetsApi.sendForSignature(
+                      token,
+                      worksheet.id,
+                      sendToUserId,
+                    ),
+                  )
+                }
+              >
+                {current.sentForSignatureAt
+                  ? "Újraküldöm"
+                  : "Elküldöm aláírásra"}
+              </PilotButton>
+            ) : null}
+            {isSigned && !worksheet.handedOverAt ? (
+              <PilotButton
+                variant="primary"
+                size="regular"
+                disabled={busy}
+                onClick={() => void toggleHandover()}
+              >
+                Átadás rögzítése
+              </PilotButton>
+            ) : null}
+            <PilotMoreMenu
+              items={[
+                ...(isSigned && !worksheet.handedOverAt
+                  ? []
+                  : [
+                      {
+                        key: "handover",
+                        label: worksheet.handedOverAt
+                          ? "Átadás visszavonása"
+                          : "Átadás rögzítése",
+                        disabled: busy,
+                        onSelect: () => void toggleHandover(),
+                      },
+                    ]),
+                ...(isSigned
+                  ? [
+                      {
+                        key: "continue",
+                        label: "Folytatás új munkalapon",
+                        disabled: busy,
+                        onSelect: () => void continueOnNewSheet(),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          </div>
+          {isDraft && current.lines.length === 0 ? (
+            <p
+              id="munkalap-lezaras-akadaly"
+              className="mt-2 text-xs text-pilot-grey-600"
+            >
+              Tétel nélküli munkalap nem zárható le.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_368px]">
         <div className="flex min-w-0 flex-col gap-5">
           <PilotCard>
@@ -568,7 +761,7 @@ export function PilotWorksheetDetailPage({
                   <Link
                     href={`/szerviz/munkalapok/${worksheet.id}/szerkesztes`}
                   >
-                    <PilotButton variant="primary">
+                    <PilotButton variant="secondary">
                       <Icon name="pencil" size={12} />
                       Tételek szerkesztése
                     </PilotButton>
@@ -603,11 +796,15 @@ export function PilotWorksheetDetailPage({
           </PilotCard>
 
           {/* the work log ("Munkanapló" in the design): who wrote what, when */}
-          <WorksheetEntries worksheetId={worksheet.id} canWrite={canManage} />
+          <WorksheetEntries
+            worksheetId={worksheet.id}
+            canWrite={canManage && !isSigned}
+          />
 
+          {/* a lezárt (aláírt) lapon a napló és az anyagigénylés is csak olvasható (picasso 3.1), mint a felelősök és az eszközök */}
           <WorksheetMaterialRequests
             worksheetId={worksheet.id}
-            canWrite={canManage}
+            canWrite={canManage && !isSigned}
           />
 
           {/*
@@ -686,7 +883,7 @@ export function PilotWorksheetDetailPage({
                           ? ` · ${worksheet.handedOverByName}`
                           : ""
                       }`
-                    : "Átadás nincs rögzítve"}
+                    : `Nincs rögzítve. ${handover?.text ?? ""}`}
                 </span>,
               )}
               {fieldRow(
@@ -736,140 +933,6 @@ export function PilotWorksheetDetailPage({
                   worksheetId={worksheet.id}
                   onDeleted={() => router.push("/szerviz/munkalapok")}
                 />
-              </div>
-            </PilotCard>
-          ) : null}
-
-          {/*
-            HELYSZÍNI LEZÁRÁS (Figma 423:662): handing over and closing, kept
-            next to each other. The facts above the buttons are facts, not
-            gates (decision E7): closing needs a draft and the permission,
-            exactly as the server checks, and the hand-over does not block it.
-          */}
-          {canManage ? (
-            <section
-              aria-label="Helyszíni lezárás"
-              className="rounded-xl bg-pilot-aqua-50 px-5 py-5 ring-1 ring-pilot-aqua-200"
-            >
-              <h2 className="text-base font-semibold text-pilot-grey-900">
-                Helyszíni lezárás
-              </h2>
-              <p className="mt-1 text-xs text-pilot-grey-600">
-                {isDraft
-                  ? "A lezárás után következik az aláírás."
-                  : `Ez a lap már ki van állítva (${worksheetStatusLabel[
-                      current.status
-                    ].toLowerCase()}). Kiállítani csak piszkozatot lehet.`}
-              </p>
-              <ul className="mt-3 space-y-1 text-sm text-pilot-grey-800">
-                <li>
-                  Tételek:{" "}
-                  {current.lines.length
-                    ? `${current.lines.length} rögzítve`
-                    : "még nincs"}
-                </li>
-                <li>
-                  Felelős:{" "}
-                  {worksheet.assignees.length ? "megadva" : "nincs kiosztva"}
-                </li>
-                <li>
-                  Átadás:{" "}
-                  {worksheet.handedOverAt ? "rögzítve" : "még nincs rögzítve"}
-                </li>
-              </ul>
-              <div className="mt-4 flex flex-col gap-2">
-                <PilotButton
-                  variant="secondary"
-                  size="regular"
-                  fullWidth
-                  disabled={busy}
-                  onClick={() =>
-                    void run(() =>
-                      worksheetsApi.setHandedOver(
-                        token,
-                        worksheet.id,
-                        !worksheet.handedOverAt,
-                      ),
-                    )
-                  }
-                >
-                  {worksheet.handedOverAt
-                    ? "Átadás visszavonása"
-                    : "Átadás rögzítése"}
-                </PilotButton>
-                {isDraft ? (
-                  <PilotButton
-                    variant="primary"
-                    size="regular"
-                    fullWidth
-                    disabled={busy}
-                    onClick={() =>
-                      void run(() => worksheetsApi.close(token, worksheet.id))
-                    }
-                  >
-                    Kiállítás és lezárás
-                  </PilotButton>
-                ) : null}
-              </div>
-            </section>
-          ) : null}
-          {/* the block stays after the first send: a mail that did not arrive
-              can be sent again (see `worksheet-detail-page.tsx`) */}
-          {canManage && current.status === "AWAITING_SIGNATURE" ? (
-            <PilotCard>
-              <PilotCardHeader
-                title={
-                  current.sentForSignatureAt
-                    ? "Újraküldés aláírásra"
-                    : "Kiküldés aláírásra"
-                }
-              />
-              <div className="flex flex-col gap-3 p-5">
-                <p className="text-xs text-pilot-grey-400">
-                  {current.sentForSignatureAt
-                    ? `Kiküldve ${formatDateTime(current.sentForSignatureAt)}${
-                        current.sentForSignatureToName
-                          ? `: ${current.sentForSignatureToName}`
-                          : ""
-                      }. Ha a levél nem érkezett meg, küldd ki újra: új levél megy, az aláírás állapota nem változik.`
-                    : "A lap ki van állítva, de még nem küldtük ki. Amíg nem megy ki, az ügyfél a partnerportálon sem tudja aláírni."}
-                </p>
-                <PilotFormField label="Kinek küldjük ki">
-                  <PilotSelect
-                    value={sendToUserId}
-                    onChange={setSendToUserId}
-                    aria-label="Kinek küldjük ki"
-                  >
-                    <option value="">Válassz aláírót</option>
-                    {signers?.items.map((jelolt) => (
-                      <option key={jelolt.id} value={jelolt.id}>
-                        {jelolt.name}
-                      </option>
-                    ))}
-                  </PilotSelect>
-                  {signers?.emptyReason ? (
-                    <p className="mt-1 text-xs text-pilot-grey-400">
-                      {signers.emptyReason}
-                    </p>
-                  ) : null}
-                </PilotFormField>
-                <PilotButton
-                  variant="primary"
-                  disabled={busy || sendToUserId === ""}
-                  onClick={() =>
-                    void run(() =>
-                      worksheetsApi.sendForSignature(
-                        token,
-                        worksheet.id,
-                        sendToUserId,
-                      ),
-                    )
-                  }
-                >
-                  {current.sentForSignatureAt
-                    ? "Újraküldöm"
-                    : "Elküldöm aláírásra"}
-                </PilotButton>
               </div>
             </PilotCard>
           ) : null}

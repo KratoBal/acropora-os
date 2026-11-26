@@ -16,7 +16,10 @@ import { describe, expect, it } from "vitest";
  *
  * A terv (`exchange/figma-telefon-make-12/src/MunkalapokScreen.tsx`,
  * `MunkalapDetail`) a "Szerkesztés" gombot PRIMARY (teli teal) színnel és
- * ceruza-ikonnal adja, a régi kód `variant="secondary"`-vel, ikon nélkül.
+ * ceruza-ikonnal adta, a régi kód `variant="secondary"`-vel, ikon nélkül.
+ *
+ * 2026-11-26 ÓTA MINDKETTŐ SECONDARY, a ceruza marad (picasso képernyő-leltár 3.1, acrobot 62182): a lapon EGY fő gomb van, a
+ * Következő lépés dobozé (piszkozatnál a Kiállítás és lezárás). Három teli gomb egy képernyőn nem mond fő irányt.
  */
 
 const FILE = join(
@@ -39,25 +42,27 @@ describe("a munkalap adatlap Szerkesztés gombjai a terv szerinti stílust kapj�
     expect(kod).toMatch(/Tételek szerkesztése/);
   });
 
-  it("a fejléc melletti 'Szerkesztés' gomb primary, ceruza ikonnal", () => {
+  it("a fejléc melletti 'Szerkesztés' gomb secondary, ceruza ikonnal", () => {
     const kod = forras();
     expect(kod).toMatch(
-      /<Link href=\{`\/szerviz\/munkalapok\/\$\{worksheet\.id\}\/szerkesztes`\}>\s*<PilotButton variant="primary">\s*<Icon name="pencil"[^/]*\/>\s*Szerkesztés\s*<\/PilotButton>\s*<\/Link>/,
+      /<Link href=\{`\/szerviz\/munkalapok\/\$\{worksheet\.id\}\/szerkesztes`\}>\s*<PilotButton variant="secondary">\s*<Icon name="pencil"[^/]*\/>\s*Szerkesztés\s*<\/PilotButton>\s*<\/Link>/,
     );
   });
 
-  it("a 'Tételek szerkesztése' gomb is primary, ceruza ikonnal", () => {
+  it("a 'Tételek szerkesztése' gomb is secondary, ceruza ikonnal", () => {
     const kod = forras();
     expect(kod).toMatch(
-      /<PilotButton variant="primary">\s*<Icon name="pencil"[^/]*\/>\s*Tételek szerkesztése\s*<\/PilotButton>/,
+      /<PilotButton variant="secondary">\s*<Icon name="pencil"[^/]*\/>\s*Tételek szerkesztése\s*<\/PilotButton>/,
     );
   });
 
-  it("egyik Szerkesztés gomb sem maradt secondary", () => {
+  it("egyik Szerkesztés gomb sem primary: a lap egyetlen fő gombja a Következő lépés dobozé", () => {
     const kod = forras();
-    expect(kod).not.toMatch(/<PilotButton variant="secondary">\s*Szerkesztés/);
     expect(kod).not.toMatch(
-      /<PilotButton variant="secondary">\s*Tételek szerkesztése/,
+      /<PilotButton variant="primary">\s*(<Icon name="pencil"[^/]*\/>\s*)?Szerkesztés/,
+    );
+    expect(kod).not.toMatch(
+      /<PilotButton variant="primary">\s*(<Icon name="pencil"[^/]*\/>\s*)?Tételek szerkesztése/,
     );
   });
 });
