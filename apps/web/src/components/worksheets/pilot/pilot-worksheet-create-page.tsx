@@ -10,7 +10,6 @@ import {
   PilotFormActions,
   PilotFormCard,
   PilotFormLayout,
-  PILOT_FIELD_HINT_CLASS,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -28,6 +27,7 @@ import { ServiceOfflineNotice } from "@/components/service/service-offline-notic
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { JobAssetPicker } from "@/components/service-jobs/job-asset-picker";
+import { PilotWaitingField } from "@/components/pilot/pilot-waiting-field";
 import { buildSiteOptions } from "@/lib/partners/site-tree";
 import {
   toggleAssignee,
@@ -558,7 +558,12 @@ export function PilotWorksheetCreatePage() {
                   disabled={!customerId}
                   onChange={setDepartmentId}
                 >
-                  <option value="">Válassz helyszínt…</option>
+                  {/* the disabled field says what it waits for (Picasso 3.7) */}
+                  <option value="">
+                    {customerId
+                      ? "Válassz helyszínt…"
+                      : "Előbb válassz partnert"}
+                  </option>
                   {departmentOptions.map((department) => (
                     <option key={department.id} value={department.id}>
                       {department.label}
@@ -684,7 +689,7 @@ export function PilotWorksheetCreatePage() {
                   ? maintenance
                     ? "A karbantartási lapból nyitott munkalap a lap eszközeivel indul; itt levehetők és továbbiak felvehetők."
                     : "A hibajegyből nyitott lap a jegy eszközeivel indul; itt levehetők és továbbiak felvehetők."
-                  : undefined
+                  : "Az eszközök a helyszín részfájából jönnek."
               }
             >
               {departmentId ? (
@@ -694,10 +699,7 @@ export function PilotWorksheetCreatePage() {
                   onChange={setAssetIds}
                 />
               ) : (
-                <p className={PILOT_FIELD_HINT_CLASS}>
-                  Előbb válassz helyszínt: az eszközök a helyszín részfájából
-                  jönnek.
-                </p>
+                <PilotWaitingField waitingFor="Előbb válassz helyszínt" />
               )}
             </PilotField>
           </PilotFormCard>

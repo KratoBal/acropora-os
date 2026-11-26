@@ -452,11 +452,16 @@ describe("ServiceJobEditorPage", () => {
   it("partner nelkul megmondja, hogy elobb partnert kell valasztani", async () => {
     render(<ServiceJobEditorPage />);
 
-    const hint = await screen.findByText(/Előbb válassz partnert/);
-    expect(hint).toBeTruthy();
-    // the same small grey style as every other hint under a field (acrobot 2026-11-25)
-    expect(hint.className).toBe("text-xs text-pilot-grey-400");
-    expect(screen.queryByLabelText(/^Helyszín/)).toBeNull();
+    // Picasso 3.7: the field stays in its place, disabled, saying what it waits for; the why is the field's small grey help
+    const waiting = await screen.findByRole("option", {
+      name: "Előbb válassz partnert",
+    });
+    expect(waiting.closest("select")).toBeDisabled();
+    expect(screen.getByLabelText(/^Helyszín/)).toBeDisabled();
+    expect(
+      screen.getByText("A helyszínek a partner saját fájából jönnek.")
+        .className,
+    ).toBe("text-xs text-pilot-grey-400");
   });
 
   /**

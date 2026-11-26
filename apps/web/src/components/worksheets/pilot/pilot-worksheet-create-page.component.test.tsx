@@ -130,9 +130,18 @@ describe("PilotWorksheetCreatePage partner picker", () => {
   it("the asset hint under Érintett eszközök is the shared small grey hint, not italic", async () => {
     worksheets.selectablePartners.mockResolvedValue({ items: [] });
     render(<PilotWorksheetCreatePage />);
-    const hint = await screen.findByText(/Előbb válassz helyszínt/);
+    // Picasso 3.7: a disabled field saying what it waits for, the why as the small grey help (not italic)
+    const waiting = await screen.findByRole("option", {
+      name: "Előbb válassz helyszínt",
+    });
+    expect(waiting.closest("select")).toBeDisabled();
+    const hint = screen.getByText("Az eszközök a helyszín részfájából jönnek.");
     expect(hint.className).toBe("text-xs text-pilot-grey-400");
     expect(hint.className).not.toContain("italic");
+    // the location select is disabled too, and says what it waits for
+    expect(
+      screen.getByRole("option", { name: "Előbb válassz partnert" }),
+    ).toBeTruthy();
   });
 
   it("offers service partners and leaves the buyers alone", async () => {
