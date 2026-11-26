@@ -26,6 +26,7 @@ import {
   rentalEquipmentPayload,
   type RentalEquipmentForm,
 } from "./rental-equipment-form";
+import { ListSearch, useListSearch } from "./settings-list-search";
 
 /**
  * THE RENTAL EQUIPMENT MASTER (task eszkozberles, S1; Balázs, 2026-11-06): one row per rented-out device, edited here and
@@ -38,6 +39,9 @@ export function RentalEquipmentPage() {
   const token = session?.token ?? "";
 
   const [items, setItems] = useState<RentalEquipment[]>([]);
+  const kereso = useListSearch(items, (item) =>
+    [item.name, item.serialNumber ?? ""].join(" "),
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<RentalEquipmentForm>(
@@ -222,55 +226,78 @@ export function RentalEquipmentPage() {
               Még egyetlen bérelhető eszköz sincs felvéve.
             </p>
           ) : (
-            <ul className="divide-y">
-              {items.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex flex-wrap items-center justify-between gap-4 py-3"
-                >
-                  <div
-                    className={
-                      item.isActive
-                        ? "space-y-1 text-sm text-dusk-800"
-                        : "space-y-1 text-sm text-dusk-400"
-                    }
+            <>
+              {/* the settings lists' search and quiet row actions (Picasso 3.24, #2940's pattern; acrobot 62633) */}
+              {kereso.searchable ? (
+                <ListSearch
+                  query={kereso.query}
+                  onChange={kereso.setQuery}
+                  shown={kereso.shown.length}
+                  total={items.length}
+                />
+              ) : null}
+              {kereso.shown.length === 0 ? (
+                <p className="text-sm text-dusk-500">
+                  Nincs a keresésnek megfelelő eszköz.
+                </p>
+              ) : null}
+              <ul className="divide-y">
+                {kereso.shown.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex flex-wrap items-center justify-between gap-4 py-3"
                   >
-                    <p
+                    <div
                       className={
                         item.isActive
-                          ? "font-medium"
-                          : "font-medium line-through"
+                          ? "space-y-1 text-sm text-dusk-800"
+                          : "space-y-1 text-sm text-dusk-400"
                       }
                     >
-                      {item.name}
-                      {item.serialNumber ? ` · ${item.serialNumber}` : ""}
-                      {item.isActive ? "" : " (kivezetve)"}
-                    </p>
-                    <p>
-                      Napi díj {formatMoney(item.dailyFeeHuf, "HUF")} · Kaució{" "}
-                      {formatMoney(item.depositHuf, "HUF")} · Pótlási érték{" "}
-                      {formatMoney(item.replacementValueHuf, "HUF")}
-                    </p>
-                    {item.accessories ? (
-                      <p className="text-dusk-500">
-                        Tartozékok: {item.accessories}
+                      <p
+                        className={
+                          item.isActive
+                            ? "font-medium"
+                            : "font-medium line-through"
+                        }
+                      >
+                        {item.name}
+                        {item.serialNumber ? ` · ${item.serialNumber}` : ""}
+                        {item.isActive ? "" : " (kivezetve)"}
                       </p>
-                    ) : null}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="secondary" onClick={() => edit(item)}>
-                      Szerkesztés
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      onClick={() => void setActive(item, !item.isActive)}
-                    >
-                      {item.isActive ? "Kivezetés" : "Visszahozás"}
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+                      <p>
+                        Napi díj {formatMoney(item.dailyFeeHuf, "HUF")} · Kaució{" "}
+                        {formatMoney(item.depositHuf, "HUF")} · Pótlási érték{" "}
+                        {formatMoney(item.replacementValueHuf, "HUF")}
+                      </p>
+                      {item.accessories ? (
+                        <p className="text-dusk-500">
+                          Tartozékok: {item.accessories}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Szerkesztés: ${item.name}`}
+                        onClick={() => edit(item)}
+                      >
+                        Szerkesztés
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`${item.isActive ? "Kivezetés" : "Visszahozás"}: ${item.name}`}
+                        onClick={() => void setActive(item, !item.isActive)}
+                      >
+                        {item.isActive ? "Kivezetés" : "Visszahozás"}
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </CardContent>
       </Card>

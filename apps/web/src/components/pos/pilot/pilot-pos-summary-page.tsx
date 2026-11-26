@@ -1,9 +1,12 @@
 "use client";
 
+import {
+  PilotBackLink,
+  backLinkLabel,
+} from "@/components/pilot/pilot-back-link";
 import { formatDayHu } from "@/lib/format/date";
 import {
   Alert,
-  Icon,
   PageHeader,
   Skeleton,
   PilotDateField,
@@ -159,14 +162,9 @@ export function PilotPosSummaryPage() {
   return (
     <PilotThemeRoot bleed className={shell}>
       <div className={`${PAGE_GUTTER_X} pb-5 pt-6`}>
-        <button
-          type="button"
-          onClick={backTo.goBack}
-          className="mb-3 flex items-center gap-1.5 text-[11px] text-pilot-aqua-700 hover:underline"
-        >
-          <Icon name="chevron-left" size={12} />
-          {backTo.fromWithinApp ? "Vissza" : "Vissza a pénztárhoz"}
-        </button>
+        <PilotBackLink href={backTo.href}>
+          {backLinkLabel(backTo, "Pénztár")}
+        </PilotBackLink>
         <PageHeader
           title="Eladások összesítője"
           description="Napi bontás fizetési módonként. Csak a lezárt eladások számítanak, a bruttó végösszeggel."

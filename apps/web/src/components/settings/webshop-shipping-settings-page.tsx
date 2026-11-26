@@ -200,18 +200,27 @@ export function WebshopShippingSettingsPage() {
                 className="flex flex-col gap-1 text-sm text-pilot-grey-700"
               >
                 {label}
-                <PilotInput
-                  type="number"
-                  min={0}
-                  aria-label={label}
-                  value={fees[field]}
-                  onChange={(value) => {
-                    setSaved(null);
-                    setFees((current) =>
-                      current ? { ...current, [field]: value } : current,
-                    );
-                  }}
-                />
+                {/* the unit beside the field, not only in the card title (Picasso 3.25, acrobot 62633): every fee and threshold is forint */}
+                <span className="flex items-center gap-2">
+                  <PilotInput
+                    type="number"
+                    min={0}
+                    aria-label={label}
+                    value={fees[field]}
+                    onChange={(value) => {
+                      setSaved(null);
+                      setFees((current) =>
+                        current ? { ...current, [field]: value } : current,
+                      );
+                    }}
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="text-sm text-pilot-grey-500"
+                  >
+                    Ft
+                  </span>
+                </span>
                 {settings.fees[field] === null ? (
                   <span className="text-xs text-pilot-grey-500">
                     A webshopban nincs beállítva.

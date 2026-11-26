@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  Icon,
   PageHeader,
   PilotButton,
   PilotDataTable,
@@ -14,11 +13,11 @@ import {
   type InvoiceCollectionSuggestion,
   type SupplierRuleRefusalCode,
 } from "@acropora/types";
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { MISSING_INVOICES_PATH } from "@/components/navigation";
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { missingInvoicesApi } from "@/lib/api/missing-invoices";
 import { AssignToIncomingPanel } from "./missing-invoices-assign-incoming";
@@ -307,13 +306,9 @@ export function MissingInvoicesSuggestionsPage() {
 
   return (
     <PilotThemeRoot className="space-y-6">
-      <Link
-        href={MISSING_INVOICES_PATH}
-        className="inline-flex items-center gap-1.5 rounded-md bg-white px-3 py-2 text-sm font-medium text-pilot-grey-800 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50"
-      >
-        <Icon name="chevron-left" size={14} />
-        Vissza a Hiányzó számlákhoz
-      </Link>
+      <PilotBackLink href={MISSING_INVOICES_PATH} flush>
+        Hiányzó számlák
+      </PilotBackLink>
       <PageHeader
         title="Javasolt számlák"
         description="A begyűjtés PDF-jei, amelyeket semmi nem kötött számlához vagy terheléshez, de számlának látszanak. Döntésig nem kerülnek a párosítás jelöltjei közé. Elfogadva jelöltek lesznek, elvetve törlődik a tartalmuk."

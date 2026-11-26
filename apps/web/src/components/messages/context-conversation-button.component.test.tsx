@@ -63,7 +63,7 @@ describe("ContextConversationButton", () => {
   it("opens the object's conversation and goes to it", async () => {
     api.openContext.mockResolvedValue({ id: "c 7" });
     render(<ContextConversationButton kind="service-job" objectId="job1" />);
-    fireEvent.click(screen.getByRole("button", { name: "Beszélgetés" }));
+    fireEvent.click(screen.getByRole("button", { name: "Belső beszélgetés" }));
     await waitFor(() =>
       expect(nav.push).toHaveBeenCalledWith("/uzenetek?c=c%207"),
     );
@@ -73,7 +73,7 @@ describe("ContextConversationButton", () => {
   it("without the Üzenetek right there is no button", () => {
     auth.enabled = false;
     render(<ContextConversationButton kind="worksheet" objectId="ws1" />);
-    expect(screen.queryByRole("button", { name: "Beszélgetés" })).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
   });
 
   it("a refusal is shown in the server's words, and nothing opens", async () => {
@@ -81,7 +81,7 @@ describe("ContextConversationButton", () => {
       new Error("Ehhez nincs jogod: a szervizt nem látod."),
     );
     render(<ContextConversationButton kind="worksheet" objectId="ws1" />);
-    fireEvent.click(screen.getByRole("button", { name: "Beszélgetés" }));
+    fireEvent.click(screen.getByRole("button", { name: "Belső beszélgetés" }));
     expect((await screen.findByRole("alert")).textContent).toBe(
       "Ehhez nincs jogod: a szervizt nem látod.",
     );

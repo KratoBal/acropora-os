@@ -283,6 +283,12 @@ describe("MissingInvoicesPage", () => {
 });
 
 describe("MissingInvoicesMonthPage", () => {
+  it("steps back to the Hiányzó számlák list with the shared arrow link", async () => {
+    render(<MissingInvoicesMonthPage month="2026-08" />);
+    const back = await screen.findByRole("link", { name: "Hiányzó számlák" });
+    expect(back).toHaveAttribute("href", "/penzugy/hianyzo-szamlak");
+  });
+
   it("asks with the URL's tab, filters and page; a tab change goes to the URL and back to page one", async () => {
     urlNavigation.reset(
       "/penzugy/hianyzo-szamlak/2026-08",

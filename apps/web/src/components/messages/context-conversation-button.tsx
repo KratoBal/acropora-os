@@ -10,7 +10,7 @@ import { messagesApi } from "@/lib/api/messages";
 import { useMessagesEnabled } from "./message-stream";
 
 /**
- * „BESZÉLGETÉS” A MUNKALAPON ÉS A HIBAJEGYEN (Üzenetek 4. fázis, terv 2.4):
+ * „BELSŐ BESZÉLGETÉS” A MUNKALAPON ÉS A HIBAJEGYEN (Üzenetek 4. fázis, terv 2.4):
  * a tárgy élő beszélgetését nyitja, vagy egy újat indít (a szerver dönti el,
  * és a kérdezőt felveszi). Akinek nincs Üzenetek joga, annak nem jelenik meg.
  */
@@ -61,7 +61,8 @@ export function ContextConversationButton({
         disabled={busy}
         onClick={() => void open()}
       >
-        {partner ? "Beszélgetés a partnerrel" : "Beszélgetés"}
+        {/* "Belső": next to the partner's button the plain word did not say which one the partner sees (acrobot 62689) */}
+        {partner ? "Beszélgetés a partnerrel" : "Belső beszélgetés"}
       </PilotButton>
       {error ? (
         <span role="alert" className="text-xs text-pilot-red-700">
