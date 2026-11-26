@@ -49,6 +49,7 @@ import {
 } from "./billing-document-storno";
 import { BillingDocumentLineEditor } from "./billing-document-line-editor";
 import { BillingDocumentSummary } from "./billing-document-summary";
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import { BILLING_LIST_PATH } from "./billing-document-table";
 import { BillingDraftDelete, deleteOffered } from "./billing-draft-delete";
 import { BillingDocumentTypeSelector } from "./billing-document-type-selector";
@@ -695,6 +696,9 @@ export function BillingDocumentEditor({
 
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
+      <PilotBackLink href={BILLING_LIST_PATH} flush>
+        Számlák
+      </PilotBackLink>
       <PilotPageHeader
         title={capabilities.newTitle}
         description={`${format === "ELECTRONIC" && state.documentType === "INVOICE" ? "E-számla" : capabilities.label} kiállítása Számlázz.hu-n keresztül.`}

@@ -16,6 +16,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { KNOWLEDGE_STORE_PATH } from "@/components/navigation";
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import {
   knowledgeBaseApi,
@@ -328,12 +329,9 @@ export function ClaimDetailPage({ claimId }: { claimId: string }) {
   if (!canView) return <NoPermission />;
   return (
     <Shell title={data?.title ?? "Állítás"}>
-      <Link
-        href={KNOWLEDGE_STORE_PATH}
-        className="text-sm font-medium text-pilot-grey-700 hover:underline"
-      >
-        ← Vissza az állítás-tárba
-      </Link>
+      <PilotBackLink href={KNOWLEDGE_STORE_PATH} flush>
+        Állítás-tár
+      </PilotBackLink>
       {error ? (
         <LoadError what="Az állítás" error={error} retry={reload} />
       ) : data === null ? (

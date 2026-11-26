@@ -1,3 +1,4 @@
+import { PILOT_BACK_LINK_FLUSH_CLASSES } from "@/components/pilot/pilot-back-link";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { Session, UserRole } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -220,6 +221,16 @@ describe("Állítás-tár", () => {
 });
 
 describe("Állítás részletei", () => {
+  it("steps back to the claim store with the shared arrow link", async () => {
+    render(<ClaimDetailPage claimId="c1" />);
+    // az oldal más helyen is hivatkozik az állítás-tárra: a közös nyíl a közös osztályairól ismerszik meg
+    await screen.findByRole("heading", { level: 1 });
+    const back = screen
+      .getAllByRole("link", { name: "Állítás-tár" })
+      .find((link) => link.className === PILOT_BACK_LINK_FLUSH_CLASSES);
+    expect(back?.getAttribute("href")).toBe("/tudasbazis/allitasok");
+  });
+
   it("a bizonyíték a szó szerinti kivonattal, a forrás jellemzőivel és az alkalmazhatósággal", async () => {
     render(<ClaimDetailPage claimId="c1" />);
     expect(
