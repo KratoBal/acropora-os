@@ -4,8 +4,12 @@ import type {
   ServiceJobListResponse,
   Session,
 } from "@acropora/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  savotMond,
+  setOnLine,
+} from "@/components/service/service-offline-notice.testing";
 import { urlNavigation } from "@/test/url-navigation";
 
 import {
@@ -255,5 +259,29 @@ describe("a karbantartás-lista a Pilot lista-mintán", () => {
       "Folyamatban",
       "Lezártminden munkalap aláírva",
     ]);
+  });
+});
+
+/*
+  KAPCSOLAT NÉLKÜL A SÁV A LAP ÁLLAPOTÁRÓL BESZÉL (a régi karbantartás-lapról átvéve, 2026-11-26): betöltött lista mellett a frissítésről,
+  üres képernyőn arról, hogy ezért nincs adat. Két állítás, mert egy rögzült `loaded` vagy `empty` csak az egyiken pirosodik.
+*/
+describe("a karbantartás-lista kapcsolat nélkül", () => {
+  afterEach(() => setOnLine(true));
+
+  it("betöltött lista mellett a frissítésről beszél", async () => {
+    setOnLine(false);
+    urlNavigation.reset("/szerviz/karbantartas");
+    render(<PilotMaintenanceListPage />);
+    await screen.findByText("Karbantartás 1");
+    expect(await savotMond("loaded")).toBeTruthy();
+  });
+
+  it("üres képernyőn azt mondja, hogy ezért nincs adat", async () => {
+    setOnLine(false);
+    api.list.mockReturnValue(new Promise(() => {}));
+    urlNavigation.reset("/szerviz/karbantartas");
+    render(<PilotMaintenanceListPage />);
+    expect(await savotMond("empty")).toBeTruthy();
   });
 });

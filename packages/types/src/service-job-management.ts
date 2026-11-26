@@ -850,7 +850,7 @@ export function partnerStatusLabel(status: ServiceJobStatusValue): string {
  * A NEGY LATSZO ALLAPOT SZINE, A PARTNER-PORTAL JELVENYENEK.
  *
  * UJ, 2026-09-24 (a hibajegy-lista es -adatlap arculati parositasa a
- * `service-job-list-page.tsx` mintaja szerint). A visszateresi ertek SZO
+ * regi `service-job-list-page.tsx` mintaja szerint, 2026-11-26 ota torolve). A visszateresi ertek SZO
  * SZERINT ugyanaz a hat-erteku unio, mint a `@acropora/ui`
  * `ServiceTone`-ja -- a tipust itt NEM importaljuk onnan, mert az egy React-
  * komponens-csomag, ez a fajl pedig keret- es UI-fuggetlen marad (lasd a

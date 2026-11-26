@@ -36,7 +36,7 @@ vi.mock("next/font/local", () => ({
  *
  * TÉVES FELTEVÉS ÁLLT A LAP FEJLÉCÉBEN: hogy a `/szerviz/hibajegyek/[id]`
  * útvonal csak REPAIR jegyet szolgál ki. NEM IGAZ -- a karbantartás-lista
- * (`service-job-list-page.tsx`, `kind="MAINTENANCE"`) minden sorát erre az
+ * (akkor a régi közös lista, `kind="MAINTENANCE"`, 2026-11-26 óta törölve) minden sorát erre az
  * útvonalra viszi, mert a `/szerviz/karbantartas/` alatt nincs saját
  * `[id]/page.tsx`. A mai (nem-pilot) lap ezért `job.kind === "MAINTENANCE"`
  * esetén megjeleníti a `CompletionCertificatePanel`-t és a
