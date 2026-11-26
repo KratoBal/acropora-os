@@ -49,4 +49,43 @@ describe("az akvárium-lista oszlopai", () => {
     expect(by("Liter").nowrap).toBe(true);
     expect(by("Utolsó vízmérés").nowrap).toBe(true);
   });
+
+  // Picasso 3.28: on a phone the card carried seven key-value rows even when the value was "—": a card of 365 px for 15 aquariums
+  it("telefonon a hiányzó érték sora kimarad a kártyáról, a meglévő marad", () => {
+    const by = (header: string) =>
+      AQUARIUM_COLUMNS.find((c) => c.header === header)!;
+    const empty = {
+      customerName: null,
+      waterType: null,
+      systemVolumeLiters: null,
+      equipmentCount: 0,
+      maintainers: [],
+      lastMeasuredAt: null,
+    } as never;
+    const full = {
+      customerName: "Fővárosi Állatkert",
+      waterType: "SALTWATER",
+      systemVolumeLiters: 300,
+      equipmentCount: 2,
+      maintainers: [{ userId: "u1", displayName: "Teszt Elek" }],
+      lastMeasuredAt: "2026-11-19T10:00:00.000Z",
+    } as never;
+    for (const header of [
+      "Ügyfél",
+      "Víz",
+      "Liter",
+      "Berendezések",
+      "Karbantartók",
+      "Utolsó vízmérés",
+    ]) {
+      const hide = by(header).phoneHideWhen;
+      expect(hide, header).toBeTypeOf("function");
+      expect(hide!(empty), `${header} empty`).toBe(true);
+      expect(hide!(full), `${header} full`).toBe(false);
+    }
+    // the card's title, the ownership badge and the type always show
+    for (const header of ["Név", "Tulajdon", "Típus"]) {
+      expect(by(header).phoneHideWhen, header).toBeUndefined();
+    }
+  });
 });

@@ -137,6 +137,7 @@ export const AQUARIUM_COLUMNS: PilotTableColumn<AquariumRow>[] = [
     sortable: true,
     header: "Ügyfél",
     width: "150px",
+    phoneHideWhen: (item) => !item.customerName,
     cell: (item) => (
       <span className="text-pilot-grey-500">{item.customerName ?? "—"}</span>
     ),
@@ -155,6 +156,7 @@ export const AQUARIUM_COLUMNS: PilotTableColumn<AquariumRow>[] = [
     id: "water",
     header: "Víz",
     width: "100px",
+    phoneHideWhen: (item) => !item.waterType,
     cell: (item) =>
       item.waterType ? (
         <span className="text-pilot-grey-600">
@@ -169,6 +171,7 @@ export const AQUARIUM_COLUMNS: PilotTableColumn<AquariumRow>[] = [
     sortable: true,
     header: "Liter",
     width: "110px",
+    phoneHideWhen: (item) => item.systemVolumeLiters == null,
     align: "right",
     nowrap: true,
     cell: (item) => (
@@ -183,6 +186,7 @@ export const AQUARIUM_COLUMNS: PilotTableColumn<AquariumRow>[] = [
     id: "equipment",
     header: "Berendezések",
     width: "120px",
+    phoneHideWhen: (item) => item.equipmentCount === 0,
     cell: (item) => (
       <span className="text-pilot-grey-500">{item.equipmentCount}</span>
     ),
@@ -191,6 +195,7 @@ export const AQUARIUM_COLUMNS: PilotTableColumn<AquariumRow>[] = [
     id: "maintainers",
     header: "Karbantartók",
     width: "140px",
+    phoneHideWhen: (item) => item.maintainers.length === 0,
     cell: (item) => (
       <div className="flex -space-x-1.5">
         {item.maintainers.map((maintainer) => (
@@ -208,6 +213,7 @@ export const AQUARIUM_COLUMNS: PilotTableColumn<AquariumRow>[] = [
     id: "lastMeasured",
     header: "Utolsó vízmérés",
     width: "170px",
+    phoneHideWhen: (item) => !item.lastMeasuredAt,
     nowrap: true,
     cell: (item) => (
       <span className="text-pilot-grey-500">
