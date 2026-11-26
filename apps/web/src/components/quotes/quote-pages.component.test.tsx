@@ -1744,6 +1744,17 @@ describe("Ajánlat szerkesztő (569:171)", () => {
     expect(alert.textContent).toContain("Új verzió gomb");
   });
 
+  it("a tanács a 409-hez kötött: ugyanaz a szöveg más állapotkóddal nem kap tanácsot", async () => {
+    const alert = await saveWith(
+      new ApiError(
+        "Publikált verzió nem módosítható; új verziót kell nyitni.",
+        500,
+      ),
+    );
+    expect(alert.textContent).toContain("Publikált verzió nem módosítható");
+    expect(alert.textContent).not.toContain("Új verzió gomb");
+  });
+
   it("lezárt ajánlat 409-ére megmondja, hol látja az állapotot", async () => {
     const alert = await saveWith(
       new ApiError("Lezárt ajánlat nem szerkeszthető.", 409),
