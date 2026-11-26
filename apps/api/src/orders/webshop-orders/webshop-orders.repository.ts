@@ -697,7 +697,6 @@ export class WebshopOrdersRepository {
     return rows.map((row) => row.userId);
   }
 
-  /** A díjbekérő bruttó összege és devizája (a kézi rögzítés ezt írja be). */
   /** Whether the order's recorded transfer paid an advance proforma (the document's own mark, `WEBSHOP_ADVANCE_TAG`). */
   async receiptProformaIsAdvance(orderId: string): Promise<boolean> {
     const receipt = await prisma.webshopTransferReceipt.findUnique({
@@ -740,6 +739,7 @@ export class WebshopOrdersRepository {
     return true;
   }
 
+  /** A díjbekérő bruttó összege és devizája (a kézi rögzítés ezt írja be). */
   async proformaAmount(
     proformaId: string,
   ): Promise<{ amount: Prisma.Decimal; currency: string } | null> {
