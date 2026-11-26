@@ -145,16 +145,47 @@ describe("a munkalap munkanaplója a weben", () => {
   it("az ÜRES lista MÁST mond annak, aki írhat, és annak, aki nem", async () => {
     /*
       Egy "a Bejegyzes gombbal irhatod le" mondat ott, ahol nincs gomb,
-      ugy nez ki, mint hiba a programban.
+      ugy nez ki, mint hiba a programban. Az ures, nem szerkesztheto kartya
+      ARRA IS EGY SOR (picasso R6, acrobot 62415): kartya, fejlec es doboz
+      nelkul, a gombra utalo mondat nelkul.
 
-      MI PIROSIT: kozos szoveg a ket agra.
+      MI PIROSIT: kozos szoveg a ket agra; ha a nem szerkesztheto lapon a
+      kartya (fejlec) marad; ha a sorban a gombra utalo mondat all; ha a
+      szerkesztheto lapon eltunik a kartya vagy a gomb.
     */
     api.entries.mockResolvedValue({ items: [] });
     const { unmount } = render(<WorksheetEntries worksheetId="w-1" canWrite />);
-    await waitFor(() => screen.getByText(/A Bejegyzés gombbal/));
+    await waitFor(() => screen.getByText(/a Bejegyzés gombbal/));
+    // szerkeszthető lapon a kártya marad, a gombbal együtt
+    expect(screen.getByText("Bejegyzések (0)")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Bejegyzés" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("entries-empty-line")).toBeNull();
     unmount();
     render(<WorksheetEntries worksheetId="w-1" canWrite={false} />);
-    await waitFor(() => screen.getByText(/a lapon dolgozó kollégák írják/));
+    const line = await screen.findByTestId("entries-empty-line");
+    expect(line.textContent).toBe(
+      "Bejegyzések (0): ezen a lapon még nincs bejegyzés.",
+    );
+    // egy sor: nincs kártya-fejléc, nincs gomb, nincs a gombra utaló mondat
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(document.body.textContent).not.toContain("Bejegyzés gombbal");
+    expect(document.querySelectorAll("p")).toHaveLength(1);
+  });
+
+  it("a nem szerkeszthető lapon, ha vannak bejegyzések, a kártya áll; hibánál is a kártya áll (a hiba nem nyelődik el)", async () => {
+    api.entries.mockResolvedValue({ items: [entry({})] });
+    const { unmount } = render(
+      <WorksheetEntries worksheetId="w-1" canWrite={false} />,
+    );
+    await waitFor(() => screen.getByText("Bejegyzések (1)"));
+    expect(screen.queryByTestId("entries-empty-line")).toBeNull();
+    unmount();
+    api.entries.mockRejectedValue(new Error("A napló nem tölthető be."));
+    render(<WorksheetEntries worksheetId="w-1" canWrite={false} />);
+    await waitFor(() => screen.getByText("A napló nem tölthető be."));
+    expect(screen.queryByTestId("entries-empty-line")).toBeNull();
   });
   /**
    * A TERMELESI MUNKAMENET ALAKJA: NINCS KLIENS OLDALON OLVASHATO TOKEN.
