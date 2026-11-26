@@ -181,7 +181,10 @@ function OrderCard({
         </span>
         <span className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
           <span className="min-w-0">
-            <span className="block truncate font-medium text-pilot-grey-900">
+            <span
+              title={item.customer.name ?? item.customer.email}
+              className="line-clamp-2 break-words font-medium text-pilot-grey-900"
+            >
               {item.customer.name ?? item.customer.email}
             </span>
             <CustomerMarkers item={item} />

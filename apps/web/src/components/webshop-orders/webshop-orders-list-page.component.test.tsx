@@ -550,6 +550,19 @@ describe("WebshopOrdersListPage", () => {
     expect(api.list).not.toHaveBeenCalled();
   });
 
+  it("a card shows a long customer name on two lines with the full text as a tooltip, not cut to one line (Picasso 3.11)", async () => {
+    viewport(false);
+    const name = "Átállítás Mérés Kereskedelmi és Szolgáltató Betéti Társaság";
+    api.list.mockResolvedValue(
+      response([order({ customer: { ...order().customer, name } })]),
+    );
+    render(createElement(WebshopOrdersListPage));
+    const cards = await screen.findByRole("list", { name: "Rendelések" });
+    const nameEl = within(cards).getByTitle(name);
+    expect(nameEl.className).toContain("line-clamp-2");
+    expect(nameEl.className).not.toContain("truncate");
+  });
+
   it("on a tablet the orders are cards, and a card opens its order (Figma 493:232)", async () => {
     viewport(false);
     api.list.mockResolvedValue(
