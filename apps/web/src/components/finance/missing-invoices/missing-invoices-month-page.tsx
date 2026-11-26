@@ -11,12 +11,12 @@ import {
   type MissingInvoiceSortDirection,
   type MissingInvoiceSortField,
 } from "@acropora/types";
-import { ConfirmDialog, Icon } from "@acropora/ui";
-import Link from "next/link";
+import { ConfirmDialog } from "@acropora/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { MISSING_INVOICES_PATH } from "@/components/navigation";
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import {
@@ -507,13 +507,9 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
 
   return (
     <PilotThemeRoot className="space-y-6">
-      <Link
-        href={MISSING_INVOICES_PATH}
-        className="inline-flex items-center gap-1.5 rounded-md bg-white px-3 py-2 text-sm font-medium text-pilot-grey-800 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50"
-      >
-        <Icon name="chevron-left" size={14} />
-        Vissza a hónapokhoz
-      </Link>
+      <PilotBackLink href={MISSING_INVOICES_PATH} flush>
+        Hiányzó számlák
+      </PilotBackLink>
       {notice ? (
         <p role="alert" className="text-sm text-pilot-red-700">
           {notice}
