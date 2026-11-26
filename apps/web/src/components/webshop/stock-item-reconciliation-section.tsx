@@ -1,6 +1,13 @@
 "use client";
 
-import { Alert, Card, CardContent, CardHeader, Skeleton } from "@acropora/ui";
+import {
+  Alert,
+  Card,
+  CardContent,
+  CardHeader,
+  Pagination,
+  Skeleton,
+} from "@acropora/ui";
 import type {
   StockItemReconciliationPage,
   StockItemReconciliationSummary,
@@ -41,6 +48,7 @@ export function StockItemReconciliationSection() {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pageNumber, setPageNumber] = useState(1);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -49,7 +57,7 @@ export function StockItemReconciliationSection() {
     Promise.all([
       stockItemReconciliationApi.page(
         token,
-        { pageSize: 25 },
+        { page: pageNumber, pageSize: 25 },
         controller.signal,
       ),
       stockItemReconciliationApi.summary(token, controller.signal),
@@ -71,7 +79,7 @@ export function StockItemReconciliationSection() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [token]);
+  }, [token, pageNumber]);
 
   return (
     <Card>
@@ -161,10 +169,19 @@ export function StockItemReconciliationSection() {
               </tbody>
             </table>
             {page.totalPages > 1 ? (
-              <p className="px-5 py-3 text-xs text-dusk-500">
-                Az első {page.items.length} sor látszik a {page.totalItems}-ből.
-                A lapozás és a javítás a következő kör.
-              </p>
+              <div className="flex flex-col gap-2 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-dusk-500">
+                  {page.page}. oldal, {page.items.length} sor a{" "}
+                  {page.totalItems.toLocaleString("hu-HU")}-ből.
+                </p>
+                <Pagination
+                  variant="directionF"
+                  position="bottom"
+                  page={page.page}
+                  totalPages={page.totalPages}
+                  onPageChange={setPageNumber}
+                />
+              </div>
             ) : null}
           </div>
         ) : null}

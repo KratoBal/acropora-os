@@ -98,11 +98,25 @@ export function ManufacturerClaimQueuePage() {
       {!claims ? (
         <p className="text-sm text-pilot-grey-500">Betöltés…</p>
       ) : claims.length === 0 ? (
-        <p className="text-sm text-pilot-grey-500">
-          {onlyWaiting
-            ? "Nincs ellenőrzésre váró állítás."
-            : "Még nincs gyártói állítás."}
-        </p>
+        <div className="space-y-2 text-sm text-pilot-grey-500">
+          {onlyWaiting ? (
+            <>
+              <p>
+                Nincs ellenőrzésre váró állítás. A lista a „Csak az ellenőrzésre
+                várók” szűrő miatt üres: más állapotú állítások lehetnek.
+              </p>
+              <button
+                type="button"
+                onClick={() => setOnlyWaiting(false)}
+                className="text-pilot-aqua-700 hover:underline"
+              >
+                Az összes állítás mutatása
+              </button>
+            </>
+          ) : (
+            <p>Még nincs gyártói állítás.</p>
+          )}
+        </div>
       ) : (
         <ul className="space-y-2">
           {claims.map((claim) => (

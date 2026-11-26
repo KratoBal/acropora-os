@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import type { ProductQualityQueueRow } from "@acropora/types";
 
 import { JevPill, JevStatusBadge } from "./jev-pill";
@@ -52,6 +53,24 @@ export function JevQualityFilters({
   );
 }
 
+/**
+ * HÁNY MEZŐ LÁTSZIK EGY TERMÉKNÉL, MIELŐTT A TÖBBIT KI KELL NYITNI (Picasso 3.27): a sor (termék, mező) páronként áll, és egy termék 17 hiányzó mezővel 17 sort adott: az 50 soros lista
+ * három terméket mutatott, 3700 px magasan. A termék neve csak az első során áll, a többi mező egy "+N további mező" gomb mögött.
+ */
+export const QUEUE_FIELDS_SHOWN = 3;
+
+function groupByProduct(
+  rows: readonly ProductQualityQueueRow[],
+): ProductQualityQueueRow[][] {
+  const groups = new Map<string, ProductQualityQueueRow[]>();
+  for (const row of rows) {
+    const group = groups.get(row.productId);
+    if (group) group.push(row);
+    else groups.set(row.productId, [row]);
+  }
+  return [...groups.values()];
+}
+
 export function JevQualityQueueTable({
   rows,
   filter,
@@ -74,6 +93,15 @@ export function JevQualityQueueTable({
   emptyRole?: "status" | "alert";
 }) {
   const visible = filterQueue(rows, filter);
+  const groups = groupByProduct(visible);
+  const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (productId: string) =>
+    setOpened((current) => {
+      const next = new Set(current);
+      if (next.has(productId)) next.delete(productId);
+      else next.add(productId);
+      return next;
+    });
   return (
     <section
       aria-label="Ellenőrzendő termékadatok"
@@ -98,29 +126,59 @@ export function JevQualityQueueTable({
             </tr>
           </thead>
           <tbody>
-            {visible.map((row) => {
-              const status = displayedStatus(row);
-              return (
+            {groups.flatMap((group) => {
+              const productId = group[0]!.productId;
+              const isOpen = opened.has(productId);
+              const shown = isOpen ? group : group.slice(0, QUEUE_FIELDS_SHOWN);
+              const hidden = group.length - shown.length;
+              const fieldRows = shown.map((row, index) => {
+                const status = displayedStatus(row);
+                return (
+                  <tr
+                    key={`${row.productId}:${row.field}`}
+                    className="border border-pilot-grey-200 text-sm leading-5 text-pilot-grey-600"
+                  >
+                    <td className="py-3 font-semibold">
+                      {index === 0 ? row.productName : ""}
+                    </td>
+                    <td className="py-3">{FIELD_LABEL[row.field]}</td>
+                    <td className="py-3">
+                      <JevStatusBadge status={status} />
+                    </td>
+                    <td className="py-3">
+                      {formatAge(row.lastCheckedAt, now)}
+                    </td>
+                    <td className="py-3">
+                      <Link
+                        href={hrefFor(row)}
+                        className="text-pilot-aqua-700 hover:underline"
+                      >
+                        {queueActionLabel(status)}
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              });
+              if (group.length <= QUEUE_FIELDS_SHOWN) return fieldRows;
+              return [
+                ...fieldRows,
                 <tr
-                  key={`${row.productId}:${row.field}`}
-                  className="border border-pilot-grey-200 text-sm leading-5 text-pilot-grey-600"
+                  key={`${productId}:toggle`}
+                  className="border border-pilot-grey-200 text-sm leading-5"
                 >
-                  <td className="py-3 font-semibold">{row.productName}</td>
-                  <td className="py-3">{FIELD_LABEL[row.field]}</td>
-                  <td className="py-3">
-                    <JevStatusBadge status={status} />
-                  </td>
-                  <td className="py-3">{formatAge(row.lastCheckedAt, now)}</td>
-                  <td className="py-3">
-                    <Link
-                      href={hrefFor(row)}
+                  <td className="py-2" />
+                  <td className="py-2" colSpan={4}>
+                    <button
+                      type="button"
+                      aria-expanded={isOpen}
+                      onClick={() => toggle(productId)}
                       className="text-pilot-aqua-700 hover:underline"
                     >
-                      {queueActionLabel(status)}
-                    </Link>
+                      {isOpen ? "Kevesebb mező" : `+${hidden} további mező`}
+                    </button>
                   </td>
-                </tr>
-              );
+                </tr>,
+              ];
             })}
           </tbody>
         </table>

@@ -1,4 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StockItemReconciliationSection } from "./stock-item-reconciliation-section";
@@ -116,5 +122,41 @@ describe("the itemised reconciliation nobody could see", () => {
       ).toBeTruthy(),
     );
     expect(screen.queryByText(/Nincs tételes eltérés/)).toBeNull();
+  });
+
+  /**
+   * LAPOZÁS (Picasso 3.27): eddig csak az első 25 sor látszott, a többi "a következő kör" volt. A lapozó a szervertől kéri a következő oldalt, nem a már letöltött sorokat szeleteli.
+   */
+  it("pages through the itemised rows by asking the server for the next page", async () => {
+    api.page.mockImplementation(
+      async (_token: string, query: { page?: number }) => ({
+        items: [
+          row({
+            sku: `ACR-P${query.page ?? 1}`,
+            variantId: `v${query.page ?? 1}`,
+          }),
+        ],
+        page: query.page ?? 1,
+        pageSize: 25,
+        totalItems: 60,
+        totalPages: 3,
+      }),
+    );
+    render(<StockItemReconciliationSection />);
+    await waitFor(() => expect(screen.getByText("ACR-P1")).toBeTruthy());
+    expect(api.page).toHaveBeenLastCalledWith(
+      "token-1",
+      { page: 1, pageSize: 25 },
+      expect.anything(),
+    );
+    const pager = screen.getByRole("navigation", { name: /Lapozás/ });
+    fireEvent.click(within(pager).getByRole("button", { name: /Következő/ }));
+    await waitFor(() => expect(screen.getByText("ACR-P2")).toBeTruthy());
+    expect(api.page).toHaveBeenLastCalledWith(
+      "token-1",
+      { page: 2, pageSize: 25 },
+      expect.anything(),
+    );
+    expect(screen.getByText(/2\. oldal, 1 sor a 60-ből/)).toBeTruthy();
   });
 });
