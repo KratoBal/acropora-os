@@ -5,6 +5,8 @@ import { describe, it } from "node:test";
 import {
   commonServiceReasonLabel,
   commonServiceStatusLabel,
+  commonWorksheetStatus,
+  type WorksheetVersionStatus,
 } from "@acropora/types";
 
 /**
@@ -17,6 +19,7 @@ import {
  */
 const MOBIL = "../mobile/src/lib/service-jobs/common-status.ts";
 const WEB = "../web/src/components/service-jobs/common-status-view.ts";
+const MOBIL_LAP = "../mobile/src/lib/worksheets/worksheet-state.ts";
 
 function forras(ut: string): string {
   const s = readFileSync(ut, "utf8");
@@ -83,5 +86,45 @@ describe("a mobil közös-állapot feliratai a közös csomaghoz mérve", () => 
     const mobil = igek(forras(MOBIL));
     assert.ok(mobil.length >= 5, "gyanúsan kevés ige");
     assert.deepEqual(mobil, igek(forras(WEB)));
+  });
+
+  /**
+   * A MUNKALAP MEGJELENÍTETT ÁLLAPOTÁBÓL A KÖZÖS ÁLLAPOT (kártya 7f23785c, acrobot 62402): a telefon a megjelenített állapot kulcsából (a hibajegy
+   * alatti lapok sora, az üzenetek kártyája) a `WORKSHEET_DISPLAY_COMMON` táblával jut a közös állapothoz; ezt a közös csomag
+   * `commonWorksheetStatus` függvénye ellen méri ez az állítás, a megjelenített állapot két bemenetén (a változat-állapot és a tételszám).
+   */
+  it("a telefon megjelenített-állapot táblája pontosan a közös csomag függvénye", () => {
+    const src = forras(MOBIL_LAP);
+    const start = src.indexOf("export const WORKSHEET_DISPLAY_COMMON");
+    assert.notEqual(start, -1);
+    const kezd = src.indexOf("= {", start);
+    const veg = src.indexOf("\n};", kezd);
+    const tabla = Object.fromEntries(
+      [
+        ...src
+          .slice(kezd, veg)
+          .matchAll(
+            /^\s+([A-Z_]+): \{ status: "([A-Z_]+)", reason: (null|"[A-Z_]+") \},?$/gm,
+          ),
+      ].map((m) => [
+        m[1]!,
+        { status: m[2]!, reason: m[3] === "null" ? null : m[3]!.slice(1, -1) },
+      ]),
+    );
+    // POZITÍV KONTROLL: nem üres halmaz
+    assert.equal(Object.keys(tabla).length, 5);
+    const bemenet: Record<string, [WorksheetVersionStatus, number]> = {
+      NEW: ["DRAFT", 0],
+      IN_PROGRESS: ["DRAFT", 1],
+      COMPLETED: ["AWAITING_SIGNATURE", 1],
+      CLOSED: ["SIGNED", 1],
+      REJECTED: ["REJECTED", 1],
+    };
+    for (const [kulcs, [allapot, tetelek]] of Object.entries(bemenet))
+      assert.deepEqual(
+        tabla[kulcs],
+        commonWorksheetStatus(allapot, tetelek),
+        kulcs,
+      );
   });
 });

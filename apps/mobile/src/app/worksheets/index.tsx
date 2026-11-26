@@ -37,11 +37,13 @@ import {
   worksheetListStartsMineOnly,
   worksheetListLines,
   worksheetListSubtitle,
-  worksheetDisplayLabel,
-  worksheetStatusTone,
   worksheetVersionNote,
   WORKSHEET_STATUS_FILTERS,
 } from "@/lib/worksheets/worksheet-presentation";
+import {
+  worksheetStateText,
+  worksheetStateTone,
+} from "@/lib/worksheets/worksheet-state";
 import { sessionKey } from "@/lib/session/session-memory";
 import { useSessionState } from "@/lib/session/useSessionState";
 
@@ -467,10 +469,7 @@ export default function WorksheetsScreen() {
 
         {items.map((item) => {
           const versionNote = worksheetVersionNote(item);
-          const statusTone = statusToneColors(
-            tokens,
-            worksheetStatusTone(item.status),
-          );
+          const statusTone = statusToneColors(tokens, worksheetStateTone(item));
           return (
             <Pressable
               key={item.id}
@@ -505,7 +504,7 @@ export default function WorksheetsScreen() {
                   ]}
                 >
                   <Text style={[styles.statusText, { color: statusTone.text }]}>
-                    {worksheetDisplayLabel(item.status, item.lineCount)}
+                    {worksheetStateText(item)}
                   </Text>
                 </View>
               </View>

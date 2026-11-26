@@ -63,12 +63,13 @@ interface CommonFields {
 /** A szerver két mezője közös állapottá, vagy `null`, ha a válasz nem hozza vagy az állapotot nem ismerjük (régi válasz, mentett másolat, újabb szerver). */
 export function commonStateOf(item: CommonFields): CommonState | null {
   const status = item.commonStatus;
-  if (!status || !(status in COMMON_STATUS_LABELS)) return null;
+  // `Object.hasOwn`, nem `in`: egy prototípus-kulcs (`toString`, `constructor`) nem állapot (barracuda, #2981)
+  if (!status || !Object.hasOwn(COMMON_STATUS_LABELS, status)) return null;
   const reason = item.commonReason;
   return {
     status: status as CommonStatus,
     reason:
-      reason && reason in COMMON_REASON_LABELS
+      reason && Object.hasOwn(COMMON_REASON_LABELS, reason)
         ? (reason as CommonReason)
         : null,
   };

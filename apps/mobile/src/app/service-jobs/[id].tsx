@@ -26,7 +26,6 @@ import { serviceJobAssigneeLine } from "@/lib/service-jobs/list-card";
 import { timelineRows } from "@/lib/service-jobs/timeline-rows";
 import {
   formatWorksheetQuantity,
-  worksheetDisplayLabel,
   worksheetListLines,
 } from "@/lib/worksheets/worksheet-presentation";
 import { toPickedImages } from "@/lib/api/picked-image";
@@ -72,6 +71,7 @@ import {
   serviceJobStepLabel,
   stepConfirmation,
 } from "@/lib/service-jobs/common-status";
+import { worksheetStateText } from "@/lib/worksheets/worksheet-state";
 import {
   serviceJobStatusLabel,
   shortPath,
@@ -626,7 +626,7 @@ export default function ServiceJobDetailScreen() {
                   */}
                   {sheet.status ? (
                     <Text style={styles.status}>
-                      {worksheetDisplayLabel(sheet.status, sheet.lineCount)}
+                      {worksheetStateText({ ...sheet, status: sheet.status })}
                     </Text>
                   ) : null}
                 </View>

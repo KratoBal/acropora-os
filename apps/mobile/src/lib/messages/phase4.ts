@@ -1,6 +1,7 @@
 import { commonStateOf, commonStateText } from "../service-jobs/common-status";
 import { SERVICE_JOB_STATUS_LABELS } from "../service-jobs/service-job-status";
-import { worksheetDisplayStatusLabel } from "../worksheets/worksheet-presentation";
+import type { WorksheetDisplayStatus } from "../worksheets/worksheet-presentation";
+import { WORKSHEET_DISPLAY_COMMON } from "../worksheets/worksheet-state";
 import type {
   ConversationContextCard,
   ConversationContextType,
@@ -73,10 +74,14 @@ export function contextStatusLabel(
     const common = commonStateOf(card);
     if (common) return commonStateText(common);
   }
-  const labels: Record<string, string> =
-    card.type === "WORKSHEET"
-      ? worksheetDisplayStatusLabel
-      : SERVICE_JOB_STATUS_LABELS;
+  // a munkalap kártyája a közös szavakkal (kártya 7f23785c, acrobot 62402): a válasz a megjelenített állapot kulcsát hozza
+  if (card.type === "WORKSHEET")
+    return Object.hasOwn(WORKSHEET_DISPLAY_COMMON, card.status)
+      ? commonStateText(
+          WORKSHEET_DISPLAY_COMMON[card.status as WorksheetDisplayStatus],
+        )
+      : null;
+  const labels: Record<string, string> = SERVICE_JOB_STATUS_LABELS;
   return labels[card.status] ?? null;
 }
 

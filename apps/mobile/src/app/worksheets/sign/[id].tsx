@@ -25,7 +25,7 @@ import type { ThemeTokens } from "@/lib/theme/tokens";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import {
   worksheetLabelOrDraft,
-  worksheetStatusLabel,
+  worksheetVersionLabel,
 } from "@/lib/worksheets/worksheet-presentation";
 import { unlockWithBiometrics } from "@/lib/auth/biometric-unlock";
 import { selfSignatureGate } from "@/lib/worksheets/worksheet-self-signature";
@@ -354,7 +354,7 @@ export default function WorksheetSignScreen() {
                 </Text>
                 <Text style={styles.muted}>
                   {capabilities.worksheetsManage
-                    ? `A lap állapota: ${worksheetStatusLabel[current.status]}. Aláírni csak aláírásra váró lapot lehet: a lezárás az irodából történik.`
+                    ? `A lap állapota: ${worksheetVersionLabel[current.status]}. Aláírni csak aláírásra váró lapot lehet: a lezárás az irodából történik.`
                     : "Ehhez írási jog kell a szerviz modulhoz. Szólj az irodának."}
                 </Text>
                 <Pressable

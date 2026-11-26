@@ -44,7 +44,7 @@ export function worksheetCardMeta(item: CardRow): string {
 /**
  * THE THREE TILES (Figma 423:904), from the server's counts: one "Új és
  * folyamatban" tile (decision E5; drafts are one status on the server),
- * "Elkészült" and "Lezárva". `null` without counts.
+ * "Elkészült" and "Lezárt" (the shared words, card 7f23785c). `null` without counts.
  */
 export function worksheetStatTiles(
   counts: StatusCounts | undefined,
@@ -57,6 +57,6 @@ export function worksheetStatTiles(
       label: "Elkészült",
       value: counts.AWAITING_SIGNATURE ?? 0,
     },
-    { key: "SIGNED", label: "Lezárva", value: counts.SIGNED ?? 0 },
+    { key: "SIGNED", label: "Lezárt", value: counts.SIGNED ?? 0 },
   ];
 }
