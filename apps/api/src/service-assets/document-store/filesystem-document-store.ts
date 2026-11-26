@@ -17,6 +17,7 @@ import { Logger } from "@nestjs/common";
 
 import {
   DOCUMENT_OWNERS,
+  DocumentStoreNotReadyError,
   ownerDirectory,
   type DocumentKey,
   type DocumentOwner,
@@ -56,6 +57,14 @@ export class FilesystemDocumentStore implements DocumentStore {
 
   async put(key: DocumentKey, bytes: Uint8Array): Promise<void> {
     const target = this.resolveWithin(key);
+    /*
+      NO WRITE INTO A STORE THAT IS NOT READY (card 3e5e85d0; barracuda on #3057). The marker used to only SAY the volume was
+      missing: every caller but the upload wrote anyway, into whatever directory stood there. On an unmounted mount point the
+      next redeploy took those files; on a wrong, empty volume the new documents and the old ones would be on two volumes. The
+      same check as `describe()`, right before the write.
+    */
+    const status = await this.describe();
+    if (status.state !== "ready") throw new DocumentStoreNotReadyError(status);
     await mkdir(path.dirname(target), { recursive: true });
 
     const temporary = `${target}.${randomUUID()}.tmp`;

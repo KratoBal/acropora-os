@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 
+import { DocumentStoreNotReadyError } from "./document-store.js";
 import {
   FilesystemDocumentStore,
   MARKER_FILE,
@@ -25,6 +26,8 @@ describe("the filesystem document store", () => {
 
   before(async () => {
     root = await mkdtemp(path.join(tmpdir(), "document-store-"));
+    // a marked root: the store writes only when it is ready (card 3e5e85d0)
+    await writeFile(path.join(root, MARKER_FILE), "");
   });
 
   after(async () => {
@@ -203,6 +206,7 @@ describe("the filesystem document store", () => {
   it("lists the files it holds, two levels deep", async () => {
     const listRoot = await mkdtemp(path.join(tmpdir(), "document-store-list-"));
     try {
+      await writeFile(path.join(listRoot, MARKER_FILE), "");
       const store = new FilesystemDocumentStore(listRoot);
       await store.put(
         { owner: "asset" as const, ownerId: "a", documentId: "1" },
@@ -302,21 +306,51 @@ describe("the filesystem document store", () => {
    * állapot, hanem a következő újraindítás mutatná meg, amikor a fájlok
    * eltűnnek a hoszt lemezéről.
    */
-  it("never creates the marker itself, not even while writing", async () => {
+  it("never creates the marker itself, and an unmarked root takes no write (card 3e5e85d0)", async () => {
     const unmarked = await mkdtemp(
       path.join(tmpdir(), "document-store-write-"),
     );
     try {
       const store = new FilesystemDocumentStore(unmarked);
-      await store.put(
-        { owner: "asset" as const, ownerId: "asset-1", documentId: "doc-1" },
-        Uint8Array.from([1]),
+      await assert.rejects(
+        store.put(
+          { owner: "asset" as const, ownerId: "asset-1", documentId: "doc-1" },
+          Uint8Array.from([1]),
+        ),
+        (error: unknown) =>
+          error instanceof DocumentStoreNotReadyError &&
+          error.getStatus() === 503 &&
+          error.storeStatus.state === "not-configured",
       );
 
-      assert.deepEqual(await readdir(unmarked), ["assets"]);
+      // nothing written: no owner directory, no marker
+      assert.deepEqual(await readdir(unmarked), []);
       assert.deepEqual((await store.describe()).state, "not-configured");
     } finally {
       await rm(unmarked, { recursive: true, force: true });
+    }
+  });
+
+  /*
+    THE MARKER LOST WHILE THE PROCESS RUNS (the 2026-11-25 shape): the check is made before every write, not once at start.
+    WHAT TURNS THIS RED: a write after the marker went still lands.
+  */
+  it("a root whose marker went away after a write takes no further write", async () => {
+    const volume = await mkdtemp(path.join(tmpdir(), "document-store-lost-"));
+    try {
+      await writeFile(path.join(volume, MARKER_FILE), "");
+      const store = new FilesystemDocumentStore(volume);
+      const first = { owner: "asset" as const, ownerId: "a", documentId: "1" };
+      await store.put(first, Uint8Array.from([1]));
+      await rm(path.join(volume, MARKER_FILE));
+
+      await assert.rejects(
+        store.put({ ...first, documentId: "2" }, Uint8Array.from([2])),
+        DocumentStoreNotReadyError,
+      );
+      assert.deepEqual(await readdir(path.join(volume, "assets", "a")), ["1"]);
+    } finally {
+      await rm(volume, { recursive: true, force: true });
     }
   });
 
@@ -364,6 +398,8 @@ describe("a gazda a lemezen is elvalik", () => {
       MI PIROSIT: a gazda konyvtarnevenek atirasa (`assets` -> `asset`).
     */
     const root = await mkdtemp(path.join(tmpdir(), "docstore-owner-"));
+    // a marked root: the store writes only when it is ready (card 3e5e85d0)
+    await writeFile(path.join(root, MARKER_FILE), "");
     try {
       const store = new FilesystemDocumentStore(root);
       await store.put(
@@ -382,6 +418,8 @@ describe("a gazda a lemezen is elvalik", () => {
     // `assets` ala ir, atmenne a fenti allitason -- es egy munkalap-kep
     // felulirhatna egy eszkoz-dokumentumot.
     const root = await mkdtemp(path.join(tmpdir(), "docstore-owner-"));
+    // a marked root: the store writes only when it is ready (card 3e5e85d0)
+    await writeFile(path.join(root, MARKER_FILE), "");
     try {
       const store = new FilesystemDocumentStore(root);
       await store.put(
@@ -406,6 +444,8 @@ describe("a gazda a lemezen is elvalik", () => {
       MI PIROSIT: ha a bejaras a gyoker OSSZES konyvtarat vegigmenne.
     */
     const root = await mkdtemp(path.join(tmpdir(), "docstore-owner-"));
+    // a marked root: the store writes only when it is ready (card 3e5e85d0)
+    await writeFile(path.join(root, MARKER_FILE), "");
     try {
       const store = new FilesystemDocumentStore(root);
       await store.put(

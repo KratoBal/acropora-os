@@ -15,7 +15,10 @@ import { budapestDayKey } from "../dashboard/budapest-day.js";
 import type { SzamlazzAgentClient } from "../integrations/szamlazz/szamlazz-agent.client.js";
 import type { SzamlazzAgentResponse } from "../integrations/szamlazz/szamlazz-agent-xml.js";
 import type { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-credential.provider.js";
-import type { DocumentStore } from "../service-assets/document-store/document-store.js";
+import {
+  DocumentStoreNotReadyError,
+  type DocumentStore,
+} from "../service-assets/document-store/document-store.js";
 import type { WebshopOrderInvoiceFact } from "./billing-document-issue.js";
 import type { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
 import type { BillingDocumentStockRepository } from "./billing-document-stock.repository.js";
@@ -117,6 +120,8 @@ function setup(
     env?: NodeJS.ProcessEnv;
     respond?: () => Promise<SzamlazzAgentResponse>;
     stockFails?: boolean;
+    /** the document store is not ready and refuses the write (card 3e5e85d0) */
+    storeRefuses?: boolean;
     over?: Record<string, unknown>;
     /** The buyer's payment days (`customerPaymentDueDays`); null: none set. */
     paymentDueDays?: number | null;
@@ -263,6 +268,11 @@ function setup(
   } as unknown as SzamlazzCredentialProvider;
   const store = {
     put: async (key: unknown) => {
+      if (options.storeRefuses)
+        throw new DocumentStoreNotReadyError({
+          state: "not-configured",
+          reason: "A jelölő fájl hiányzik",
+        });
       calls.pdf.push(key);
     },
   } as unknown as DocumentStore;
@@ -1002,6 +1012,20 @@ describe("BillingDocumentIssueService", () => {
     const { service, calls } = setup();
     await issue(service);
     assert.equal(calls.stock, 1);
+  });
+
+  /*
+    A STORE THAT REFUSES THE PDF (card 3e5e85d0, acrobot 63239 (a)): the invoice exists at Számlázz.hu, so it must stay issued
+    here, recorded, with its stock booked; only the PDF is missing, and the PDF endpoint fetches it again later. WHAT TURNS THIS
+    RED: the refusal undoing or failing the issue, or a PDF key recorded for a file that was never written.
+  */
+  it("keeps the issued document, without a PDF key, when the document store refuses the PDF", async () => {
+    const { service, calls } = setup({ storeRefuses: true });
+    const detail = await issue(service);
+    assert.equal(detail.status, "ISSUED");
+    assert.equal(calls.issued.length, 1);
+    assert.equal(calls.stock, 1);
+    assert.deepEqual(calls.pdf, []);
   });
 
   it("keeps the issued document when the stock booking fails", async () => {
