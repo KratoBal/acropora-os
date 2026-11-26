@@ -202,24 +202,37 @@ export function TransferReceivedDialog({
   amount,
   onClose,
   onSave,
+  title = "Utalás beérkezett",
+  consequence,
+  earliest,
 }: {
   /** ÉÉÉÉ-HH-NN, a nap alapértéke és felső határa. */
   today: string;
-  /** Megjelenítésre kész összeg (a díjbekérőé). */
+  /** Megjelenítésre kész összeg (a díjbekérőé, vagy a hátraléké). */
   amount: string;
   onClose: () => void;
   onSave: (input: { receivedOn: string; reference: string }) => Promise<void>;
+  /** A hátralék ablaka (d31a66a3, S3) a saját címével és mondatával. */
+  title?: string;
+  consequence?: string;
+  /** ÉÉÉÉ-HH-NN, a legkorábbi nap (a hátraléknál az előleg napja). */
+  earliest?: string;
 }) {
   const [receivedOn, setReceivedOn] = useState(today);
   const [reference, setReference] = useState("");
   const { busy, error, save } = useSave(onClose);
   return (
     <Shell
-      title="Utalás beérkezett"
+      title={title}
       busy={busy}
       error={error}
       onClose={onClose}
-      saveDisabled={!reference.trim() || !receivedOn || receivedOn > today}
+      saveDisabled={
+        !reference.trim() ||
+        !receivedOn ||
+        receivedOn > today ||
+        (earliest !== undefined && receivedOn < earliest)
+      }
       onSave={() =>
         save(() => onSave({ receivedOn, reference: reference.trim() }))
       }
@@ -244,9 +257,8 @@ export function TransferReceivedDialog({
         />
       </label>
       <p className="text-xs text-pilot-grey-500">
-        A rendelés {amount} befizetéssel kifizetettnek látszik, és a
-        befizetés-felelősök értesítést kapnak. A rögzítés a felületről nem
-        vonható vissza.
+        {consequence ??
+          `A rendelés ${amount} befizetéssel kifizetettnek látszik, és a befizetés-felelősök értesítést kapnak. A rögzítés a felületről nem vonható vissza.`}
       </p>
     </Shell>
   );

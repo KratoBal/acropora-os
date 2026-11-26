@@ -476,6 +476,18 @@ export const webshopOrdersApi = {
       { method: "POST", body: JSON.stringify(input) },
     );
   },
+  /** „Hátralék beérkezett” kézzel (d31a66a3, S3): az előleg utáni maradék; az összeget a szerver számolja. */
+  recordBalanceReceived(
+    token: string,
+    id: string,
+    input: WebshopTransferReceiptInput,
+  ) {
+    return apiRequest<WebshopOrderDetail>(
+      `/webshop-orders/${encodeURIComponent(id)}/balance-received`,
+      token,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  },
   /** „Webshop fizetés lezárása”: a rögzített beérkezés újraküldése a webshopnak. */
   syncTransferToShop(token: string, id: string) {
     return apiRequest<WebshopOrderDetail>(

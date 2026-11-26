@@ -17,6 +17,7 @@ import {
   TRANSFER_PARCEL_WAIT,
   toDetail,
   transferSwitchOf,
+  balanceDueOf,
 } from "./webshop-order-detail.rules.js";
 import { NO_FACTS } from "./webshop-orders.rules.js";
 
@@ -922,5 +923,27 @@ describe("the manual refund notice", () => {
       ),
       null,
     );
+  });
+});
+
+/*
+  AZ ELŐLEG UTÁNI HÁTRALÉK (kártya d31a66a3, S3). MI PIROSÍT: hátralékot mutat előleg nélkül vagy egész díjbekérő után, vagy a
+  beérkezett hátralék után is; az összeg nem a végösszeg mínusz az előleg; nulla vagy negatív maradékot hátraléknak mond.
+*/
+describe("balanceDueOf (S3)", () => {
+  const advance = { advance: true, amount: "4800.0000" };
+  it("az előleg után a végösszeg mínusz az előleg, a beérkezett hátralékig", () => {
+    assert.equal(balanceDueOf(13000, advance, null), "8200.0000");
+    assert.equal(balanceDueOf("13000.5", advance, null), "8200.5000");
+    assert.equal(balanceDueOf(13000, advance, { amount: "8200.0000" }), null);
+  });
+  it("előleg nélkül, egész díjbekérő után és nulla maradéknál nincs hátralék", () => {
+    assert.equal(balanceDueOf(13000, null, null), null);
+    assert.equal(
+      balanceDueOf(13000, { ...advance, advance: false }, null),
+      null,
+    );
+    assert.equal(balanceDueOf(4800, advance, null), null);
+    assert.equal(balanceDueOf(4000, advance, null), null);
   });
 });

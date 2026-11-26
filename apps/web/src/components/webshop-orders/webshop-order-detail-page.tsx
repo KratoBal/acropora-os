@@ -553,6 +553,9 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setOrder(await webshopOrdersApi.recordTransferReceived(token, id, input));
     setNow(Date.now());
   };
+  const recordBalance = async (input: WebshopTransferReceiptInput) => {
+    setOrder(await webshopOrdersApi.recordBalanceReceived(token, id, input));
+  };
   const syncTransferToShop = async () => {
     setOrder(await webshopOrdersApi.syncTransferToShop(token, id));
     setNow(Date.now());
@@ -742,6 +745,7 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           onSwitchToTransfer={switchToTransfer}
           onProformaSummary={proformaSummary}
           onRecordTransfer={recordTransfer}
+          onRecordBalance={recordBalance}
           onSyncTransferToShop={syncTransferToShop}
           onChangeStatus={changeStatus}
           mailNotice={mailNotice}
@@ -1176,6 +1180,7 @@ function ProformaSection({
   onSend,
   onSummary,
   onRecord,
+  onRecordBalance,
   onSyncShop,
 }: {
   order: WebshopOrderDetail;
@@ -1192,6 +1197,8 @@ function ProformaSection({
     advance?: WebshopProformaAdvance,
   ) => Promise<WebshopProformaSummary>;
   onRecord: (input: WebshopTransferReceiptInput) => Promise<void>;
+  /** „Hátralék beérkezett” (d31a66a3, S3): az előleg utáni maradék. */
+  onRecordBalance: (input: WebshopTransferReceiptInput) => Promise<void>;
   /** A rögzített beérkezés újraküldése a webshopnak (commerce #509). */
   onSyncShop: () => Promise<void>;
 }) {
@@ -1200,6 +1207,7 @@ function ProformaSection({
   // VALÓDI BIZONYLAT ÉS VALÓDI LEVÉL (acrobot 26827): egy kattintás nem elég
   const [confirming, setConfirming] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [recordingBalance, setRecordingBalance] = useState(false);
   const proforma = order.proforma;
   const receipt = order.transferReceipt;
   // a Számlázz.hu számlája a saját kifizetései szerint is mondhatja (bb3a6bd5)
@@ -1371,6 +1379,44 @@ function ProformaSection({
           .
         </p>
       ) : null}
+      {/* AZ ELŐLEG UTÁNI HÁTRALÉK (d31a66a3, S3): a várt összeg, amíg nem jött meg; utána a beérkezése */}
+      {receipt?.advance && (order.balanceReceipt || order.balanceDue) ? (
+        <div className="space-y-2" data-testid="balance-section">
+          <p className="text-xs font-semibold text-pilot-grey-700">Hátralék</p>
+          {order.balanceReceipt ? (
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Beérkezett">
+                {order.balanceReceipt.receivedOn}
+              </Field>
+              <Field label="Összeg">
+                {formatMoney(
+                  Number(order.balanceReceipt.amount),
+                  order.balanceReceipt.currency,
+                  { fractionDigits: 2 },
+                )}
+              </Field>
+              <Field label="Hivatkozás">
+                <span className="break-all">
+                  {order.balanceReceipt.reference}
+                </span>
+              </Field>
+              <Field label="Rögzítette">
+                {order.balanceReceipt.source === "BANK_PAIRING"
+                  ? "Banki párosítás"
+                  : (order.balanceReceipt.recordedBy ?? "—")}
+              </Field>
+            </div>
+          ) : (
+            <Field label="Várt hátralék">
+              <span data-testid="balance-due">
+                {formatMoney(Number(order.balanceDue), order.currency, {
+                  fractionDigits: 2,
+                })}
+              </span>
+            </Field>
+          )}
+        </div>
+      ) : null}
       {proforma ? (
         <Link
           href={`/penzugy/szamlazas/${encodeURIComponent(proforma.id)}`}
@@ -1432,7 +1478,22 @@ function ProformaSection({
           Utalás beérkezett
         </PilotButton>
       ) : null}
-      {canRecord && receipt && order.payment?.state === "AWAITING" ? (
+      {canRecord && order.balanceDue && !closed ? (
+        <PilotButton
+          size="regular"
+          variant="secondary"
+          disabled={busy}
+          onClick={() => setRecordingBalance(true)}
+        >
+          Hátralék beérkezett
+        </PilotButton>
+      ) : null}
+      {canRecord &&
+      receipt &&
+      (order.payment?.state === "AWAITING" ||
+        // the balance is in the OS, the shop still reads the advance only (its close failed): the same button repeats it
+        (order.balanceReceipt &&
+          order.payment?.state === "PARTIALLY_CAPTURED")) ? (
         <div className="space-y-2">
           <p className="text-xs text-pilot-amber-700">
             A beérkezés az OS-ben rögzítve van, de a webshopban a rendelés még
@@ -1447,6 +1508,19 @@ function ProformaSection({
             {busy ? "Küldés…" : "Webshop fizetés lezárása"}
           </PilotButton>
         </div>
+      ) : null}
+      {recordingBalance && order.balanceDue ? (
+        <TransferReceivedDialog
+          title="Hátralék beérkezett"
+          today={today}
+          earliest={receipt?.receivedOn}
+          amount={formatMoney(Number(order.balanceDue), order.currency, {
+            fractionDigits: 2,
+          })}
+          consequence={`A ${formatMoney(Number(order.balanceDue), order.currency, { fractionDigits: 2 })} hátralékkal a rendelés teljesen kifizetett lesz: ez a végösszeg mínusz a beérkezett előleg, a webshop pontosan ezt fogadja el. A befizetés-felelősök értesítést kapnak; a rögzítés a felületről nem vonható vissza.`}
+          onClose={() => setRecordingBalance(false)}
+          onSave={onRecordBalance}
+        />
       ) : null}
       {recording && proforma ? (
         <TransferReceivedDialog
@@ -2505,6 +2579,7 @@ function OrderBody({
   onSwitchToTransfer,
   onProformaSummary,
   onRecordTransfer,
+  onRecordBalance,
   onSyncTransferToShop,
   onChangeStatus,
   mailNotice,
@@ -2553,6 +2628,8 @@ function OrderBody({
     advance?: WebshopProformaAdvance,
   ) => Promise<WebshopProformaSummary>;
   onRecordTransfer: (input: WebshopTransferReceiptInput) => Promise<void>;
+  /** „Hátralék beérkezett” (d31a66a3, S3). */
+  onRecordBalance: (input: WebshopTransferReceiptInput) => Promise<void>;
   onSyncTransferToShop: () => Promise<void>;
   onChangeStatus: (
     status: WebshopOrderStatus,
@@ -3161,6 +3238,7 @@ function OrderBody({
                 onSend={onSendProforma}
                 onSummary={onProformaSummary}
                 onRecord={onRecordTransfer}
+                onRecordBalance={onRecordBalance}
                 onSyncShop={onSyncTransferToShop}
               />
             ) : null}

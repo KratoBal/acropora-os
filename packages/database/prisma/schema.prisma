@@ -10837,6 +10837,27 @@ model WebshopTransferReceipt {
   /// Kézi rögzítésnél ki; a párosításnál `null`.
   recordedByUserId  String?
   createdAt         DateTime                     @default(now())
+  /// Az előleg utáni hátralék beérkezése, ha ez a sor egy előleg-díjbekérőé volt (kártya d31a66a3, S3).
+  balance           WebshopBalanceReceipt?
+}
+
+/// AZ ELŐLEG UTÁNI HÁTRALÉK BEÉRKEZÉSE (kártya d31a66a3, S3). Rendelésenként egy, és csak egy már rögzített (előleg-)beérkezés
+/// után: a kulcs a rendelés, és a beérkezés-sorára mutat. Külön tábla, hogy a migráció bővítő legyen: a régi sor érintetlen.
+/// Az összeg a webshop szerinti maradék (a rendelés végösszege mínusz az előleg); a webshop más összeget nem fogad el.
+model WebshopBalanceReceipt {
+  orderId           String                       @id @db.VarChar(64)
+  receipt           WebshopTransferReceipt       @relation(fields: [orderId], references: [orderId])
+  source            WebshopTransferReceiptSource
+  /// A párosított jóváírás; kézi rögzítésnél `null`.
+  bankTransactionId String?                      @unique
+  /// A banki hivatkozás vagy a kézzel megadott hivatkozás.
+  reference         String
+  receivedOn        DateTime                     @db.Date
+  amount            Decimal                      @db.Decimal(19, 4)
+  currency          String                       @db.VarChar(3)
+  /// Kézi rögzítésnél ki; a párosításnál `null`.
+  recordedByUserId  String?
+  createdAt         DateTime                     @default(now())
 }
 
 enum WebshopTransferReceiptSource {

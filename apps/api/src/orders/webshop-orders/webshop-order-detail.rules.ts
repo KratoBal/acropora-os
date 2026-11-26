@@ -9,6 +9,7 @@ import {
   type WebshopOrderStatus,
   type WebshopOrderStep,
 } from "@acropora/types";
+import { Prisma } from "@acropora/database";
 
 import type {
   MedusaOrderAddressRow,
@@ -531,6 +532,21 @@ export function outstandingCapturedOf(
   return captured - refunded;
 }
 
+/**
+ * THE BALANCE STILL EXPECTED AFTER AN ADVANCE (card d31a66a3, S3): the order's total minus the advance that came in, while the
+ * advance is in and the balance is not; otherwise `null`. Exactly this is what the shop takes as the balance (commerce #908: the
+ * uncaptured remainder on the same payment; any other amount is refused), and what the "Hátralék beérkezett" button records.
+ */
+export function balanceDueOf(
+  orderTotal: number | string,
+  receipt: { advance: boolean; amount: string } | null,
+  balance: unknown,
+): string | null {
+  if (!receipt?.advance || balance) return null;
+  const due = new Prisma.Decimal(orderTotal).minus(receipt.amount);
+  return due.greaterThan(0) ? due.toFixed(4) : null;
+}
+
 export function toDetail(input: {
   order: MedusaOrderDetailRow;
   status: MedusaOrderBusinessStatus | null;
@@ -547,6 +563,8 @@ export function toDetail(input: {
   /** A díjbekérő (bb3a6bd5); nincs: `null`. */
   proforma?: WebshopOrderDetail["proforma"];
   transferReceipt?: WebshopOrderDetail["transferReceipt"];
+  /** Az előleg utáni hátralék beérkezése (d31a66a3, S3). */
+  balanceReceipt?: WebshopOrderDetail["balanceReceipt"];
   externalInvoice?: WebshopOrderDetail["externalInvoice"];
   split?: WebshopOrderDetail["split"];
   /** A vevő jelzései a webshop áttekintéséből; `null`: nem olvasható. */
@@ -621,6 +639,12 @@ export function toDetail(input: {
     bankTransfer,
     proforma: input.proforma ?? null,
     transferReceipt: input.transferReceipt ?? null,
+    balanceReceipt: input.balanceReceipt ?? null,
+    balanceDue: balanceDueOf(
+      total,
+      input.transferReceipt ?? null,
+      input.balanceReceipt ?? null,
+    ),
     advanceInvoice: input.advanceInvoice ?? null,
     externalInvoice: input.externalInvoice ?? null,
     parcel: facts.parcel,

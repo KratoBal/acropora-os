@@ -474,6 +474,21 @@ export class WebshopOrdersController {
   }
 
   /**
+   * „HÁTRALÉK BEÉRKEZETT” (kártya d31a66a3, S3): az előleg utáni maradék kézi rögzítése; ugyanaz a jog és ugyanaz a bemenet, mint
+   * az előleg beérkezésénél. Az összeget a szerver számolja (a rendelés végösszege mínusz az előleg).
+   */
+  @Post(":id/balance-received")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.FINANCE_MANAGE)
+  recordBalanceReceived(
+    @Param("id") id: string,
+    @Body() body: WebshopTransferReceiptDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.transfers.recordBalanceManual(id, body, user);
+  }
+
+  /**
    * A DÍJBEKÉRŐ KIÁLLÍTÁSA ÉS KIKÜLDÉSE (kártya bb3a6bd5), előre utalásos
    * rendelésnél; ha már kiment, újraküldés. Ugyanaz a két jog, mint a
    * számlához, plusz a kiküldésé. A válasz a friss adatlap.

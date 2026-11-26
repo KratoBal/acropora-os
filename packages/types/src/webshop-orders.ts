@@ -161,6 +161,12 @@ export interface WebshopTransferReceipt {
 }
 
 /**
+ * AZ ELŐLEG UTÁNI HÁTRALÉK BEÉRKEZÉSE (kártya d31a66a3, S3): ugyanaz az alak, mint az előleg beérkezése, csak nincs előleg-jele.
+ * Az összeg a webshop szerinti maradék.
+ */
+export type WebshopBalanceReceipt = Omit<WebshopTransferReceipt, "advance">;
+
+/**
  * A SZÁMLÁZZ.HU ÁLTAL KIÁLLÍTOTT SZÁMLA (bb3a6bd5): előre utalásnál a
  * kifizetett díjbekérőből az Autokassza állítja ki, és a kimenő továbbítás
  * hozza be. `link`: miből tudjuk, hogy ehhez a rendeléshez tartozik; a
@@ -552,6 +558,13 @@ export interface WebshopOrderDetail {
   proforma: WebshopOrderProforma | null;
   /** Az előre utalás beérkezése, ha már rögzítve van; különben `null`. */
   transferReceipt: WebshopTransferReceipt | null;
+  /** Az előleg utáni hátralék beérkezése (kártya d31a66a3, S3), ha rögzítve van; különben `null`. */
+  balanceReceipt: WebshopBalanceReceipt | null;
+  /**
+   * A még várt hátralék, tizedesponttal (a rendelés végösszege mínusz a beérkezett előleg), amíg az előleg megjött és a hátralék
+   * még nem; minden más esetben `null`. Ezt az összeget rögzíti a "Hátralék beérkezett" gomb, és ezt fogadja el a webshop.
+   */
+  balanceDue: string | null;
   /** A Számlázz.hu számlája, ha bejött és a rendeléshez köthető; különben `null`. */
   externalInvoice: WebshopExternalInvoice | null;
   /** A vevő OS-partnere, ha a számlázás már bekötötte (Medusa-kötés); különben `null`. */

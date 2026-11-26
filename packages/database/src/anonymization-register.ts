@@ -1844,6 +1844,13 @@ export const ANONYMIZATION_REGISTER: Readonly<
     currency: "business",
     recordedByUserId: "identifier",
   },
+  WebshopBalanceReceipt: {
+    // orderId: a foreign key to WebshopTransferReceipt.orderId, decided there
+    bankTransactionId: "identifier",
+    reference: "freeText",
+    currency: "business",
+    recordedByUserId: "identifier",
+  },
   WebshopInvoiceDownload: {
     jti: "identifier",
     orderId: "identifier",

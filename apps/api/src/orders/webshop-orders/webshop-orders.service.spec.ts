@@ -55,6 +55,8 @@ const NO_AUDIT = {
   internalNote: async () => null,
   proformas: async () => proformasNow.map,
   transferReceipts: async () => receiptsNow.map,
+  // no balance after an advance in these cases (S3)
+  balanceReceipts: async () => new Map(),
   externalInvoices: async () => externalsNow.map,
   activeShortages: async (ids: string[]) => {
     shortagesNow.asked.push([...ids]);
@@ -711,6 +713,8 @@ describe("WebshopOrdersService.changeStatus", () => {
       internalNote: async () => null,
       proformas: async () => new Map(),
       transferReceipts: async () => new Map(),
+      // no balance after an advance in these cases (S3)
+      balanceReceipts: async () => new Map(),
       externalInvoices: async () => new Map(),
     } as unknown as WebshopOrdersRepository;
     return {
