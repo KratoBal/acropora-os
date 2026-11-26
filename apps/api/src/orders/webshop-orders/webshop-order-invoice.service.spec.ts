@@ -64,6 +64,7 @@ const ORDER: MedusaOrderDetailRow = {
       variant_sku: "RSP-20",
       quantity: 1,
       unit_price: 18900,
+      is_tax_inclusive: true,
       total: 18900,
       metadata: null,
       tax_lines: [{ rate: 27 }],

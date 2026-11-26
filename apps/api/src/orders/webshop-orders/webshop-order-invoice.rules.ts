@@ -341,6 +341,8 @@ interface SourceLine {
   gross: number | null;
   taxLines: { rate: number }[] | null | undefined;
   comment: string | null;
+  /** The shop's own price of an item line (L3), for `lineMatchProblem`; `null` on a shipping line. */
+  shop: { unitPrice: number | null; taxInclusive: boolean | null } | null;
 }
 
 /**
@@ -369,6 +371,10 @@ function sourceLinesOf(order: MedusaOrderDetailRow): SourceLine[] {
       taxLines: item.tax_lines,
       comment:
         !fee && item.variant_sku ? `Cikkszám: ${item.variant_sku}` : null,
+      shop: {
+        unitPrice: amountOf(item.unit_price),
+        taxInclusive: item.is_tax_inclusive ?? null,
+      },
     });
   }
   for (const method of order.shipping_methods ?? []) {
@@ -380,6 +386,7 @@ function sourceLinesOf(order: MedusaOrderDetailRow): SourceLine[] {
       gross,
       taxLines: method.tax_lines,
       comment: null,
+      shop: null,
     });
   }
   return lines;
@@ -515,6 +522,41 @@ export type InvoiceDraftResult =
   | { ok: false; message: string };
 
 /**
+ * THE INVOICE LINE AGAINST THE SHOP'S LINE (L3; barracuda's line sweep 2026-11-25, acrobot 61617 (a)). Until now only the
+ * invoice's total was compared with the order's (1 Ft); a line could be wrong as long as the total was not. The quantity is the
+ * shop's, copied as it is. The price:
+ *   - the shop's unit price must be gross (`is_tax_inclusive`): the line total and the invoice's gross are read as gross, and a
+ *     net price would put a smaller amount on the invoice without a word;
+ *   - the line total cannot be MORE than the unit price times the quantity (there is no surcharge on a line: such a line is not
+ *     the shop's price);
+ *   - without a discount the line total IS the unit price times the quantity, and the invoice's line is back-calculated from it
+ *     (the Számlázz.hu rounding stays under a fillér per line, the invoice total's 1 Ft rule bounds the rest);
+ *   - a discounted line keeps today's shape: a lower unit price, no separate discount line (acrobot 61617 (c): the customer's
+ *     invoice as it is today).
+ * Answers the reason the invoice is not made, naming the item, or `null`.
+ *
+ * THE UNIT (61617 (b), "from the variant if it has one"): neither the shop's variant nor its order line carries a unit today
+ * (measured on the commerce main and the OS, 2026-11-26), so every line stays "db"; a unit field would be a new shop field.
+ */
+function lineMatchProblem(
+  source: Pick<SourceLine, "description" | "quantity" | "gross" | "shop">,
+  currency: string,
+): string | null {
+  if (!source.shop || source.gross === null) return null;
+  const name = `„${source.description}”`;
+  if (source.shop.taxInclusive !== true)
+    return source.shop.taxInclusive === false
+      ? `A webshop a ${name} tétel árát nettóként adta meg, a számla bruttó árakkal számol: a számla nem készül el.`
+      : `A webshop nem mondta meg, hogy a ${name} tétel ára bruttó-e: a számla nem készül el.`;
+  if (source.shop.unitPrice === null)
+    return `A webshop nem adta meg a ${name} tétel egységárát: a számla nem készül el.`;
+  const full = Math.round(source.shop.unitPrice * source.quantity * 100) / 100;
+  if (source.gross > full + 0.005)
+    return `A ${name} tétel összege (${source.gross} ${currency}) több, mint az egységára és a mennyisége szorzata (${source.shop.unitPrice} × ${source.quantity} = ${full} ${currency}): a webshop sora nem egyezik, a számla nem készül el.`;
+  return null;
+}
+
+/**
  * A VÁZLAT A RENDELÉSBŐL. A soronkénti bruttóból visszaszámolt nettó a
  * Számlázz.hu szabályával nem mindig adja vissza pontosan a bruttót (mérve:
  * 27%-on a sorok kb. ötödénél 1 fillér az eltérés). Fillérnyi eltérés
@@ -568,6 +610,8 @@ export function invoiceDraftOf(
         ok: false,
         message: `A tétel nettó ára nem számolható vissza: „${source.description}” (${amounts.error}).`,
       };
+    const mismatch = lineMatchProblem(source, currency);
+    if (mismatch) return { ok: false, message: mismatch };
     invoiceGross =
       Math.round((invoiceGross + Number(amounts.grossAmount)) * 100) / 100;
     itemParts.push({ rate: Number(rate), gross: Number(amounts.grossAmount) });
