@@ -144,7 +144,7 @@ export function SeoLandingListPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Webshop válogatások"
+        title="Válogatások"
         description="Kiemelt termékválogatások saját címmel a webshopban: /hu/valogatas/…"
         actions={
           canManage ? (

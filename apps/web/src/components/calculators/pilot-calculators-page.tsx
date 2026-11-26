@@ -149,6 +149,7 @@ export function PilotCalculatorsPage() {
     >
       <PageHeader
         className="mb-5"
+        eyebrow="Akvarisztika"
         title="Kalkulátorok"
         description="Vízkezelési segédszámítások, tiszta vegyszerekre."
       />

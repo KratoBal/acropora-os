@@ -187,3 +187,11 @@ describe("AiChatSettingsPage", () => {
     expect(await screen.findByLabelText(DAYS)).toBeTruthy();
   });
 });
+
+describe("AiChatSettingsPage save position (Picasso 3.20)", () => {
+  it("the Mentés button is on the right, as on the shared form pattern", async () => {
+    render(createElement(AiChatSettingsPage));
+    const save = await screen.findByRole("button", { name: "Mentés" });
+    expect(save.parentElement!.className).toContain("justify-end");
+  });
+});

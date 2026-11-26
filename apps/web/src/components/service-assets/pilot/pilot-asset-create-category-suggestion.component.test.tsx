@@ -383,3 +383,27 @@ describe("a létrehozó űrlap: a szülőeszköz keresése", () => {
     ).toContain("Nincs megadva");
   });
 });
+
+/*
+  A GOMBSOR A KÖZÖS ŰRLAP-MINTA SZERINT (Picasso 3.20, acrobot 62278): bal oldalt a hiányzó mezők, jobb oldalt a Mégse és a mentés (a Mégse bal, a létrehozás középen állt). MI PIROSÍT: ha a gombok újra
+  a hiányzó-lista mellett balra állnak; ha a hiányzó mezők nem a gombsor bal oldalán állnak.
+*/
+describe("a létrehozó űrlap gombsora", () => {
+  it("a Mégse és a létrehozás jobb oldalt áll, a hiányzó mezők bal oldalt", async () => {
+    await megjelenit();
+    const create = screen.getByRole("button", { name: "Eszköz létrehozása" });
+    const cancel = screen.getByRole("button", { name: "Mégse" });
+    const right = create.parentElement!;
+    expect(right.className).toContain("sm:justify-end");
+    expect(right.contains(cancel)).toBe(true);
+    const bar = right.parentElement!;
+    expect(bar.className).toContain("sm:justify-between");
+    // the missing-fields text is in the left part, a sibling BEFORE the buttons
+    const left = bar.firstElementChild!;
+    expect(left).not.toBe(right);
+    expect(left.textContent).toContain("Hiányzik:");
+    expect(
+      left.compareDocumentPosition(right) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+});
