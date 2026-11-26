@@ -29,7 +29,7 @@ vi.mock("@acropora/types", () => ({
   hasPermission: () => true,
   isNavigationEntryVisible: () => false,
   // a meglévő fiók betöltése (a jelenléti beosztás szakasz) hívja; az új fióknál ez az ág nem fut
-  isAttendanceEmployeeRole: () => false,
+  isAttendanceEmployeeRole: (role: string) => role === "STAFF",
   /*
     KEZZEL IRT TUKOR, NEM A VALODI LISTA -- ES EZ SZANDEKOS.
 
@@ -114,8 +114,29 @@ vi.mock("@/components/service-jobs/partner-picker", () => ({
 }));
 // a jog-táblázatnak saját tesztje van (`user-permission-table.component.test.tsx`);
 // itt a közös csomag részleges dublőre mellett nem töltődhet be
-vi.mock("./user-permission-table", () => ({
-  UserPermissionTable: () => null,
+// a dupla SAJÁT állapotot tart (mint a valódi táblázat): ezen látszik, ha egy fülváltás lecsatolja a szakaszt
+vi.mock("./user-permission-table", async () => {
+  const { useState } = await import("react");
+  function UserPermissionTable() {
+    const [draft, setDraft] = useState("");
+    return (
+      <>
+        <input
+          aria-label="Jog-vázlat"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+        />
+        <button type="button">Jogosultságok mentése</button>
+      </>
+    );
+  }
+  return { UserPermissionTable };
+});
+// a munkarendnek is saját tesztje van; itt csak az számít, melyik fülön áll a mentése
+vi.mock("./user-attendance-schedule", () => ({
+  UserAttendanceSchedule: () => (
+    <button type="button">Munkarend mentése</button>
+  ),
 }));
 vi.mock("./role-labels", () => ({
   ROLE_LABELS: {
@@ -542,5 +563,97 @@ describe("UserEditorPage új és meglévő fiók űrlapja (Picasso 3.20)", () =>
       screen.getByText(/csak annak a partnernek az adatait látja/),
     ).toBeTruthy();
     expect(screen.queryByText("Vevő nevében lép be")).toBeNull();
+  });
+});
+
+/*
+  A MEGLÉVŐ FELHASZNÁLÓ NÉGY FÜLÖN, FÜLENKÉNT EGY MENTÉSSEL (picasso leltár 3.23, acrobot 2026-11-26). MI PIROSÍT: egy fülön újra több mentés
+  gomb látszik; a fülváltás elveszti a félbehagyott szerkesztést; a Munkarend fül olyan fióknál is ott áll, ahol a szakasz nem jelenik meg;
+  egy új felhasználónál fülek jelennek meg.
+*/
+describe("UserEditorPage fülei", () => {
+  const existing = (role: string) => ({
+    id: "u1",
+    firstName: "Anna",
+    lastName: "Kiss",
+    displayName: "Kiss Anna",
+    nickname: null,
+    email: "anna@acropora.local",
+    role,
+    isActive: true,
+    hasPassword: true,
+    createdAt: "2026-11-01T10:00:00.000Z",
+    updatedAt: "2026-11-25T10:00:00.000Z",
+    notificationRoles: [],
+    serviceCapabilities: [],
+    isServiceAccount: false,
+    customerId: null,
+    supplierId: null,
+  });
+  const saves = () =>
+    screen
+      .queryAllByRole("button", { name: /mentése$/ })
+      .map((button) => button.textContent);
+
+  beforeEach(() => {
+    auth.session = session;
+    vi.mocked(usersApi.detail).mockReset();
+  });
+
+  it("minden fülön egy mentés látszik, és csak az övé", async () => {
+    vi.mocked(usersApi.detail).mockResolvedValue(existing("STAFF") as never);
+    render(<UserEditorPage userId="u1" />);
+    const tablist = await screen.findByRole("tablist", {
+      name: "A felhasználó lapjai",
+    });
+    expect(
+      within(tablist)
+        .getAllByRole("tab")
+        .map((t) => t.textContent),
+    ).toEqual(["Adatok", "Jogosultságok", "Munkarend", "Biztonság"]);
+    expect(saves()).toEqual(["Változások mentése"]);
+    for (const [name, save] of [
+      ["Jogosultságok", "Jogosultságok mentése"],
+      ["Munkarend", "Munkarend mentése"],
+      ["Biztonság", "Jelszó mentése"],
+    ] as const) {
+      fireEvent.click(within(tablist).getByRole("tab", { name }));
+      expect(saves()).toEqual([save]);
+    }
+  });
+
+  it("a fülváltás nem veszti el a félbehagyott szerkesztést (egy szakasz saját állapotát sem)", async () => {
+    vi.mocked(usersApi.detail).mockResolvedValue(existing("VIEWER") as never);
+    render(<UserEditorPage userId="u1" />);
+    const tablist = await screen.findByRole("tablist");
+    fireEvent.click(
+      within(tablist).getByRole("tab", { name: "Jogosultságok" }),
+    );
+    fireEvent.change(screen.getByLabelText("Jog-vázlat"), {
+      target: { value: "kezelés" },
+    });
+    fireEvent.click(within(tablist).getByRole("tab", { name: "Biztonság" }));
+    fireEvent.click(
+      within(tablist).getByRole("tab", { name: "Jogosultságok" }),
+    );
+    expect(
+      (screen.getByLabelText("Jog-vázlat") as HTMLInputElement).value,
+    ).toBe("kezelés");
+  });
+
+  it("a Munkarend fül csak ott áll, ahol a szakasz megjelenne, és egy új felhasználónál nincs fül", async () => {
+    vi.mocked(usersApi.detail).mockResolvedValue(existing("VIEWER") as never);
+    const first = render(<UserEditorPage userId="u1" />);
+    const tablist = await screen.findByRole("tablist");
+    expect(
+      within(tablist).queryByRole("tab", { name: "Munkarend" }),
+    ).toBeNull();
+    first.unmount();
+
+    render(<UserEditorPage />);
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Felhasználó létrehozása" }),
+    ).toBeInTheDocument();
   });
 });
