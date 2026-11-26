@@ -27,6 +27,8 @@ function setup(
     exists?: boolean;
     /** A webshop válasza a lezárásra; ha Error, azt dobja. */
     shop?: Error;
+    /** only the FIRST call to the shop throws this (a shop that refuses a field, then takes the receipt without it) */
+    shopFirst?: Error;
     /** Már rögzített beérkezés (a lezárás újraküldéséhez). */
     receipt?: boolean;
     /** A beérkezés díjbekérője előleg-díjbekérő (2b). */
@@ -66,6 +68,7 @@ function setup(
         ) => {
           shopCalls.push({ orderId, receipt });
           if (over.shop) throw over.shop;
+          if (over.shopFirst && shopCalls.length === 1) throw over.shopFirst;
           return { recorded: true, payment_id: "pay_1" };
         },
       }),
@@ -316,6 +319,56 @@ describe("closing the payment in the shop", () => {
         String(advanceNumber),
       );
     }
+  });
+
+  /*
+    A SHOP WITHOUT commerce #914 (acrobot 63083: the live OS goes out daily, the live shop on Balázs's word). MI PIROSÍT: such a
+    shop's 400 for the unknown field leaves the advance open; or any OTHER refusal is retried (a real refusal would be hidden).
+  */
+  it("a shop that does not know the number takes the advance without it; any other refusal stands", async () => {
+    const unknownField = new MedusaAdminHttpError(
+      400,
+      JSON.stringify({
+        type: "invalid_data",
+        message: "Invalid request: Unrecognized fields: 'balance_reference'",
+      }),
+    );
+    const old = setup({
+      receipt: true,
+      advance: true,
+      shopFirst: unknownField,
+    });
+    await old.service.syncShop("order_55", NOW);
+    assert.equal(old.shopCalls.length, 2);
+    assert.equal(old.shopCalls[0]!.receipt.balance_reference, "D-CRPR-7");
+    assert.equal("balance_reference" in old.shopCalls[1]!.receipt, false);
+    assert.equal(old.shopCalls[1]!.receipt.advance, true);
+
+    const refused = setup({
+      receipt: true,
+      advance: true,
+      shopFirst: new MedusaAdminHttpError(
+        400,
+        JSON.stringify({
+          message: "Invalid request: Unrecognized fields: 'amount_x'",
+        }),
+      ),
+    });
+    await assert.rejects(refused.service.syncShop("order_55", NOW));
+    assert.equal(refused.shopCalls.length, 1);
+
+    const conflict = setup({
+      receipt: true,
+      advance: true,
+      shopFirst: new MedusaAdminHttpError(
+        409,
+        JSON.stringify({ message: "Az összeg eltér" }),
+      ),
+    });
+    await assert.rejects(conflict.service.syncShop("order_55", NOW), {
+      message: /Az összeg eltér/,
+    });
+    assert.equal(conflict.shopCalls.length, 1);
   });
 
   it("a shop failure keeps the OS record and the notice", async () => {

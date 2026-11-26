@@ -50,6 +50,15 @@ export const transferAmountText = (amount: Prisma.Decimal, currency: string) =>
 /** The shop's shape of a balance reference (commerce #914): a document number, letters, digits, "/", "-", "_", ".", at most 40. */
 const BALANCE_REFERENCE = /^[A-Za-z0-9][A-Za-z0-9/._-]{0,39}$/;
 
+/** The shop's 400 for a receipt field it does not know (Medusa's validator: "Unrecognized fields: 'balance_reference'"). */
+export function refusesBalanceReference(error: unknown): boolean {
+  return (
+    error instanceof MedusaAdminHttpError &&
+    error.status === 400 &&
+    /Unrecognized fields: '[^']*\bbalance_reference\b/.test(error.body)
+  );
+}
+
 /** The advance proforma's number as the shop takes it, or null (no number, or one it would refuse). */
 export function balanceReferenceOf(
   number: string | null | undefined,
@@ -296,13 +305,30 @@ export class WebshopOrderTransferService {
     const balanceReference = balanceReferenceOf(advanceProforma?.number);
     try {
       const client = await this.orders.adminClient();
-      await client.recordTransferReceipt(orderId, {
+      const base = {
         reference: receipt.reference,
         received_at: receipt.receivedOn,
         amount: Number(receipt.amount),
         ...(advance ? { advance: true } : {}),
-        ...(balanceReference ? { balance_reference: balanceReference } : {}),
-      });
+      };
+      try {
+        await client.recordTransferReceipt(orderId, {
+          ...base,
+          ...(balanceReference ? { balance_reference: balanceReference } : {}),
+        });
+      } catch (error) {
+        /*
+          A SHOP WITHOUT commerce #914 (acrobot 63083): the live OS goes out daily, the live shop only on Balázs's word, so the two
+          can stand on different versions. Such a shop refuses the unknown field with a 400 naming it, and the advance would stay
+          open there. Then the receipt goes once more without the number: the advance closes, only the page's sentence stays out.
+          Any other refusal is the shop's answer, as before.
+        */
+        if (!(balanceReference && refusesBalanceReference(error))) throw error;
+        this.logger.warn(
+          `Előre utalás: a webshop nem ismeri a díjbekérő számát (${orderId}), nélküle küldöm`,
+        );
+        await client.recordTransferReceipt(orderId, base);
+      }
       return null;
     } catch (error) {
       const raw = error instanceof Error ? error.message : String(error);
