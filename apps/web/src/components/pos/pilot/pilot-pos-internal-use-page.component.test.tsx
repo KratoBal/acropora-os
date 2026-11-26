@@ -114,6 +114,12 @@ beforeEach(() => {
   with a missing price showing a value; an empty period shown as an error; the page asking without orders.view.
 */
 describe("PilotPosInternalUsePage", () => {
+  it("steps back to the till with the shared arrow link", async () => {
+    render(createElement(PilotPosInternalUsePage));
+    const back = await screen.findByRole("link", { name: "Pénztár" });
+    expect(back).toHaveAttribute("href", "/pos");
+  });
+
   it("monthRange gives the whole month, across the year boundary", () => {
     expect(monthRange("2026-11-20", 0)).toEqual({
       from: "2026-11-01",

@@ -1,8 +1,11 @@
 "use client";
 
 import {
+  PilotBackLink,
+  backLinkLabel,
+} from "@/components/pilot/pilot-back-link";
+import {
   Alert,
-  Icon,
   PageHeader,
   PilotDataTable,
   Skeleton,
@@ -219,14 +222,9 @@ export function PilotPosSaleDetailPage({ saleId }: { saleId: string }) {
       className="flex min-h-screen flex-col bg-pilot-grey-50 [&_h1]:![font-family:inherit] [&_h2]:![font-family:inherit] [&_h3]:![font-family:inherit]"
     >
       <div className={`${PAGE_GUTTER_X} pb-5 pt-6`}>
-        <button
-          type="button"
-          onClick={backTo.goBack}
-          className="mb-3 flex items-center gap-1.5 text-[11px] text-pilot-aqua-700 hover:underline"
-        >
-          <Icon name="chevron-left" size={12} />
-          {backTo.fromWithinApp ? "Vissza" : "Vissza a pénztárhoz"}
-        </button>
+        <PilotBackLink href={backTo.href}>
+          {backLinkLabel(backTo, "Pénztár")}
+        </PilotBackLink>
         <PageHeader
           title={detail ? detail.orderNumber : "Eladás"}
           description="POS eladás részletei"

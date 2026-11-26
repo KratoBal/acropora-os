@@ -16,10 +16,13 @@ import {
   type QuoteRichText,
 } from "@acropora/types";
 import { isExpired } from "./quote-expiry.js";
+import { quoteMoneyFixed } from "./pdf/quote-pdf-layout.js";
 import type { QuoteListRow, QuoteRow } from "./quotes.repository.js";
 export function quoteListItemDto(
   row: QuoteListRow,
   netTotals: ReadonlyMap<string, string> = new Map(),
+  /** the exact gross sums per version (`QuotesRepository.grossTotals`); rounded here the PDF's way */
+  grossTotals: ReadonlyMap<string, string> = new Map(),
   /** P8: computed by the list's own query (`expiredWhere`) */
   expired = false,
 ): QuoteListItemDto {
@@ -48,6 +51,10 @@ export function quoteListItemDto(
           >["priceDisplay"],
           publishedAt: version.publishedAt?.toISOString() ?? null,
           netTotal: netTotals.get(version.id) ?? "0.0000",
+          grossTotal: quoteMoneyFixed(
+            new Prisma.Decimal(grossTotals.get(version.id) ?? 0),
+            version.currency,
+          ),
         }
       : null,
   };

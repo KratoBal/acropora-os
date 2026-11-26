@@ -16,6 +16,7 @@ import {
   quoteListItemDto,
   type QuoteRow,
 } from "./quote-dto.mapper.js";
+import { quoteMoneyFixed, quoteTotals } from "./pdf/quote-pdf-layout.js";
 import { QuotesService } from "./quotes.service.js";
 import { QuotesRepository } from "./quotes.repository.js";
 import { QuotesController } from "./quotes.controller.js";
@@ -346,6 +347,8 @@ test("list query fetches only a bounded header/version projection and list mappe
       "priceDisplay",
       "publishedAt",
       "netTotal",
+      // the list's gross total (Luca 2026-11-26): the PDF's number, rounded the PDF's way
+      "grossTotal",
     ].sort(),
   );
   noCosts(dto);
@@ -354,6 +357,68 @@ test("list query fetches only a bounded header/version projection and list mappe
     quoteListItemDto({ ...quoteFixture(), versions: [] }).latestVersion,
     null,
   );
+});
+/*
+  THE LIST'S GROSS TOTAL (Luca 2026-11-26, acrobot 62637): the exact gross sum per version from the database, rounded ONCE the PDF's way (`quoteMoneyFixed`:
+  forint to the whole, half up; other currencies two places). WHAT TURNS IT RED: a forint total with decimals; a rounding that is not half up (the .5 case);
+  two places missing on a euro quote; a version with no lines showing something else than zero; the sum rounded per line instead of once.
+*/
+test("the list's gross total is rounded once, the PDF's way: forint whole half up, euro two places, no lines zero", () => {
+  const gross = (sum: string | undefined, currency = "HUF") => {
+    const row = quoteFixture();
+    row.versions[0]!.currency = currency;
+    return quoteListItemDto(
+      row,
+      new Map(),
+      sum === undefined ? new Map() : new Map([["v", sum]]),
+    ).latestVersion!.grossTotal;
+  };
+  assert.equal(gross("1049.999895"), "1050");
+  assert.equal(gross("1049.5"), "1050", "half up");
+  assert.equal(gross("1049.49999"), "1049");
+  assert.equal(gross("6172200"), "6172200");
+  assert.equal(gross("12.345", "EUR"), "12.35");
+  assert.equal(gross("12.344", "EUR"), "12.34");
+  assert.equal(gross(undefined), "0");
+  assert.equal(gross(undefined, "EUR"), "0.00");
+});
+test("the PDF and the list agree on a mixed-VAT total: the same lines, the same sum, the same rounding", () => {
+  const items = [
+    ["3", "333.3333", "5"],
+    ["1", "1234.5678", "0"],
+    ["2", "1500", "27"],
+    ["1", "50000", "27"],
+  ].map(([quantity, unitNetPrice, vatRatePercent]) => ({
+    name: "x",
+    description: null,
+    unit: "db",
+    isOptional: false,
+    quantity: new Prisma.Decimal(quantity!),
+    unitNetPrice: new Prisma.Decimal(unitNetPrice!),
+    vatRatePercent: new Prisma.Decimal(vatRatePercent!),
+  }));
+  const pdfGross = quoteTotals([{ items }] as never).gross;
+  // what the database sums: quantity * net * (1 + rate / 100), unrounded
+  const sqlSum = items.reduce(
+    (sum, item) =>
+      sum.plus(
+        item.quantity
+          .times(item.unitNetPrice)
+          .times(
+            new Prisma.Decimal(1).plus(item.vatRatePercent.dividedBy(100)),
+          ),
+      ),
+    new Prisma.Decimal(0),
+  );
+  const row = quoteFixture();
+  const dto = quoteListItemDto(
+    row,
+    new Map(),
+    new Map([["v", sqlSum.toFixed()]]),
+  );
+  assert.equal(dto.latestVersion!.grossTotal, quoteMoneyFixed(pdfGross, "HUF"));
+  // 1049.999895 + 1234.5678 + 3810 + 63500 = 69594.567695: rounded once, 69595
+  assert.equal(dto.latestVersion!.grossTotal, "69595");
 });
 test("three allowlisted DTO shapes, decimal precision and no customer/internal cost-free leakage", () => {
   const row = quoteFixture(),
@@ -467,6 +532,7 @@ test("cost-free API reads and writes use the safe mapper and VIEWER cannot reach
     create: async () => row,
     update: async () => row,
     netTotals: async () => new Map(),
+    grossTotals: async () => new Map(),
   } as unknown as QuotesRepository;
   const service = new QuotesService(repo);
   noCosts(await service.get("q", user("SALES")));

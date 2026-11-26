@@ -1,9 +1,12 @@
 "use client";
 
 import {
+  PilotBackLink,
+  backLinkLabel,
+} from "@/components/pilot/pilot-back-link";
+import {
   Alert,
   Badge,
-  Button,
   Card,
   CardContent,
   CardHeader,
@@ -71,14 +74,12 @@ export function PosSaleDetailPage({ saleId }: { saleId: string }) {
 
   return (
     <div className="space-y-6">
+      <PilotBackLink href={backTo.href} flush>
+        {backLinkLabel(backTo, "Pénztár")}
+      </PilotBackLink>
       <PageHeader
         title={detail ? detail.orderNumber : "Eladás"}
         description="POS eladás részletei"
-        actions={
-          <Button variant="secondary" onClick={backTo.goBack}>
-            {backTo.fromWithinApp ? "Vissza" : "Vissza a pénztárhoz"}
-          </Button>
-        }
       />
 
       {loading ? (
