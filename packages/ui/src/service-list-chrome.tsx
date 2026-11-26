@@ -232,6 +232,9 @@ export function ServiceListTabs({
     event.preventDefault();
     row[target]?.focus();
   };
+  // the one tab in the Tab order: the active one, or the first when the active key names none (an unknown `status` in the
+  // address, barracuda on #3002), so the row is never out of the keyboard's reach
+  const stop = tabs.some((tab) => tab.key === active) ? active : tabs[0]?.key;
   return (
     <div
       className={className ?? (pill ? sv.pillTabs : sv.tabs)}
@@ -248,7 +251,7 @@ export function ServiceListTabs({
             id={idPrefix ? `${idPrefix}-${tab.key}` : undefined}
             aria-selected={on}
             aria-controls={panelId}
-            tabIndex={on ? 0 : -1}
+            tabIndex={tab.key === stop ? 0 : -1}
             onClick={() => onSelect(tab.key)}
             onKeyDown={onKeyDown}
             className={
