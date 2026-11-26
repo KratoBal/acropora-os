@@ -168,6 +168,8 @@ export function ServiceListHeader({
 export interface ServiceListTab {
   key: string;
   label: string;
+  /** The tab's number after its label (the pill shape only; Picasso R9). Omitted: no number. */
+  count?: ReactNode;
 }
 
 /**
@@ -212,6 +214,13 @@ export function ServiceListTabs({
             }
           >
             {tab.label}
+            {pill && tab.count !== undefined ? (
+              <span
+                className={`${sv.pillTabCount} ${on ? sv.pillTabCountActive : sv.pillTabCountIdle}`}
+              >
+                {tab.count}
+              </span>
+            ) : null}
           </button>
         );
       })}

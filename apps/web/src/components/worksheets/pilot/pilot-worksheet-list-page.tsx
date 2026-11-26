@@ -12,6 +12,7 @@ import {
   PilotSelect,
   type PilotTableColumn,
   PAGE_GUTTER_X,
+  sv,
 } from "@acropora/ui";
 import {
   commonServiceStatusLabel,
@@ -768,14 +769,15 @@ export function PilotWorksheetListPage() {
               role="tab"
               aria-selected={active}
               onClick={() => selectStatus(tab.key)}
-              className={`flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md px-4 py-2 text-sm transition-colors ${
-                active
-                  ? "bg-pilot-aqua-50 font-semibold text-pilot-aqua-700"
-                  : "text-pilot-grey-600 hover:text-pilot-grey-900"
+              // the lists' one tab shape (Picasso R9, acrobot 62497): the solid green pill
+              className={`cursor-pointer ${sv.pillTab} ${
+                active ? sv.pillTabActive : sv.pillTabIdle
               }`}
             >
               {tab.label}
-              <span className="text-xs font-normal text-pilot-grey-400">
+              <span
+                className={`${sv.pillTabCount} ${active ? sv.pillTabCountActive : sv.pillTabCountIdle}`}
+              >
                 {tabCount(tab.key) ?? "–"}
               </span>
             </button>
