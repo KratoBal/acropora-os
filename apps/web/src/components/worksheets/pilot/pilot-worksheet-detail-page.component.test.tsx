@@ -18,10 +18,14 @@ vi.mock("next/font/local", () => ({
   default: () => ({ className: "pilot-inter-stub" }),
 }));
 vi.mock("../worksheet-entries", () => ({
-  WorksheetEntries: () => <div data-testid="entries-stub" />,
+  WorksheetEntries: ({ canWrite }: { canWrite: boolean }) => (
+    <div data-testid="entries-stub" data-can-write={String(canWrite)} />
+  ),
 }));
 vi.mock("../worksheet-material-requests", () => ({
-  WorksheetMaterialRequests: () => <div data-testid="material-stub" />,
+  WorksheetMaterialRequests: ({ canWrite }: { canWrite: boolean }) => (
+    <div data-testid="material-stub" data-can-write={String(canWrite)} />
+  ),
 }));
 vi.mock("../worksheet-asset-editor", () => ({
   // the stubs report whether the page lets them write (the real editors are tested on their own)
@@ -256,7 +260,7 @@ describe("PilotWorksheetDetailPage -- redesign", () => {
     api.close.mockResolvedValue(sheet());
     render(<PilotWorksheetDetailPage worksheetId="ws-1" />);
     const panel = await screen.findByRole("region", {
-      name: "Helyszíni lezárás",
+      name: "Következő lépés",
     });
     expect(panel.textContent).toContain("Átadás: még nincs rögzítve");
     const close = screen.getByRole("button", { name: "Kiállítás és lezárás" });
@@ -267,13 +271,13 @@ describe("PilotWorksheetDetailPage -- redesign", () => {
     );
   });
 
-  it("records the hand-over from the closing panel", async () => {
+  it("records the hand-over from the next-step box, behind Továbbiak on a draft", async () => {
     api.detail.mockResolvedValue(sheet());
     api.setHandedOver.mockResolvedValue(sheet());
     render(<PilotWorksheetDetailPage worksheetId="ws-1" />);
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Átadás rögzítése" }),
-    );
+    // on a draft the main step is the close: the hand-over is a secondary step
+    fireEvent.click(await screen.findByRole("button", { name: "Továbbiak" }));
+    fireEvent.click(screen.getByRole("button", { name: "Átadás rögzítése" }));
     await waitFor(() =>
       expect(api.setHandedOver).toHaveBeenCalledWith("token-1", "ws-1", true),
     );
@@ -292,12 +296,21 @@ describe("PilotWorksheetDetailPage -- redesign", () => {
     );
     render(<PilotWorksheetDetailPage worksheetId="ws-1" />);
     const panel = await screen.findByRole("region", {
-      name: "Helyszíni lezárás",
+      name: "Következő lépés",
     });
-    expect(panel.textContent).toContain("Kiállítani csak piszkozatot lehet");
+    // a signed sheet under a ticket: the hand-over is the next step, and the box says why it matters
+    expect(panel.textContent).toContain(
+      "A HJ-2026-0001 hibajegy csak az átadás rögzítése után zárható le.",
+    );
     expect(
       screen.queryByRole("button", { name: "Kiállítás és lezárás" }),
     ).toBeNull();
+    const primary = Array.from(panel.querySelectorAll("button")).filter(
+      (button) => button.className.includes("bg-pilot-aqua-600"),
+    );
+    expect(primary.map((button) => button.textContent)).toEqual([
+      "Átadás rögzítése",
+    ]);
   });
 
   /*
@@ -319,7 +332,7 @@ describe("PilotWorksheetDetailPage -- redesign", () => {
     expect(versions.closest(columns)).toBeNull();
   });
 
-  it("a signed sheet gives its assignee and asset editors NO write right, a draft does", async () => {
+  it("a signed sheet gives its assignee, asset, log and material editors NO write right, a draft does", async () => {
     api.detail.mockResolvedValue(sheet());
     const draft = render(<PilotWorksheetDetailPage worksheetId="ws-1" />);
     const writes = async () => [
@@ -329,8 +342,14 @@ describe("PilotWorksheetDetailPage -- redesign", () => {
       (await screen.findByTestId("assets-stub")).getAttribute(
         "data-can-manage",
       ),
+      (await screen.findByTestId("entries-stub")).getAttribute(
+        "data-can-write",
+      ),
+      (await screen.findByTestId("material-stub")).getAttribute(
+        "data-can-write",
+      ),
     ];
-    expect(await writes()).toEqual(["true", "true"]);
+    expect(await writes()).toEqual(["true", "true", "true", "true"]);
     draft.unmount();
 
     api.detail.mockResolvedValue(
@@ -344,8 +363,8 @@ describe("PilotWorksheetDetailPage -- redesign", () => {
       }),
     );
     render(<PilotWorksheetDetailPage worksheetId="ws-1" />);
-    await screen.findByRole("region", { name: "Helyszíni lezárás" });
-    expect(await writes()).toEqual(["false", "false"]);
+    await screen.findByRole("region", { name: "Következő lépés" });
+    expect(await writes()).toEqual(["false", "false", "false", "false"]);
   });
 
   it("shows no closing panel to a reader without the manage permission", async () => {

@@ -351,9 +351,10 @@ describe("WorksheetDetailPage és az aláíró", () => {
       },
     });
     render(<WorksheetDetailPage worksheetId="worksheet-1" />);
-    await waitFor(() =>
-      expect(screen.getByText("Kiküldés aláírásra")).toBeTruthy(),
-    );
+    // the send is the next step's main button (picasso 3.1); the decision card stays the other way
+    expect(
+      await screen.findByRole("button", { name: "Elküldöm aláírásra" }),
+    ).toBeTruthy();
     expect(screen.getByText("Ügyfél döntésének rögzítése")).toBeTruthy();
   });
 
@@ -374,8 +375,10 @@ describe("WorksheetDetailPage és az aláíró", () => {
     await waitFor(() =>
       expect(screen.getByText("Ügyfél döntésének rögzítése")).toBeTruthy(),
     );
-    expect(screen.queryByText("Kiküldés aláírásra")).toBeNull();
-    expect(screen.getByText("Újraküldés aláírásra")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Elküldöm aláírásra" }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Újraküldöm" })).toBeTruthy();
     expect(screen.getByText(/Kiküldve .*: Vevő Vilmos\./)).toBeTruthy();
   });
 
@@ -942,7 +945,11 @@ describe("a kiállítás a munkalap adatlapján", () => {
 
     render(<WorksheetDetailPage worksheetId="worksheet-1" />);
 
-    expect(await screen.findByText(/Ez a lap már ki van állítva/)).toBeTruthy();
+    // the progress bar stands on Elkészült (the badge's word), and the close is gone
+    const bar = await screen.findByRole("list", { name: "A munkalap útja" });
+    expect(bar.querySelector("[aria-current='step']")?.textContent).toContain(
+      "Elkészült",
+    );
     expect(
       screen.queryByRole("button", { name: /Kiállítás és lezárás/ }),
     ).toBeNull();
@@ -983,8 +990,36 @@ describe("WorksheetDetailPage és az eszköz átadása", () => {
     // hianya a betoltes lassusagat merne, nem az allapotot.
     await screen.findByText("Kompresszor bevizsgálás");
 
+    // a standalone sheet: nothing waits for the hand-over, and the row says so (picasso 3.1)
     expect(screen.getByTestId("munkalap-atadas").textContent).toBe(
-      "Átadás nincs rögzítve",
+      "Nincs rögzítve. Ennél a lapnál az átadás rögzítése nem kötelező.",
+    );
+  });
+
+  it("hibajegy alatti lapon kimondja, hogy a hibajegy lezárása vár rá; karbantartási lapon nem kötelező", async () => {
+    api.detail.mockResolvedValue({
+      ...detail(null),
+      serviceJob: { id: "job-1", jobNumber: "HJ-2026-0042", kind: "REPAIR" },
+    });
+    const ticket = render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    await screen.findByText("Kompresszor bevizsgálás");
+    expect(screen.getByTestId("munkalap-atadas").textContent).toBe(
+      "Nincs rögzítve. A HJ-2026-0042 hibajegy csak az átadás rögzítése után zárható le.",
+    );
+    ticket.unmount();
+
+    api.detail.mockResolvedValue({
+      ...detail(null),
+      serviceJob: {
+        id: "job-2",
+        jobNumber: "KT-2026-0007",
+        kind: "MAINTENANCE",
+      },
+    });
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    await screen.findByText("Kompresszor bevizsgálás");
+    expect(screen.getByTestId("munkalap-atadas").textContent).toBe(
+      "Nincs rögzítve. Ennél a lapnál az átadás rögzítése nem kötelező.",
     );
   });
 
@@ -1056,7 +1091,9 @@ describe("WorksheetDetailPage és az eszköz átadása", () => {
       handedOverByName: "Szerelő Sándor",
     });
     render(<WorksheetDetailPage worksheetId="worksheet-1" />);
-    const gomb = await screen.findByRole("button", {
+    // on a draft the undo sits behind Továbbiak (the main step is the close)
+    fireEvent.click(await screen.findByRole("button", { name: "Továbbiak" }));
+    const gomb = screen.getByRole("button", {
       name: "Átadás visszavonása",
     });
 
