@@ -429,3 +429,74 @@ describe("a katalógus-sor szűrése", () => {
     expect(screen.getByText("0 elem megjelenítve")).toBeTruthy();
   });
 });
+
+describe("a katalógus-sor termékenként csoportosítva (Picasso 3.27)", () => {
+  const FIELDS = [
+    "searchKeywords",
+    "seoTitle",
+    "metaDescription",
+    "featureBullets",
+    "shortDescription",
+  ] as const;
+  const many: ProductQualityQueueRow[] = FIELDS.map((field) => ({
+    productId: "p-many",
+    productName: "Sok hiányzó mezős termék",
+    field,
+    tier: "C",
+    status: "MISSING",
+    lastCheckedAt: "2026-10-02T09:58:00.000Z",
+  }));
+
+  it("egy sok mezős termék három sort mutat, a termék neve egyszer áll, a többi egy gomb mögött van", () => {
+    render(
+      <JevQualityQueueTable
+        rows={many}
+        filter="all"
+        now={now}
+        hrefFor={() => "/"}
+      />,
+    );
+    expect(screen.getAllByText("Sok hiányzó mezős termék")).toHaveLength(1);
+    expect(
+      screen.getAllByRole("link", { name: /Ellenőrzés|Megnyitás/ }),
+    ).toHaveLength(3);
+    expect(
+      screen.getByRole("button", { name: "+2 további mező" }),
+    ).toBeTruthy();
+    // a számláló továbbra is az összes sort mondja, nem a látszókat
+    expect(screen.getByText("5 elem megjelenítve")).toBeTruthy();
+  });
+
+  it("a gomb kinyitja az összes mezőt, és vissza is csukja", () => {
+    render(
+      <JevQualityQueueTable
+        rows={many}
+        filter="all"
+        now={now}
+        hrefFor={() => "/"}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "+2 további mező" }));
+    expect(
+      screen.getAllByRole("link", { name: /Ellenőrzés|Megnyitás/ }),
+    ).toHaveLength(5);
+    const close = screen.getByRole("button", { name: "Kevesebb mező" });
+    expect(close.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(close);
+    expect(
+      screen.getAllByRole("link", { name: /Ellenőrzés|Megnyitás/ }),
+    ).toHaveLength(3);
+  });
+
+  it("legfeljebb három mezős terméknél nincs gomb", () => {
+    render(
+      <JevQualityQueueTable
+        rows={many.slice(0, 3)}
+        filter="all"
+        now={now}
+        hrefFor={() => "/"}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /további mező/ })).toBeNull();
+  });
+});
