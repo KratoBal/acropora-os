@@ -262,6 +262,13 @@ export const SETTINGS_AREAS: SettingsArea[] = [
         entryId: "partner-migration",
       },
       {
+        label: "Hátralékos megrendelések",
+        description:
+          "Hány nap mozgás nélkül után jelezzen hátralékosnak a Megrendelések lista egy nyitott megrendelést.",
+        href: "/beallitasok/megrendeles-hatralek",
+        entryId: "partner-order-backlog",
+      },
+      {
         label: "Szállítási jelzők feltöltése",
         description:
           "Egyszeri feltöltés a UNAS-ból: minden UNAS-os termék megkapja a szállítási jelzőit. Előbb próba, utána írás.",

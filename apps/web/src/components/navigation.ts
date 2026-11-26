@@ -708,6 +708,14 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         icon: "settings",
         entryId: "quote-templates",
       },
+      {
+        // A HÁTRALÉKOS MEGRENDELÉS HATÁRA (Picasso 3.8): a Megrendelések lista tetejéről ide költözött; az ajánlat-láncé, ezért az Árajánlat alcsoportban áll
+        subgroup: "Árajánlat",
+        href: "/beallitasok/megrendeles-hatralek",
+        label: "Hátralékos megrendelések",
+        icon: "settings",
+        entryId: "partner-order-backlog",
+      },
     ],
   },
 ];

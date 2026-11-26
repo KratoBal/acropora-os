@@ -17,7 +17,6 @@ import {
 } from "@acropora/ui";
 import {
   hasPermission,
-  PARTNER_ORDER_BACKLOG_DAYS_MAX,
   PARTNER_ORDER_CHAIN_FILTERS,
   PARTNER_ORDER_STATUSES,
   PERMISSIONS,
@@ -26,6 +25,7 @@ import {
   type PartnerOrderListItemDto,
   type PartnerOrderListResponse,
 } from "@acropora/types";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -88,9 +88,6 @@ export function PartnerOrderListPage() {
   const backlogOnly = params.get("backlog") === "1";
   // the days setting (S4b): the saved value, and what is typed in the field
   const [backlogDays, setBacklogDays] = useState<number | null>(null);
-  const [daysText, setDaysText] = useState("");
-  const [savingDays, setSavingDays] = useState(false);
-  const [daysError, setDaysError] = useState<string | null>(null);
   const [dense, setDense] = useState(false);
   const [search, setSearch] = useState(appliedSearch);
   const [data, setData] = useState<PartnerOrderListResponse | null>(null);
@@ -165,34 +162,11 @@ export function PartnerOrderListPage() {
       .settings(token, controller.signal)
       .then((settings) => {
         setBacklogDays(settings.backlogDays);
-        setDaysText(String(settings.backlogDays));
       })
       // the list works without the setting: a failed read leaves the field empty and the badge rule is the server's
       .catch(() => undefined);
     return () => controller.abort();
   }, [canView, token]);
-
-  const daysValid =
-    /^\d{1,3}$/.test(daysText.trim()) &&
-    Number(daysText) <= PARTNER_ORDER_BACKLOG_DAYS_MAX;
-  const saveDays = async () => {
-    if (!daysValid) return;
-    setSavingDays(true);
-    setDaysError(null);
-    try {
-      const saved = await partnerOrdersApi.saveSettings(
-        token,
-        Number(daysText),
-      );
-      setBacklogDays(saved.backlogDays);
-      setDaysText(String(saved.backlogDays));
-      await load();
-    } catch (cause) {
-      setDaysError(errorText(cause, "A beállítás nem menthető."));
-    } finally {
-      setSavingDays(false);
-    }
-  };
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -451,43 +425,22 @@ export function PartnerOrderListPage() {
         </PilotButton>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-sm text-pilot-grey-600">
-        <span>
-          Hátralékos: nyitott megrendelés, teljesítetlen tétellel, amelyen ennyi
-          napja nincs mozgás:
-        </span>
-        <div className="w-20">
-          <PilotInput
-            aria-label="Hátralék napjai"
-            inputMode="numeric"
-            value={daysText}
-            disabled={!canManage || backlogDays === null}
-            onChange={setDaysText}
-          />
-        </div>
-        <span>nap</span>
-        {canManage ? (
-          <PilotButton
-            variant="secondary"
-            disabled={
-              !daysValid || savingDays || Number(daysText) === backlogDays
-            }
-            onClick={() => void saveDays()}
-          >
-            {savingDays ? "Mentés…" : "Mentés"}
-          </PilotButton>
-        ) : null}
-        {!daysValid && daysText !== "" ? (
-          <span role="alert" className="text-pilot-red-700">
-            0 és {PARTNER_ORDER_BACKLOG_DAYS_MAX} közötti egész szám kell.
-          </span>
-        ) : null}
-        {daysError ? (
-          <span role="alert" className="text-pilot-red-700">
-            {daysError}
-          </span>
-        ) : null}
-      </div>
+      {/*
+        A HÁTRALÉK HATÁRA MÁR NEM ITT ÁLL (Picasso 3.8): a beállítás a Beállítások alatt van; a lista kimondja a mostani értéket, és oda mutat.
+      */}
+      <p className="text-sm text-pilot-grey-600">
+        Hátralékos: nyitott megrendelés, teljesítetlen tétellel
+        {backlogDays !== null
+          ? `, amelyen ${backlogDays} napja nincs mozgás`
+          : ""}
+        .{" "}
+        <Link
+          href="/beallitasok/megrendeles-hatralek"
+          className="text-pilot-aqua-700 hover:underline"
+        >
+          A határ beállítása
+        </Link>
+      </p>
 
       {error ? (
         <Alert

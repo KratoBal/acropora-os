@@ -7,13 +7,18 @@ import { describe, expect, it, vi } from "vitest";
 import { mainNavigation, navigationItems } from "../navigation";
 import { SETTINGS_AREAS, SettingsOverviewPage } from "./settings-overview-page";
 
-const auth = vi.hoisted(() => ({ role: "OWNER" as "OWNER" | "SALES" }));
+const auth = vi.hoisted(() => ({
+  role: "OWNER" as "OWNER" | "SALES",
+  // a szerver által kiszolgált menü: a `quotes` kapcsoló akkor áll, ha egy rá váró menüpont megjött
+  navigation: [] as { id: string }[],
+}));
 
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({
     session: {
       token: "token-1",
       user: { id: "user-1", email: "b@acropora.local", role: auth.role },
+      navigation: auth.navigation,
     },
   }),
 }));
@@ -132,6 +137,8 @@ describe("beállítások gyűjtőoldal", () => {
   // az Integrációk kártyán a NAV és a Számlázz.hu maradt
   it("a több oldalas területnél minden hivatkozás ott áll", () => {
     auth.role = "OWNER";
+    // a megrendelés-hátralék beállítása az Árajánlatok kapcsolója mögött áll
+    auth.navigation = [{ id: "quotes" }];
     render(<SettingsOverviewPage />);
     const tobbLinkes = SETTINGS_AREAS.filter((area) => area.links.length > 1);
     expect(tobbLinkes.map((area) => area.title)).toContain("Integrációk");
@@ -140,6 +147,22 @@ describe("beállítások gyűjtőoldal", () => {
         screen.getByRole("link", { name: new RegExp(link.label) }),
       ).toHaveAttribute("href", link.href);
     }
+  });
+
+  it("a hátralékos megrendelések beállítása csak ott áll, ahol az árajánlat-kapcsoló él", () => {
+    auth.role = "OWNER";
+    auth.navigation = [];
+    const { unmount } = render(<SettingsOverviewPage />);
+    expect(
+      screen.queryByRole("link", { name: /Hátralékos megrendelések/ }),
+    ).toBeNull();
+    unmount();
+
+    auth.navigation = [{ id: "quotes" }];
+    render(<SettingsOverviewPage />);
+    expect(
+      screen.getByRole("link", { name: /Hátralékos megrendelések/ }),
+    ).toHaveAttribute("href", "/beallitasok/megrendeles-hatralek");
   });
 
   // NEM DUPLÁZÓDIK (acrobot, 2026-10-26): ami a Webshop beállítások oldalon

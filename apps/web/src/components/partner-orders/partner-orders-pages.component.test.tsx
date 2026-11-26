@@ -382,61 +382,33 @@ describe("a megrendelések listája", () => {
     );
   });
 
-  it("shows the saved days, saves what is typed (zero too) and reloads the list", async () => {
-    api.saveSettings.mockResolvedValue({ backlogDays: 0 });
+  /*
+    A HÁTRALÉK HATÁRA MÁR NEM A LISTÁN ÁLL (Picasso 3.8, acrobot 62141): a beállítás a Beállítások alatt van (`partner-order-backlog-settings-page`, saját teszt). MI PIROSÍT:
+    ha a lista újra beviteli mezőt és Mentés gombot kap; ha a mondat nem mondja ki a mostani értéket; ha a hivatkozás nem a beállítás-oldalra mutat.
+  */
+  it("says the current backlog limit in a sentence and links to the setting, without a field or a save button", async () => {
     render(<PartnerOrderListPage />);
-    const field = (await screen.findByLabelText(
-      "Hátralék napjai",
-    )) as HTMLInputElement;
-    await waitFor(() => expect(field.value).toBe("14"));
-    const save = screen.getByRole("button", { name: "Mentés" });
-    expect(save).toBeDisabled();
-    fireEvent.change(field, { target: { value: "0" } });
-    expect(save).toBeEnabled();
-    const loads = api.list.mock.calls.length;
-    fireEvent.click(save);
-    await waitFor(() =>
-      expect(api.saveSettings).toHaveBeenCalledWith("token-1", 0),
-    );
-    await waitFor(() =>
-      expect(api.list.mock.calls.length).toBeGreaterThan(loads),
-    );
-    expect(field.value).toBe("0");
-  });
-
-  it("does not let an invalid number be saved, and says why", async () => {
-    render(<PartnerOrderListPage />);
-    const field = (await screen.findByLabelText(
-      "Hátralék napjai",
-    )) as HTMLInputElement;
-    await waitFor(() => expect(field.value).toBe("14"));
-    for (const bad of ["-1", "1.5", "x", "366", "1000"]) {
-      fireEvent.change(field, { target: { value: bad } });
-      expect(
-        screen.getByRole("button", { name: "Mentés" }),
-        bad,
-      ).toBeDisabled();
-      expect(
-        screen.getByText(/0 és 365 közötti egész szám kell/),
-      ).toBeInTheDocument();
-    }
-    fireEvent.change(field, { target: { value: "365" } });
-    expect(screen.getByRole("button", { name: "Mentés" })).toBeEnabled();
-  });
-
-  it("a failed save says so and keeps the typed value", async () => {
-    api.saveSettings.mockRejectedValue(new Error("A beállítás nem menthető."));
-    render(<PartnerOrderListPage />);
-    const field = (await screen.findByLabelText(
-      "Hátralék napjai",
-    )) as HTMLInputElement;
-    await waitFor(() => expect(field.value).toBe("14"));
-    fireEvent.change(field, { target: { value: "7" } });
-    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+    await screen.findByText("MR-2026-0042");
     expect(
-      await screen.findByText("A beállítás nem menthető."),
+      await screen.findByText(/amelyen 14 napja nincs mozgás/),
     ).toBeInTheDocument();
-    expect(field.value).toBe("7");
+    expect(
+      screen.getByRole("link", { name: "A határ beállítása" }),
+    ).toHaveAttribute("href", "/beallitasok/megrendeles-hatralek");
+    expect(screen.queryByLabelText("Hátralék napjai")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Mentés" })).toBeNull();
+  });
+
+  it("the sentence still reads when the setting could not be read: no number, no claim", async () => {
+    api.settings.mockRejectedValue(new Error("boom"));
+    render(<PartnerOrderListPage />);
+    await screen.findByText("MR-2026-0042");
+    expect(
+      screen.getByText(
+        /Hátralékos: nyitott megrendelés, teljesítetlen tétellel/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/napja nincs mozgás/)).toBeNull();
   });
 
   it("opens the order on a click", async () => {
