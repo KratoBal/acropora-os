@@ -323,7 +323,14 @@ export function UserEditorPage({ userId }: { userId?: string }) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={user ? `${user.lastName} ${user.firstName}` : "Új felhasználó"}
+        // név nélküli (gépi, smoke) fióknál a cím üres h1 volt: a megjelenő név, végül az e-mail áll a helyén (a 3.23 utáni stage-kép)
+        title={
+          user
+            ? `${user.lastName} ${user.firstName}`.trim() ||
+              user.displayName ||
+              user.email
+            : "Új felhasználó"
+        }
         description="Név, e-mail, jelszó és szerepkör alapú jogosultságok."
         actions={
           <Link href={backToList.href}>
