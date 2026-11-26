@@ -1,8 +1,8 @@
 "use client";
 
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import {
   Alert,
-  Icon,
   PageHeader,
   PAGE_GUTTER_X,
   PilotField,
@@ -447,13 +447,9 @@ export function PilotWorksheetCreatePage() {
   return (
     <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
       <div className={`${PAGE_GUTTER_X} pt-6`}>
-        <Link
-          href={backToList.href}
-          className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
-        >
-          <Icon name="chevron-left" size={12} />
+        <PilotBackLink href={backToList.href}>
           {backToList.fromWithinApp ? "Vissza" : "Munkalapok"}
-        </Link>
+        </PilotBackLink>
         <PageHeader title="Új munkalap" />
       </div>
 

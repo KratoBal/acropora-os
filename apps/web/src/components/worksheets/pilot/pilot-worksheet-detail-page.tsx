@@ -1,6 +1,10 @@
 "use client";
 
 import {
+  PilotBackLink,
+  backLinkLabel,
+} from "@/components/pilot/pilot-back-link";
+import {
   Alert,
   Icon,
   PageHeader,
@@ -453,15 +457,10 @@ export function PilotWorksheetDetailPage({
         handing over, continuing) are in the "Következő lépés" box below.
       */}
       <div>
-        <Link
-          href={backToList.href}
-          className="text-sm text-pilot-aqua-700 transition-colors hover:text-pilot-aqua-800"
-        >
-          <span aria-hidden="true">← </span>
-          {backToList.fromWithinApp ? "Vissza" : "Munkalapok"}
-        </Link>
+        <PilotBackLink href={backToList.href}>
+          {backLinkLabel(backToList, "Munkalapok")}
+        </PilotBackLink>
         <PageHeader
-          className="mt-4"
           eyebrow={current.label ?? "Piszkozat"}
           title={current.subject}
           meta={

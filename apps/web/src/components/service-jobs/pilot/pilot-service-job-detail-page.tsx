@@ -1,5 +1,6 @@
 "use client";
 
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import {
   Alert,
   ConfirmDialog,
@@ -815,15 +816,10 @@ export function PilotServiceJobDetailPage({
         the partner's status as two separate badges (the brief, point 3).
       */}
       <div>
-        <Link
-          href={maintenance ? maintenanceListHref : listHref}
-          className="text-sm text-pilot-aqua-700 transition-colors hover:text-pilot-aqua-800"
-        >
-          <span aria-hidden="true">← </span>
+        <PilotBackLink href={maintenance ? maintenanceListHref : listHref}>
           {maintenance ? "Karbantartás" : "Hibajegyek"}
-        </Link>
+        </PilotBackLink>
         <PageHeader
-          className="mt-4"
           eyebrow={
             job.previousNumber
               ? `${job.jobNumber} (régi szám: ${job.previousNumber})`

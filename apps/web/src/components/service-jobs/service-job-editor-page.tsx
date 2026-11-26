@@ -1,5 +1,6 @@
 "use client";
 
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import {
   Alert,
   PageHeader,
@@ -464,27 +465,9 @@ export function ServiceJobEditorPage({
           űrlapot és nem viszed végig; ez akkor, ha rossz lapra jöttél). FIX CÉL, NEM `useReturnTo`: erre a lapra egyetlen helyről lehet eljutni
           (a lista „Új ..." gombjáról), egy menekülő-útnak pedig kiszámíthatónak kell lennie.
         */}
-        <nav className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400">
-          <button
-            type="button"
-            onClick={() => router.push(listHref)}
-            className="cursor-pointer transition-colors hover:text-pilot-aqua-600"
-          >
-            Szerviz
-          </button>
-          <span>/</span>
-          <button
-            type="button"
-            onClick={() => router.push(listHref)}
-            className="cursor-pointer transition-colors hover:text-pilot-aqua-600"
-          >
-            {maintenance ? "Karbantartás" : "Hibajegyek"}
-          </button>
-          <span>/</span>
-          <span className="font-medium text-pilot-grey-700">
-            {maintenance ? "Új karbantartási lap" : "Új hibajegy"}
-          </span>
-        </nav>
+        <PilotBackLink href={listHref}>
+          {maintenance ? "Karbantartás" : "Hibajegyek"}
+        </PilotBackLink>
         <PageHeader
           title={maintenance ? "Új karbantartási lap" : "Új hibajegy"}
           description={

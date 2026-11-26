@@ -1,9 +1,9 @@
 "use client";
 
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import {
   Alert,
   ConfirmDialog,
-  Icon,
   PilotBadge,
   PilotButton,
   PilotCard,
@@ -25,7 +25,6 @@ import {
   type QuoteTemplateDto,
   type QuoteTemplateInput,
 } from "@acropora/types";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -292,12 +291,9 @@ export function QuoteTemplateEditorPage({
     <PilotThemeRoot theme="light" className="space-y-6">
       {/* a visszalépés a közös bal felső "‹" nyíl, nem egy gomb a jobb felső sarokban (picasso leltár 3.24, R12) */}
       <div>
-        <Link
-          href={QUOTE_TEMPLATES_PATH}
-          className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
-        >
-          <Icon name="chevron-left" size={12} /> Ajánlatsablonok
-        </Link>
+        <PilotBackLink href={QUOTE_TEMPLATES_PATH}>
+          Ajánlatsablonok
+        </PilotBackLink>
         <PilotPageHeader
           eyebrow="Beállítások / Árajánlatok"
           title={template ? `Sablon · ${template.name}` : "Új sablon"}
