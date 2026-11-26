@@ -86,6 +86,22 @@ describe("AssetCategoriesPage list", () => {
     ).toBeTruthy();
   });
 
+  it("a kereső ékezet- és kisbetű-független, mindkét irányban", async () => {
+    cat.list.mockResolvedValue({
+      items: Array.from({ length: 12 }, (_, i) => category(i + 1)),
+    });
+    render(<AssetCategoriesPage />);
+    const search = await screen.findByLabelText("Keresés a listában");
+    // ékezet nélkül gépelve megtalálja az ékezetes nevet
+    fireEvent.change(search, { target: { value: "kategoria 3" } });
+    expect(screen.getByText("Kategória 3")).toBeTruthy();
+    expect(screen.queryByText("Kategória 4")).toBeNull();
+    // ékezetesen gépelve is
+    fireEvent.change(search, { target: { value: "KATEGÓRIA 4" } });
+    expect(screen.getByText("Kategória 4")).toBeTruthy();
+    expect(screen.queryByText("Kategória 3")).toBeNull();
+  });
+
   it("egy rövid listán nincs kereső", async () => {
     cat.list.mockResolvedValue({
       items: Array.from({ length: 5 }, (_, i) => category(i + 1)),
