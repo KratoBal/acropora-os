@@ -8,7 +8,10 @@ import {
   WEBSHOP_PROFORMA_DUE_DAYS,
 } from "@acropora/types";
 
-import type { MedusaOrderDetailRow } from "../../integrations/medusa/medusa-admin.client.js";
+import {
+  ORDER_DETAIL_FIELDS,
+  type MedusaOrderDetailRow,
+} from "../../integrations/medusa/medusa-admin.client.js";
 import {
   advanceProformaDraftOf,
   buyerMismatch,
@@ -66,6 +69,7 @@ const order = (
       variant_sku: "RSP-20",
       quantity: 1,
       unit_price: 18900,
+      is_tax_inclusive: true,
       total: 18900,
       metadata: null,
       tax_lines: rate(27),
@@ -78,6 +82,7 @@ const order = (
       variant_sku: "CF-100",
       quantity: 2,
       unit_price: 3000,
+      is_tax_inclusive: true,
       total: 6000,
       metadata: null,
       tax_lines: rate(27),
@@ -90,6 +95,7 @@ const order = (
       variant_sku: null,
       quantity: 1,
       unit_price: 450,
+      is_tax_inclusive: true,
       total: 450,
       metadata: { acropora_line_item_kind: "fee" },
       tax_lines: rate(27),
@@ -437,6 +443,118 @@ describe("what the webshop does not send", () => {
     );
     assert.equal(noTotal.ok, false);
     assert.match(!noTotal.ok ? noTotal.message : "", /végösszegét/);
+  });
+});
+
+/*
+  THE INVOICE LINE AGAINST THE SHOP'S LINE (L3; barracuda's line sweep 2026-11-25, acrobot 61617). WHAT TURNS RED: a net or an
+  unstated price makes an invoice; a line total above the unit price times the quantity makes one; the refusal does not name the
+  item; the COD fee or the proforma escapes the check; a discounted line gets a separate discount line or stops; the shipping line
+  (no unit price of its own) stops; the unit is not "db".
+*/
+describe("the invoice lines against the shop's lines", () => {
+  const withCoral = (
+    over: Partial<MedusaOrderDetailRow["items"][number]>,
+    total = 26840,
+  ) => {
+    const base = order();
+    return order({
+      total,
+      items: base.items.map((item) =>
+        item.id === "i2" ? { ...item, ...over } : item,
+      ),
+    });
+  };
+  const refusal = (result: ReturnType<typeof invoiceDraftOf>) =>
+    result.ok ? "" : result.message;
+
+  it("the order is read with the price's tax status: without it every invoice would stop", () => {
+    assert.ok(
+      ORDER_DETAIL_FIELDS.split(",").includes("items.is_tax_inclusive"),
+    );
+  });
+
+  it("a net or an unstated price makes no invoice, and the refusal names the item", () => {
+    const net = invoiceDraftOf(withCoral({ is_tax_inclusive: false }), {
+      customerId: "cust_1",
+      now: NOW,
+    });
+    assert.equal(net.ok, false);
+    assert.match(refusal(net), /„Coral Food · 100 ml” tétel árát nettóként/);
+    const unstated = invoiceDraftOf(
+      withCoral({ is_tax_inclusive: undefined }),
+      { customerId: "cust_1", now: NOW },
+    );
+    assert.equal(unstated.ok, false);
+    assert.match(
+      refusal(unstated),
+      /nem mondta meg, hogy a „Coral Food · 100 ml” tétel ára bruttó-e/,
+    );
+  });
+
+  it("a line total above the unit price times the quantity makes no invoice, with both amounts", () => {
+    const result = invoiceDraftOf(withCoral({ total: 6100 }, 26940), {
+      customerId: "cust_1",
+      now: NOW,
+    });
+    assert.equal(result.ok, false);
+    assert.match(
+      refusal(result),
+      /„Coral Food · 100 ml” tétel összege \(6100 HUF\) több, mint az egységára és a mennyisége szorzata \(3000 × 2 = 6000 HUF\)/,
+    );
+  });
+
+  it("a missing unit price makes no invoice", () => {
+    const result = invoiceDraftOf(
+      withCoral({ unit_price: undefined as unknown as number }),
+      { customerId: "cust_1", now: NOW },
+    );
+    assert.match(
+      refusal(result),
+      /nem adta meg a „Coral Food · 100 ml” tétel egységárát/,
+    );
+  });
+
+  it("the COD fee is checked too, and the proforma has the same check", () => {
+    const base = order();
+    const netFee = order({
+      items: base.items.map((item) =>
+        item.id === "fee" ? { ...item, is_tax_inclusive: false } : item,
+      ),
+    });
+    assert.match(
+      refusal(invoiceDraftOf(netFee, { customerId: "cust_1", now: NOW })),
+      /„Utánvét kezelési díj” tétel árát nettóként/,
+    );
+    const proforma = proformaDraftOf(withCoral({ is_tax_inclusive: false }), {
+      customerId: "cust_1",
+      now: NOW,
+    });
+    assert.equal(proforma.ok, false);
+  });
+
+  it("a discounted line keeps today's shape: a lower unit price, no discount line; every line is db", () => {
+    const result = invoiceDraftOf(withCoral({ total: 5400 }, 26240), {
+      customerId: "cust_1",
+      now: NOW,
+    });
+    assert.ok(result.ok);
+    assert.deepEqual(
+      result.draft.lines.map((line) => line.description),
+      [
+        "Reef Salt Pro 20 kg",
+        "Coral Food · 100 ml",
+        "Utánvét kezelési díj",
+        "Szállítás: Foxpost csomagpont",
+      ],
+    );
+    const coral = result.draft.lines[1]!;
+    assert.equal(coral.quantity, "2");
+    assert.equal(grossOf([coral]), 5400);
+    assert.deepEqual(
+      result.draft.lines.map((line) => line.unit),
+      ["db", "db", "db", "db"],
+    );
   });
 });
 

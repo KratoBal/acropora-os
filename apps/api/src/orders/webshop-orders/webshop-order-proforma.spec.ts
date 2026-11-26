@@ -63,6 +63,7 @@ const order = (
         variant_sku: "NRP",
         quantity: 1,
         unit_price: 4800,
+        is_tax_inclusive: true,
         total: 4800,
         metadata: null,
         tax_lines: [{ rate: 27 }],

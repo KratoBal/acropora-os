@@ -72,6 +72,7 @@ const order = (
       variant_sku: "RSP-20",
       quantity: 1,
       unit_price: 18900,
+      is_tax_inclusive: true,
       total: 18900,
       metadata: null,
     },
@@ -83,6 +84,7 @@ const order = (
       variant_sku: "CF-100",
       quantity: 2,
       unit_price: 3000,
+      is_tax_inclusive: true,
       total: 6000,
       metadata: null,
     },
@@ -94,6 +96,7 @@ const order = (
       variant_sku: null,
       quantity: 1,
       unit_price: 450,
+      is_tax_inclusive: true,
       total: 450,
       metadata: {
         acropora_line_item_kind: "fee",

@@ -852,6 +852,11 @@ export interface MedusaOrderDetailRow {
     variant_sku: string | null;
     quantity: number;
     unit_price: number;
+    /**
+     * Whether `unit_price` contains the tax (a stored field). The shop prices gross, and asserts it for its own goods total
+     * (commerce `goods-total.ts`); the invoice's line check (L3) refuses a line that does not say so. Older answers lack it.
+     */
+    is_tax_inclusive?: boolean | null;
     total: number;
     metadata: Record<string, unknown> | null;
     /** Az ÁFA-kulcs a webshop adóterületéből; a számla ebből veszi a kulcsot. */
@@ -2069,6 +2074,7 @@ export const ORDER_DETAIL_FIELDS = [
   "items.variant_sku",
   "items.quantity",
   "items.unit_price",
+  "items.is_tax_inclusive",
   "items.total",
   "items.metadata",
   "items.tax_lines.rate",
