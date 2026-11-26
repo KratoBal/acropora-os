@@ -352,6 +352,11 @@ export function PilotAquariumWaterValues({
               </p>
               <PilotSparkline points={activePoints} />
             </div>
+          ) : activeParam && activePoints.length === 1 ? (
+            // EGY MÉRÉSBŐL NINCS GÖRBE (picasso P6): a hely eddig üres maradt; ugyanaz a mondat, mint a mérés-történet lapján
+            <p className="px-4 pb-4 text-xs text-pilot-grey-500">
+              Egy mérésből még nincs görbe, a második után jelenik meg.
+            </p>
           ) : null}
           {/*
             BALÁZS KÉRÉSE (2026-09-25 05:49 UTC, msg_id 1552919976975929355):
@@ -540,10 +545,14 @@ function PilotSparkline({
   const minValue = Math.min(...values);
   const maxValue = Math.max(...values);
   const spanAt = maxAt - minAt || 1;
-  const spanValue = maxValue - minValue || 1;
+  const spanValue = maxValue - minValue;
   const coords = points.map((point) => {
     const x = ((point.at - minAt) / spanAt) * width;
-    const y = height - ((point.value - minValue) / spanValue) * height;
+    // ÁLLANDÓ ÉRTÉK: a vonal középen áll (picasso P6); a régi tartalék (1) az aljára tette, a kitöltés széle alá, és üres sávnak látszott
+    const y =
+      spanValue === 0
+        ? height / 2
+        : height - ((point.value - minValue) / spanValue) * height;
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   });
   const area = `0,${height} ${coords.join(" ")} ${width},${height}`;
