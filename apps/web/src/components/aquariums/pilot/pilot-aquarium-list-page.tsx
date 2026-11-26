@@ -60,14 +60,34 @@ export const AQUARIUM_SORT_COLUMNS = {
   liters: "systemVolumeLiters",
 } as const;
 
+/** A két szűrő értékei: az URL-ben csak ezek számítanak, bármi más (régi vagy kézzel írt link) olyan, mintha a szűrő nem állna ("Minden ..."). */
+const OWNERSHIP_FILTER_VALUES = ["OWN", "CUSTOMER"] as const;
+const WATER_BODY_FILTER_VALUES = ["AKVARIUM", "TO"] as const;
+
+function knownFilterValue(
+  params: URLSearchParams,
+  key: string,
+  allowed: readonly string[],
+): string {
+  const value = params.get(key);
+  return value !== null && allowed.includes(value) ? value : "";
+}
+
 /**
  * A kérés az oldal URL-jéből. Az oldal az URL paramétereit továbbadja az API-nak, ezért a rendezés CSAK akkor marad benne, ha ismert
- * mezőre és érvényes irányra szól: egy régi vagy kézzel írt link ne törje el a listát 400-zal.
+ * mezőre és érvényes irányra szól: egy régi vagy kézzel írt link ne törje el a listát 400-zal. A tulajdon- és típusszűrő is csak ismert értékkel
+ * marad a kérésben (különben a választó "Minden ..."-t mutatna, a szerver pedig szűrt volna: barracuda a #2928-on).
  */
 export function aquariumListQuery(params: URLSearchParams): URLSearchParams {
   const q = new URLSearchParams(params.toString());
   q.delete("sort");
   q.delete("direction");
+  for (const [key, allowed] of [
+    ["ownershipType", OWNERSHIP_FILTER_VALUES],
+    ["waterBodyType", WATER_BODY_FILTER_VALUES],
+  ] as const) {
+    if (!knownFilterValue(params, key, allowed)) q.delete(key);
+  }
   const sort = sortFromParams(params, AQUARIUM_SORT_COLUMNS);
   if (sort) {
     q.set(
@@ -339,7 +359,11 @@ export function PilotAquariumListPage() {
         <PilotSelect
           chevron
           aria-label="Tulajdon"
-          value={params.get("ownershipType") ?? ""}
+          value={knownFilterValue(
+            params,
+            "ownershipType",
+            OWNERSHIP_FILTER_VALUES,
+          )}
           onChange={(value) => filter("ownershipType", value)}
           className="w-full shrink-0 sm:w-[160px]"
         >
@@ -350,7 +374,11 @@ export function PilotAquariumListPage() {
         <PilotSelect
           chevron
           aria-label="Típus"
-          value={params.get("waterBodyType") ?? ""}
+          value={knownFilterValue(
+            params,
+            "waterBodyType",
+            WATER_BODY_FILTER_VALUES,
+          )}
           onChange={(value) => filter("waterBodyType", value)}
           className="w-full shrink-0 sm:w-[160px]"
         >
