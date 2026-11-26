@@ -1117,3 +1117,48 @@ describe("Luca's three bank rows", () => {
     );
   });
 });
+
+/*
+  AN INVOICE MADE IN CASHMAN (2026-11-26, Balázs: "ez sose lesz megoldva?"; acrobot 62980). The Állatkert's 34 671 Ft named
+  2026/00058, which NAV alone holds (card 785dfea6), and the page said "nincs a feedben". WHAT TURNS THIS RED: such an invoice
+  marked (Számlázz.hu does not know it), reported as missing, hidden from the default list, or put on the attention list.
+*/
+describe("an invoice NAV alone holds (CASHMAN's)", () => {
+  const allatkert = (over: Partial<FeedInvoice> = {}) =>
+    invoice("x", "34671.00", { documentNumber: "2026/00058", ...over });
+  const transfer = credit({
+    id: "bt-allatkert",
+    amount: "34671.00",
+    bookingDate: "2026-11-12",
+    narrative: "HCUT/2026/003814 2026/00058 S/2026/0005034",
+  });
+
+  it("is found and said to be CASHMAN's: no mark, listed by default, not on the attention list", () => {
+    const decision = decideBankTransfer(transfer, [
+      allatkert({ onlyInNav: true, paymentsKnown: null }),
+    ]);
+    assert.equal(decision.markable, false);
+    if (decision.markable) return;
+    assert.equal(decision.refusal, "OTHER_PROGRAM");
+    assert.equal(decision.detail, "2026/00058");
+    assert.equal(bankTransferListed(decision, [], false), true);
+    const plan = bankTransferPlanFrom([decision]);
+    assert.deepEqual(plan.marks, []);
+    assert.equal(plan.exceptions[0]?.attention, false);
+  });
+
+  it("the same invoice from the Számlázz.hu feed pairs: the source decides, not the number", () => {
+    const decision = decideBankTransfer(transfer, [allatkert()]);
+    assert.equal(decision.markable, true);
+  });
+
+  it("beside invoices Számlázz.hu knows, the credit is still not paired, and only the NAV one is named", () => {
+    const rows = balazs();
+    rows[1] = { ...rows[1]!, onlyInNav: true };
+    const decision = decideBankTransfer(credit(), rows);
+    assert.equal(decision.markable, false);
+    if (decision.markable) return;
+    assert.equal(decision.refusal, "OTHER_PROGRAM");
+    assert.equal(decision.detail, "ACRW-2026/00084");
+  });
+});

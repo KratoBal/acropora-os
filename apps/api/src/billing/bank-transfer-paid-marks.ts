@@ -12,6 +12,7 @@ import {
   type PaymentMarkStore,
 } from "../integrations/szamlazz/outgoing-payment-marks.js";
 import type { SzamlazzAgentPaymentClient } from "../integrations/szamlazz/szamlazz-agent.client.js";
+import { NAV_SOURCE } from "./external-billing-one-row.js";
 import {
   paidMarksRunResult,
   type PaidMarkException,
@@ -73,6 +74,8 @@ export interface FeedInvoice {
   paidAmount: string;
   /** ÉÉÉÉ-HH-NN; only the proforma route reads it (an invoice issued BEFORE the díjbekérő is not its invoice) */
   issueDate?: string;
+  /** stored from NAV only (`NAV_SOURCE`): Számlázz.hu does not know the number, so no mark can be written on it */
+  onlyInNav?: boolean;
   /**
    * null: the feed row was not projected with its payments, so nothing is provably open. false: Számlázz.hu sent no
    * `kifizetesek` element, whose meaning is the payment method's (`missingPayments`).
@@ -135,6 +138,11 @@ export type BankTransferRefusal =
   | "CREDIT_USED"
   /** the text names an eBIZ invoice (EINV): not paid through Számlázz.hu, nothing to write on this page */
   | "OTHER_SYSTEM"
+  /**
+   * the text names an invoice known only from NAV (card 785dfea6: CASHMAN's invoices before the push feed): Számlázz.hu does not
+   * know it, so its payment cannot be written there; it is recorded in CASHMAN
+   */
+  | "OTHER_PROGRAM"
   /** the credit is in our own company's name: a transfer between our accounts, an exchange */
   | "OWN_ACCOUNT"
   /** an OTP card-acquiring settlement: a lump sum of card payments, not one invoice's */
@@ -405,6 +413,8 @@ export function decideBankTransfer(
   /** invoices a bare number named only after the narrowing chose among series: the mark says so (barracuda, #2216 b) */
   const narrowed = new Set<string>();
   const unresolved: string[] = [];
+  /** the payable invoices the texts name that only NAV knows (CASHMAN's): found, said, never written */
+  const otherProgram: string[] = [];
   /** the refs that name a cancelled invoice whose money went back out: said, not unresolved */
   const refunded: { number: string; day: string }[] = [];
   for (const ref of refs) {
@@ -417,7 +427,10 @@ export function decideBankTransfer(
     // a bare number fits every series (`2026/00083` and `ACRW-2026/00083`): of two, only one can be this transfer's
     const candidates =
       hits.length > 1 ? hits.filter(couldBeThisTransfers(day)) : hits;
-    if (candidates.length === 1) {
+    if (candidates.length === 1 && candidates[0]!.onlyInNav) {
+      if (!otherProgram.includes(candidates[0]!.documentNumber))
+        otherProgram.push(candidates[0]!.documentNumber);
+    } else if (candidates.length === 1) {
       if (!named.includes(candidates[0]!)) named.push(candidates[0]!);
       if (hits.length > 1) narrowed.add(candidates[0]!.documentNumber);
     } else if (hits.length > 1) unresolved.push(`${refLabel(ref)} több`);
@@ -458,6 +471,10 @@ export function decideBankTransfer(
     }
   }
   if (unresolved.length > 0) return refuse("UNRESOLVED", unresolved.join(", "));
+  // an invoice made in CASHMAN (2026-11-26, the Állatkert's 2026/00058 stood as "nincs a feedben" while its NAV row was there):
+  // Számlázz.hu cannot take its payment, so the credit is not paired here, with or without other invoices beside it
+  if (otherProgram.length > 0)
+    return refuse("OTHER_PROGRAM", otherProgram.join(", "));
   if (refunded.length > 0) {
     const said = refunded
       .map((r) => `${r.number} sztornózva, visszafizetve ${r.day}`)
@@ -651,6 +668,7 @@ export function bankTransferPlanFrom(
         (decision.refusal === "ALREADY_PAID"
           ? Boolean(decision.sharedWith?.length)
           : decision.refusal !== "OTHER_SYSTEM" &&
+            decision.refusal !== "OTHER_PROGRAM" &&
             decision.refusal !== "REFUNDED") && !settledElsewhere(decision),
       ...(decision.detail ? { detail: decision.detail } : {}),
     });
@@ -780,9 +798,10 @@ export async function loadFeedInvoicesFor(
     ...new Set(refs.flatMap((ref) => (ref.literal ? [ref.literal] : []))),
   ];
   if (keys.length === 0 && literals.length === 0) return [];
+  // the rows NAV alone holds are read too (card 785dfea6): the decision says they are CASHMAN's instead of "nincs a feedben"
   const documents = await prisma.externalBillingDocument.findMany({
     where: {
-      source: "SZAMLAZZ",
+      source: { in: ["SZAMLAZZ", NAV_SOURCE] },
       OR: [
         ...keys.map((key) => ({
           AND: [
@@ -796,12 +815,13 @@ export async function loadFeedInvoicesFor(
       ],
     },
     orderBy: [{ feedReceivedAt: "desc" }, { id: "asc" }],
-    select: FEED_SELECT,
+    select: { ...FEED_SELECT, source: true },
   });
   // the invoice Számlázz.hu's Autokassza issued from a named díjbekérő is not named in the text: look for it by the same customer,
   // the same gross, on or after the díjbekérő's day (the decision takes it only when exactly one fits)
   const proformas = documents.filter(
-    (row) => row.kindCode === "D" && !row.cancelled,
+    (row) =>
+      row.kindCode === "D" && !row.cancelled && row.source !== NAV_SOURCE,
   );
   const issued =
     proformas.length === 0
@@ -839,7 +859,10 @@ export async function loadFeedInvoicesFor(
           select: FEED_SELECT,
         });
   // the latest feed version of each number
-  const latest = new Map<string, (typeof documents)[number]>();
+  const latest = new Map<
+    string,
+    Omit<(typeof documents)[number], "source"> & { source?: string }
+  >();
   for (const row of [...documents, ...issued])
     if (!latest.has(row.documentNumber)) latest.set(row.documentNumber, row);
   return [...latest.values()].map((row) => ({
@@ -850,6 +873,7 @@ export async function loadFeedInvoicesFor(
     customerName: row.customerName,
     customerTaxNumber: row.customerTaxNumber,
     issueDate: isoDay(row.issueDate),
+    ...(row.source === NAV_SOURCE ? { onlyInNav: true } : {}),
     grossAmount: row.grossAmount.toFixed(2),
     paidAmount: row.paidAmount.toFixed(2),
     paymentsKnown: row.paymentsKnown,
