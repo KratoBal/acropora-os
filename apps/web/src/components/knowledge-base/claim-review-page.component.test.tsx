@@ -13,6 +13,7 @@ import type { ClaimReview, ClaimReviewField } from "@/lib/api/knowledge-base";
 import {
   ClaimReviewPage,
   quantityLabel,
+  duplicateClaimId,
   reviewErrorText,
 } from "./claim-review-page";
 
@@ -354,6 +355,50 @@ describe("Állítás ellenőrzése", () => {
     expect(api.reviewQueue).toHaveBeenCalledTimes(1);
   });
 
+  it("második elfogadás ugyanarra az állításra: megnevezi az elsőt, nem ment, és csak a „Mégis elfogadom” küldi a megerősítéssel", async () => {
+    api.saveClaimReview.mockRejectedValueOnce(
+      new Error("the same claim is already verified: claim-first"),
+    );
+    render(<ClaimReviewPage />);
+    await screen.findByText("Kitalált foszfát-kísérlet");
+    await decideAll();
+    // no confirmation on the plain save, and no confirm button before the refusal
+    expect(
+      screen.queryByRole("button", { name: "Mégis elfogadom" }),
+    ).toBeNull();
+    fireEvent.click(saveButton());
+    expect(
+      await screen.findByText(/már el van fogadva, azonosítója: claim-first/),
+    ).toBeTruthy();
+    expect("confirmDuplicate" in api.saveClaimReview.mock.calls[0]![2]).toBe(
+      false,
+    );
+    expect(api.reviewQueue).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mégis elfogadom" }));
+    await waitFor(() => expect(api.saveClaimReview).toHaveBeenCalledTimes(2));
+    expect(api.saveClaimReview.mock.calls[1]![2].confirmDuplicate).toBe(true);
+    await waitFor(() => expect(api.reviewQueue).toHaveBeenCalledTimes(2));
+    expect(
+      screen.queryByRole("button", { name: "Mégis elfogadom" }),
+    ).toBeNull();
+  });
+
+  it("a megerősítő gomb eltűnik, ha a szerkesztő módosít egy döntést", async () => {
+    api.saveClaimReview.mockRejectedValueOnce(
+      new Error("the same claim is already verified: claim-first"),
+    );
+    render(<ClaimReviewPage />);
+    await screen.findByText("Kitalált foszfát-kísérlet");
+    await decideAll();
+    fireEvent.click(saveButton());
+    await screen.findByRole("button", { name: "Mégis elfogadom" });
+    click("studyType", "elfogad");
+    expect(
+      screen.queryByRole("button", { name: "Mégis elfogadom" }),
+    ).toBeNull();
+  });
+
   it("a mezőre kattintva a horgony kiemelődik: a szöveghelyen belül, vagy külön blokkban a saját szakaszával", async () => {
     render(<ClaimReviewPage />);
     await screen.findByText("Kitalált foszfát-kísérlet");
@@ -483,6 +528,13 @@ describe("Állítás ellenőrzése", () => {
     expect(
       reviewErrorText("quantity: the claim no longer holds this value"),
     ).toBe("Mennyiség: az állítás közben megváltozott. Töltsd be újra.");
+    expect(
+      reviewErrorText("the same claim is already verified: claim-first"),
+    ).toMatch(/már el van fogadva, azonosítója: claim-first\./);
+    expect(duplicateClaimId("the same claim is already verified: x1")).toBe(
+      "x1",
+    );
+    expect(duplicateClaimId("quantity: NUMBER_NOT_AT_UNIT")).toBeNull();
   });
 
   it("visszavont forrás: az állítás nem menthető, csak elvethető", async () => {

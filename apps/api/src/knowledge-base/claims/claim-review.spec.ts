@@ -365,6 +365,7 @@ describe("claim review: the request", () => {
           reason: "laborban, nem akváriumban",
         },
         imageCompared: false,
+        confirmDuplicate: false,
       },
     );
   });

@@ -102,6 +102,11 @@ const REFUSAL_TEXT: Record<string, string> = {
     "a horgony nem foszfát-értékről szól (nitrát, ammónium): ez nem a foszfát mennyisége, vesd el",
 };
 
+/** The id of the already accepted twin, when the server refused a repeat. */
+export function duplicateClaimId(message: string): string | null {
+  return /the same claim is already verified: (\S+)/.exec(message)?.[1] ?? null;
+}
+
 export function reviewErrorText(message: string): string {
   const coded = /^(\w+): ([A-Z_]+)$/.exec(message.trim());
   if (coded)
@@ -115,6 +120,9 @@ export function reviewErrorText(message: string): string {
     return named[2] === "two anchors propose"
       ? `${FIELD_LABELS[named[1]!] ?? named[1]}: két horgony javasol értéket erre a mezőre, és az állítás a másikét tartja. Ezt javítsd vagy vesd el.`
       : `${FIELD_LABELS[named[1]!] ?? named[1]}: az állítás közben megváltozott. Töltsd be újra.`;
+  const duplicate = /the same claim is already verified: (\S+)/.exec(message);
+  if (duplicate)
+    return `Ugyanez az állítás (hatás, irány, faj, mennyiség, forrás) már el van fogadva, azonosítója: ${duplicate[1]}. Ha ez egy másik megfigyelés, fogadd el mégis.`;
   if (/source was retracted/.test(message))
     return "A forrást visszavonták: erre az állításra nem épülhet semmi, csak elvethető.";
   if (/effect and the direction/.test(message))
@@ -209,6 +217,7 @@ export function ClaimReviewPage() {
   const [review, setReview] = useState<ClaimReview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [duplicateOf, setDuplicateOf] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [decisions, setDecisions] = useState<Record<string, LocalDecision>>({});
   const [editing, setEditing] = useState<string | null>(null);
@@ -294,6 +303,7 @@ export function ClaimReviewPage() {
     setEditing(null);
     setAddingVocab(null);
     setSaveError(null);
+    setDuplicateOf(null);
   };
 
   const afterWrite = async () => {
@@ -301,10 +311,11 @@ export function ClaimReviewPage() {
     await loadQueue();
   };
 
-  const save = async () => {
+  const save = async (confirmDuplicate = false) => {
     if (!review || !canSave) return;
     setBusy(true);
     setSaveError(null);
+    setDuplicateOf(null);
     try {
       await knowledgeBaseApi.saveClaimReview(token, review.id, {
         decisions: review.fields.filter(required).map((f) => {
@@ -324,10 +335,13 @@ export function ClaimReviewPage() {
             ? null
             : { value: applicability, reason: applicabilityReason.trim() },
         ...(review.readOff ? { imageCompared } : {}),
+        ...(confirmDuplicate ? { confirmDuplicate: true } : {}),
       });
       await afterWrite();
     } catch (caught) {
-      setSaveError(reviewErrorText((caught as Error)?.message ?? ""));
+      const message = (caught as Error)?.message ?? "";
+      setDuplicateOf(duplicateClaimId(message));
+      setSaveError(reviewErrorText(message));
     } finally {
       setBusy(false);
     }
@@ -542,7 +556,9 @@ export function ClaimReviewPage() {
               {saveError ? (
                 <Alert
                   variant="danger"
-                  title="Nem menthető"
+                  title={
+                    duplicateOf ? "Már elfogadott állítás" : "Nem menthető"
+                  }
                   description={saveError}
                 />
               ) : null}
@@ -575,6 +591,16 @@ export function ClaimReviewPage() {
                     >
                       Állítás elvetése
                     </PilotButton>
+                    {duplicateOf ? (
+                      <PilotButton
+                        variant="secondary"
+                        size="regular"
+                        disabled={!canSave}
+                        onClick={() => void save(true)}
+                      >
+                        Mégis elfogadom
+                      </PilotButton>
+                    ) : null}
                     <PilotButton
                       size="regular"
                       disabled={!canSave}

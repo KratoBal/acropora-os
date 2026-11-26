@@ -232,6 +232,8 @@ export interface ClaimReviewInput {
   applicability: { value: Applicability; reason: string } | null;
   /** The editor compared the figure reading with the image. */
   imageCompared?: boolean;
+  /** Accept although the same claim is already verified (the server refuses a repeat otherwise). */
+  confirmDuplicate?: boolean;
 }
 
 export type ClaimLayer =

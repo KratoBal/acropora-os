@@ -20,6 +20,7 @@ import { VocabularyRepository } from "../vocabulary/vocabulary.repository.js";
 import {
   ADDABLE_FIELDS,
   ReviewInputError,
+  isSameClaim,
   planReview,
   type Applicability,
   type ClaimColumns,
@@ -107,6 +108,56 @@ export class ClaimReviewConflict extends Error {
   }
 }
 
+/**
+ * THE SAME CLAIM IS ALREADY VERIFIED (card 1e4790e4, acrobot 62304): the message carries the id of the first, so the editor can open it. A conflict (409), like a claim reviewed meanwhile.
+ */
+export class DuplicateClaim extends ClaimReviewConflict {
+  constructor(readonly existingClaimId: string) {
+    super(`the same claim is already verified: ${existingClaimId}`);
+    this.name = "DuplicateClaim";
+  }
+}
+
+/**
+ * THE FIRST VERIFIED CLAIM THAT THE ONE BEING ACCEPTED REPEATS, or null. The query takes the four things a claim is said to be (the subject, the effect, the direction, the source: acrobot) and only
+ * VERIFIED ones (a withdrawn or discarded copy does not block a correct one); the species and the quantity are compared in `isSameClaim`. Oldest first: the first acceptance is the original.
+ */
+export async function findVerifiedDuplicate(
+  client: Pick<Tx, "knowledgeClaim">,
+  target: {
+    claimId: string;
+    subject: string;
+    sourceId: string;
+    columns: Pick<
+      ClaimColumns,
+      "species" | "effect" | "direction" | "quantity"
+    >;
+  },
+): Promise<string | null> {
+  const { columns } = target;
+  const candidates = await client.knowledgeClaim.findMany({
+    where: {
+      id: { not: target.claimId },
+      status: "VERIFIED",
+      subject: target.subject,
+      effect: columns.effect,
+      direction: columns.direction,
+      evidence: {
+        some: { passage: { sourceVersion: { sourceId: target.sourceId } } },
+      },
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      originalMin: true,
+      originalMax: true,
+      originalUnit: true,
+      evidence: { select: { species: true } },
+    },
+  });
+  return candidates.find((c) => isSameClaim(c, columns))?.id ?? null;
+}
+
 /** The screen reads one claim with exactly one evidence row (S3 writes one). */
 export class ClaimShapeUnsupported extends Error {
   constructor(id: string) {
@@ -130,6 +181,8 @@ const ANCHOR_SELECT = {
 const CLAIM_SELECT = {
   id: true,
   status: true,
+  /** The duplicate check compares the subject too (card 1e4790e4). */
+  subject: true,
   originalMin: true,
   originalMax: true,
   originalUnit: true,
@@ -469,6 +522,15 @@ export class ClaimReviewRepository {
           claimId: claim.id,
           anchorId,
         });
+      // the same claim, accepted twice (card 1e4790e4): refused, unless the editor confirms it
+      const duplicateOf = await findVerifiedDuplicate(tx, {
+        claimId: claim.id,
+        subject: claim.subject,
+        sourceId: source.id,
+        columns: plan.claim,
+      });
+      if (duplicateOf && !input.confirmDuplicate)
+        throw new DuplicateClaim(duplicateOf);
       const now = new Date();
       for (const a of plan.anchors) {
         const { count } = await tx.knowledgeFieldAnchor.updateMany({
@@ -544,6 +606,7 @@ export class ClaimReviewRepository {
               source: plan.source,
               applicability: input.applicability,
               ...(readOff ? { imageCompared: true } : {}),
+              ...(duplicateOf ? { duplicateOf, duplicateConfirmed: true } : {}),
             },
             decisions: plan.anchors.map((a) => ({
               anchorId: a.id,
