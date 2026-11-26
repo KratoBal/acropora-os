@@ -182,3 +182,73 @@ describe("az új eszköz a közös űrlap-vázon", () => {
     expect(api.create).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * A FÜGGŐ MEZŐK, MINT A HIBAJEGYEN (Picasso 3.21, acrobot 63427): ami még nem választható, a helyén kikapcsolt mező, benne amire
+ * vár (PilotWaitingField), és a címke rá mutat. MI PIROSÍT: partner nélkül a Vevő címe, a Helyszín vagy a Szülőeszköz nem mondja,
+ * hogy partnerre vár; vevőnél a Helyszín, szerviz partnernél a Vevő címe nem mondja, miért nem adható meg; vagy a választható mező
+ * maga is a várakozót mutatja.
+ */
+describe("az új eszköz függő mezői", () => {
+  const waiting = (label: RegExp) =>
+    screen.getByLabelText(label, { selector: "select" }) as HTMLSelectElement;
+
+  it("partner nélkül a Vevő címe, a Helyszín és a Szülőeszköz a partnerre vár, kikapcsolva", async () => {
+    await megjelenit();
+    for (const label of [/^Vevő címe/, /^Helyszín/, /^Szülőeszköz/]) {
+      const field = waiting(label);
+      expect(
+        [field.disabled, field.options[0]?.textContent],
+        String(label),
+      ).toEqual([true, "Előbb válassz partnert"]);
+    }
+    expect(screen.queryByLabelText("Szülőeszköz keresése")).toBeNull();
+  });
+
+  it("vevőnél a Vevő címe és a Szülőeszköz választható, a Helyszín megmondja, miért nem", async () => {
+    await megjelenit();
+    fireEvent.change(screen.getByLabelText("Partner"), {
+      target: { value: "CUSTOMER:customer-1" },
+    });
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("Vevő címe") as HTMLSelectElement).disabled,
+      ).toBe(false),
+    );
+    expect(screen.getByLabelText("Szülőeszköz keresése")).toBeTruthy();
+    const site = waiting(/^Helyszín/);
+    expect([site.disabled, site.options[0]?.textContent]).toEqual([
+      true,
+      "Csak szerviz partner eszközénél adható meg",
+    ]);
+  });
+
+  it("szerviz partnernél a Helyszín választható, a Vevő címe megmondja, miért nem", async () => {
+    api.owners.mockResolvedValue({
+      items: [
+        {
+          type: "SUPPLIER",
+          id: "supplier-1",
+          code: "FANK",
+          displayName: "Fánk Kft.",
+          isActive: true,
+          addresses: [],
+        },
+      ],
+    });
+    await megjelenit();
+    fireEvent.change(screen.getByLabelText("Partner"), {
+      target: { value: "SUPPLIER:supplier-1" },
+    });
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("Helyszín") as HTMLSelectElement).disabled,
+      ).toBe(false),
+    );
+    const address = waiting(/^Vevő címe/);
+    expect([address.disabled, address.options[0]?.textContent]).toEqual([
+      true,
+      "Csak vevő eszközénél adható meg",
+    ]);
+  });
+});

@@ -71,6 +71,7 @@ import {
   PilotSelect,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
+import { PilotWaitingField } from "@/components/pilot/pilot-waiting-field";
 
 /**
  * A FIGMA MAKE TERV ÁTÜLTETÉSE -- ÚJ ESZKÖZ ŰRLAP (7. kör, 3/3 rész).
@@ -881,21 +882,44 @@ export function PilotAssetCreatePage() {
                     ))}
                   </PilotSelect>
                 </PilotField>
-                <PilotField requirement="optional" label="Vevő címe">
-                  <PilotSelect
-                    value={customerAddressId}
-                    disabled={!owner || owner.type !== "CUSTOMER"}
-                    onChange={setCustomerAddressId}
-                    aria-label="Vevő címe"
-                  >
-                    <option value="">Nincs pontosítva</option>
-                    {addresses.map((address) => (
-                      <option key={address.id} value={address.id}>
-                        {address.name ? `${address.name} – ` : ""}
-                        {address.formatted}
-                      </option>
-                    ))}
-                  </PilotSelect>
+                {/*
+                  A FÜGGŐ MEZŐ A HELYÉN, KIKAPCSOLVA, BENNE AMIRE VÁR (Picasso 3.21, acrobot 63427; a hibajegy és a karbantartás
+                  ugyanígy, PilotWaitingField): eddig egy kikapcsolt választó "Nincs pontosítva" felirattal állt itt, ami nem
+                  mondta meg, miért nem választható.
+                */}
+                <PilotField
+                  requirement="optional"
+                  label="Vevő címe"
+                  htmlFor={
+                    owner?.type === "CUSTOMER"
+                      ? undefined
+                      : "eszkoz-vevo-cime-var"
+                  }
+                >
+                  {owner?.type === "CUSTOMER" ? (
+                    <PilotSelect
+                      value={customerAddressId}
+                      onChange={setCustomerAddressId}
+                      aria-label="Vevő címe"
+                    >
+                      <option value="">Nincs pontosítva</option>
+                      {addresses.map((address) => (
+                        <option key={address.id} value={address.id}>
+                          {address.name ? `${address.name} – ` : ""}
+                          {address.formatted}
+                        </option>
+                      ))}
+                    </PilotSelect>
+                  ) : (
+                    <PilotWaitingField
+                      id="eszkoz-vevo-cime-var"
+                      waitingFor={
+                        owner
+                          ? "Csak vevő eszközénél adható meg"
+                          : "Előbb válassz partnert"
+                      }
+                    />
+                  )}
                 </PilotField>
                 {/*
                 CSAK VEVŐ TULAJDONOSNÁL LÁTSZIK, NEM CSAK LETILTVA -- a
@@ -930,21 +954,36 @@ export function PilotAssetCreatePage() {
                     "Szerviz partner eszközéhez válassz helyszínt.",
                   )}
                   help="A partner helyszíne, ahol az eszköz áll. Ugyanaz a lista, amit a partner adatlapján Helyszínek néven szerkesztesz."
+                  htmlFor={
+                    owner?.type === "SUPPLIER"
+                      ? undefined
+                      : "eszkoz-helyszin-var"
+                  }
                 >
-                  <PilotSelect
-                    value={departmentId}
-                    disabled={!owner || owner.type !== "SUPPLIER"}
-                    onChange={setDepartmentId}
-                    aria-label="Helyszín"
-                  >
-                    <option value="">Nincs pontosítva</option>
-                    {units.map((unit) => (
-                      <option key={unit.id} value={unit.id}>
-                        {unit.label}
-                        {unit.isActive ? "" : " · archivált"}
-                      </option>
-                    ))}
-                  </PilotSelect>
+                  {owner?.type === "SUPPLIER" ? (
+                    <PilotSelect
+                      value={departmentId}
+                      onChange={setDepartmentId}
+                      aria-label="Helyszín"
+                    >
+                      <option value="">Nincs pontosítva</option>
+                      {units.map((unit) => (
+                        <option key={unit.id} value={unit.id}>
+                          {unit.label}
+                          {unit.isActive ? "" : " · archivált"}
+                        </option>
+                      ))}
+                    </PilotSelect>
+                  ) : (
+                    <PilotWaitingField
+                      id="eszkoz-helyszin-var"
+                      waitingFor={
+                        owner
+                          ? "Csak szerviz partner eszközénél adható meg"
+                          : "Előbb válassz partnert"
+                      }
+                    />
+                  )}
                 </PilotField>
                 <PilotField requirement="optional" label="Típus">
                   <PilotSelect
@@ -976,54 +1015,60 @@ export function PilotAssetCreatePage() {
                   requirement="optional"
                   label="Szülőeszköz"
                   className="md:col-span-2"
+                  htmlFor={owner ? undefined : "eszkoz-szulo-var"}
                 >
-                  <div className="space-y-2">
-                    <PilotInput
-                      value={parentSearch}
-                      disabled={!owner}
-                      onChange={setParentSearch}
-                      placeholder="Keresés név, kód vagy matrica szerint…"
-                      aria-label="Szülőeszköz keresése"
+                  {!owner ? (
+                    <PilotWaitingField
+                      id="eszkoz-szulo-var"
+                      waitingFor="Előbb válassz partnert"
                     />
-                    <PilotSelect
-                      value={parentAssetId}
-                      disabled={!owner}
-                      onChange={(value) => {
-                        setParentAssetId(value);
-                        setParentChoice(
-                          parentAssets.find((asset) => asset.id === value) ??
-                            null,
-                        );
-                      }}
-                      aria-label="Szülőeszköz"
-                    >
-                      <option value="">Önálló / főegység</option>
-                      {parentChoice &&
-                      !parentAssets.some(
-                        (asset) => asset.id === parentChoice.id,
+                  ) : (
+                    <div className="space-y-2">
+                      <PilotInput
+                        value={parentSearch}
+                        onChange={setParentSearch}
+                        placeholder="Keresés név, kód vagy matrica szerint…"
+                        aria-label="Szülőeszköz keresése"
+                      />
+                      <PilotSelect
+                        value={parentAssetId}
+                        onChange={(value) => {
+                          setParentAssetId(value);
+                          setParentChoice(
+                            parentAssets.find((asset) => asset.id === value) ??
+                              null,
+                          );
+                        }}
+                        aria-label="Szülőeszköz"
+                      >
+                        <option value="">Önálló / főegység</option>
+                        {parentChoice &&
+                        !parentAssets.some(
+                          (asset) => asset.id === parentChoice.id,
+                        ) ? (
+                          <option value={parentChoice.id}>
+                            {parentChoice.name} ({parentChoice.assetNumber})
+                          </option>
+                        ) : null}
+                        {parentAssets.map((asset) => (
+                          <option key={asset.id} value={asset.id}>
+                            {asset.name} ({asset.assetNumber})
+                          </option>
+                        ))}
+                      </PilotSelect>
+                      {parentAssetTruncation(
+                        parentAssets.length,
+                        parentAssetTotal,
                       ) ? (
-                        <option value={parentChoice.id}>
-                          {parentChoice.name} ({parentChoice.assetNumber})
-                        </option>
+                        <p className="text-xs text-pilot-grey-500">
+                          {parentAssetTruncation(
+                            parentAssets.length,
+                            parentAssetTotal,
+                          )}
+                        </p>
                       ) : null}
-                      {parentAssets.map((asset) => (
-                        <option key={asset.id} value={asset.id}>
-                          {asset.name} ({asset.assetNumber})
-                        </option>
-                      ))}
-                    </PilotSelect>
-                    {parentAssetTruncation(
-                      parentAssets.length,
-                      parentAssetTotal,
-                    ) ? (
-                      <p className="text-xs text-pilot-grey-500">
-                        {parentAssetTruncation(
-                          parentAssets.length,
-                          parentAssetTotal,
-                        )}
-                      </p>
-                    ) : null}
-                  </div>
+                    </div>
+                  )}
                 </PilotField>
               </div>
             </PilotFormCard>
