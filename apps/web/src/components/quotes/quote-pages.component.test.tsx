@@ -2859,7 +2859,14 @@ describe("Az ajánlat partnere: a piszkozaton cserélhető", () => {
   };
 
   it("swaps the partner: the search is the new-quote page's, only the pick plus the button saves, and the page shows the new partner", async () => {
-    api.detail.mockResolvedValue(draftOnly());
+    // the first read is the old partner; after the save the page reads the quote again (the recipient and the printed partner come
+    // from it), and the server then answers with the new one. The reload used to answer with the OLD partner, so the new name stood
+    // on the page only between the save and that answer, and the check below raced it (card f94126d9).
+    api.detail.mockResolvedValueOnce(draftOnly()).mockResolvedValue({
+      ...draftOnly(),
+      customerId: "c2",
+      customerName: "Állatkert Zrt.",
+    });
     customers.list.mockResolvedValue({
       items: [{ id: "c2", displayName: "Állatkert Zrt.", partnerMirror: true }],
     });
@@ -2887,7 +2894,13 @@ describe("Az ajánlat partnere: a piszkozaton cserélhető", () => {
         customerId: "c2",
       }),
     );
-    expect(await screen.findByText("Állatkert Zrt.")).toBeInTheDocument();
+    // the page read the quote again, and shows the new partner after that read, not only before it. The check re-queries the
+    // page instead of holding an element across an await: on the runner a found element was re-rendered away before the
+    // check ("element could not be found in the document", a detached node, not a missing text; card f94126d9).
+    await waitFor(() => expect(api.detail).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.getByText("Állatkert Zrt.")).toBeInTheDocument(),
+    );
     expect(screen.queryByLabelText("Partner keresése")).toBeNull();
   });
 
