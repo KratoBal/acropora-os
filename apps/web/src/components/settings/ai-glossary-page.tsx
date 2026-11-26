@@ -252,6 +252,7 @@ export function AiGlossaryPage() {
     <PilotThemeRoot className="space-y-6">
       <UnsavedChangesGuard when={dirty} />
       <PilotPageHeader
+        eyebrow="Beállítások / AI szójegyzék"
         title="AI szójegyzék"
         description="A rövidítések, amiket az AI az első előfordulásnál kibont: az eredeti kifejezés és a magyar név. Egy mentés új verzió; az előzményből bármelyik visszaállítható."
       />
@@ -283,7 +284,7 @@ export function AiGlossaryPage() {
       {notice ? (
         <p
           role="status"
-          className="rounded-lg bg-pilot-teal-50 p-3 text-sm text-pilot-teal-700"
+          className="rounded-lg bg-pilot-aqua-50 p-3 text-sm text-pilot-aqua-700"
         >
           {notice}
         </p>
@@ -331,7 +332,7 @@ export function AiGlossaryPage() {
                 className="space-y-2 border-t border-pilot-grey-100 pt-3 first:border-t-0 first:pt-0"
                 data-testid={`szojegyzek-sor-${index + 1}`}
               >
-                <div className="grid gap-2 md:grid-cols-[8rem_1fr_8rem_1fr]">
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-[8rem_minmax(0,1fr)_8rem_minmax(0,1fr)]">
                   <label className="space-y-1 text-xs text-pilot-grey-600">
                     Rövidítés
                     <PilotInput
