@@ -292,7 +292,7 @@ export function WebshopShippingSettingsPage() {
                                 edit(shipping, (l) => move(l, index, -1))
                               }
                             >
-                              Fel
+                              <span aria-hidden="true">↑</span>
                             </PilotButton>
                             <PilotButton
                               variant="ghost"
@@ -302,7 +302,7 @@ export function WebshopShippingSettingsPage() {
                                 edit(shipping, (l) => move(l, index, 1))
                               }
                             >
-                              Le
+                              <span aria-hidden="true">↓</span>
                             </PilotButton>
                             <PilotButton
                               variant="ghost"
@@ -313,7 +313,7 @@ export function WebshopShippingSettingsPage() {
                                 )
                               }
                             >
-                              Eltávolítás
+                              <span aria-hidden="true">×</span>
                             </PilotButton>
                           </li>
                         );
