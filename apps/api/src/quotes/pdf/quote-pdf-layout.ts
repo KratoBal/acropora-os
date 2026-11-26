@@ -80,6 +80,21 @@ export function quoteTotals(blocks: readonly QuotePdfBlock[]) {
 }
 
 /**
+ * THE ROUNDING OF A QUOTE'S MONEY, ONE PLACE (Luca 2026-11-26, the list's gross column): forint to the whole, other currencies to two places,
+ * half up. The PDF prints its totals through this, and the quote list's gross total is rounded by the same function, so the two cannot differ
+ * by a rounding rule.
+ */
+export function quoteMoneyFixed(
+  amount: Prisma.Decimal,
+  currency: string,
+): string {
+  const huf = currency.toUpperCase() === "HUF";
+  return amount
+    .toDecimalPlaces(huf ? 0 : 2, Prisma.Decimal.ROUND_HALF_UP)
+    .toFixed(huf ? 0 : 2);
+}
+
+/**
  * Money for the customer: forint to the whole (half up), other currencies to
  * two places, with a space every three digits (`4 800`, not `4800`: the
  * hu-HU locale would not group four digits).
@@ -89,9 +104,7 @@ export function formatQuoteMoney(
   currency: string,
 ): string {
   const huf = currency.toUpperCase() === "HUF";
-  const fixed = amount
-    .toDecimalPlaces(huf ? 0 : 2, Prisma.Decimal.ROUND_HALF_UP)
-    .toFixed(huf ? 0 : 2);
+  const fixed = quoteMoneyFixed(amount, currency);
   const negative = fixed.startsWith("-");
   const [whole, fraction] = (negative ? fixed.slice(1) : fixed).split(".");
   const grouped = whole!.replace(/\B(?=(\d{3})+(?!\d))/g, " ");

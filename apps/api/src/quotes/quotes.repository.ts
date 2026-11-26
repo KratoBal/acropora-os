@@ -170,6 +170,26 @@ export class QuotesRepository {
       );
     return totals;
   }
+  /**
+   * The offered (non-optional) GROSS total per version, as the PDF counts it (`quoteTotals` in `pdf/quote-pdf-layout.ts`): each line's net times
+   * (1 + its own VAT rate), the lines summed UNROUNDED, in the database. The caller rounds the sum once with `quoteMoneyFixed`, the PDF's own
+   * rounding, so a mixed-VAT quote's list gross is the PDF's gross.
+   */
+  async grossTotals(versionIds: string[]): Promise<Map<string, string>> {
+    if (!versionIds.length) return new Map();
+    const rows = await prisma.$queryRaw<
+      Array<{ versionId: string; total: Prisma.Decimal | null }>
+    >(
+      Prisma.sql`SELECT "versionId", SUM("quantity" * "unitNetPrice" * (1 + "vatRatePercent" / 100)) AS "total"
+        FROM "QuoteItem"
+        WHERE "versionId" IN (${Prisma.join(versionIds)}) AND NOT "isOptional"
+        GROUP BY "versionId"`,
+    );
+    const totals = new Map(versionIds.map((id) => [id, "0"]));
+    for (const r of rows)
+      totals.set(r.versionId, new Prisma.Decimal(r.total ?? 0).toFixed());
+    return totals;
+  }
   async list(page: number, pageSize: number, filter: QuoteListFilter = {}) {
     const { q } = filter;
     const where: Prisma.QuoteWhereInput = {
