@@ -3,6 +3,7 @@
 import {
   Alert,
   ConfirmDialog,
+  Icon,
   PilotBadge,
   PilotButton,
   PilotCard,
@@ -24,6 +25,7 @@ import {
   type QuoteTemplateDto,
   type QuoteTemplateInput,
 } from "@acropora/types";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -288,38 +290,41 @@ export function QuoteTemplateEditorPage({
 
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
-      <PilotPageHeader
-        eyebrow="Beállítások / Árajánlatok"
-        title={template ? `Sablon · ${template.name}` : "Új sablon"}
-        description="A sablon szerkezete új ajánlat létrehozásakor másolódik; az egyedi ajánlat később szabadon módosítható."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <PilotButton
-              variant="ghost"
-              onClick={() => router.push(QUOTE_TEMPLATES_PATH)}
-            >
-              Vissza a sablonokhoz
-            </PilotButton>
-            {template ? (
+      {/* a visszalépés a közös bal felső "‹" nyíl, nem egy gomb a jobb felső sarokban (picasso leltár 3.24, R12) */}
+      <div>
+        <Link
+          href={QUOTE_TEMPLATES_PATH}
+          className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
+        >
+          <Icon name="chevron-left" size={12} /> Ajánlatsablonok
+        </Link>
+        <PilotPageHeader
+          eyebrow="Beállítások / Árajánlatok"
+          title={template ? `Sablon · ${template.name}` : "Új sablon"}
+          description="A sablon szerkezete új ajánlat létrehozásakor másolódik; az egyedi ajánlat később szabadon módosítható."
+          actions={
+            <div className="flex flex-wrap gap-2">
+              {template ? (
+                <PilotButton
+                  variant="secondary"
+                  size="regular"
+                  disabled={busy}
+                  onClick={() => void copy()}
+                >
+                  Másolat készítése
+                </PilotButton>
+              ) : null}
               <PilotButton
-                variant="secondary"
                 size="regular"
-                disabled={busy}
-                onClick={() => void copy()}
+                disabled={!ready || busy}
+                onClick={() => void save()}
               >
-                Másolat készítése
+                Sablon mentése
               </PilotButton>
-            ) : null}
-            <PilotButton
-              size="regular"
-              disabled={!ready || busy}
-              onClick={() => void save()}
-            >
-              Sablon mentése
-            </PilotButton>
-          </div>
-        }
-      />
+            </div>
+          }
+        />
+      </div>
 
       {error ? (
         <Alert variant="danger" title="Hiba történt" description={error} />

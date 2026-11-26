@@ -144,7 +144,7 @@ export function ComponentCatalogPage() {
   return (
     <PilotThemeRoot className="space-y-6">
       <PageHeader
-        eyebrow="Fejlesztés"
+        eyebrow="Beállítások / Fejlesztés"
         title="Komponens-katalógus"
         description="A közös pilot készlet minden darabja a fő állapotaival. Design-kör ellenőrzéséhez: egy lap három szélességen."
         meta={<PilotBadge variant="teal">Belső lap</PilotBadge>}

@@ -168,6 +168,7 @@ export function QuoteSnippetsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        eyebrow="Beállítások / Árajánlatok"
         title="Ajánlat szövegrészletek"
         description="Újrahasznosítható ajánlati szövegek. Beszúráskor az ajánlatba másolat kerül: egy későbbi szerkesztés vagy archiválás a már megírt ajánlatot nem változtatja."
       />
