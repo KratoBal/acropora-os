@@ -109,6 +109,8 @@ function setup(
   options: {
     /** The advance invoice a final invoice deducts, as `find` reads it (barracuda N3b); absent: `find` answers the row itself. */
     advanceLines?: { vatRatePercent: string; unitNet: string }[];
+    /** The webshop order's cancel state as the shared issue reads it (card ba6b8256); absent: not cancelled. */
+    cancellation?: { of: (orderId: string) => Promise<string | null> };
     status?: string;
     format?: string;
     claim?: boolean;
@@ -296,6 +298,7 @@ function setup(
     credentials,
     store,
     stock,
+    (options.cancellation ?? { of: async () => null }) as never,
     client,
     options.env ?? ON,
   );
@@ -626,6 +629,48 @@ describe("BillingDocumentIssueService", () => {
       advanceLines: [{ vatRatePercent: "27", unitNet: "212.60" }],
     });
     assert.equal((await issue(covered.service)).status, "ISSUED");
+  });
+
+  /*
+    A LEMONDOTT RENDELÉS VÉGSZÁMLÁJA A SZERKESZTŐBŐL (kártya ba6b8256, barracuda a #2992-n). MI PIROSÍT: a lemondás előtt kész vázlat a
+    lemondás után kimegy; olvashatatlan webshopnál kimegy; nem webshopos végszámlánál a webshopot olvassa.
+  */
+  it("WEBSHOP-FINAL-CANCELLED (ba6b8256): a cancelled order's final draft stops before the claim, also when the shop cannot be read", async () => {
+    const asked: string[] = [];
+    for (const [state, pattern] of [
+      ["canceled", /le van mondva a webshopban: végszámla nem állítható ki/],
+      [
+        "closed_unsuccessfully",
+        /sikertelenül lezárt: végszámla nem állítható ki/,
+      ],
+      ["unreadable", /a webshop nem olvasható/i],
+    ] as const) {
+      const s = setup({
+        over: webshopFinal,
+        balance: { amount: "1000" },
+        cancellation: {
+          of: async (orderId: string) => {
+            asked.push(orderId);
+            return state;
+          },
+        },
+      });
+      await assert.rejects(issue(s.service), pattern, state);
+      assert.deepEqual([s.calls.claim, s.calls.generate], [0, 0], state);
+    }
+    assert.deepEqual(asked, ["order_38", "order_38", "order_38"]);
+    // a plain final invoice (no webshop order) does not ask the shop
+    const plain = setup({
+      over: { documentType: "FINAL_INVOICE" },
+      cancellation: {
+        of: async (orderId: string) => {
+          asked.push(`plain ${orderId}`);
+          return "canceled";
+        },
+      },
+    });
+    await issue(plain.service).catch(() => undefined);
+    assert.equal(asked.length, 3);
   });
 
   it("WEBSHOP-FINAL-RELABELLED (barracuda on #2980): a final invoice written to MANUAL still meets the balance and claims nothing", async () => {
