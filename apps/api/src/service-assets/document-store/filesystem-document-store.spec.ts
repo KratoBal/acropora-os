@@ -7,7 +7,6 @@ import {
   readdir,
   readFile,
   rm,
-  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -458,18 +457,13 @@ describe("a lost marker, and whether the root is a mounted volume", () => {
     documentId: "doc-1",
   };
 
-  it("on a mount point the missing marker is put back, and the store is ready with its data", async () => {
+  it("on a mount point holding our documents the missing marker is put back, and the store is ready with its data", async () => {
     const mounted = await mkdtemp(
       path.join(tmpdir(), "document-store-mounted-"),
     );
     try {
-      // the process "started" now: the document below was written before it
-      const store = new FilesystemDocumentStore(
-        mounted,
-        async () => true,
-        Date.now() + 60_000,
-      );
-      // the data of before is there: a document written while the marker still stood
+      const store = new FilesystemDocumentStore(mounted, async () => true);
+      // the data of before, written straight to the volume (the put refuses an unmarked store since #3058)
       await mkdir(path.join(mounted, "assets", "asset-1"), { recursive: true });
       await writeFile(
         path.join(mounted, "assets", "asset-1", "doc-1"),
@@ -492,15 +486,10 @@ describe("a lost marker, and whether the root is a mounted volume", () => {
     too. WHAT TURNS THIS RED: the marker put on it (new documents would go there and the old ones would be missing), or put
     after the first write some caller makes without asking the state (billing, quotes, messages do).
   */
-  it("a mounted volume with no document from before this run stays not-configured, even after a write", async () => {
+  it("an empty mounted volume stays not-configured, and the put writes nothing there (with #3058, the two prove it together)", async () => {
     const empty = await mkdtemp(path.join(tmpdir(), "document-store-empty-"));
     try {
-      const startedAt = Date.now() - 60_000;
-      const store = new FilesystemDocumentStore(
-        empty,
-        async () => true,
-        startedAt,
-      );
+      const store = new FilesystemDocumentStore(empty, async () => true);
       const first = await store.describe();
       assert.equal(first.state, "not-configured");
       assert.match(
@@ -508,16 +497,10 @@ describe("a lost marker, and whether the root is a mounted volume", () => {
         /kézzel kell letenni/,
       );
 
-      // a caller that writes without asking the state: its file is from this run, not from before
-      await store.put(key, Uint8Array.from([1]));
+      // a caller that writes without asking the state: refused, so the volume stays empty and unmarked
+      await assert.rejects(store.put(key, Uint8Array.from([1])));
+      assert.deepEqual(await readdir(empty), []);
       assert.equal((await store.describe()).state, "not-configured");
-      assert.equal((await readdir(empty)).includes(MARKER_FILE), false);
-
-      // the same file, older than the run: that is the volume of before, and the marker comes back
-      const file = path.join(empty, "assets", "asset-1", "doc-1");
-      const old = new Date(startedAt - 3_600_000);
-      await utimes(file, old, old);
-      assert.deepEqual(await store.describe(), { state: "ready" });
     } finally {
       await rm(empty, { recursive: true, force: true });
     }
