@@ -186,6 +186,37 @@ describe("WebshopProductListPage", () => {
    * nothing is the reader's to fix; a shop with nothing synchronised is not,
    * and retyping the search would never help.
    */
+  // Picasso 3.19 (acrobot 62633): a negative stock is flagged as on the Termékek list (#2922); zero and missing are not
+  it("flags a negative stock red with a note; zero, missing and positive stay plain", async () => {
+    api.list.mockResolvedValue(
+      response([
+        { ...reefSalt, id: "p-neg", name: "Negatív termék", stockOnHand: "-4" },
+        { ...reefSalt, id: "p-zero", name: "Nulla termék", stockOnHand: "0" },
+        {
+          ...reefSalt,
+          id: "p-none",
+          name: "Ismeretlen termék",
+          stockOnHand: null,
+        },
+        { ...reefSalt, id: "p-ok", name: "Rendes termék", stockOnHand: "12" },
+      ]),
+    );
+    render(<WebshopProductListPage />);
+    const stockOf = async (name: string) =>
+      (await screen.findByText(name))
+        .closest("tr")!
+        .querySelector("td[data-label='Készlet']")!;
+    const negative = await stockOf("Negatív termék");
+    const flag = negative.querySelector("[title='Negatív készlet']")!;
+    expect(flag.className).toContain("text-pilot-red-700");
+    expect(negative.textContent).toContain("(negatív készlet)");
+    for (const name of ["Nulla termék", "Ismeretlen termék", "Rendes termék"])
+      expect(
+        (await stockOf(name)).querySelector("[title='Negatív készlet']"),
+        name,
+      ).toBeNull();
+  });
+
   it("says the sync may not have run when nothing is listed at all", async () => {
     api.list.mockResolvedValue(response([]));
 

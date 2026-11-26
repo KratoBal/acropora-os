@@ -2531,6 +2531,26 @@ describe("Ajánlat szövegrészletek (Beállítások)", () => {
     expect(api.snippets).not.toHaveBeenCalled();
   });
 
+  // Picasso 3.24 (acrobot 62633): a longer list gets the settings lists' search
+  it("nyolcnál több szövegrészletnél kereső szűr a névre", async () => {
+    api.snippets.mockResolvedValue(
+      Array.from({ length: 9 }, (_, i) => ({
+        id: `s-${i}`,
+        name: `Részlet ${i}`,
+        kind: "PAYMENT",
+        content: null,
+        milestones: null,
+        archivedAt: null,
+        updatedAt: "2026-11-26T08:00:00Z",
+      })),
+    );
+    render(<QuoteSnippetsPage />);
+    const search = await screen.findByLabelText("Keresés a listában");
+    fireEvent.change(search, { target: { value: "részlet 4" } });
+    expect(screen.getByText("Részlet 4")).toBeTruthy();
+    expect(screen.queryByText("Részlet 5")).toBeNull();
+  });
+
   it("fizetési feltétel mérföldkövekkel jön létre", async () => {
     api.createSnippet.mockResolvedValue({});
     render(<QuoteSnippetsPage />);

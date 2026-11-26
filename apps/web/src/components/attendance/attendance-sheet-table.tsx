@@ -154,6 +154,8 @@ export function AttendanceSheetTable({
                   {canEdit(row) ? (
                     <PilotButton
                       variant="secondary"
+                      // the row action's own size, so a future row is as tall as a past one (Picasso 3.20, acrobot 62633)
+                      size="action"
                       aria-label={`${formatDayHu(row.date)} módosítása`}
                       onClick={() => onEdit(row)}
                     >

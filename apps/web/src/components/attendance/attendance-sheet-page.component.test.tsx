@@ -208,6 +208,14 @@ describe("AttendanceSheetPage", () => {
     ).toBeTruthy();
   });
 
+  // Picasso 3.20 (acrobot 62633): the row action is the small action size, so a future row is not taller than a past one
+  it("the row's Módosítás is the small action button", async () => {
+    await openSheet();
+    const edit = await screen.findByLabelText("2026. 11. 16. módosítása");
+    expect(edit.className).toContain("h-8");
+    expect(edit.className).not.toContain("py-1.5");
+  });
+
   it("marks a day sick, and reloads the month", async () => {
     await openSheet();
     fireEvent.click(screen.getByLabelText("2026. 11. 16. módosítása"));
