@@ -92,7 +92,17 @@ describe("phase 4 helpers", () => {
   it("status labels by kind; an unknown status is not shown raw", () => {
     expect(
       contextStatusLabel({ ...card, type: "WORKSHEET", status: "COMPLETED" }),
-    ).toBe("Elkészült");
+    ).toBe("Elkészült · aláírásra vár");
+    // a munkalap kártyája a közös szavakkal (kártya 7f23785c): Lezárt, nem Lezárva; az elutasított Folyamatban · elutasítva
+    expect(
+      contextStatusLabel({ ...card, type: "WORKSHEET", status: "CLOSED" }),
+    ).toBe("Lezárt");
+    expect(
+      contextStatusLabel({ ...card, type: "WORKSHEET", status: "REJECTED" }),
+    ).toBe("Folyamatban · elutasítva");
+    expect(
+      contextStatusLabel({ ...card, type: "WORKSHEET", status: "toString" }),
+    ).toBeNull();
     expect(contextStatusLabel({ ...card, status: "NO_SUCH" })).toBeNull();
     expect(contextStatusLabel({ ...card, status: null })).toBeNull();
   });

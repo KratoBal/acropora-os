@@ -21,7 +21,7 @@ import {
   formatDateTime,
   formatDay,
   worksheetDisplayPilotVariant,
-  worksheetStatusLabel,
+  worksheetVersionLabel,
 } from "@/components/worksheets/worksheet-labels";
 
 /**
@@ -192,7 +192,7 @@ export function PilotLinkedWorksheetsCard({
                 <PilotBadge
                   variant={worksheetDisplayPilotVariant(item.status, 1)}
                 >
-                  {worksheetStatusLabel[item.status]}
+                  {worksheetVersionLabel(item.status)}
                 </PilotBadge>
                 <div className="flex items-center gap-3 text-xs text-pilot-grey-400">
                   {item.linkedByName ? (
@@ -445,7 +445,7 @@ function Group({
                 </p>
               </div>
               <PilotBadge variant={worksheetDisplayPilotVariant(row.status, 1)}>
-                {worksheetStatusLabel[row.status]}
+                {worksheetVersionLabel(row.status)}
               </PilotBadge>
               <PilotButton
                 variant="secondary"

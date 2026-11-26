@@ -4,7 +4,7 @@ import { handoverNote, worksheetProgressSteps } from "./worksheet-progress";
 
 /*
   A MUNKALAP FOLYAMATSÁVJA ÉS AZ ÁTADÁS MONDATA (picasso 3.1; acrobot 62184).
-  MI PIROSÍT: ha a sáv szavai nem a jelvény szavai; ha az aláírt lap nem lépi át a Lezárva lépést; ha az elutasított lap nem a harmadik
+  MI PIROSÍT: ha a sáv szavai nem a jelvény szavai; ha az aláírt lap nem lépi át a Lezárt lépést; ha az elutasított lap nem a harmadik
   lépésen áll; ha az átadás a sorrendhez kötött (korábbi átadás is pipa); ha a karbantartási vagy az önálló lap átadását hibának
   mondja, vagy a hibajegy alattiét nem.
 */
@@ -16,7 +16,7 @@ describe("worksheetProgressSteps", () => {
     expect(states(worksheetProgressSteps("DRAFT", 0, false))).toEqual([
       "Új:current",
       "Elkészült:todo",
-      "Lezárva:todo",
+      "Lezárt:todo",
       "Átadva:todo",
     ]);
     expect(states(worksheetProgressSteps("DRAFT", 2, false))[0]).toBe(
@@ -30,16 +30,16 @@ describe("worksheetProgressSteps", () => {
     ).toEqual([
       "Folyamatban:done",
       "Elkészült:current",
-      "Lezárva:todo",
+      "Lezárt:todo",
       "Átadva:todo",
     ]);
   });
 
-  it("aláírva: a Lezárva megtett, az átadás a jelenlegi, amíg nincs rögzítve", () => {
+  it("aláírva: a Lezárt megtett, az átadás a jelenlegi, amíg nincs rögzítve", () => {
     expect(states(worksheetProgressSteps("SIGNED", 2, false))).toEqual([
       "Folyamatban:done",
       "Elkészült:done",
-      "Lezárva:done",
+      "Lezárt:done",
       "Átadva:current",
     ]);
     expect(states(worksheetProgressSteps("SIGNED", 2, true))[3]).toBe(

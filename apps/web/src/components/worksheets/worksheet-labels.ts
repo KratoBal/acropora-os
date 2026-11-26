@@ -10,7 +10,18 @@ import type { WorksheetVersionStatus } from "@acropora/types";
  * A re-export marad, mert a modul többi címkéje (szín, összegformázás)
  * webes, tehát a hívóknak amúgy is innen kell importálniuk.
  */
-export { worksheetStatusLabel } from "@acropora/types";
+import { worksheetStatusLabel as sharedWorksheetStatusLabel } from "@acropora/types";
+
+/**
+ * A VÁLTOZAT-ÁLLAPOT FELIRATA A BELSŐ WEBEN: a közös csomag szótára (a partnerportál és a telefon is azt olvassa), egy eltéréssel: az aláírt
+ * változat „Lezárt", mint a közös szótárban (kártya 7f23785c, acrobot 62402), hogy a fül, a csempe és a verziótörténet ugyanazt a szót
+ * mondja, mint a sor jelvénye. A partner portál saját szava a „Lezárva" marad, a csomag szótárát ez nem írja át. A fülek a változat-állapot
+ * szerint szűrnek (az Elutasítva külön fül): a szűrő neve marad, a sor jelvénye pedig „Folyamatban · elutasítva".
+ */
+export const worksheetStatusLabel: Record<WorksheetVersionStatus, string> = {
+  ...sharedWorksheetStatusLabel,
+  SIGNED: "Lezárt",
+};
 
 /**
  * AZ ALLAPOT MEGITELESE: jo, rossz, varakozo vagy semleges. EGY helyen.
@@ -115,41 +126,101 @@ export function worksheetStatusPilotVariant(
 }
 
 /**
- * A MEGJELENÍTETT ÁLLAPOT (Új, Folyamatban, Elkészült, Lezárva, Elutasítva) a
- * `@acropora/types` szabálya szerint: a változat-állapotból és a tételszámból.
- * A sorok és az adatlap jelvénye ezt mutatja; a fülek és a csempék a szerver
- * változat-állapot szerinti számait (ott a DRAFT „Új és folyamatban”).
+ * A MUNKALAP ÁLLAPOTA A KÖZÖS SZÓTÁRBÓL (kártya 7f23785c, acrobot 62402): Új, Folyamatban, Elkészült, Lezárt; az elutasított lap Folyamatban,
+ * „elutasítva" okkal (a javítás nálunk van). 2026-11-26 előtt a webes munkalap a saját négy-öt szavát mondta (Lezárva, Elutasítva, más
+ * színek), amit mérve eltért a hibajegyétől; ma a két lap ugyanazt a szót és színt kapja.
+ *
+ * A LAP-VÁLASZ IS HOZZA (`commonStatus`, `commonReason` a lista-soron és az adatlapon, a telefonnak), de a webnek a mezői megvannak, és a
+ * munkalapnál ez tiszta levezetés: ha a válasz hozza, az áll, ha nem (régi válasz, fixtúra), a közös szótár ugyanazzal a függvénnyel
+ * (`commonWorksheetStatus`) számolja a változat-állapotból és a tételszámból. A fülek és a csempék a szerver változat-állapot szerinti számait mutatják (ott a DRAFT „Új és
+ * folyamatban"), azokhoz ez nem nyúl.
  */
-export {
-  worksheetDisplayStatus,
-  worksheetDisplayStatusLabel,
-} from "@acropora/types";
+export { worksheetDisplayStatus } from "@acropora/types";
 
 import {
-  worksheetDisplayStatus,
-  worksheetDisplayStatusLabel,
-  worksheetDisplayStatusTone,
+  commonServiceReasonLabel,
+  commonServiceStateTone,
+  commonServiceStatusLabel,
+  commonWorksheetStatus,
+  type CommonServiceState,
+  type CommonServiceStatus,
+  type CommonServiceStatusReason,
+  type WorksheetDisplayStatus,
 } from "@acropora/types";
+
+import { commonPilotVariant } from "@/components/service-jobs/common-status-view";
+
+export function worksheetCommonState(item: {
+  status: WorksheetVersionStatus;
+  lineCount?: number | null;
+  commonStatus?: CommonServiceStatus | null;
+  commonReason?: CommonServiceStatusReason | null;
+}): CommonServiceState {
+  return item.commonStatus
+    ? { status: item.commonStatus, reason: item.commonReason ?? null }
+    : commonWorksheetStatus(item.status, item.lineCount ?? 0);
+}
+
+/**
+ * A SZERVER MEGJELENÍTETT ÁLLAPOTÁBÓL (Feladataim, az üzenetek kapcsolt lap kártyája: ott a válasz a `WorksheetDisplayStatus` kulcsát hozza,
+ * nem a változat-állapotot) A KÖZÖS ÁLLAPOT: a megjelenített állapot ugyanabból a két bemenetből áll, ezért a leképezés veszteségmentes, és
+ * a közös szótár ugyanazzal a függvénnyel mondja (`commonWorksheetStatus`). Ismeretlen kulcsra `null` (a hívó a mai tartalékot adja).
+ */
+const DISPLAY_TO_VERSION: Record<
+  WorksheetDisplayStatus,
+  [WorksheetVersionStatus, number]
+> = {
+  NEW: ["DRAFT", 0],
+  IN_PROGRESS: ["DRAFT", 1],
+  COMPLETED: ["AWAITING_SIGNATURE", 1],
+  CLOSED: ["SIGNED", 1],
+  REJECTED: ["REJECTED", 1],
+};
+
+export function commonStateOfDisplayStatus(
+  status: string,
+): CommonServiceState | null {
+  if (!Object.hasOwn(DISPLAY_TO_VERSION, status)) return null;
+  const [version, lines] = DISPLAY_TO_VERSION[status as WorksheetDisplayStatus];
+  return commonWorksheetStatus(version, lines);
+}
+
+/** Az ok szövege a jelvény mellé („aláírásra vár", „elutasítva"), vagy `null`: a sima Új, Folyamatban és a Lezárt nem kap okot. */
+export function worksheetReasonText(state: CommonServiceState): string | null {
+  return state.reason === null ? null : commonServiceReasonLabel[state.reason];
+}
 
 export function worksheetDisplayLabel(
   status: WorksheetVersionStatus,
   lineCount: number,
 ): string {
-  return worksheetDisplayStatusLabel[worksheetDisplayStatus(status, lineCount)];
+  return commonServiceStatusLabel[
+    commonWorksheetStatus(status, lineCount).status
+  ];
 }
 
 export function worksheetDisplayTone(
   status: WorksheetVersionStatus,
   lineCount: number,
 ) {
-  return worksheetDisplayStatusTone(worksheetDisplayStatus(status, lineCount));
+  return commonServiceStateTone(commonWorksheetStatus(status, lineCount));
 }
 
 export function worksheetDisplayPilotVariant(
   status: WorksheetVersionStatus,
   lineCount: number,
 ): PilotBadgeVariant {
-  return TONE_TO_PILOT_VARIANT[worksheetDisplayTone(status, lineCount)];
+  return commonPilotVariant(commonWorksheetStatus(status, lineCount));
+}
+
+/**
+ * A FELIRAT, AHOL A TÉTELSZÁM NEM ISMERT (a hibajegy alatti lap-kártya és a csatolható lapok listája): a piszkozat a mai „Új és folyamatban"
+ * (a két megjelenített állapotot fedi, mint a fülek), minden más a közös szó.
+ */
+export function worksheetVersionLabel(status: WorksheetVersionStatus): string {
+  return status === "DRAFT"
+    ? worksheetStatusLabel.DRAFT
+    : worksheetDisplayLabel(status, 1);
 }
 
 /**

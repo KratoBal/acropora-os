@@ -10,6 +10,7 @@ import {
   PAGE_GUTTER_X,
 } from "@acropora/ui";
 import {
+  commonServiceStatusLabel,
   hasPermission,
   PERMISSIONS,
   type WorksheetDetail,
@@ -34,13 +35,14 @@ import { WorksheetDocuments } from "../worksheet-documents";
 import { serviceJobRef } from "../service-job-ref";
 import { WorksheetDelete } from "../worksheet-delete";
 import { handoverNote, worksheetProgressSteps } from "../worksheet-progress";
+import { commonPilotVariant } from "@/components/service-jobs/common-status-view";
 import { PilotMoreMenu } from "@/components/pilot/pilot-more-menu";
 import {
   formatDate,
   formatDateTime,
   formatLaborHours,
-  worksheetDisplayLabel,
-  worksheetDisplayPilotVariant,
+  worksheetCommonState,
+  worksheetReasonText,
   worksheetStatusLabel,
   worksheetStatusPilotVariant,
 } from "../worksheet-labels";
@@ -399,6 +401,11 @@ export function PilotWorksheetDetailPage({
     );
 
   const current = worksheet.currentVersion;
+  // a KÖZÖS állapot (kártya 7f23785c): a közös szótár számolja a változatból és a tételszámból (a lap-válasz is hozza, `commonStatus`, de a web a tiszta levezetést olvassa a mezőiből)
+  const commonState = worksheetCommonState({
+    status: current.status,
+    lineCount: current.lines.length,
+  });
   const isDraft = current.status === "DRAFT";
   const isSigned = current.status === "SIGNED";
   const isAwaiting = current.status === "AWAITING_SIGNATURE";
@@ -466,14 +473,15 @@ export function PilotWorksheetDetailPage({
           title={current.subject}
           meta={
             <>
-              <PilotBadge
-                variant={worksheetDisplayPilotVariant(
-                  current.status,
-                  current.lines.length,
-                )}
-              >
-                {worksheetDisplayLabel(current.status, current.lines.length)}
+              {/* a KÖZÖS állapot az okkal (kártya 7f23785c): a közös szótár számolja a változatból és a tételszámból */}
+              <PilotBadge variant={commonPilotVariant(commonState)}>
+                {commonServiceStatusLabel[commonState.status]}
               </PilotBadge>
+              {worksheetReasonText(commonState) ? (
+                <span className="text-sm text-pilot-grey-500">
+                  {worksheetReasonText(commonState)}
+                </span>
+              ) : null}
               <span className="break-words text-sm text-pilot-grey-500">
                 {worksheet.customer.displayName}
                 {worksheet.department.path?.length
@@ -561,7 +569,7 @@ export function PilotWorksheetDetailPage({
 
       {/*
         A FOLYAMATSÁV ÉS A KÖVETKEZŐ LÉPÉS (picasso képernyő-leltár 3.1; acrobot 62182, 62184). Felül a lap útja (Folyamatban, Elkészült,
-        Lezárva, Átadva: a jelvény szavai, ugyanabból a forrásból, `worksheet-progress.ts`), alatta a következő lépés EGY fő gombbal, a
+        Lezárt, Átadva: a jelvény szavai, ugyanabból a forrásból, `worksheet-progress.ts`), alatta a következő lépés EGY fő gombbal, a
         többi a közös "Továbbiak" menüben (`PilotMoreMenu`), mint a hibajegynél (3.2). A "Helyszíni lezárás" doboz eddig a jobb oszlop
         legalján állt; a tartalma (a tények, az átadás, a kiállítás) ide került, és aláírásra váró lapon a kiküldés is.
       */}

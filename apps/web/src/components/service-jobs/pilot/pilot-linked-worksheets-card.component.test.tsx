@@ -138,7 +138,7 @@ describe("a Kapcsolódó munkalapok kártya", () => {
     expect(row).toHaveTextContent("Lámpák átszerelése");
     expect(row).toHaveTextContent("KAR-2026-022");
     expect(row).toHaveTextContent("Állatkert / Középső medence");
-    expect(row).toHaveTextContent("Lezárva");
+    expect(row).toHaveTextContent("Lezárt");
     expect(row.textContent).not.toMatch(/munkaóra|Ft|ár\b/i);
   });
 

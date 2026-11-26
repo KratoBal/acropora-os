@@ -14,6 +14,7 @@ import {
   PAGE_GUTTER_X,
 } from "@acropora/ui";
 import {
+  commonServiceStatusLabel,
   hasPermission,
   PERMISSIONS,
   type WorksheetCopyResult,
@@ -43,9 +44,10 @@ import { serviceJobRef } from "../service-job-ref";
 import {
   formatDay,
   formatLaborHours,
-  worksheetDisplayLabel,
-  worksheetDisplayPilotVariant,
+  worksheetCommonState,
+  worksheetReasonText,
 } from "../worksheet-labels";
+import { commonPilotVariant } from "@/components/service-jobs/common-status-view";
 import {
   PilotBadge,
   PilotButton,
@@ -130,7 +132,7 @@ const FIGMA_TAB_ORDER: {
   { key: "", label: "Összes" },
   { key: "DRAFT", label: "Új és folyamatban" },
   { key: "AWAITING_SIGNATURE", label: "Elkészült" },
-  { key: "SIGNED", label: "Lezárva" },
+  { key: "SIGNED", label: "Lezárt" },
   { key: "REJECTED", label: "Elutasítva" },
 ];
 
@@ -158,7 +160,7 @@ const STAT_TILES: {
   },
   {
     key: "SIGNED",
-    label: "Lezárva",
+    label: "Lezárt",
     detail: "aláírva",
     tone: "text-pilot-aqua-700",
   },
@@ -270,16 +272,21 @@ export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
     id: "status",
     header: "Állapot",
     width: "130px",
-    cell: (worksheet) => (
-      <PilotBadge
-        variant={worksheetDisplayPilotVariant(
-          worksheet.status,
-          worksheet.lineCount ?? 0,
-        )}
-      >
-        {worksheetDisplayLabel(worksheet.status, worksheet.lineCount ?? 0)}
-      </PilotBadge>
-    ),
+    cell: (worksheet) => {
+      // a KÖZÖS állapot az okkal (kártya 7f23785c): a közös szótár számolja a változatból és a tételszámból
+      const state = worksheetCommonState(worksheet);
+      const reason = worksheetReasonText(state);
+      return (
+        <div className="flex flex-col items-start gap-0.5">
+          <PilotBadge variant={commonPilotVariant(state)}>
+            {commonServiceStatusLabel[state.status]}
+          </PilotBadge>
+          {reason ? (
+            <span className="text-xs text-pilot-grey-500">{reason}</span>
+          ) : null}
+        </div>
+      );
+    },
   },
   {
     id: "createdAt",
