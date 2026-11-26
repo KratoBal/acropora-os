@@ -619,7 +619,8 @@ const TAG_HEIGHT = 11;
  * THE OPTIONAL ITEM'S TAG (card 2540d9d4, Luca 2026-11-26): "Opcionális · kiegészítés" under the name. Every optional item is an
  * addition until an option can name the item it replaces; then this one line says which ("a 3. tétel helyett").
  */
-function optionalTag(labels: Labels): string {
+// the item is not read yet: murena's replaced item (`replacesItemId`) adds "a X. tétel helyett" here, in this one place
+function optionalTagLine(labels: Labels, _item: QuotePdfItem): string {
   return `${labels.optionalTag} · ${labels.optionalAddition}`;
 }
 
@@ -718,7 +719,7 @@ function drawTable(
       flow,
       input,
       item,
-      item.isOptional ? optionalTag(labels) : null,
+      item.isOptional ? optionalTagLine(labels, item) : null,
     );
     // a description that ran onto the next page leaves the cursor there: the
     // next row finds `flow.page` past `headPage` and draws the head first
