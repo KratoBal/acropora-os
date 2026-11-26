@@ -8,10 +8,12 @@ import {
   Input,
   PageHeader,
   Select,
+  ServiceListTabs,
   Skeleton,
 } from "@acropora/ui";
 import {
   hasPermission,
+  isAttendanceEmployeeRole,
   isNavigationEntryVisible,
   PERMISSIONS,
   type UserDetail,
@@ -68,6 +70,18 @@ function Requirement({ kind }: { kind: "required" | "optional" }) {
   );
 }
 
+/**
+ * A MEGLÉVŐ FELHASZNÁLÓ LAPJA NÉGY FÜLÖN, FÜLENKÉNT EGY MENTÉSSEL (picasso leltár 3.23, acrobot döntése 2026-11-26). Eddig egy 4977 px-es
+ * görgetés volt négy mentés gombbal (Változások mentése, Munkarend mentése, Jogosultságok mentése, Jelszó mentése), és nem derült ki,
+ * melyik gomb mit ment. A fülek a meglévő szakaszokat osztják szét, a mentések nem változnak:
+ *   Adatok       az űrlap (név, e-mail, szerep, partner, értesítések) és az elérhető menüpontok -> Változások mentése
+ *   Jogosultságok a látható helyszínek és a felhasználónkénti jogok                             -> Jogosultságok mentése
+ *   Munkarend    a heti munkarend (csak ha a szakasz megjelenne: jelenléti jog és saját kolléga) -> Munkarend mentése
+ *   Biztonság    a jelszó, az audit és az inaktiválás                                         -> Jelszó mentése
+ * A nem aktív fül REJTETT, nem lecsatolt: egy félbehagyott szerkesztés a fülváltás után is megvan. Új felhasználónál nincs fül.
+ */
+type UserTab = "adatok" | "jogok" | "munkarend" | "biztonsag";
+
 export function UserEditorPage({ userId }: { userId?: string }) {
   const { session } = useAuth();
   const router = useRouter();
@@ -97,6 +111,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
    */
   const [isServiceAccount, setIsServiceAccount] = useState(false);
   const [loading, setLoading] = useState(Boolean(userId));
+  const [tab, setTab] = useState<UserTab>("adatok");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
@@ -281,6 +296,30 @@ export function UserEditorPage({ userId }: { userId?: string }) {
   const availableRoleOptions = isPartnerAccount
     ? ROLE_OPTIONS.filter((option) => option.value === "PARTNER_SERVICE")
     : ROLE_OPTIONS;
+  // a Munkarend fül ott áll, ahol a szakasz meg is jelenne (UserAttendanceSchedule: jelenléti jog és saját kolléga szerepe)
+  const showScheduleTab = Boolean(
+    user &&
+    session &&
+    hasPermission(session.user, PERMISSIONS.ATTENDANCE_MANAGE) &&
+    isAttendanceEmployeeRole(user.role),
+  );
+  const tabs: { key: UserTab; label: string }[] = [
+    { key: "adatok", label: "Adatok" },
+    { key: "jogok", label: "Jogosultságok" },
+    ...(showScheduleTab
+      ? [{ key: "munkarend" as const, label: "Munkarend" }]
+      : []),
+    { key: "biztonsag", label: "Biztonság" },
+  ];
+  /** Egy fül tartalma: meglévő felhasználónál csak az aktív látszik, újnál minden (csak az Adatok van). */
+  const panel = (key: UserTab) =>
+    user
+      ? {
+          role: "tabpanel" as const,
+          "aria-label": tabs.find((t) => t.key === key)?.label,
+          hidden: tab !== key,
+        }
+      : {};
   return (
     <div className="space-y-6">
       <PageHeader
@@ -301,7 +340,16 @@ export function UserEditorPage({ userId }: { userId?: string }) {
           description={error}
         />
       ) : null}
-      <form className="space-y-6" onSubmit={submit}>
+      {user ? (
+        <ServiceListTabs
+          variant="pill"
+          label="A felhasználó lapjai"
+          tabs={tabs}
+          active={tab}
+          onSelect={(key) => setTab(key as UserTab)}
+        />
+      ) : null}
+      <form className="space-y-6" onSubmit={submit} {...panel("adatok")}>
         <Card className="p-6">
           <h2 className="font-semibold">Alapadatok</h2>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -637,44 +685,50 @@ export function UserEditorPage({ userId }: { userId?: string }) {
         szepseghiba: a hozzarendeles a fiok AZONOSITOJAHOZ kotodik, ami a
         felvitel elott meg nem letezik.
       */}
-      {user ? (
-        <UserVisibleUnits
-          userId={user.id}
-          role={user.role}
-          /* A KET KOTES KIZARJA EGYMAST (`User_at_most_one_partner_check`),
+      <div className="space-y-6" {...panel("jogok")}>
+        {user ? (
+          <UserVisibleUnits
+            userId={user.id}
+            role={user.role}
+            /* A KET KOTES KIZARJA EGYMAST (`User_at_most_one_partner_check`),
              tehat ez harom allapot, nem negy. */
-          binding={
-            user.customerId
-              ? "customer"
-              : user.supplierId
-                ? "supplier"
-                : "internal"
-          }
-        />
-      ) : null}
-      {/*
-        THE WEEKLY SCHEDULE (os-jelenleti-iv, S1b): only on an existing account, for the same reason as above (the versions
-        hang on the account's id). The section hides itself without attendance.manage or for a partner or machine account.
-      */}
-      {user ? (
-        <UserAttendanceSchedule userId={user.id} role={user.role} />
-      ) : null}
-      {/*
+            binding={
+              user.customerId
+                ? "customer"
+                : user.supplierId
+                  ? "supplier"
+                  : "internal"
+            }
+          />
+        ) : null}
+        {/*
         A FELHASZNÁLÓNKÉNTI JOGOK (3. lépés): csak meglévő felhasználónál, mert
         az eltérés a fiók azonosítójához kötődik. A táblázat saját mentéssel
         megy, a fenti űrlaptól függetlenül: a szerepkör változtatása után a
         táblázat az ÚJ sablonhoz méri az eltéréseket, ezért előbb azt kell menteni.
       */}
-      {user ? (
-        <UserPermissionTable
-          key={`${user.id}:${user.role}`}
-          userId={user.id}
-          customerId={user.customerId}
-          supplierId={user.supplierId ?? null}
-        />
+        {user ? (
+          <UserPermissionTable
+            key={`${user.id}:${user.role}`}
+            userId={user.id}
+            customerId={user.customerId}
+            supplierId={user.supplierId ?? null}
+          />
+        ) : null}
+      </div>
+      {showScheduleTab ? (
+        <div className="space-y-6" {...panel("munkarend")}>
+          {/*
+        THE WEEKLY SCHEDULE (os-jelenleti-iv, S1b): only on an existing account, for the same reason as above (the versions
+        hang on the account's id). The section hides itself without attendance.manage or for a partner or machine account.
+      */}
+          {user ? (
+            <UserAttendanceSchedule userId={user.id} role={user.role} />
+          ) : null}
+        </div>
       ) : null}
       {user ? (
-        <>
+        <div className="space-y-6" {...panel("biztonsag")}>
           <Card className="p-6">
             <h2 className="font-semibold">Jelszó módosítása</h2>
             <p className="mt-1 text-sm text-dusk-500">
@@ -724,7 +778,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
               {user.isActive ? "Inaktiválás" : "Aktiválás"}
             </Button>
           </Card>
-        </>
+        </div>
       ) : null}
       {confirmDeactivate ? (
         <div
