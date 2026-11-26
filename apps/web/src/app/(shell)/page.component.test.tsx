@@ -64,6 +64,46 @@ describe("DashboardCards", () => {
     ).not.toBeInTheDocument();
   });
 
+  /*
+    A MUNKALAP ÁLLAPOTA A KEZDŐLAPON A KÖZÖS SZAVAKKAL (kártya 7f23785c, acrobot 62451). MI PIROSÍT: ha az aláírt lap Lezárva (a közös: Lezárt); ha az
+    aláírásra váró lap az ok nélkül Elkészült; ha az elutasított lap külön „Elutasítva" (a közös: Folyamatban · elutasítva); ha a piszkozat (tételszám
+    nélkül) Új vagy Folyamatban lesz az összevont név helyett; ha egy ismeretlen állapot üres szöveget kap a nyers kód helyett.
+  */
+  it("a munkalap állapota a közös szavakkal áll, az okkal", () => {
+    const sheet = (id: string, status: string) =>
+      ({
+        id,
+        number: id,
+        subject: `Lap ${id}`,
+        status,
+        deadline: "2026-09-26",
+      }) as never;
+    const summary: DashboardSummary = {
+      myWorksheets: {
+        items: [
+          sheet("ml-1", "DRAFT"),
+          sheet("ml-2", "AWAITING_SIGNATURE"),
+          sheet("ml-3", "REJECTED"),
+          sheet("ml-4", "SIGNED"),
+          sheet("ml-5", "BRAND_NEW"),
+        ],
+      },
+    };
+
+    render(<DashboardCards summary={summary} />);
+
+    for (const text of [
+      "Új és folyamatban",
+      "Elkészült · aláírásra vár",
+      "Folyamatban · elutasítva",
+      "Lezárt",
+      "BRAND_NEW",
+    ])
+      expect(screen.getByText(text)).toBeInTheDocument();
+    expect(screen.queryByText("Lezárva")).toBeNull();
+    expect(screen.queryByText("Elutasítva")).toBeNull();
+  });
+
   it("az üres, de engedélyezett kártyán megmutatja az üres állapotot", () => {
     const summary: DashboardSummary = {
       myWorksheets: { items: [] },
