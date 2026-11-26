@@ -581,6 +581,35 @@ describe("BillingDocumentIssueService", () => {
     assert.match(ok.calls.xml[0] ?? "", /<fizetve>true<\/fizetve>/);
   });
 
+  it("WEBSHOP-FINAL-RELABELLED (barracuda on #2980): a final invoice written to MANUAL still meets the balance and claims nothing", async () => {
+    const relabelled = {
+      ...webshopFinal,
+      sourceType: "MANUAL",
+      sourceId: null,
+      referencedInvoice: {
+        ...webshopFinal.referencedInvoice,
+        sourceType: "WEBSHOP_ORDER",
+        sourceId: "order_38",
+      },
+    };
+    const off = setup({ over: relabelled, balance: { amount: "999" } });
+    await assert.rejects(
+      issue(off.service),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        /eltérés 1\.00 HUF/.test(error.message),
+    );
+    assert.deepEqual([off.calls.claim, off.calls.generate], [0, 0]);
+    assert.ok(off.calls.webshopAsked.includes("balance order_38"));
+    // the order's other invoices are asked for this order too (the overbilling guard)
+    assert.ok(
+      off.calls.webshopAsked.some((asked) =>
+        asked.startsWith("invoices order_38"),
+      ),
+      off.calls.webshopAsked.join(" | "),
+    );
+  });
+
   /*
     A SZERKESZTŐBEN MANUAL-RA ÁTÍRT WEBSHOP-VÁZLAT (S2 követés). A szerkesztő a forrást és a típust menti, a díjbekérő-kötést nem;
     a kiállított díjbekérő forrása megmarad. MI PIROSÍT: az átírt vázlat kikerül az összeg-, az előleg-, az Autokassza- vagy a

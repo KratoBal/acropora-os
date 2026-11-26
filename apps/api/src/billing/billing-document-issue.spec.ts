@@ -1173,6 +1173,43 @@ describe("a webshop order's final invoice against the balance (S4)", () => {
     assert.equal(finalPaidByBalance(final("13001"), balance()), false);
   });
 
+  // barracuda on #2980: the editor relabels a final invoice draft as MANUAL; its advance invoice (issued) still names the order
+  it("a final invoice relabelled as MANUAL keeps the rule through the advance invoice it deducts", () => {
+    const relabelled = {
+      ...final("13001"),
+      sourceType: "MANUAL",
+      sourceId: null,
+      referencedInvoice: {
+        ...final().referencedInvoice!,
+        sourceType: "WEBSHOP_ORDER",
+        sourceId: "order_38",
+      },
+    } as BillingDocumentRow;
+    assert.match(
+      webshopFinalInvoiceProblem(relabelled, null) ?? "",
+      /a hátralék beérkezése után/,
+    );
+    assert.match(
+      webshopFinalInvoiceProblem(relabelled, balance()) ?? "",
+      /eltérés 1\.00 HUF/,
+    );
+    assert.equal(finalPaidByBalance(relabelled, balance()), false);
+    // and through the advance's own proforma, when the advance draft was relabelled before it was issued
+    const viaProforma = {
+      ...relabelled,
+      referencedInvoice: {
+        ...final().referencedInvoice!,
+        sourceType: "MANUAL",
+        sourceId: null,
+        proformaInvoice: { sourceType: "WEBSHOP_ORDER", sourceId: "order_38" },
+      },
+    } as BillingDocumentRow;
+    assert.match(
+      webshopFinalInvoiceProblem(viaProforma, null) ?? "",
+      /a hátralék beérkezése után/,
+    );
+  });
+
   it("another currency stops; a final invoice that is not a webshop order's is not this rule's", () => {
     assert.match(
       webshopFinalInvoiceProblem(final(), balance("8200", "EUR")) ?? "",

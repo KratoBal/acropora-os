@@ -192,6 +192,45 @@ describe(
       assert.equal(settling.get(`${ORDER}8`)?.id, invoice.id);
     });
 
+    // barracuda on #2980: a final invoice relabelled as MANUAL still counts as the order's, through the advance invoice it deducts
+    it("the order's other invoices include a final invoice relabelled as MANUAL, by its advance invoice", async () => {
+      const advance = await prisma.invoice.create({
+        data: {
+          direction: "OUTBOUND",
+          source: "MANUAL",
+          partnerName: "Kitalalt Vevo",
+          documentType: "ADVANCE_INVOICE",
+          status: "ISSUED",
+          invoiceNumber: "IT-ELO-10",
+          sourceType: "WEBSHOP_ORDER",
+          sourceId: `${ORDER}10`,
+          grossAmount: new Prisma.Decimal("4800"),
+          currency: "HUF",
+        },
+      });
+      await prisma.invoice.create({
+        data: {
+          direction: "OUTBOUND",
+          source: "MANUAL",
+          partnerName: "Kitalalt Vevo",
+          documentType: "FINAL_INVOICE",
+          status: "ISSUED",
+          invoiceNumber: "IT-VEG-10",
+          sourceType: "MANUAL",
+          sourceId: `${ORDER}10-relabelled`,
+          referencedInvoiceId: advance.id,
+          grossAmount: new Prisma.Decimal("13000"),
+          currency: "HUF",
+        },
+      });
+      const billing = new BillingDocumentsRepository();
+      const others = await billing.webshopOrderInvoices(`${ORDER}10`, "none");
+      assert.deepEqual(others.map((row) => row.documentType).sort(), [
+        "ADVANCE_INVOICE",
+        "FINAL_INVOICE",
+      ]);
+    });
+
     after(async () => {
       if (gate.mode === "skip") return;
       await removeLeftovers();

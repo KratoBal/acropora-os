@@ -407,12 +407,34 @@ export function webshopOrderOf(row: {
     sourceType?: string | null;
     sourceId?: string | null;
   } | null;
+  /**
+   * A FINAL INVOICE'S ADVANCE (barracuda on #2980): the editor can relabel a final invoice draft too, and a final invoice has no
+   * proforma of its own, only the advance invoice it deducts (issued, so its source holds), or that advance's proforma.
+   */
+  referencedInvoice?: {
+    sourceType?: string | null;
+    sourceId?: string | null;
+    proformaInvoice?: {
+      sourceType?: string | null;
+      sourceId?: string | null;
+    } | null;
+  } | null;
 }): string | null {
-  if (row.sourceType === "WEBSHOP_ORDER" && row.sourceId) return row.sourceId;
-  const proforma = row.proformaInvoice;
-  return proforma?.sourceType === "WEBSHOP_ORDER" && proforma.sourceId
-    ? proforma.sourceId
-    : null;
+  const ofSource = (
+    source?: {
+      sourceType?: string | null;
+      sourceId?: string | null;
+    } | null,
+  ) =>
+    source?.sourceType === "WEBSHOP_ORDER" && source.sourceId
+      ? source.sourceId
+      : null;
+  return (
+    ofSource(row) ??
+    ofSource(row.proformaInvoice) ??
+    ofSource(row.referencedInvoice) ??
+    ofSource(row.referencedInvoice?.proformaInvoice)
+  );
 }
 
 /**
@@ -493,12 +515,14 @@ export interface WebshopBalanceFacts {
   currency: string;
 }
 
-/** A webshop order's final invoice: its own WEBSHOP_ORDER source, with the advance invoice it deducts. */
-const webshopFinal = (row: BillingDocumentRow) =>
-  row.documentType === "FINAL_INVOICE" &&
-  row.sourceType === "WEBSHOP_ORDER" &&
-  !!row.sourceId &&
-  !!row.referencedInvoice;
+/**
+ * A webshop order's final invoice: the order (`webshopOrderOf`: its own source, or the advance invoice it deducts, so a draft
+ * relabelled in the editor keeps it, barracuda on #2980), with that advance invoice. `null`: not one.
+ */
+export const webshopFinalOrder = (row: BillingDocumentRow): string | null =>
+  row.documentType === "FINAL_INVOICE" && row.referencedInvoice
+    ? webshopOrderOf(row)
+    : null;
 
 /** What the final invoice leaves to pay: its gross minus the advance it deducts (the Számlázz.hu deduction). */
 const finalPayable = (row: BillingDocumentRow, gross: string) =>
@@ -518,7 +542,7 @@ export function webshopFinalInvoiceProblem(
   row: BillingDocumentRow,
   balance: WebshopBalanceFacts | null,
 ): string | null {
-  if (!webshopFinal(row)) return null;
+  if (!webshopFinalOrder(row)) return null;
   if (!balance)
     return "A webshop rendelés végszámlája a hátralék beérkezése után állítható ki: előbb rögzítsd a hátralékot a rendelés oldalán.";
   const input = buildIssueInput(row);
@@ -555,7 +579,7 @@ export function finalPaidByBalance(
   row: BillingDocumentRow,
   balance: WebshopBalanceFacts | null,
 ): boolean {
-  if (!webshopFinal(row) || !balance) return false;
+  if (!webshopFinalOrder(row) || !balance) return false;
   if (
     balance.currency.trim().toUpperCase() !== row.currency.trim().toUpperCase()
   )
@@ -587,10 +611,11 @@ export async function proformaPaidOf(
   },
 ): Promise<boolean> {
   // a webshop order's final invoice: the recorded balance says "paid" (S4); it settles no proforma of its own
-  if (webshopFinal(row) && row.sourceId)
+  const finalOrder = webshopFinalOrder(row);
+  if (finalOrder)
     return finalPaidByBalance(
       row,
-      await documents.webshopBalanceFacts(row.sourceId),
+      await documents.webshopBalanceFacts(finalOrder),
     );
   const proforma = row.proformaInvoice;
   if (!proforma?.invoiceNumber) return false;

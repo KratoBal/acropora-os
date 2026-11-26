@@ -36,6 +36,7 @@ import { budapestDayKey } from "../dashboard/budapest-day.js";
 import {
   proformaPaidOf,
   webshopFinalInvoiceProblem,
+  webshopFinalOrder,
   webshopOverbillingProblem,
   webshopTransferInvoiceProblem,
   webshopOrderOf,
@@ -327,15 +328,13 @@ export class BillingDocumentIssueService {
     const transferProblem = await this.webshopTransferInvoice(row);
     if (transferProblem) throw new ConflictException(transferProblem);
     // A WEBSHOP VÉGSZÁMLÁJA A HÁTRALÉKRA (S4, acrobot 62375): a fizetendője a beérkezett hátralék fillérre, különben megáll
-    const webshopFinalProblem =
-      row.documentType === "FINAL_INVOICE" &&
-      row.sourceType === "WEBSHOP_ORDER" &&
-      row.sourceId
-        ? webshopFinalInvoiceProblem(
-            row,
-            await this.documents.webshopBalanceFacts(row.sourceId),
-          )
-        : null;
+    const finalOrder = webshopFinalOrder(row);
+    const webshopFinalProblem = finalOrder
+      ? webshopFinalInvoiceProblem(
+          row,
+          await this.documents.webshopBalanceFacts(finalOrder),
+        )
+      : null;
     if (webshopFinalProblem) throw new ConflictException(webshopFinalProblem);
 
     // WHAT THE WINDOW SHOWED IS WHAT THE INVOICE CARRIES (card 7ba97e0d): the same summary again, the shown values
