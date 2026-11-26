@@ -197,6 +197,19 @@ export const SETTINGS_AREAS: SettingsArea[] = [
     ],
   },
   {
+    title: "AI szójegyzék",
+    icon: "settings",
+    links: [
+      {
+        label: "Az AI szójegyzéke",
+        description:
+          "A rövidítések, amiket az AI az első előfordulásnál kibont, az eredeti kifejezéssel és a magyar névvel; verziózva, előzménnyel és visszaállítással.",
+        href: "/beallitasok/ai-szojegyzek",
+        entryId: "ai-glossary",
+      },
+    ],
+  },
+  {
     title: "Mértékegységek",
     icon: "settings",
     links: [

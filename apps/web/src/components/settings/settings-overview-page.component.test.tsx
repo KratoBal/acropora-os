@@ -100,6 +100,8 @@ describe("beállítások gyűjtőoldal", () => {
    */
   it("minden területet megmutat a tulajdonosnak", () => {
     auth.role = "OWNER";
+    // az AI szójegyzék kártyája kapcsolóhoz kötött (`ai-glossary`): a szerver által kiszolgált menüben ott áll, ahol az AI_GLOSSARY_EDITOR be van kapcsolva
+    auth.navigation = [{ id: "ai-glossary" }];
     render(<SettingsOverviewPage />);
     for (const area of SETTINGS_AREAS) {
       expect(screen.getAllByText(area.title).length).toBeGreaterThan(0);

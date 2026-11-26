@@ -402,6 +402,7 @@ describe("AuthController", () => {
         MEDUSA_WEBSHOP_SHIPPING_SETTINGS: "true",
         MEDUSA_WEBSHOP_PRICE_RULES: "true",
         MEDUSA_WEBSHOP_CUSTOMER_TEXTS: "true",
+        AI_GLOSSARY_EDITOR: "true",
         MEDUSA_WEBSHOP_GIFT_CARDS: "true",
       },
     ]) {

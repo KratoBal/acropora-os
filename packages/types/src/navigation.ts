@@ -79,6 +79,8 @@ export type NavigationVisibility =
  * #889), so the page exists only where the OS may write it.
  * `webshop-gift-cards` is `MEDUSA_WEBSHOP_GIFT_CARDS=true`: issuing a gift card writes money into the TEST shop (card
  * 495c0007), so the page exists only where the OS may write it.
+ * `ai-glossary` is `AI_GLOSSARY_EDITOR=true`: the editor of the AI service's aquarium glossary (card 7a5ea203, part C) saves a new
+ * version of the abbreviation list the model is told, so the page exists only where the OS may write it (the test OS first).
  *
  * `jev-product-enrichment` is `JEV_PRODUCT_ENRICHMENT` not being `off`
  * (docs/jev-product-intelligence/v1-discovery.md, answer 6). Only the server
@@ -96,6 +98,7 @@ export const NAVIGATION_FEATURES = [
   "webshop-price-rules",
   "webshop-customer-texts",
   "webshop-gift-cards",
+  "ai-glossary",
 ] as const;
 export type NavigationFeature = (typeof NAVIGATION_FEATURES)[number];
 
@@ -690,6 +693,17 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
     feature: "webshop-gift-cards",
+  },
+  {
+    /**
+     * AZ AI SZÓJEGYZÉKE (/beallitasok/ai-szojegyzek; kártya 7a5ea203, C3): a rövidítések, amiket a modell kibont, a magyar nevükkel, verziózva.
+     * Nem menüpont: a Beállítások lap kártyája. Ugyanaz a jog, mint a végpontoké (`settings.manage`), és csak ahol az OS írhatja
+     * (`ai-glossary`, az `AI_GLOSSARY_EDITOR` kapcsoló).
+     */
+    id: "ai-glossary",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+    feature: "ai-glossary",
   },
   {
     id: "settings-general",
