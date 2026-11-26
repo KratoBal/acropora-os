@@ -253,4 +253,18 @@ describe("beállítások gyűjtőoldal", () => {
     expect(screen.queryByText("Felhasználók")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /NAV/ })).not.toBeInTheDocument();
   });
+
+  // Picasso 3.16 (acrobot 62278): the Fejlesztés card (Komponens-katalógus) is for the admin roles only; a manager has no `settings.manage`
+  it("the Fejlesztés card is shown to the admin and the owner, and not to a manager", () => {
+    for (const role of ["OWNER", "ADMIN"]) {
+      auth.role = role;
+      const { unmount } = render(<SettingsOverviewPage />);
+      expect(screen.getAllByText("Fejlesztés").length).toBeGreaterThan(0);
+      unmount();
+    }
+    auth.role = "MANAGER";
+    render(<SettingsOverviewPage />);
+    expect(screen.queryByText("Fejlesztés")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Komponens-katalógus/)).not.toBeInTheDocument();
+  });
 });
