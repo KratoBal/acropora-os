@@ -1,4 +1,8 @@
 "use client";
+import {
+  PilotBackLink,
+  backLinkLabel,
+} from "@/components/pilot/pilot-back-link";
 import { useAssistantEntity } from "../assistant/page-context";
 
 import {
@@ -228,6 +232,9 @@ export function PurchaseInvoiceDetailPage({
 
   return (
     <div className="space-y-6">
+      <PilotBackLink href={backToList.href} flush>
+        {backLinkLabel(backToList, "Beszerzés")}
+      </PilotBackLink>
       <PageHeader
         title={detail ? detail.documentNumber : "Beszerzési számla"}
         description="Beérkezett beszállítói számla részletei"
@@ -255,9 +262,6 @@ export function PurchaseInvoiceDetailPage({
                 </PilotButton>
               </>
             ) : null}
-            <PilotButton variant="secondary" onClick={backToList.goBack}>
-              {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
-            </PilotButton>
           </div>
         }
       />

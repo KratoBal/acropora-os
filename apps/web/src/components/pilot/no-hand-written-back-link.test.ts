@@ -59,14 +59,9 @@ const MEG_ATALLITANDO = [
   "components/pos/pilot/pilot-pos-sale-detail-page.tsx",
   "components/pos/pilot/pilot-pos-summary-page.tsx",
   "components/pos/pos-sale-detail-page.tsx",
-  "components/purchasing/nav-incoming-invoice-detail-page.tsx",
-  "components/purchasing/price-list-suggestions-page.tsx",
-  "components/purchasing/purchase-invoice-detail-page.tsx",
   "components/quotes/quote-pdf-page.tsx",
   "components/service-assets/asset-editor-page.tsx",
   "components/suppliers/pilot/pilot-supplier-editor-page.tsx",
-  "components/webshop-orders/webshop-order-detail-page.tsx",
-  "components/webshop/webshop-order-detail-page.tsx",
   "components/worksheets/worksheet-entry-page.tsx",
 ];
 
@@ -138,6 +133,11 @@ describe("a visszalépés egy alakja", () => {
       "components/customers/customer-editor-page.tsx",
       "components/inventory/inventory-count-detail-page.tsx",
       "components/products/product-detail-page.tsx",
+      "components/purchasing/purchase-invoice-detail-page.tsx",
+      "components/purchasing/nav-incoming-invoice-detail-page.tsx",
+      "components/purchasing/price-list-suggestions-page.tsx",
+      "components/webshop/webshop-order-detail-page.tsx",
+      "components/webshop-orders/webshop-order-detail-page.tsx",
     ]) {
       const f = MIND.find((x) => x.ut === ut);
       expect(f, ut).toBeDefined();

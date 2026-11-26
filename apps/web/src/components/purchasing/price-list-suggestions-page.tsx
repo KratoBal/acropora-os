@@ -1,4 +1,5 @@
 "use client";
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import { Alert, EmptyState, PilotPageHeader, Skeleton } from "@acropora/ui";
 import {
   formatMoney,
@@ -7,7 +8,6 @@ import {
   type SupplierPriceSuggestionItem,
   type SupplierSummary,
 } from "@acropora/types";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -192,11 +192,9 @@ export function PriceListSuggestionsPage() {
         description="Az árlisták azon sorai, amelyeket sem vonalkód, sem ismert cikkszám nem köt egy termékhez: a rendszer a NEVÜK alapján javasol termékeket. A javaslat nem kötés: amit jóváhagysz, az a te döntésed lesz (név szerint, jóváhagyva); amit elutasítasz, az a jelölt nem jön vissza. Egy cikkszámnál egy jelöltet jelölhetsz."
       />
       <PurchasingTabs active="/beszerzes/arlistak" />
-      <p className="text-sm">
-        <Link href="/beszerzes/arlistak" className="underline">
-          Vissza a beszállítói árlistákhoz
-        </Link>
-      </p>
+      <PilotBackLink href="/beszerzes/arlistak" flush>
+        Beszállítói árlisták
+      </PilotBackLink>
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
