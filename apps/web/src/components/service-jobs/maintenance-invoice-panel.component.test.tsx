@@ -136,6 +136,43 @@ describe("MaintenanceInvoicePanel", () => {
     await screen.findByText("127 000 Ft");
   });
 
+  // measured on stage (2026-11-26, 1440 px): the button showed while the existing draft was still being read
+  it("while the invoice is still being read, it offers no create-draft button; then it shows the existing draft", async () => {
+    certificatesApi.list.mockResolvedValue([signedCertificate]);
+    let answer: (value: MaintenanceInvoiceSummary | null) => void = () => {};
+    invoiceApi.byCertificate.mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+    );
+
+    render(<MaintenanceInvoicePanel serviceJobId="job-1" />);
+
+    await waitFor(() => expect(invoiceApi.byCertificate).toHaveBeenCalled());
+    expect(screen.getByText("Betöltés…")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Piszkozat készítése" }),
+    ).toBeNull();
+    answer(invoiceSummary);
+    await screen.findByText("127 000 Ft");
+    expect(
+      screen.queryByRole("button", { name: "Piszkozat készítése" }),
+    ).toBeNull();
+  });
+
+  it("a failed invoice read says so once, with no loading line under it", async () => {
+    certificatesApi.list.mockResolvedValue([signedCertificate]);
+    invoiceApi.byCertificate.mockRejectedValue(new Error("Hálózati hiba."));
+
+    render(<MaintenanceInvoicePanel serviceJobId="job-1" />);
+
+    await screen.findByText("Hálózati hiba.");
+    expect(screen.queryByText("Betöltés…")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Piszkozat készítése" }),
+    ).toBeNull();
+  });
+
   it("shows the amount, a download button and a disabled, labelled Kiállítás button when a draft exists", async () => {
     certificatesApi.list.mockResolvedValue([signedCertificate]);
     invoiceApi.byCertificate.mockResolvedValue(invoiceSummary);

@@ -81,18 +81,20 @@ export function MaintenanceInvoicePanel({
         serviceJobId,
       );
       const certificate = certificates[0] ?? null;
-      setCertificateId(certificate?.id ?? null);
+      /*
+        THE INVOICE IS READ BEFORE THE CERTIFICATE IS SET, and the three are set together: between the two reads the panel saw the
+        certificate without its invoice, took the not-yet-read invoice for "no draft" and offered "Piszkozat készítése" (measured on
+        stage, 1440 px, 2026-11-26). Until all three are in, the panel says it is loading.
+      */
+      const found = certificate
+        ? await maintenanceInvoiceApi.byCertificate(token, certificate.id)
+        : null;
+      setInvoice(found);
       setSigned(
         certificate?.documents.some((doc) => doc.type === "SIGNED_FORM") ??
           false,
       );
-      if (certificate) {
-        setInvoice(
-          await maintenanceInvoiceApi.byCertificate(token, certificate.id),
-        );
-      } else {
-        setInvoice(null);
-      }
+      setCertificateId(certificate?.id ?? null);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -179,7 +181,10 @@ export function MaintenanceInvoicePanel({
       ) : null}
 
       {certificateId === undefined ? (
-        <p className="text-sm text-muted">Betöltés…</p>
+        // a failed read is said by the alert above; "Betöltés…" under it would promise data that is not coming
+        error ? null : (
+          <p className="text-sm text-muted">Betöltés…</p>
+        )
       ) : certificateId === null ? (
         <p className="text-sm text-muted">
           Nincs kiállítva teljesítési igazolás, piszkozat-számla enélkül nem
