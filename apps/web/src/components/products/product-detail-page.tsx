@@ -46,6 +46,7 @@ import { JevProductCard } from "@/components/jev-product-intelligence/jev-produc
 import { productApi } from "@/lib/api/products";
 import { currencyLabel } from "@/lib/format/currency";
 import { BarcodeEditor } from "./barcode-editor";
+import { unasStatusWithCode } from "@/lib/integrations/unas-status";
 import { VariantPriceEditor } from "./variant-price-editor";
 import { VariantSaleEditor } from "./variant-sale-editor";
 import { ProductImagesEditor } from "./product-images-editor";
@@ -870,7 +871,7 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                 </p>
               ) : (
                 <p className="mt-1 text-xs text-pilot-grey-500">
-                  Nyers külső státusz: {listing.externalStatus ?? "—"}
+                  Webshop státusz: {unasStatusWithCode(listing.externalStatus)}
                 </p>
               )}
               {listing.productUrl ? (

@@ -30,6 +30,7 @@ import {
 } from "@/components/products/shipping-flags";
 import { isNegativeStock } from "@/components/products/product-list-page";
 import { productApi } from "@/lib/api/products";
+import { unasStatusWords } from "@/lib/integrations/unas-status";
 
 const PAGE_SIZE = 25;
 
@@ -127,8 +128,15 @@ export const PRODUCT_COLUMNS: PilotTableColumn<ProductRow>[] = [
     header: "Webshop státusz",
     width: "150px",
     cell: (item) => (
-      <span className="font-mono text-xs text-dusk-600">
-        {item.unasListing?.externalStatus ?? "—"}
+      <span
+        className="text-xs text-dusk-600"
+        title={
+          item.unasListing?.externalStatus
+            ? `UNAS státuszkód: ${item.unasListing.externalStatus}`
+            : undefined
+        }
+      >
+        {unasStatusWords(item.unasListing?.externalStatus) ?? "—"}
       </span>
     ),
   },
