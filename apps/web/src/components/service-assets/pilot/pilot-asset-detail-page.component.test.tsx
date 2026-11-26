@@ -767,3 +767,27 @@ describe("AssetDetailPage fogyasztás-mezőinek egysége", () => {
     expect(screen.queryByText("0,75 kW kW")).toBeNull();
   });
 });
+
+/*
+  A KARBANTARTÁS KÁRTYA ÜRESEN (Picasso 3.20): ha sem a telepítés, sem a garancia, sem az intervallum, sem a következő karbantartás nincs kitöltve, a kártya felirat nélküli üres doboz volt.
+  MI PIROSÍT: ha üresen nem áll a mondat; ha kitöltött adatnál is ott áll; ha a kitöltött mező elvész.
+*/
+describe("AssetDetailPage karbantartás kártya", () => {
+  it("üresen kimondja, hogy nincs karbantartási adat", async () => {
+    api.detail.mockResolvedValue(asset);
+    render(<AssetDetailPage assetId="asset-1" />);
+    expect(
+      await screen.findByText(/Még nincs karbantartási adat/),
+    ).toBeTruthy();
+  });
+
+  it("kitöltött adatnál nincs ilyen mondat, és az adat látszik", async () => {
+    api.detail.mockResolvedValue({
+      ...asset,
+      serviceIntervalDays: 90,
+    } as unknown as AssetDetail);
+    render(<AssetDetailPage assetId="asset-1" />);
+    expect(await screen.findByText("90 nap")).toBeTruthy();
+    expect(screen.queryByText(/Még nincs karbantartási adat/)).toBeNull();
+  });
+});

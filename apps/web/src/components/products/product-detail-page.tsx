@@ -872,7 +872,10 @@ export function ProductDetailPage({ productId }: { productId: string }) {
     ismétli meg), többváltozatosnál a jegyzetes változatok, névvel.
   */
   const note = (
-    <PilotSection title="Belső megjegyzés" tone="warm">
+    <PilotSection
+      title="Belső megjegyzés"
+      tone={variantNotes.length === 0 ? "default" : "warm"}
+    >
       {variantNotes.length === 0 ? (
         <p className="text-sm text-pilot-grey-500">Nincs belső megjegyzés.</p>
       ) : activeVariants.length === 1 ? (

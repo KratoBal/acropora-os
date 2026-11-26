@@ -58,6 +58,35 @@ export const RESTING: ReadonlySet<AttendanceSheetRow["kind"]> = new Set([
   "NO_SCHEDULE",
 ]);
 
+/** A PAPÍRON ÁLLÓ KÓD JELENTÉSE (Picasso 3.20): a "B" és az "SZ" a papír ívet követi, de a jelentésük csak a Megjegyzés oszlopból derült ki; most a kódra állva és a felolvasónak is kimondja. */
+const MARK_MEANING: Record<string, string> = {
+  B: "Betegség",
+  SZ: "Szabadság",
+};
+
+function TimeOrMark({
+  time,
+  mark,
+}: {
+  time: string | null;
+  mark: string | null | undefined;
+}) {
+  if (time) return <>{time}</>;
+  if (!mark) return <></>;
+  const meaning = MARK_MEANING[mark];
+  return meaning ? (
+    <abbr
+      title={meaning}
+      aria-label={meaning}
+      className="cursor-help no-underline"
+    >
+      {mark}
+    </abbr>
+  ) : (
+    <>{mark}</>
+  );
+}
+
 /**
  * THE MONTH'S ROWS (S2b, shared with the employee's own page in S3): date, arrival, departure, hours as h:mm, and the note;
  * "B" and "SZ" stand in place of the times, as on the paper sheet. A row gets a "Módosítás" button only where `canEdit`
@@ -107,8 +136,12 @@ export function AttendanceSheetTable({
                 <td className="whitespace-nowrap py-1.5 pr-3">
                   {formatDayHu(row.date)} {WEEKDAY_SHORT[row.weekday - 1]}
                 </td>
-                <td className="py-1.5 pr-3">{row.start ?? row.mark ?? ""}</td>
-                <td className="py-1.5 pr-3">{row.end ?? row.mark ?? ""}</td>
+                <td className="py-1.5 pr-3">
+                  <TimeOrMark time={row.start} mark={row.mark} />
+                </td>
+                <td className="py-1.5 pr-3">
+                  <TimeOrMark time={row.end} mark={row.mark} />
+                </td>
                 <td className="py-1.5 pr-3">
                   {row.kind === "WORK" && row.end
                     ? formatAttendanceHours(row.minutes)
