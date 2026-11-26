@@ -36,7 +36,7 @@ export function SupplierAccountEditor({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const label =
-    row.supplierBankAccount === null ? "Számlaszám megadása" : "Csere";
+    row.supplierBankAccount === null ? "Bankszámlaszám megadása" : "Csere";
 
   async function save(confirmReplace: boolean) {
     setBusy(true);

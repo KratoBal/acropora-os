@@ -305,7 +305,7 @@ export function NavConnectionSettingsPage() {
                 {testing ? "Tesztelés…" : "Kapcsolat tesztelése"}
               </Button>
               <Button
-                variant="danger"
+                variant="ghost"
                 disabled={!view.configured || disabling}
                 onClick={() => setConfirmDisable(true)}
               >

@@ -281,6 +281,20 @@ describe("MissingInvoicesSuggestionsPage", () => {
     expect(banner).toHaveTextContent("Automatikusan nem törlődnek");
   });
 
+  // Picasso 3.25: the intro under the title was six lines, longer than the empty list below it
+  it("the intro under the title is two sentences, and says what happens on accept and on reject", async () => {
+    render(<MissingInvoicesSuggestionsPage />);
+    await rowOf("WR26-0220.pdf");
+    const intro = screen.getByText(
+      /A begyűjtés PDF-jei, amelyeket semmi nem kötött/,
+    );
+    expect(intro.textContent!.length).toBeLessThan(260);
+    expect(intro.textContent).toContain(
+      "Elfogadva jelöltek lesznek, elvetve törlődik a tartalmuk.",
+    );
+    expect(intro.textContent).not.toContain("Jev látta");
+  });
+
   it("shows no warning when nothing has waited past the limit", async () => {
     render(<MissingInvoicesSuggestionsPage />);
     await rowOf("WR26-0220.pdf");

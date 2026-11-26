@@ -316,7 +316,7 @@ export function MissingInvoicesSuggestionsPage() {
       </Link>
       <PageHeader
         title="Javasolt számlák"
-        description="A begyűjtés olyan PDF-jei, amelyeket semmi nem kötött egy számlához vagy terheléshez, de számlának látszanak: vagy a Jev látta bejövő számlának (van bizonyossága), vagy nem párosodtak (a fájlnév, a tárgy vagy a szöveg szerint számla, de a szám, a szállító vagy a fizetés nem egyezik semmivel). Amíg nem döntesz róluk, nem kerülnek a párosítás jelöltjei közé, de a PDF megvan. Elfogadva jelöltek lesznek, elvetve törlődnek. Ha később összekötheti őket egy új adat, a begyűjtés maga köti."
+        description="A begyűjtés PDF-jei, amelyeket semmi nem kötött számlához vagy terheléshez, de számlának látszanak. Döntésig nem kerülnek a párosítás jelöltjei közé. Elfogadva jelöltek lesznek, elvetve törlődik a tartalmuk."
       />
       {items && items.some((item) => item.stale) ? (
         <Alert
