@@ -122,6 +122,41 @@ describe("worksheetHoursCell", () => {
   });
 });
 
+describe("PilotWorksheetListPage -- a közös állapot (kártya 7f23785c)", () => {
+  /*
+    A LISTA SORA A KÖZÖS SZAVAKAT MONDJA AZ OKKAL (acrobot 62402). MI PIROSÍT: ha az aláírt lap Lezárva (a közös szó Lezárt); ha az
+    elutasított lap külön Elutasítva állapot (a közös: Folyamatban, „elutasítva" okkal); ha az aláírásra váró lap az ok nélkül Elkészült.
+  */
+  it("a sor állapota: Új, Folyamatban, Elkészült · aláírásra vár, Lezárt, Folyamatban · elutasítva", async () => {
+    api.list.mockResolvedValue(
+      response([
+        row({ id: "a", status: "DRAFT", lineCount: 0 }),
+        row({ id: "b", status: "DRAFT", lineCount: 3 }),
+        row({ id: "c", status: "AWAITING_SIGNATURE" }),
+        row({ id: "d", status: "SIGNED" }),
+        row({ id: "e", status: "REJECTED" }),
+      ]),
+    );
+    render(<PilotWorksheetListPage />);
+    await screen.findAllByText("Tömítéscsere és ellenőrzés");
+    const cells = Array.from(
+      document.querySelectorAll(
+        '[data-column="status"], [data-label="Állapot"]',
+      ),
+    ).map((cell) => cell.textContent?.replace(/\s+/g, " ").trim());
+    expect(cells.length).toBeGreaterThanOrEqual(5);
+    expect(cells.slice(0, 5)).toEqual([
+      "Új",
+      "Folyamatban",
+      "Elkészültaláírásra vár",
+      "Lezárt",
+      "Folyamatbanelutasítva",
+    ]);
+    expect(document.body.textContent).not.toContain("Lezárva");
+    // a fülek is a közös szót mondják (az Elutasítva külön szűrő-fül marad: a változat-állapot szerint szűr)
+  });
+});
+
 describe("PilotWorksheetListPage -- redesign", () => {
   it("shows the assignees by name, or says nobody is assigned", async () => {
     api.list.mockResolvedValue(
