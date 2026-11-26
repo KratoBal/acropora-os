@@ -7,6 +7,7 @@ import type { CompletionCertificateSummary } from "@/lib/api/completion-certific
 import {
   MaintenanceProcessSteps,
   maintenanceProcessSteps,
+  packageSendBlockedReason,
   type StepInputs,
 } from "./maintenance-process-steps";
 
@@ -196,6 +197,96 @@ describe("maintenanceProcessSteps", () => {
       tone: "waiting",
       state: "A teljesítési igazolás után",
     });
+  });
+});
+
+/*
+  A SZERVER HÁROM KAPUJA A LÉPÉSSORON (Picasso 3.3, acrobot 62195). MI PIROSÍT: ha aláíratlan munkalap mellett az igazolás nyitott lépésnek látszik (a szerver
+  elutasítja); ha aláíratlan igazolás mellett a számla nyitott; ha a csomag kiküldési oka elcsúszik a szerver kapujától, vagy ismeretlen állapotban okot talál ki.
+*/
+describe("a szerver kapui a lépéssoron", () => {
+  it("aláíratlan munkalap mellett az igazolás vár, és a mondata megmondja, mire", () => {
+    const unsigned = steps({
+      worksheets: [{ status: "SIGNED" }, { status: "DRAFT" }],
+      certificates: [],
+      invoice: undefined,
+    });
+    expect(byKey(unsigned, "certificate")).toMatchObject({
+      state: "Előbb minden munkalap legyen aláírva",
+      tone: "waiting",
+      next: false,
+    });
+    // the worksheets are the next step, not the certificate
+    expect(
+      unsigned.filter((step) => step.next).map((step) => step.key),
+    ).toEqual(["worksheets"]);
+    // the server lets a sheet without any worksheet through: so does the strip
+    expect(
+      byKey(steps({ worksheets: [], certificates: [] }), "certificate").tone,
+    ).toBe("open");
+  });
+
+  it("aláíratlan igazolás mellett a számla vár; a forrás hiánya a saját mondatával áll", () => {
+    expect(
+      byKey(
+        steps({ certificates: [certificate(false)], invoice: null }),
+        "invoice",
+      ),
+    ).toMatchObject({
+      state: "Az aláírt teljesítési igazolás után",
+      tone: "waiting",
+    });
+    expect(
+      byKey(
+        steps({
+          certificateBlockedReason: "A lapnak nincs megrendelőlapja.",
+          certificates: [],
+        }),
+        "certificate",
+      ).state,
+    ).toBe("A lapnak nincs megrendelőlapja.");
+  });
+
+  it("a csomag kiküldésének oka a szerver kapuja szerint; ismeretlen állapotban nincs ok", () => {
+    const reason = (over: Partial<StepInputs>) =>
+      packageSendBlockedReason({
+        worksheets: [{ status: "SIGNED" }],
+        certificates: [certificate(true)],
+        invoice: invoice("ISSUED", "ACR-1"),
+        ...over,
+      });
+    expect(reason({})).toBeNull();
+    expect(reason({ certificates: [] })).toBe(
+      "A kiküldéshez teljesítési igazolás kell.",
+    );
+    expect(reason({ certificates: [certificate(false)] })).toBe(
+      "A kiküldéshez a teljesítési igazolás aláírt példánya kell.",
+    );
+    expect(reason({ invoice: invoice("DRAFT") })).toBe(
+      "A kiküldéshez kiállított számla kell.",
+    );
+    expect(
+      reason({ invoice: { ...invoice("ISSUED", "ACR-1"), cancelled: true } }),
+    ).toBe("A kiküldéshez kiállított számla kell.");
+    for (const unknown of [
+      { certificates: null },
+      { certificates: "error" as const },
+      { invoice: undefined },
+      { invoice: "error" as const },
+    ])
+      expect(reason(unknown)).toBeNull();
+    // the package step's sentence follows, and the package is never "next"
+    const ready = steps({ invoice: invoice("ISSUED", "ACR-1") });
+    expect(byKey(ready, "package")).toMatchObject({
+      state: "Kiküldhető; letölteni bármikor lehet",
+      next: false,
+    });
+    expect(byKey(steps({ invoice: invoice("DRAFT") }), "package").state).toBe(
+      "Kiküldés az aláírt igazolás és a kiállított számla után; letölteni most is lehet",
+    );
+    expect(
+      byKey(steps({ certificates: null, invoice: undefined }), "package").state,
+    ).toBe("Letöltés és kiküldés lent");
   });
 });
 
