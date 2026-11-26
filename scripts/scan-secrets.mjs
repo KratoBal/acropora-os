@@ -217,9 +217,13 @@ const PEM = A_RULES[0];
 
 /** Every rule must catch its own sample: a rule that does not is broken, and the run stops before it guards nothing. */
 const kalibral = () => {
-  const vak = A_RULES.filter(({ re, minta }) => !re.test(minta)).map(({ nev }) => nev);
+  const vak = A_RULES.filter(({ re, minta }) => !re.test(minta)).map(
+    ({ nev }) => nev,
+  );
   if (vak.length > 0) {
-    console.error(`A titok-kereses mintai elromlottak, nem fognak meg a sajat peldajukat: ${vak.join(", ")}`);
+    console.error(
+      `A titok-kereses mintai elromlottak, nem fognak meg a sajat peldajukat: ${vak.join(", ")}`,
+    );
     process.exit(2);
   }
 };
@@ -243,7 +247,9 @@ for (const file of files) {
     PEM rule now reads the whole file once, and is reported at the header's line.
   */
   if (PEM.re.test(content)) {
-    const sor = content.split("\n").findIndex((l) => l.includes("PRIVATE KEY-----"));
+    const sor = content
+      .split("\n")
+      .findIndex((l) => l.includes("PRIVATE KEY-----"));
     talalatok.push(`${file}:${sor + 1}  ${PEM.nev}`);
   }
 
