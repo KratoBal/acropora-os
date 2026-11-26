@@ -27,6 +27,9 @@ const page = (over: Partial<PublicQuoteDto> = {}): PublicQuoteDto => ({
       vatRatePercent: "27",
       netTotal: "100000.00",
       isOptional: false,
+      replacesName: null,
+      replaced: false,
+      chosen: false,
     },
     {
       id: "opt-1",
@@ -37,10 +40,15 @@ const page = (over: Partial<PublicQuoteDto> = {}): PublicQuoteDto => ({
       vatRatePercent: "27",
       netTotal: "20000.00",
       isOptional: true,
+      replacesName: null,
+      replaced: false,
+      chosen: false,
     },
   ],
   netTotal: "100000.00",
   optionalNetTotal: "20000.00",
+  netTotalWithOptionals: "120000.00",
+  acceptedNetTotal: null,
   state: "OPEN",
   acceptedAt: null,
   ...over,
@@ -127,6 +135,10 @@ describe("Az elfogadó link oldala (#1582 P4b)", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(reply(200, page()))
+      // bejelöléskor a lap a szervertől kéri a végösszeget
+      .mockResolvedValueOnce(
+        reply(200, { netTotal: "120000.00", replacedItems: [] }),
+      )
       .mockResolvedValueOnce(
         reply(200, page({ state: "ACCEPTED", acceptedAt: "2026-10-08" })),
       );
@@ -144,7 +156,7 @@ describe("Az elfogadó link oldala (#1582 P4b)", () => {
     );
     fireEvent.click(button);
     expect(await screen.findByText(/az ajánlatot elfogadtad/)).toBeTruthy();
-    const [path, init] = fetchMock.mock.calls[1]!;
+    const [path, init] = fetchMock.mock.calls[2]!;
     expect(path).toBe("/api/public/quotes/tok-123/accept");
     const body = JSON.parse((init as RequestInit).body as string);
     expect(body).toMatchObject({
@@ -152,6 +164,115 @@ describe("Az elfogadó link oldala (#1582 P4b)", () => {
       selectedOptionalItemIds: ["opt-1"],
     });
     expect(typeof body.requestId).toBe("string");
+  });
+
+  /*
+    KIVÁLTOTT TÉTEL (kártya 2540d9d4, Luca 2026-11-26): az opcionális tétel a megnevezett tétel HELYÉRE léphet. A végösszeget a SZERVER számolja
+    a kiválasztásra, a lap csak mutatja. MI PIROSÍT: ha a lap maga számolja az összeget; ha a kiváltott tétel nincs áthúzva és "Kiváltva" jelölve;
+    ha a címke nem a kiváltott tétel nevét írja; ha az "opcionális tételekkel együtt" összeg a szerver értéke helyett az összeadás; ha az elfogadott
+    összefoglaló a kiváltott tételt nem húzza át, vagy nem az elfogadott összeget mutatja.
+  */
+  const replacing = (over: Partial<PublicQuoteDto> = {}) =>
+    page({
+      items: [
+        ...page().items.slice(0, 1),
+        {
+          id: "opt-1",
+          name: "Fedőlap",
+          quantity: "1",
+          unit: "db",
+          unitNetPrice: "20000.00",
+          vatRatePercent: "27",
+          netTotal: "20000.00",
+          isOptional: true,
+          replacesName: "Akvárium",
+          replaced: false,
+          chosen: false,
+        },
+      ],
+      netTotalWithOptionals: "20000.00",
+      ...over,
+    });
+
+  it("a bejelölt kiváltó tétel esetén a szerver végösszegét mutatja, és a kiváltott tételt áthúzza", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(reply(200, replacing()))
+      .mockResolvedValueOnce(
+        reply(200, { netTotal: "20000.00", replacedItems: [0] }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<PublicQuotePage token="tok-123" />);
+    await screen.findByText("Tengeri akvárium");
+    const rows = screen.getAllByTestId("quote-item-row");
+    expect(rows[1]!.textContent).toContain("„Akvárium” helyett");
+    expect(rows[0]!.textContent).not.toContain("Kiváltva");
+    fireEvent.click(screen.getByRole("checkbox", { name: /Fedőlap/ }));
+    expect(await screen.findByText(/A kiválasztott tételekkel:/)).toBeTruthy();
+    expect(
+      screen.getByText(/A kiválasztott tételekkel:\s*20\s000 Ft\s*\+ ÁFA/),
+    ).toBeTruthy();
+    const [path, init] = fetchMock.mock.calls[1]!;
+    expect(path).toBe("/api/public/quotes/tok-123/total");
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      selectedOptionalItemIds: ["opt-1"],
+    });
+    expect(screen.getAllByTestId("quote-item-row")[0]!.textContent).toContain(
+      "Kiváltva",
+    );
+    expect(document.querySelector(".line-through")).toBeTruthy();
+    // a bejelölés visszavétele: a kiváltás is megszűnik
+    fireEvent.click(screen.getByRole("checkbox", { name: /Fedőlap/ }));
+    await waitFor(() =>
+      expect(screen.queryByText(/A kiválasztott tételekkel:/)).toBeNull(),
+    );
+    expect(
+      screen.getAllByTestId("quote-item-row")[0]!.textContent,
+    ).not.toContain("Kiváltva");
+  });
+
+  it("az opcionális tételekkel együtt összeg a szerver értéke, nem az összeadás", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(reply(200, replacing())),
+    );
+    render(<PublicQuotePage token="tok-123" />);
+    // 100 000 + 20 000 volna az összeadás: a kiváltás miatt 20 000
+    expect(
+      await screen.findByText(
+        /Az opcionális tételekkel együtt:\s*20\s000 Ft\s*\+ ÁFA/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("elfogadás után a kiváltott tétel áthúzva és Kiváltva jelölve áll, az elfogadott összeggel", async () => {
+    const items = replacing().items.map((item, index) => ({
+      ...item,
+      replaced: index === 0,
+      chosen: index === 1,
+    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(
+        reply(
+          200,
+          replacing({
+            items,
+            state: "ACCEPTED",
+            acceptedAt: "2026-11-26",
+            acceptedNetTotal: "20000.00",
+          }),
+        ),
+      ),
+    );
+    render(<PublicQuotePage token="tok-123" />);
+    expect(
+      await screen.findByText(/Elfogadott nettó összeg:\s*20\s000 Ft\s*\+ ÁFA/),
+    ).toBeTruthy();
+    expect(screen.getAllByTestId("quote-item-row")[0]!.textContent).toContain(
+      "Kiváltva",
+    );
+    expect(screen.queryByText(/opcionális tételekkel együtt/)).toBeNull();
   });
 
   it("egy nem működő link a szerver mondatát mutatja", async () => {

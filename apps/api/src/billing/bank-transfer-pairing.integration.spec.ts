@@ -190,6 +190,12 @@ describe(
         documentNumber: "D-CRPR-7000",
         kindCode: "D",
       });
+      // a CASHMAN invoice NAV alone holds (card 785dfea6; the Állatkert's 2026/00058, 2026-11-26)
+      await document("nav58", 100000, {
+        documentNumber: "2099/00058",
+        source: "NAV",
+        paymentsKnown: null,
+      });
       ids.slow = await credit("slow");
       ids.auto = (
         await prisma.bankTransaction.create({
@@ -238,6 +244,22 @@ describe(
       assert.match(
         !missing.markable ? missing.detail : "",
         /E-CRPR-2099-99 nincs a feedben/,
+      );
+    });
+
+    it("an invoice NAV alone holds is found and said to be CASHMAN's, not missing from the feed, and nothing is written", async () => {
+      const decision = await service().check(ids.credit!, "2099/00058");
+      assert.equal(!decision.markable && decision.refusal, "OTHER_PROGRAM");
+      assert.equal(!decision.markable && decision.detail, "2099/00058");
+      await assert.rejects(
+        () => service().pair(ids.credit!, "2099/00058", user),
+        ConflictException,
+      );
+      assert.equal(
+        await prisma.outgoingPaymentMark.count({
+          where: { invoiceNumber: "2099/00058" },
+        }),
+        0,
       );
     });
 

@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { menuEyebrow } from "@/components/navigation";
 import { JobAssetPicker } from "@/components/service-jobs/job-asset-picker";
 import { buildSiteOptions } from "@/lib/partners/site-tree";
 import { ApiError } from "@/lib/api/client";
@@ -394,7 +395,8 @@ export function PilotContractsPage() {
       <div className="flex min-h-full flex-col">
         <PageHeader
           className={`${PAGE_GUTTER_X} pt-6`}
-          eyebrow="Partnerek"
+          // the menu's own place (Picasso 3.22): the page is under Értékesítés, the eyebrow said "Partnerek"
+          eyebrow={menuEyebrow("/partnerek/szerzodesek") ?? undefined}
           title="Szerződések"
           description="Az éves díj a tétel egységárából, darabszámából és alkalomszámából számolódik."
           actions={

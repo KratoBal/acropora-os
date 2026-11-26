@@ -124,6 +124,13 @@ describe("NavConnectionSettingsPage", () => {
       expect(screen.getByLabelText(label)).toHaveValue("");
   });
 
+  it("the save button stands at the form's end on the right (Picasso 3.22, R11)", async () => {
+    render(<NavConnectionSettingsPage />);
+    await screen.findByText("Beállítva");
+    const save = screen.getByRole("button", { name: "Mentés és ellenőrzés" });
+    expect(save.parentElement!.className).toContain("justify-end");
+  });
+
   it("tests the stored credential", async () => {
     api.test.mockResolvedValue(configuredView);
     render(<NavConnectionSettingsPage />);

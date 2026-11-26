@@ -270,6 +270,54 @@ describe("the live draw page", () => {
     expect(api.liveDraw).not.toHaveBeenCalled();
   });
 
+  it("lists the weeks newest first across the year, and marks the newest closed one as the one to draw (Picasso 3.26)", async () => {
+    search.value = "";
+    vi.setSystemTime(new Date("2026-11-20T12:00:00.000Z"));
+    const question = (id: string, week: string, closesAt: string) => ({
+      id,
+      week,
+      closesAt,
+      prizeName: null,
+    });
+    // the server's order (by opensAt), with one week opened out of turn
+    api.questions.mockResolvedValue([
+      question("q45", "2026-W45", "2026-11-09T22:59:00.000Z"),
+      question("q47", "2026-W47", "2026-11-23T22:59:00.000Z"), // still open
+      question("q52", "2025-W52", "2025-12-28T22:59:00.000Z"),
+      question("q46", "2026-W46", "2026-11-16T22:59:00.000Z"),
+    ]);
+    await mount();
+    const weeks = [
+      ...screen.getByTestId("elo-sorsolas").querySelectorAll("a"),
+    ].filter((link) => link.href.includes("kind=WEEKLY"));
+    expect(
+      weeks.map((link) => link.getAttribute("href")!.split("=").pop()),
+    ).toEqual(["q47", "q46", "q45", "q52"]);
+    const marked = weeks.filter((link) => link.getAttribute("aria-current"));
+    expect(marked.map((link) => link.getAttribute("href"))).toEqual([
+      "/sorsolas?kind=WEEKLY&kerdes=q46",
+    ]);
+    expect(marked[0]!.className).toContain("live-draw-choice-latest");
+    expect(marked[0]!.textContent).toContain("legutóbb lezárult");
+    expect(screen.getAllByText("legutóbb lezárult")).toHaveLength(1);
+  });
+
+  it("no week is marked while none has closed", async () => {
+    search.value = "";
+    vi.setSystemTime(new Date("2026-11-20T12:00:00.000Z"));
+    api.questions.mockResolvedValue([
+      {
+        id: "q47",
+        week: "2026-W47",
+        closesAt: "2026-11-23T22:59:00.000Z",
+        prizeName: null,
+      },
+    ]);
+    await mount();
+    expect(screen.getByText("47. heti sorsolás")).toBeTruthy();
+    expect(screen.queryByText("legutóbb lezárult")).toBeNull();
+  });
+
   it("spins neutral player labels that change, never a name, and stops on the server's ticket (Balázs, 2026-11-13)", async () => {
     for (const tickets of [1, 2, 5, 142]) {
       cleanup();

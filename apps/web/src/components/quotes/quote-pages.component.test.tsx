@@ -1835,6 +1835,59 @@ describe("Ajánlat szerkesztő (569:171)", () => {
   });
 
   /*
+    AZ OPCIONÁLIS TÉTEL SORA KIMONDJA, MIT TESZ (kártya 2540d9d4; acrobot 62814, murena #3026). MI PIROSÍT: ha a kiváltott tétel nevét csak
+    a saját blokkjában keresi (a kiváltott másik blokkban is állhat); ha a kiváltás nélküli opció nem kiegészítésként áll; ha egy már törölt
+    kiváltott tétel üres nevet ad; ha nem opcionális tétel is kap ilyen sort.
+  */
+  it("az opcionális tétel alatt: kiegészítés, vagy melyik tétel helyett áll, másik blokkból is", async () => {
+    const base = version();
+    const option = (
+      id: string,
+      name: string,
+      replacesItemId: string | null,
+    ) => ({
+      ...base.blocks[0]!.items[0]!,
+      id,
+      name,
+      isOptional: true,
+      source: "STANDALONE" as const,
+      replacesItemId,
+    });
+    api.detail.mockResolvedValue(
+      quote([
+        {
+          ...base,
+          blocks: [
+            base.blocks[0]!,
+            {
+              ...base.blocks[0]!,
+              id: "b2",
+              position: 1,
+              title: "Opciók",
+              items: [
+                option("o1", "Fedőlap", "i1"),
+                option("o2", "Kalkwasser", null),
+                option("o3", "Árva opció", "torolt-tetel"),
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    render(<QuoteEditorPage quoteId="q1" />);
+    // the optional item's name carries the "☐ " mark in the same element: matched by its end
+    await screen.findByText(/Fedőlap$/);
+    const noteOf = (name: string) =>
+      screen.getByText(new RegExp(`${name}$`)).closest("div")!.textContent;
+    expect(noteOf("Fedőlap")).toContain(
+      "Opcionális · a(z) „Egyedi szűrő” helyett",
+    );
+    expect(noteOf("Kalkwasser")).toContain("Opcionális · kiegészítés");
+    expect(noteOf("Árva opció")).toContain("Opcionális · kiegészítés");
+    expect(noteOf("Egyedi szűrő")).not.toContain("Opcionális");
+  });
+
+  /*
     A TÉTELEK SORRENDJE FEL-LE MOZGATHATÓ, ahogy a blokkoké (Luca, 2026-11-26, acrobot 62604). MI PIROSÍT: ha a tétel soráról hiányzik a feljebb vagy a lejjebb gomb; ha az első
     tétel feljebb vagy az utolsó lejjebb elküldhető (az API nem is kapna értelmes sorrendet); ha a gomb nem a blokk MINDEN tételének azonosítóját küldi az új
     sorrendben (a szerver más listát elutasít); ha egy másik blokk tétele kerül a listába.
@@ -2859,7 +2912,14 @@ describe("Az ajánlat partnere: a piszkozaton cserélhető", () => {
   };
 
   it("swaps the partner: the search is the new-quote page's, only the pick plus the button saves, and the page shows the new partner", async () => {
-    api.detail.mockResolvedValue(draftOnly());
+    // the first read is the old partner; after the save the page reads the quote again (the recipient and the printed partner come
+    // from it), and the server then answers with the new one. The reload used to answer with the OLD partner, so the new name stood
+    // on the page only between the save and that answer, and the check below raced it (card f94126d9).
+    api.detail.mockResolvedValueOnce(draftOnly()).mockResolvedValue({
+      ...draftOnly(),
+      customerId: "c2",
+      customerName: "Állatkert Zrt.",
+    });
     customers.list.mockResolvedValue({
       items: [{ id: "c2", displayName: "Állatkert Zrt.", partnerMirror: true }],
     });
@@ -2887,7 +2947,13 @@ describe("Az ajánlat partnere: a piszkozaton cserélhető", () => {
         customerId: "c2",
       }),
     );
-    expect(await screen.findByText("Állatkert Zrt.")).toBeInTheDocument();
+    // the page read the quote again, and shows the new partner after that read, not only before it. The check re-queries the
+    // page instead of holding an element across an await: on the runner a found element was re-rendered away before the
+    // check ("element could not be found in the document", a detached node, not a missing text; card f94126d9).
+    await waitFor(() => expect(api.detail).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.getByText("Állatkert Zrt.")).toBeInTheDocument(),
+    );
     expect(screen.queryByLabelText("Partner keresése")).toBeNull();
   });
 

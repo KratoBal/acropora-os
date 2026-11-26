@@ -342,12 +342,16 @@ export function ContentCalendarPage() {
         title="Tartalomnaptár"
         description="Események, ünnepek, akciók, érkezések és tervezett tartalmak egy helyen."
         actions={
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {/*
+              TWO SHAPES IN THE HEADER, NOT THREE (Picasso 3.26): the template link stood as a text link beside a secondary and a primary
+              button. It is drawn as the small secondary button (the Button's own classes), and stays a link: it opens a page.
+            */}
             <Link
               href="/tartalom/naptar/sablon"
-              className="text-sm font-medium text-pilot-aqua-700 underline-offset-4 hover:underline"
+              className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-lg border border-dusk-200 bg-white px-3 text-xs font-semibold text-dusk-700 shadow-sm transition-colors hover:bg-dusk-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-ring focus-visible:ring-offset-2"
             >
-              Sablon →
+              Sablon
             </Link>
             {canManage ? (
               <Button

@@ -111,7 +111,7 @@ const COVER_LOGO_WIDTH = 71;
 const COVER_LOGO_TOP = 42;
 const COMPACT_LOGO_WIDTH = 39;
 
-const LABELS = {
+export const LABELS = {
   hu: {
     tagline: "TENGERI AKVÁRIUMOK · TERVEZÉS · KIVITELEZÉS",
     title: "ÁRAJÁNLAT",
@@ -122,6 +122,7 @@ const LABELS = {
     optionsBand: "Nem részei a végösszegnek.",
     optionalTag: "Opcionális",
     optionalAddition: "kiegészítés",
+    optionalReplaces: (name: string) => `„${name}” helyett`,
     withOptions: "Az opcionális tételekkel együtt",
     summary: "Összesítés",
     net: "Nettó összeg",
@@ -148,6 +149,7 @@ const LABELS = {
     optionsBand: "Not included in the total.",
     optionalTag: "Optional",
     optionalAddition: "addition",
+    optionalReplaces: (name: string) => `instead of “${name}”`,
     withOptions: "Including the optional items",
     summary: "Summary",
     net: "Net amount",
@@ -166,7 +168,7 @@ const LABELS = {
   },
 } as const;
 
-type Labels = (typeof LABELS)[QuotePdfLanguage];
+export type Labels = (typeof LABELS)[QuotePdfLanguage];
 
 export interface RenderedQuotePdf {
   bytes: Buffer;
@@ -615,13 +617,45 @@ function rowHeadHeight(doc: PDFKit.PDFDocument, item: QuotePdfItem): number {
 /** The line under an optional item's name; it moves with the name. */
 const TAG_HEIGHT = 11;
 
+/** The replaced item's name as one line of at most `max` characters (a cut name ends with an ellipsis). */
+export function replacedNameForTag(name: string, max = 80): string {
+  const flat = name.replace(/\s+/g, " ").trim();
+  return flat.length > max ? `${flat.slice(0, max - 1).trimEnd()}…` : flat;
+}
+
 /**
- * THE OPTIONAL ITEM'S TAG (card 2540d9d4, Luca 2026-11-26): "Opcionális · kiegészítés" under the name. Every optional item is an
- * addition until an option can name the item it replaces; then this one line says which ("a 3. tétel helyett").
+ * THE OPTIONAL ITEM'S TAG (card 2540d9d4, Luca 2026-11-26): "Opcionális · kiegészítés" under the name, or, when the item stands in for another
+ * one, "Opcionális · „X” helyett" (the replaced item's name, cut to one line).
  */
-// the item is not read yet: murena's replaced item (`replacesItemId`) adds "a X. tétel helyett" here, in this one place
-function optionalTagLine(labels: Labels, _item: QuotePdfItem): string {
-  return `${labels.optionalTag} · ${labels.optionalAddition}`;
+export function optionalTagLine(labels: Labels, item: QuotePdfItem): string {
+  const what = item.replacesName
+    ? labels.optionalReplaces(replacedNameForTag(item.replacesName))
+    : labels.optionalAddition;
+  return `${labels.optionalTag} · ${what}`;
+}
+
+/**
+ * THE TAG THAT FITS ONE LINE (card 2540d9d4): the row reserves ONE tag line (`TAG_HEIGHT`), so a long replaced name is cut until the whole tag
+ * fits the name column, measured with the tag's own font, not guessed by characters.
+ */
+export function fitTagLine(
+  doc: PDFKit.PDFDocument,
+  labels: Labels,
+  item: QuotePdfItem,
+): string {
+  const full = optionalTagLine(labels, item);
+  if (!item.replacesName) return full;
+  const oneLine = measure(doc, "Ag", OPTIONAL_TAG, NAME_WIDTH);
+  let tag = full;
+  let max = replacedNameForTag(item.replacesName).length;
+  while (max > 1 && measure(doc, tag, OPTIONAL_TAG, NAME_WIDTH) > oneLine) {
+    max -= 1;
+    tag = optionalTagLine(labels, {
+      ...item,
+      replacesName: replacedNameForTag(item.replacesName, max),
+    });
+  }
+  return tag;
 }
 
 function drawItem(
@@ -719,7 +753,7 @@ function drawTable(
       flow,
       input,
       item,
-      item.isOptional ? optionalTagLine(labels, item) : null,
+      item.isOptional ? fitTagLine(doc, labels, item) : null,
     );
     // a description that ran onto the next page leaves the cursor there: the
     // next row finds `flow.page` past `headPage` and draws the head first
@@ -879,8 +913,9 @@ function drawSummary(
   ];
   const totalLabel = `${labels.grossTotal}${hasOptions ? ` · ${labels.withoutOptions}` : ""}`;
   const totalValue = money(totals.gross);
+  // the replaced lines drop out when every option is chosen (they were counted twice before)
   const withOptions = hasOptions
-    ? money(totals.gross.plus(totals.optionalGross))
+    ? money(totals.gross.minus(totals.replacedGross).plus(totals.optionalGross))
     : null;
   const boxHeight =
     SUMMARY_PAD +

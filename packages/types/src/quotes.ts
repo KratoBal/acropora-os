@@ -564,13 +564,34 @@ export interface PublicQuoteDto {
     vatRatePercent: string;
     netTotal: string;
     isOptional: boolean;
+    /** KIVÁLTOTT TÉTEL: egy opcionális tételen az a (nem opcionális) tétel neve, amelynek a helyére lép; null: kiegészítés vagy nem opcionális */
+    replacesName: string | null;
+    /** az ELFOGADOTT kiválasztás szerint ezt a tételt kiváltották (áthúzva mutatandó); elfogadás előtt mindig false */
+    replaced: boolean;
+    /** az ELFOGADOTT kiválasztás szerint ezt az opcionális tételt kérték; elfogadás előtt mindig false */
+    chosen: boolean;
   }>;
   netTotal: string;
   optionalNetTotal: string;
+  /** az összes opcionális tétellel együtt, a kiváltott tételek nélkül (a szerveren számolva) */
+  netTotalWithOptionals: string;
+  /** az elfogadott kiválasztás nettó összege (a kiváltott tételek nélkül), elfogadás előtt null */
+  acceptedNetTotal: string | null;
   /** OPEN: it can be accepted; ACCEPTED: it was (date below); CLOSED: no */
   state: "OPEN" | "ACCEPTED" | "CLOSED";
   /** YYYY-MM-DD, when state is ACCEPTED */
   acceptedAt: string | null;
+}
+
+/** A nyilvános lap végösszeg-kérése egy kiválasztásra (a szerver számol). */
+export interface PublicQuoteTotalInput {
+  selectedOptionalItemIds?: string[];
+}
+export interface PublicQuoteTotalDto {
+  /** a kiválasztott tételekkel számolt nettó összeg */
+  netTotal: string;
+  /** a kiváltott tételek helye a nyilvános lap `items` listájában (a sorrend stabil) */
+  replacedItems: number[];
 }
 
 export interface PublicQuoteAcceptInput {

@@ -13,7 +13,13 @@ import {
   type QuotePdfInput,
   type QuotePdfItem,
 } from "./quote-pdf-layout.js";
-import { coverLayout, renderQuotePdf } from "./quote-pdf.renderer.js";
+import {
+  coverLayout,
+  LABELS,
+  optionalTagLine,
+  renderQuotePdf,
+  replacedNameForTag,
+} from "./quote-pdf.renderer.js";
 
 const d = (v: string) => new Prisma.Decimal(v);
 const doc = (...texts: string[]): QuoteRichText => ({
@@ -95,6 +101,74 @@ describe("quote PDF content", () => {
     assert.equal(t.net.toString(), "200000");
     assert.equal(t.gross.toString(), "254000");
     assert.equal(t.optionalNet.toString(), "10");
+  });
+
+  /*
+    KIVÁLTOTT TÉTEL (card 2540d9d4): az "együtt" összeg a kiváltott sort kihagyja. A Régi szűrő (50 000 nettó) helyére az Új szűrő (30 000) lép.
+    MI PIROSÍT: ha az "együtt" összeg a kiváltott sort is hozzáadja (régi hiba: 228 600 helyett a helyes 165 100); ha az alapösszeg elmozdul; ha egy
+    kiváltás nélküli opció összegét módosítja a kiváltás kezelése.
+  */
+  it("totals: a replaced line drops out of the with-options total, the offered total stays", () => {
+    const blocks = [
+      block("SECTION", {
+        items: [
+          item("Akvárium", { ref: "a", unitNetPrice: d("100000") }),
+          item("Régi szűrő", { ref: "b", unitNetPrice: d("50000") }),
+          item("Új szűrő", {
+            isOptional: true,
+            unitNetPrice: d("30000"),
+            replacesRef: "b",
+            replacesName: "Régi szűrő",
+          }),
+          item("Kiegészítés", {
+            isOptional: true,
+            unitNetPrice: d("10000"),
+          }),
+        ],
+      }),
+    ];
+    const totals = quoteTotals(blocks);
+    assert.equal(totals.gross.toString(), "190500"); // 150 000 net x 1.27
+    assert.equal(totals.replacedGross.toString(), "63500");
+    assert.equal(totals.replacedNet.toString(), "50000");
+    assert.equal(totals.optionalGross.toString(), "50800");
+    // 190 500 - 63 500 + 50 800 = 177 800 (not 190 500 + 50 800 = 241 300)
+    assert.equal(
+      totals.gross
+        .minus(totals.replacedGross)
+        .plus(totals.optionalGross)
+        .toString(),
+      "177800",
+    );
+    // without any replacement nothing is replaced
+    const plain = quoteTotals([
+      block("SECTION", { items: [item("A", { ref: "a" })] }),
+    ]);
+    assert.equal(plain.replacedGross.toString(), "0");
+  });
+
+  it("the optional tag names what the item replaces, in both languages, and cuts a long name to one line", () => {
+    const opt = item("Új szűrő", {
+      isOptional: true,
+      replacesRef: "b",
+      replacesName: "Régi szűrő",
+    });
+    assert.equal(
+      optionalTagLine(LABELS.hu, opt),
+      "Opcionális · „Régi szűrő” helyett",
+    );
+    assert.equal(
+      optionalTagLine(LABELS.en, opt),
+      "Optional · instead of “Régi szűrő”",
+    );
+    assert.equal(
+      optionalTagLine(LABELS.hu, item("Más", { isOptional: true })),
+      "Opcionális · kiegészítés",
+    );
+    const long = "Nagyon hosszú megnevezés ".repeat(8);
+    const cut = replacedNameForTag(long, 30);
+    assert.ok(cut.length <= 30 && cut.endsWith("…"), cut);
+    assert.equal(replacedNameForTag("Rövid név"), "Rövid név");
   });
 
   it("money: forint whole and grouped from four digits, other currencies to two places", () => {
@@ -636,6 +710,55 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
 
     const plain = (await linesOf([item("Medence")])).join(" | ");
     assert.doesNotMatch(plain, /opcionális|Opcionális/);
+  });
+
+  /*
+    KIVÁLTOTT TÉTEL a PDF-en (card 2540d9d4): az opcionális tétel címkéje a kiváltott tétel nevét írja, az "együtt" összeg a kiváltott sort kihagyja.
+    MI PIROSÍT: ha a címke "kiegészítés" marad kiváltó tételnél; ha a kiváltott név nem a címkén áll; ha az "együtt" összeg a kiváltott sort is
+    hozzáadja; ha a hosszú név a címkét több sorba töri.
+  */
+  it("a replacing option says what it replaces, and the with-options total leaves the replaced line out", async () => {
+    const longName = "Nagyon hosszú megnevezésű régi szűrőegység "
+      .repeat(4)
+      .trim();
+    const lines = (
+      await readPdfTextLines(
+        (
+          await renderQuotePdf(
+            input([
+              block("SECTION", {
+                title: "Szűrés",
+                items: [
+                  item("Akvárium", { ref: "a", unitNetPrice: d("100000") }),
+                  item(longName, { ref: "b", unitNetPrice: d("50000") }),
+                  item("Új szűrő", {
+                    isOptional: true,
+                    unitNetPrice: d("30000"),
+                    replacesRef: "b",
+                    replacesName: longName,
+                  }),
+                ],
+              }),
+            ]),
+          )
+        ).bytes,
+      )
+    ).map((l) => l.text);
+    const all = lines.join(" | ");
+    const at = lines.findIndex((t) => t.includes("Új szűrő"));
+    assert.ok(at >= 0, all);
+    // the tag is ONE line under the name, with the cut replaced name
+    assert.match(
+      lines[at + 1]!,
+      /^Opcionális · „Nagyon hosszú .*…” helyett$/,
+      all,
+    );
+    // ONE line: the next text line is not a continuation of the tag
+    assert.doesNotMatch(lines[at + 2] ?? "", /helyett|régi|szűrő/, all);
+    // offered 150 000 net = 190 500 gross; with the option and without the replaced line: 100 000 + 30 000 = 130 000 net = 165 100 gross
+    assert.match(all, /BRUTTÓ VÉGÖSSZEG · OPCIÓK NÉLKÜL 190 500 Ft/);
+    assert.match(all, /Az opcionális tételekkel együtt 165 100 Ft/);
+    assert.doesNotMatch(all, /228 600 Ft/);
   });
 
   /**

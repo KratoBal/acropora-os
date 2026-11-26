@@ -248,16 +248,17 @@ export function ContentCreatePage() {
               </>
             ) : null}
 
-            <div className="flex flex-wrap gap-2 pt-2">
-              <PilotButton type="submit" disabled={!kuldheto || saving}>
-                {saving ? "Mentés…" : "Mentés"}
-              </PilotButton>
+            {/* the form's actions at its end on the right, Mégse then the primary (Picasso 3.26, R11): they stood at the bottom left, the primary first */}
+            <div className="flex flex-wrap justify-end gap-2 pt-2">
               <PilotButton
                 type="button"
                 variant="secondary"
                 onClick={() => router.push("/tartalom")}
               >
                 Mégse
+              </PilotButton>
+              <PilotButton type="submit" disabled={!kuldheto || saving}>
+                {saving ? "Mentés…" : "Mentés"}
               </PilotButton>
             </div>
           </form>

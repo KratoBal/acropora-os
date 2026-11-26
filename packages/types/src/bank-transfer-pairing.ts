@@ -16,6 +16,7 @@ export type BankTransferRefusalValue =
   | "REFUNDED"
   | "CREDIT_USED"
   | "OTHER_SYSTEM"
+  | "OTHER_PROGRAM"
   | "OWN_ACCOUNT"
   | "CARD_SETTLEMENT"
   | "PAYMENT_PROVIDER";
@@ -82,6 +83,8 @@ export const BANK_TRANSFER_REFUSAL_TEXT: Readonly<
     "Ezt a jóváírást már más számla kifizetéseként beírtuk; egy utalás pénze nem zárhat le két számlát.",
   OTHER_SYSTEM:
     "Ez eBIZ-számla (EINV): a kifizetése nem a Számlázz.hu-ba íródik, ezen a lapon nincs mit beírni.",
+  OTHER_PROGRAM:
+    "A számla a CASHMAN-ben készült, a Számlázz.hu nem ismeri: a kifizetését a CASHMAN-ben kell rögzíteni, ezen a lapon nincs mit beírni.",
   OWN_ACCOUNT:
     "A saját cég nevén érkezett jóváírás (átvezetés, devizaváltás): nem ügyfélfizetés, nincs mit párosítani.",
   CARD_SETTLEMENT:
@@ -109,6 +112,8 @@ export const BANK_TRANSFER_SETTLED_BADGE: Readonly<
   ALREADY_PAID: { label: "Rendben: a Számlázz.hu beírta", variant: "success" },
   REFUNDED: { label: "Visszafizetve", variant: "success" },
   PROFORMA: { label: "Díjbekérő: számlára vár", variant: "amber" },
+  // the money is an invoice's payment, but the invoice lives in CASHMAN: a person records it there, nothing to pair here
+  OTHER_PROGRAM: { label: "CASHMAN-számla", variant: "grey" },
 };
 
 /**
