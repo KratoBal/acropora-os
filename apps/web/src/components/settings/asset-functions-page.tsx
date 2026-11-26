@@ -17,6 +17,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { assetFunctionsApi } from "@/lib/api/asset-functions";
+import { ListSearch, useListSearch } from "./settings-list-search";
 
 /**
  * AZ ESZKOZ-FUNKCIOK KARBANTARTASA -- SZO SZERINT AZ `AssetCategoriesPage`
@@ -38,6 +39,7 @@ export function AssetFunctionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [ujNev, setUjNev] = useState("");
   const [mentes, setMentes] = useState(false);
+  const kereso = useListSearch(items, (funkcio) => funkcio.name);
 
   const betolt = useCallback(
     async (signal?: AbortSignal) => {
@@ -144,30 +146,47 @@ export function AssetFunctionsPage() {
               Még egyetlen funkció sincs felvéve.
             </p>
           ) : (
-            <ul className="divide-y">
-              {items.map((funkcio) => (
-                <li
-                  key={funkcio.id}
-                  className="flex items-center justify-between gap-4 py-3"
-                >
-                  <span
-                    className={
-                      funkcio.isActive
-                        ? "text-sm text-dusk-800"
-                        : "text-sm text-dusk-400 line-through"
-                    }
+            <>
+              {kereso.searchable ? (
+                <ListSearch
+                  query={kereso.query}
+                  onChange={kereso.setQuery}
+                  shown={kereso.shown.length}
+                  total={items.length}
+                />
+              ) : null}
+              {kereso.shown.length === 0 ? (
+                <p className="text-sm text-dusk-500">
+                  Nincs a keresésnek megfelelő funkció.
+                </p>
+              ) : null}
+              <ul className="divide-y">
+                {kereso.shown.map((funkcio) => (
+                  <li
+                    key={funkcio.id}
+                    className="flex items-center justify-between gap-4 py-3"
                   >
-                    {funkcio.name}
-                  </span>
-                  <Button
-                    variant="secondary"
-                    onClick={() => void allit(funkcio, !funkcio.isActive)}
-                  >
-                    {funkcio.isActive ? "Kivezetés" : "Visszahozás"}
-                  </Button>
-                </li>
-              ))}
-            </ul>
+                    <span
+                      className={
+                        funkcio.isActive
+                          ? "text-sm text-dusk-800"
+                          : "text-sm text-dusk-400 line-through"
+                      }
+                    >
+                      {funkcio.name}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`${funkcio.isActive ? "Kivezetés" : "Visszahozás"}: ${funkcio.name}`}
+                      onClick={() => void allit(funkcio, !funkcio.isActive)}
+                    >
+                      {funkcio.isActive ? "Kivezetés" : "Visszahozás"}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </CardContent>
       </Card>
