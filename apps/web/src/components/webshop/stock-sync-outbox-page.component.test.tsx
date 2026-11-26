@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -166,7 +172,7 @@ describe("készlet-kimenősor oldal", () => {
     await waitFor(() =>
       expect(api.list).toHaveBeenCalledWith(
         "token-1",
-        { status: "FAILED" },
+        { status: "FAILED", limit: 25, offset: 0 },
         expect.anything(),
       ),
     );
@@ -440,5 +446,121 @@ describe("outboxColumns", () => {
     expect(columns(false).find((c) => c.header === "Következő")!.nowrap).toBe(
       true,
     );
+  });
+});
+
+/*
+  A KÉSZLET-KIMENŐSOR LAPOZÁSA (Picasso 3.27, acrobot 62278): eddig a lap csak a legutóbbi 50 sort mutatta, a többit nem lehetett elérni. MI PIROSÍT: ha a lap nem kér `limit`-et és `offset`-et; ha a
+  lapozó nem az összefoglaló darabszámából számol; ha a következő oldal nem a következő sorokat kéri; ha a szűrőváltás nem az első oldalra visz; ha egy oldalnyi sornál is lapozó áll.
+*/
+describe("StockSyncOutboxPage paging", () => {
+  const counts = (over: Record<string, number> = {}) => ({
+    PENDING: 40,
+    PROCESSING: 0,
+    SUCCEEDED: 0,
+    FAILED: 20,
+    DEAD_LETTER: 0,
+    ...over,
+  });
+
+  beforeEach(() => {
+    auth.role = "OWNER";
+    api.summary.mockResolvedValue(summary({ counts: counts() }));
+    api.list.mockResolvedValue([row()]);
+  });
+
+  it("asks for the first page of 25, and shows the pager from the summary's total (60 rows: 3 pages)", async () => {
+    render(<StockSyncOutboxPage />);
+    await screen.findByText("ACR-001");
+    expect(api.list).toHaveBeenLastCalledWith(
+      "token-1",
+      { limit: 25, offset: 0 },
+      expect.anything(),
+    );
+    const pager = screen.getByRole("navigation", { name: /Lapozás/ });
+    expect(pager.textContent).toMatch(/1\. \/ 3 oldal/);
+    expect(
+      screen.getByText(/1–1 \/ 60 tétel, a legújabb elöl/),
+    ).toBeInTheDocument();
+  });
+
+  it("the next page asks for the next 25 rows", async () => {
+    render(<StockSyncOutboxPage />);
+    await screen.findByText("ACR-001");
+    fireEvent.click(
+      within(screen.getByRole("navigation", { name: /Lapozás/ })).getByRole(
+        "button",
+        { name: /Következő/ },
+      ),
+    );
+    await waitFor(() =>
+      expect(api.list).toHaveBeenLastCalledWith(
+        "token-1",
+        { limit: 25, offset: 25 },
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("changing the status goes back to the first page, and the total is that status's count (20: one page, no pager)", async () => {
+    render(<StockSyncOutboxPage />);
+    await screen.findByText("ACR-001");
+    fireEvent.click(
+      within(screen.getByRole("navigation", { name: /Lapozás/ })).getByRole(
+        "button",
+        { name: /Következő/ },
+      ),
+    );
+    await waitFor(() =>
+      expect(api.list).toHaveBeenLastCalledWith(
+        "token-1",
+        { limit: 25, offset: 25 },
+        expect.anything(),
+      ),
+    );
+    fireEvent.change(screen.getByLabelText("Állapot szűrő"), {
+      target: { value: "FAILED" },
+    });
+    await waitFor(() =>
+      expect(api.list).toHaveBeenLastCalledWith(
+        "token-1",
+        { status: "FAILED", limit: 25, offset: 0 },
+        expect.anything(),
+      ),
+    );
+    // 20 failed rows fit one page
+    await waitFor(() =>
+      expect(screen.queryByRole("navigation", { name: /Lapozás/ })).toBeNull(),
+    );
+  });
+
+  it("with a status chosen the pager counts that status's rows, not all of them", async () => {
+    api.summary.mockResolvedValue(
+      summary({ counts: counts({ PENDING: 100, FAILED: 30 }) }),
+    );
+    render(<StockSyncOutboxPage />);
+    await screen.findByText("ACR-001");
+    // all statuses: 130 rows, 6 pages
+    expect(
+      screen.getByRole("navigation", { name: /Lapozás/ }).textContent,
+    ).toMatch(/1\. \/ 6 oldal/);
+    fireEvent.change(screen.getByLabelText("Állapot szűrő"), {
+      target: { value: "FAILED" },
+    });
+    // 30 failed rows: 2 pages
+    await waitFor(() =>
+      expect(
+        screen.getByRole("navigation", { name: /Lapozás/ }).textContent,
+      ).toMatch(/1\. \/ 2 oldal/),
+    );
+  });
+
+  it("a total that fits one page has no pager", async () => {
+    api.summary.mockResolvedValue(
+      summary({ counts: counts({ PENDING: 3, FAILED: 2 }) }),
+    );
+    render(<StockSyncOutboxPage />);
+    await screen.findByText("ACR-001");
+    expect(screen.queryByRole("navigation", { name: /Lapozás/ })).toBeNull();
   });
 });

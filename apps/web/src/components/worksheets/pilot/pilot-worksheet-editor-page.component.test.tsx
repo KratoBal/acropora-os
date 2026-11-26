@@ -139,7 +139,7 @@ describe("PilotWorksheetEditorPage", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Felelősök")).not.toBeInTheDocument();
     expect(
-      screen.getByText(/Mentés után az adatlapon vehetők fel és le/),
+      screen.getByText(/saját\s+mentéssel: azok a laphoz tartoznak/),
     ).toBeInTheDocument();
   });
 
@@ -170,24 +170,34 @@ describe("PilotWorksheetEditorPage", () => {
     );
   });
 
-  it("a Mégsem az adatlapra visz mentés nélkül", async () => {
+  // a közös űrlap-vázon (leltár 3.21): a gombsor a Mégse és a Mentés, mint az Új munkalapon
+  it("a Mégse az adatlapra visz mentés nélkül", async () => {
+    const user = userEvent.setup();
+    navigation.push.mockClear();
     render(<PilotWorksheetEditorPage worksheetId="ws-1" />);
     await screen.findByText("Fankó Kft.");
 
-    expect(screen.getByRole("link", { name: "Mégsem" })).toHaveAttribute(
-      "href",
-      "/szerviz/munkalapok/ws-1",
-    );
+    await user.click(screen.getByRole("button", { name: "Mégse" }));
+    expect(navigation.push).toHaveBeenCalledWith("/szerviz/munkalapok/ws-1");
     expect(worksheets.updateDraft).not.toHaveBeenCalled();
   });
 
-  it("üres tárgynál a Mentés le van tiltva", async () => {
+  it("üres tárgynál a Mentés halvány, kattintásra a mezőnél mondja meg a hibát, és nem ment", async () => {
     const user = userEvent.setup();
     render(<PilotWorksheetEditorPage worksheetId="ws-1" />);
 
     const subject = await screen.findByRole("textbox", { name: "Tárgy" });
+    const save = screen.getByRole("button", { name: "Mentés" });
+    // positive control: with the subject there the button is not dimmed
+    expect(save).toHaveAttribute("aria-disabled", "false");
     await user.clear(subject);
 
-    expect(screen.getByRole("button", { name: "Mentés" })).toBeDisabled();
+    expect(save).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText("Hiányzik: Tárgy")).toBeInTheDocument();
+    await user.click(save);
+    expect(
+      await screen.findByText("Add meg a munkalap tárgyát."),
+    ).toBeInTheDocument();
+    expect(worksheets.updateDraft).not.toHaveBeenCalled();
   });
 });

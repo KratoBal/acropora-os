@@ -705,18 +705,21 @@ describe("ProductDetailPage mirror ownership", () => {
     ).toBeTruthy();
   });
 
-  it("mentett beállítás nélkül is kiírja a deviza és ár mezőket üresen", async () => {
+  // picasso leltár 3.21: mentett beállítás nélkül EGY mondat nevezi meg a mezőket (a 07-21-i döntés szerint a mezők mentés előtt is
+  // ismertek), nem tizenkét üres "—" sor változatonként. Az ellenpróba a következő eset: mentett beállításnál a rács áll.
+  it("mentett beállítás nélkül egy mondat nevezi meg a mezőket, üres rács nélkül", async () => {
     api.detail.mockResolvedValue(noExtensionDetail);
     render(<ProductDetailPage productId="product-1" />);
     await screen.findByText("UNAS terméktükör");
 
-    expect(
-      screen.getByText(
-        "Ehhez a változathoz még nincs mentett saját beállítás, az alábbi mezők üresek.",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Beszerzési deviza")).toBeInTheDocument();
-    expect(screen.getByText("Utolsó beszerzési ár")).toBeInTheDocument();
+    const sentence = screen.getByText(
+      /^Ehhez a változathoz még nincs mentett saját beállítás\./,
+    );
+    expect(sentence.textContent).toContain("beszerzési deviza");
+    expect(sentence.textContent).toContain("utolsó beszerzési ár");
+    expect(sentence.textContent).toContain("minimumkészlet");
+    expect(screen.queryByText("Beszerzési deviza")).not.toBeInTheDocument();
+    expect(screen.queryByText("Minimumkészlet")).not.toBeInTheDocument();
   });
 
   it("nem forintos devizánál egyetlen beszerzési ár mezőt mutat", async () => {

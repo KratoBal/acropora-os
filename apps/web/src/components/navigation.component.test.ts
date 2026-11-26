@@ -229,7 +229,13 @@ describe("navigation", () => {
       ],
       [
         "Tartalom és tudás",
-        ["Tartalom", "Nyereményjáték", "Tudásbázis", "AI teszt"],
+        [
+          "Tartalom",
+          "Oktatóanyagok",
+          "Nyereményjáték",
+          "Tudásbázis",
+          "AI teszt",
+        ],
       ],
       [
         "Webshop",
@@ -480,6 +486,7 @@ describe("navigation", () => {
     ["/szerviz/uzemeltetesi-naplo", "operations-log", "Üzemeltetési napló"],
     ["/szerviz/anyagigenyek", "material-requests-pending", "Anyagigények"],
     ["/tartalom", "content", "Tartalom"],
+    ["/tartalom/oktatoanyagok", "teaching-sources", "Oktatóanyagok"],
     ["/tartalom/nyeremenyjatek", "game", "Nyereményjáték"],
     ["/ai-teszt", "ai-test", "AI teszt"],
     ["/tudasbazis", "knowledge-base", "Tudásbázis"],
@@ -804,6 +811,8 @@ describe("navigation", () => {
     // `settings.manage` adja pontosan ezt a ket szerepet.
     "/szerviz/piszkozatok": "settings.manage",
     "/tartalom": "content.view",
+    // Picasso 3.17: az Oktatóanyagok menüpont; az olvasás ugyanaz a jog, mint a Tartalomé
+    "/tartalom/oktatoanyagok": "content.view",
     "/tartalom/nyeremenyjatek": "game.view",
     // a webshop kezdolapja a Webshop csoportban (2026-10-26): ugyanaz a jog,
     // mint a Beallitasok kartyajae es az API vegpontjaie

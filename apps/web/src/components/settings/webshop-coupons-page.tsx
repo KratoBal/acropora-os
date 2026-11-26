@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  PilotBadge,
+  type PilotBadgeVariant,
   PilotButton,
   PilotCard,
   PilotInput,
@@ -33,6 +35,18 @@ export const COUPON_STATE_LABELS: Record<WebshopCouponState, string> = {
   SCHEDULED: "Még nem indult",
   EXPIRED: "Lejárt",
   USED_UP: "Elfogyott",
+};
+
+/** Az állapot JELVÉNY, nem szöveg a gomb mellett (Picasso 3.25): a "Kikapcsolva" szó és mellette a "Bekapcsolás" egy állapot és az ellentéte volt egy sorban. */
+export const COUPON_STATE_BADGES: Record<
+  WebshopCouponState,
+  PilotBadgeVariant
+> = {
+  ACTIVE: "success",
+  INACTIVE: "grey",
+  SCHEDULED: "blue",
+  EXPIRED: "amber",
+  USED_UP: "amber",
 };
 
 const discountLabel = (coupon: WebshopCoupon) =>
@@ -304,11 +318,13 @@ export function WebshopCouponsPage() {
                         {coupon.used} / {coupon.usageLimit ?? "korlátlan"}
                       </td>
                       <td className="py-2 pr-3">
-                        {COUPON_STATE_LABELS[coupon.state]}
+                        <PilotBadge variant={COUPON_STATE_BADGES[coupon.state]}>
+                          {COUPON_STATE_LABELS[coupon.state]}
+                        </PilotBadge>
                       </td>
                       <td className="py-2">
                         <PilotButton
-                          variant="secondary"
+                          variant="ghost"
                           disabled={busy}
                           aria-label={`${coupon.code}: ${coupon.state === "INACTIVE" ? "bekapcsolás" : "kikapcsolás"}`}
                           onClick={() => void toggle(coupon)}

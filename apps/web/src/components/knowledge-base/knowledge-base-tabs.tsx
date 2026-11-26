@@ -59,6 +59,7 @@ export function KnowledgeBaseTabs({ active }: { active: string }) {
   return (
     <PilotLinkTabs
       label="Tudásbázis oldalai"
+      variant="underline"
       tabs={tabs}
       renderLink={({ href, className, children, ...rest }) => (
         <Link href={href} className={className} {...rest}>

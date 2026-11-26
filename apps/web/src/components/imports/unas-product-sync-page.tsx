@@ -39,7 +39,7 @@ const STATUS_VARIANT: Record<
   FAILED: "danger",
 };
 /**
- * AZ ÜRES FUTÁS (Picasso 3.23): egy sikeres futás, amely semmit nem látott, nem hozott létre, nem frissített, nem hiányolt, nem hagyott ki és nem hibázott. A teszten húsz majdnem azonos
+ * AZ ÜRES FUTÁS (Picasso 3.23): egy sikeres futás, amelynek MINDEN számlálója nulla (látott, létrehozott, frissített, változatlan, ütközés, hiányzó, kihagyott, elveszett kapcsolat, írt kapcsolat) és nincs hibakódja (barracuda a #2952-n: a számlálók felsorolása teljes legyen). A teszten húsz majdnem azonos
  * "Sikeres, Inkrementális, 0, 0, 0" sor közt veszett el a két érdemi futás (1919 feldolgozott, 13 új, 1556 frissített). Az egymás utáni üres futások egy sorba vonódnak, és kinyithatók.
  */
 export function isIdleRun(run: UnasProductSyncRun): boolean {
@@ -48,8 +48,13 @@ export function isIdleRun(run: UnasProductSyncRun): boolean {
     run.productsSeen === 0 &&
     run.createdCount === 0 &&
     run.updatedCount === 0 &&
+    run.unchangedCount === 0 &&
+    run.conflictCount === 0 &&
     run.missingCount === 0 &&
+    run.skippedCount === 0 &&
     run.skippedSourceChangedCount === 0 &&
+    run.similarRelationsWritten === 0 &&
+    run.accessoryRelationsWritten === 0 &&
     run.similarReferencesUnresolved === 0 &&
     run.accessoryReferencesUnresolved === 0 &&
     !run.errorCode

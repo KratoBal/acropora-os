@@ -1,6 +1,18 @@
 "use client";
 
-import { Alert, Icon, PageHeader, Skeleton, PAGE_GUTTER_X } from "@acropora/ui";
+import {
+  Alert,
+  Icon,
+  PageHeader,
+  PilotField,
+  PilotFieldPair,
+  PilotFormActions,
+  PilotFormCard,
+  PilotFormLayout,
+  PILOT_FIELD_HINT_CLASS,
+  Skeleton,
+  PAGE_GUTTER_X,
+} from "@acropora/ui";
 import { hasPermission, PERMISSIONS } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -15,11 +27,7 @@ import {
   type WorksheetLineDraft,
 } from "../worksheet-line-editor";
 import {
-  PilotButton,
-  PilotCard,
-  PilotCardHeader,
   PilotDataRow,
-  PilotFormField,
   PilotInput,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
@@ -78,6 +86,12 @@ import {
  * create-page.tsx` már használja. A komponens saját fejléce szerint a régi,
  * nem-pilot hívó (ez a szerkesztő lap) a propot eddig nem adta át; mostantól
  * átadja, ugyanúgy, mint a felvitel lap.
+ *
+ * === A KÖZÖS ŰRLAP-VÁZON, MINT AZ ÚJ MUNKALAP (picasso leltár 3.21, acrobot döntése 2026-11-26) ===
+ *
+ * Ugyanazok a kérdés-kártyák és ugyanaz a sorrend, mint a `pilot-worksheet-create-page.tsx`-ben (Kinek és hol? Mi a munka? Mikor?), a
+ * kötelező és a nem kötelező mező ugyanúgy jelölve, a gombsor jobbra lent a hiány-összesítővel (eddig bal lent, "Mégsem" felirattal). A
+ * mezők és a mentés logikája nem változott; a Tárgy hiányánál a mentés gomb halvány, kattintásra a mezőnél mondja meg a hibát.
  */
 
 interface HeaderDraft {
@@ -121,6 +135,7 @@ export function PilotWorksheetEditorPage({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showErrors, setShowErrors] = useState(false);
 
   useEffect(() => {
     if (!canManage) return;
@@ -206,13 +221,25 @@ export function PilotWorksheetEditorPage({
       </PilotThemeRoot>
     );
 
-  const canSubmit = Boolean(header.subject.trim()) && !saving;
+  const missing = header.subject.trim() ? [] : ["Tárgy"];
+  const backHref = `/szerviz/munkalapok/${worksheetId}`;
+  // a halvány mentés gomb kattintható: hiányzó Tárgynál a mezőnél mondja meg a hibát és oda görget (nem ment), mint az Új munkalap
+  const onSubmitClick = () => {
+    if (missing.length === 0) {
+      void submit();
+      return;
+    }
+    setShowErrors(true);
+    const box = document.getElementById("munkalap-targy-mezo");
+    box?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    box?.querySelector<HTMLElement>("input")?.focus({ preventScroll: true });
+  };
 
   return (
     <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
       <div className={`${PAGE_GUTTER_X} pt-6`}>
         <Link
-          href={`/szerviz/munkalapok/${worksheetId}`}
+          href={backHref}
           className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
         >
           <Icon name="chevron-left" size={12} />
@@ -224,44 +251,104 @@ export function PilotWorksheetEditorPage({
         />
       </div>
 
-      <div className={`flex max-w-3xl flex-col gap-5 ${PAGE_GUTTER_X} py-6`}>
-        <ServiceOfflineNotice state={{ kind: "form" }} pilot />
-        {error ? (
-          <Alert variant="danger" title="Hiba" description={error} />
-        ) : null}
-
+      <div className={`${PAGE_GUTTER_X} py-6`}>
         {loading ? (
-          <div className="space-y-3" aria-label="Munkalap betöltése">
+          <div
+            className="max-w-[760px] space-y-3"
+            aria-label="Munkalap betöltése"
+          >
             <Skeleton className="h-16" />
             <Skeleton className="h-64" />
           </div>
         ) : (
-          <>
-            <PilotCard>
-              <PilotCardHeader title="Hozzárendelés" />
-              <div className="px-5 py-2">
+          <PilotFormLayout
+            top={
+              <>
+                <ServiceOfflineNotice state={{ kind: "form" }} pilot />
+                {error ? (
+                  <Alert variant="danger" title="Hiba" description={error} />
+                ) : null}
+              </>
+            }
+            afterText="Mentés után visszakerülsz a munkalap adatlapjára. A piszkozat teljes tartalma cserélődik: a fejléc és a tételek is a most látható állapotra."
+            actions={
+              <PilotFormActions
+                missing={missing}
+                busy={saving}
+                submitLabel="Mentés"
+                busyLabel="Mentés…"
+                onCancel={() => router.push(backHref)}
+                onSubmit={onSubmitClick}
+              />
+            }
+          >
+            <PilotFormCard title="Kinek és hol?">
+              <div>
                 <PilotDataRow label="Partner" value={customerName} />
                 <PilotDataRow label="Helyszín" value={departmentLabel} />
               </div>
-            </PilotCard>
+              <p className={PILOT_FIELD_HINT_CLASS}>
+                A partner és a helyszín a lap létrehozásakor dől el, itt nem
+                változtatható.
+              </p>
+            </PilotFormCard>
 
-            <PilotCard>
-              <PilotCardHeader title="Munkalap adatai" />
-              <div className="grid grid-cols-1 gap-x-6 gap-y-5 p-5 sm:grid-cols-2">
-                <PilotFormField
-                  label="Tárgy"
-                  required
-                  className="sm:col-span-2"
-                >
-                  <PilotInput
-                    aria-label="Tárgy"
-                    value={header.subject}
-                    onChange={(value) =>
-                      setHeader((current) => ({ ...current, subject: value }))
-                    }
-                  />
-                </PilotFormField>
-                <PilotFormField label="Keltezés">
+            <PilotFormCard title="Mi a munka?">
+              <PilotField
+                id="munkalap-targy-mezo"
+                label="Tárgy"
+                requirement="required"
+                error={
+                  showErrors && missing.includes("Tárgy")
+                    ? "Add meg a munkalap tárgyát."
+                    : null
+                }
+              >
+                <PilotInput
+                  aria-label="Tárgy"
+                  value={header.subject}
+                  onChange={(value) =>
+                    setHeader((current) => ({ ...current, subject: value }))
+                  }
+                />
+              </PilotField>
+              <PilotField label="Megjegyzés" requirement="optional">
+                <textarea
+                  aria-label="Megjegyzés"
+                  rows={3}
+                  value={header.description}
+                  onChange={(event) =>
+                    setHeader((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                  className="w-full resize-none rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                />
+              </PilotField>
+              <WorksheetLineEditor
+                pilot
+                bare
+                lines={lines}
+                onChange={setLines}
+                disabled={saving}
+              />
+              {/* nem mező: a lap eszközei az adatlapon szerkeszthetők, ezért nem kap "(nem kötelező)" jelet */}
+              <div className="flex flex-col gap-1.5">
+                <h3 className="text-sm font-semibold text-pilot-grey-800">
+                  Érintett eszközök
+                </h3>
+                <p className={PILOT_FIELD_HINT_CLASS}>
+                  A lap eszközei a munkalap adatlapján szerkeszthetők, saját
+                  mentéssel: azok a laphoz tartoznak, nem a verzióhoz, tehát
+                  lezárt lapon is javíthatók.
+                </p>
+              </div>
+            </PilotFormCard>
+
+            <PilotFormCard title="Mikor?">
+              <PilotFieldPair>
+                <PilotField label="Keltezés" requirement="optional">
                   <PilotInput
                     aria-label="Keltezés"
                     type="date"
@@ -273,8 +360,20 @@ export function PilotWorksheetEditorPage({
                       }))
                     }
                   />
-                </PilotFormField>
-                <PilotFormField label="Teljesítés">
+                </PilotField>
+                <PilotField label="Határidő" requirement="optional">
+                  <PilotInput
+                    aria-label="Határidő"
+                    type="date"
+                    value={header.dueDate}
+                    onChange={(value) =>
+                      setHeader((current) => ({ ...current, dueDate: value }))
+                    }
+                  />
+                </PilotField>
+              </PilotFieldPair>
+              <PilotFieldPair>
+                <PilotField label="Teljesítés" requirement="optional">
                   <PilotInput
                     aria-label="Teljesítés"
                     type="date"
@@ -286,68 +385,10 @@ export function PilotWorksheetEditorPage({
                       }))
                     }
                   />
-                </PilotFormField>
-                <PilotFormField label="Határidő">
-                  <PilotInput
-                    aria-label="Határidő"
-                    type="date"
-                    value={header.dueDate}
-                    onChange={(value) =>
-                      setHeader((current) => ({ ...current, dueDate: value }))
-                    }
-                  />
-                </PilotFormField>
-                <PilotFormField label="Megjegyzés" className="sm:col-span-2">
-                  <textarea
-                    aria-label="Megjegyzés"
-                    rows={3}
-                    value={header.description}
-                    onChange={(event) =>
-                      setHeader((current) => ({
-                        ...current,
-                        description: event.target.value,
-                      }))
-                    }
-                    className="w-full resize-none rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
-                  />
-                </PilotFormField>
-              </div>
-            </PilotCard>
-
-            <WorksheetLineEditor
-              pilot
-              lines={lines}
-              onChange={setLines}
-              disabled={saving}
-            />
-
-            <PilotCard>
-              <PilotCardHeader title="Érintett eszközök" />
-              <div className="p-5">
-                <p className="text-sm text-pilot-grey-400">
-                  A lap eszközei a munkalap adatlapján szerkeszthetők, saját
-                  mentéssel: azok a laphoz tartoznak, nem a verzióhoz, tehát
-                  lezárt lapon is javíthatók. Mentés után az adatlapon vehetők
-                  fel és le.
-                </p>
-              </div>
-            </PilotCard>
-
-            <div className="flex items-center gap-4 pb-8">
-              <Link href={`/szerviz/munkalapok/${worksheetId}`}>
-                <PilotButton variant="secondary" disabled={saving}>
-                  Mégsem
-                </PilotButton>
-              </Link>
-              <PilotButton
-                variant="primary"
-                disabled={!canSubmit}
-                onClick={() => void submit()}
-              >
-                {saving ? "Mentés…" : "Mentés"}
-              </PilotButton>
-            </div>
-          </>
+                </PilotField>
+              </PilotFieldPair>
+            </PilotFormCard>
+          </PilotFormLayout>
         )}
       </div>
     </PilotThemeRoot>

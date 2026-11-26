@@ -128,6 +128,24 @@ describe("WebshopShippingSettingsPage", () => {
     ).toBeNull();
   });
 
+  // Picasso 3.25: the order buttons said Fel / Le / Eltávolítás in words (arrows everywhere else); the names for the screen reader stay
+  it("the order buttons are arrows and a cross, each still named for the screen reader", async () => {
+    render(createElement(WebshopShippingSettingsPage));
+    await screen.findByLabelText("Foxpost díja");
+    const up = screen.getByRole("button", {
+      name: "Foxpost csomagautomata: Utánvét feljebb",
+    });
+    const down = screen.getByRole("button", {
+      name: "Foxpost csomagautomata: Utánvét lejjebb",
+    });
+    const remove = screen.getByRole("button", {
+      name: "Foxpost csomagautomata: Utánvét eltávolítása",
+    });
+    expect(up.textContent).toBe("↑");
+    expect(down.textContent).toBe("↓");
+    expect(remove.textContent).toBe("×");
+  });
+
   it("moving, removing and adding go to the API in the order shown", async () => {
     api.savePayments.mockImplementation(async (_t, matrix) =>
       settings({ matrix }),
