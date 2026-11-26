@@ -95,6 +95,7 @@ export function quoteFixture(): QuoteRow {
                 unitNetPrice: d("100000.1234"),
                 vatRatePercent: d("27"),
                 isOptional: false,
+                replacesItemId: null,
               },
               {
                 id: "optional",
@@ -108,6 +109,7 @@ export function quoteFixture(): QuoteRow {
                 unitNetPrice: d("0.3333"),
                 vatRatePercent: d("27"),
                 isOptional: true,
+                replacesItemId: "item",
               },
             ],
           },
@@ -420,6 +422,21 @@ test("the PDF and the list agree on a mixed-VAT total: the same lines, the same 
   // 1049.999895 + 1234.5678 + 3810 + 63500 = 69594.567695: rounded once, 69595
   assert.equal(dto.latestVersion!.grossTotal, "69595");
 });
+// KIVÁLTOTT TÉTEL (card 2540d9d4): a szerkesztő látja, melyik tételt váltja ki az opcionális; az ügyfél-DTO-ban nincs belső azonosító
+test("the writer's items name the replaced line, the customer's do not", () => {
+  const row = quoteFixture();
+  const internal = internalQuoteDto(row).versions[0]!.blocks[0]!.items;
+  assert.deepEqual(
+    internal.map((i) => [i.id, i.replacesItemId]),
+    [
+      ["item", null],
+      ["optional", "item"],
+    ],
+  );
+  for (const item of customerQuoteDto(row).versions[0]!.blocks[0]!.items)
+    assert.equal("replacesItemId" in item, false);
+});
+
 test("three allowlisted DTO shapes, decimal precision and no customer/internal cost-free leakage", () => {
   const row = quoteFixture(),
     customer = customerQuoteDto(row),

@@ -225,6 +225,7 @@ function version(
             source: "BOM",
             variantId: null,
             variantLabel: null,
+            replacesItemId: null,
           },
         ],
       },
@@ -1657,6 +1658,7 @@ describe("Ajánlat szerkesztő (569:171)", () => {
       source: "STANDALONE" as const,
       variantId: null,
       variantLabel: null,
+      replacesItemId: null,
     });
     const base = version();
     api.detail.mockResolvedValue(
@@ -1828,6 +1830,7 @@ describe("Ajánlat szerkesztő (569:171)", () => {
       source: "STANDALONE" as const,
       variantId: null,
       variantLabel: null,
+      replacesItemId: null,
     });
     const base = version();
     const withItems = quote([
@@ -1934,6 +1937,7 @@ describe("Ajánlat szerkesztő (569:171)", () => {
         unitNetPrice: "120000",
         vatRatePercent: "27",
         isOptional: false,
+        replacesItemId: null,
       },
     ]);
   });

@@ -120,6 +120,8 @@ export interface QuoteInternalBlock extends Omit<QuoteCustomerBlock, "items"> {
       variantId: string | null;
       /** "Product · Variant (SKU)" of a linked variant (P1) */
       variantLabel: string | null;
+      /** KIVÁLTOTT TÉTEL: az a (nem opcionális) tétel, amelynek a helyére ez az opcionális tétel lép; null: kiegészítés. Csak a szerkesztő látja (a nyilvános oldalra a nautilus utáni PR hozza a megjelenítendő nevet). */
+      replacesItemId: string | null;
     }
   >;
 }
@@ -372,6 +374,8 @@ export interface QuoteItemInput {
   unitNetPrice: string;
   vatRatePercent: string;
   isOptional?: boolean;
+  /** the item this OPTIONAL item stands in for (same version, not optional); null clears it; only with isOptional */
+  replacesItemId?: string | null;
   position?: number;
 }
 export type QuoteItemPatch = Partial<Omit<QuoteItemInput, "position">> & {

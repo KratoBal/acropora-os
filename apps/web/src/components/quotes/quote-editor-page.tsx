@@ -760,6 +760,7 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
                 .length
             : 0
         }
+        lines={v.blocks.flatMap((b) => b.items)}
         onSaved={saved}
       />
       <QuoteBomDrawer
