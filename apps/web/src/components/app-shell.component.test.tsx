@@ -145,13 +145,13 @@ describe("AppShell business navigation groups", () => {
     render(<AppShell>Oldaltartalom</AppShell>);
 
     expect(
-      screen.queryByRole("link", { name: "UNAS Megrendelések" }),
+      screen.queryByRole("link", { name: "UNAS megrendelések" }),
     ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Webshop" }));
 
     expect(
-      screen.getByRole("link", { name: "UNAS Megrendelések" }),
+      screen.getByRole("link", { name: "UNAS megrendelések" }),
     ).toHaveAttribute("href", "/webshop");
     expect(screen.getByRole("link", { name: "Vevők" })).toHaveAttribute(
       "href",
@@ -320,7 +320,7 @@ describe("AppShell business navigation groups", () => {
     fireEvent.click(screen.getByRole("button", { name: "Webshop" }));
 
     expect(
-      screen.getByRole("link", { name: "UNAS Megrendelések" }),
+      screen.getByRole("link", { name: "UNAS megrendelések" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Termékek a webshopban" }),
