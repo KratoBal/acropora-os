@@ -1767,6 +1767,7 @@ export type {
   WebshopOrderDetail,
   WebshopOrderProforma,
   WebshopTransferReceipt,
+  WebshopBalanceReceipt,
   WebshopExternalInvoice,
   WebshopTransferReceiptInput,
   WebshopOrderHistoryEntry,

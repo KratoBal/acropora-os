@@ -16,6 +16,7 @@ import { formatHuf } from "../../completion-certificates/completion-certificate-
 import { MedusaAdminHttpError } from "../../integrations/medusa/medusa-admin.client.js";
 import { budapestDayKey } from "../../dashboard/budapest-day.js";
 import { NotificationsService } from "../../notifications/notifications.service.js";
+import { balanceDueOf } from "./webshop-order-detail.rules.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import {
   BANK_TRANSFER_PROVIDER_ID,
@@ -118,6 +119,83 @@ export class WebshopOrderTransferService {
   }
 
   /**
+   * „HÁTRALÉK BEÉRKEZETT” (kártya d31a66a3, S3): az előleg utáni maradék átutalásának kézi rögzítése. Csak ha az előleg már
+   * beérkezett (a rendelés beérkezés-sora egy ELŐLEG-díjbekérőé) és a hátralék még nem. Az összeg nem a kezelőé: a rendelés
+   * végösszege mínusz a beérkezett előleg (`balanceDueOf`), mert a webshop pontosan ezt fogadja el ugyanazon a fizetésen
+   * (commerce #908); más összeg ott 409 lenne. Értesít, mint az előleg, és lezárja a fizetést a webshopban.
+   */
+  async recordBalanceManual(
+    orderId: string,
+    input: WebshopTransferReceiptInput,
+    user: AuthenticatedUser,
+    now = new Date(),
+  ): Promise<WebshopOrderDetail> {
+    const reference = input.reference.trim();
+    if (!reference)
+      throw new UnprocessableEntityException(
+        "Add meg a banki hivatkozást (a közleményt vagy a tranzakció azonosítóját).",
+      );
+    const day = new Date(`${input.receivedOn}T00:00:00Z`);
+    if (
+      Number.isNaN(day.getTime()) ||
+      day.toISOString().slice(0, 10) !== input.receivedOn
+    )
+      throw new UnprocessableEntityException("A beérkezés napja nem dátum.");
+    if (input.receivedOn > budapestDayKey(now))
+      throw new UnprocessableEntityException(
+        "A beérkezés napja nem lehet a jövőben.",
+      );
+
+    const { order } = await this.orders.source(orderId);
+    const receipt = (await this.repository.transferReceipts([orderId])).get(
+      orderId,
+    );
+    if (!receipt?.advance)
+      throw new ConflictException(
+        "Hátralék csak előleg után rögzíthető: ennek a rendelésnek nincs beérkezett előlege.",
+      );
+    if (input.receivedOn < receipt.receivedOn)
+      throw new UnprocessableEntityException(
+        `A hátralék nem érkezhetett az előleg (${receipt.receivedOn}) előtt.`,
+      );
+    const balance = (await this.repository.balanceReceipts([orderId])).get(
+      orderId,
+    );
+    const due = balanceDueOf(order.total, receipt, balance ?? null);
+    if (balance || due === null)
+      throw new ConflictException(
+        balance
+          ? "Ennek a rendelésnek a hátraléka már rögzítve van."
+          : "Ennél a rendelésnél nincs fizetendő hátralék: az előleg a teljes végösszeg.",
+      );
+    const amount = new Prisma.Decimal(due);
+
+    const created = await this.repository.createBalanceReceipt({
+      orderId,
+      source: "MANUAL",
+      bankTransactionId: null,
+      reference,
+      receivedOn: input.receivedOn,
+      amount,
+      currency: receipt.currency,
+      recordedByUserId: user.id,
+    });
+    if (!created)
+      throw new ConflictException(
+        "Ennek a rendelésnek a hátraléka már rögzítve van.",
+      );
+
+    this.notifications.notifyWebshopTransferReceived({
+      userIds: await this.repository.transferRecipients(),
+      orderId,
+      displayId: order.display_id,
+      amount: transferAmountText(amount, receipt.currency),
+    });
+    await this.closeBalanceInShop(orderId);
+    return this.orders.detail(orderId, now);
+  }
+
+  /**
    * „WEBSHOP FIZETÉS LEZÁRÁSA”: a rögzített beérkezés újraküldése a webshopnak,
    * ha az első küldés elhasalt. A webshop oldal ismétlésre nem ír újra
    * (commerce #509: `recorded: false`). Beérkezés nélkül 409.
@@ -133,7 +211,10 @@ export class WebshopOrderTransferService {
       throw new ConflictException(
         "Ennek a rendelésnek nincs rögzített beérkezése, ezért a webshopnak nincs mit küldeni.",
       );
-    const failure = await this.closeInShop(orderId);
+    // the advance first, then the balance if it is in: the shop answers a repeat of either without a second capture (commerce #908)
+    const failure =
+      (await this.closeInShop(orderId)) ??
+      (await this.closeBalanceInShop(orderId, true));
     if (failure) throw new ConflictException(failure);
     return this.orders.detail(orderId, now);
   }
@@ -144,6 +225,42 @@ export class WebshopOrderTransferService {
    * vonja vissza egy webshop-hiba. A hiba mondata a visszatérési érték, a
    * „Webshop fizetés lezárása” gomb ismétli.
    */
+  /**
+   * THE BALANCE IN THE SHOP (commerce #908): the same receipt endpoint without `advance`, with the balance's own reference and
+   * exactly the recorded amount; the shop captures it on the advance's payment. As with the advance, the OS row stays if this
+   * fails, and "Webshop fizetés lezárása" repeats it. `optional`: no balance recorded is not a failure (the sync's second step).
+   */
+  private async closeBalanceInShop(
+    orderId: string,
+    optional = false,
+  ): Promise<string | null> {
+    const balance = (await this.repository.balanceReceipts([orderId])).get(
+      orderId,
+    );
+    if (!balance) return optional ? null : "Nincs rögzített hátralék.";
+    try {
+      const client = await this.orders.adminClient();
+      await client.recordTransferReceipt(orderId, {
+        reference: balance.reference,
+        received_at: balance.receivedOn,
+        amount: Number(balance.amount),
+      });
+      return null;
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Előleg hátraléka: a webshop fizetése nem zárult le (${orderId}): ${raw}`,
+      );
+      const reason =
+        error instanceof MedusaAdminHttpError
+          ? error.status >= 500
+            ? `a webshop nem érhető el (HTTP ${error.status})`
+            : (webshopErrorMessage(error.body) ?? `HTTP ${error.status}`)
+          : raw;
+      return `A hátralék az OS-ben rögzítve van, de a webshop fizetése nem zárult le: ${reason}`;
+    }
+  }
+
   private async closeInShop(orderId: string): Promise<string | null> {
     const receipt = (await this.repository.transferReceipts([orderId])).get(
       orderId,

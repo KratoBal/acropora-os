@@ -54,6 +54,7 @@ const api = vi.hoisted(() => ({
   sendProforma: vi.fn(),
   proformaSummary: vi.fn(),
   recordTransferReceived: vi.fn(),
+  recordBalanceReceived: vi.fn(),
   syncTransferToShop: vi.fn(),
   createParcel: vi.fn(),
   parcelLabel: vi.fn(),
@@ -251,6 +252,8 @@ const detail: WebshopOrderDetail = {
   bankTransfer: false,
   proforma: null,
   transferReceipt: null,
+  balanceReceipt: null,
+  balanceDue: null,
   externalInvoice: null,
   parcel: null,
   cardPayment: null,
@@ -346,6 +349,7 @@ beforeEach(() => {
   api.sendProforma.mockReset();
   api.proformaSummary.mockReset().mockResolvedValue(PROFORMA_SUMMARY);
   api.recordTransferReceived.mockReset();
+  api.recordBalanceReceived.mockReset();
   api.syncTransferToShop.mockReset();
   api.createParcel.mockReset();
   api.parcelLabel.mockReset();
@@ -2960,6 +2964,95 @@ describe("the proforma on the Fizetés card", () => {
     const payment = await card();
     expect(within(payment).getByText("Előleg beérkezett")).toBeTruthy();
     expect(within(payment).queryByText("Kifizetve")).toBeNull();
+  });
+
+  /*
+    AZ ELŐLEG UTÁNI HÁTRALÉK (kártya d31a66a3, S3). MI PIROSÍT: előleg után nem látszik a várt hátralék vagy a gomb; a gomb a beérkezés
+    után is áll; az ablak nem a hátralék összegét mondja, vagy az előleg napja előtti napot is menti; a mentés nem a hátralék
+    végpontjára megy; a rögzített hátralék adatai nem látszanak.
+  */
+  const advanceIn = (): WebshopOrderDetail => {
+    const order = paid({
+      amount: "8000.0000",
+      advance: true,
+      receivedOn: "2026-10-06",
+    });
+    return {
+      ...order,
+      payment: { ...order.payment!, state: "PARTIALLY_CAPTURED" },
+      balanceDue: "12840.0000",
+    };
+  };
+
+  it("after an advance: the expected balance, and Hátralék beérkezett records it at the balance endpoint", async () => {
+    api.detail.mockResolvedValue(advanceIn());
+    api.recordBalanceReceived.mockResolvedValue({
+      ...advanceIn(),
+      balanceDue: null,
+      balanceReceipt: {
+        source: "MANUAL",
+        receivedOn: "2026-10-09",
+        reference: "OTP hátralék 21",
+        amount: "12840.0000",
+        currency: "HUF",
+        recordedBy: "Teszt Elek",
+      },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const payment = await card();
+    expect(within(payment).getByTestId("balance-due").textContent).toMatch(
+      /12\s?840/,
+    );
+    fireEvent.click(
+      within(payment).getByRole("button", { name: "Hátralék beérkezett" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Hátralék beérkezett" });
+    expect(dialog.textContent).toMatch(/12\s?840.*hátralékkal/);
+    fireEvent.change(within(dialog).getByLabelText("Banki hivatkozás"), {
+      target: { value: " OTP hátralék 21 " },
+    });
+    const save = within(dialog).getByRole("button", { name: "Mentés" });
+    expect((save as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(save);
+    expect(await within(payment).findByText("OTP hátralék 21")).toBeTruthy();
+    expect(api.recordBalanceReceived).toHaveBeenCalledWith(
+      "token",
+      "order_38",
+      expect.objectContaining({ reference: "OTP hátralék 21" }),
+    );
+    expect(api.recordTransferReceived).not.toHaveBeenCalled();
+    expect(
+      within(payment).queryByRole("button", { name: "Hátralék beérkezett" }),
+    ).toBeNull();
+  });
+
+  it("no balance button before an advance, after a whole-order transfer, or once the balance is in", async () => {
+    for (const order of [
+      issued(),
+      paid(),
+      {
+        ...advanceIn(),
+        balanceDue: null,
+        balanceReceipt: {
+          source: "BANK_PAIRING" as const,
+          receivedOn: "2026-10-09",
+          reference: "x",
+          amount: "12840.0000",
+          currency: "HUF",
+          recordedBy: null,
+        },
+      },
+    ]) {
+      api.detail.mockResolvedValue(order);
+      const view = render(
+        createElement(WebshopOrderDetailPage, { id: "order_38" }),
+      );
+      const payment = await card();
+      expect(
+        within(payment).queryByRole("button", { name: "Hátralék beérkezett" }),
+      ).toBeNull();
+      view.unmount();
+    }
   });
 
   it("a bank pairing is named as such", async () => {

@@ -4,6 +4,7 @@ import {
   WEBSHOP_STALE_THRESHOLD_DEFAULTS,
   type BillingDocumentStatus,
   type WebshopStaleThreshold,
+  type WebshopBalanceReceipt,
   type WebshopTransferReceipt,
 } from "@acropora/types";
 
@@ -569,6 +570,79 @@ export class WebshopOrdersRepository {
         },
       ]),
     );
+  }
+
+  /**
+   * THE BALANCE RECEIPTS AFTER AN ADVANCE (card d31a66a3, S3), per order, with the recording person's display name.
+   */
+  async balanceReceipts(
+    orderIds: string[],
+  ): Promise<Map<string, WebshopBalanceReceipt>> {
+    if (!orderIds.length) return new Map();
+    const rows = await prisma.webshopBalanceReceipt.findMany({
+      where: { orderId: { in: orderIds } },
+    });
+    const userIds = [
+      ...new Set(
+        rows.flatMap((row) =>
+          row.recordedByUserId ? [row.recordedByUserId] : [],
+        ),
+      ),
+    ];
+    const users = userIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, displayName: true },
+        })
+      : [];
+    const names = new Map(users.map((user) => [user.id, user.displayName]));
+    return new Map(
+      rows.map((row) => [
+        row.orderId,
+        {
+          source: row.source,
+          receivedOn: row.receivedOn.toISOString().slice(0, 10),
+          reference: row.reference,
+          amount: row.amount.toFixed(4),
+          currency: row.currency,
+          recordedBy: row.recordedByUserId
+            ? (names.get(row.recordedByUserId) ?? null)
+            : null,
+        },
+      ]),
+    );
+  }
+
+  /**
+   * THE BALANCE'S RECEIPT (card d31a66a3, S3). One per order, after the order's (advance) receipt (the foreign key): a second one
+   * answers `false` and writes nothing (the person and a later bank pairing race; the first wins), as `createTransferReceipt`.
+   */
+  async createBalanceReceipt(input: {
+    orderId: string;
+    source: "BANK_PAIRING" | "MANUAL";
+    bankTransactionId: string | null;
+    reference: string;
+    receivedOn: string;
+    amount: Prisma.Decimal;
+    currency: string;
+    recordedByUserId: string | null;
+  }): Promise<boolean> {
+    try {
+      await prisma.webshopBalanceReceipt.create({
+        data: {
+          ...input,
+          receivedOn: new Date(`${input.receivedOn}T00:00:00Z`),
+        },
+      });
+      return true;
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      )
+        return false;
+      throw error;
+    }
   }
 
   /**

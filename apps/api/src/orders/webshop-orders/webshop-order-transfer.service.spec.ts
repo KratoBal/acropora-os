@@ -91,6 +91,8 @@ function setup(
       },
       transferRecipients: async () => ["user_9", "user_7"],
       receiptProformaIsAdvance: async () => over.advance ?? false,
+      // no balance in these cases (S3 has its own setup below)
+      balanceReceipts: async () => new Map(),
       // a lezárás a TÁROLT beérkezést küldi: a rögzítés után ez már áll
       transferReceipts: async () =>
         new Map(
@@ -329,5 +331,177 @@ describe("closing the payment in the shop", () => {
         return true;
       });
     }
+  });
+});
+
+/*
+  „HÁTRALÉK BEÉRKEZETT” (kártya d31a66a3, S3). MI PIROSÍT:
+  - előleg nélkül (nincs beérkezés, vagy egész díjbekérőé) is rögzít;
+  - a második hátralék is rögzít vagy értesít, és nem 409;
+  - az összeg nem a rendelés végösszege mínusz az előleg, vagy a kezelőtől jön;
+  - az előleg napja előtti hátralék átmegy;
+  - a webshopnak `advance` jellel, más hivatkozással vagy más összeggel megy;
+  - a "Webshop fizetés lezárása" a rögzített hátralékot nem küldi újra.
+*/
+describe("Hátralék beérkezett (S3)", () => {
+  function balanceSetup(
+    over: {
+      receipt?: "advance" | "whole" | null;
+      balance?: boolean;
+      exists?: boolean;
+      total?: number;
+    } = {},
+  ) {
+    const created: Record<string, unknown>[] = [];
+    const notices: Record<string, unknown>[] = [];
+    const shopCalls: Record<string, unknown>[] = [];
+    const receiptKind = over.receipt === undefined ? "advance" : over.receipt;
+    const balanceRow = () =>
+      created.length || over.balance
+        ? new Map([
+            [
+              "order_55",
+              {
+                source: "MANUAL",
+                receivedOn: "2026-10-06",
+                reference: "OTP hátralék 77",
+                amount: "8200.0000",
+                currency: "HUF",
+                recordedBy: "Teszt Elek",
+              },
+            ],
+          ])
+        : new Map();
+    const service = new WebshopOrderTransferService(
+      {
+        source: async () => ({
+          order: { id: "order_55", display_id: 55, total: over.total ?? 13000 },
+          status: { status: "pending_processing" },
+        }),
+        detail: async (id: string) => ({ id }) as WebshopOrderDetail,
+        adminClient: async () => ({
+          recordTransferReceipt: async (
+            _orderId: string,
+            receipt: Record<string, unknown>,
+          ) => {
+            shopCalls.push(receipt);
+            return { recorded: true, payment_id: "pay_1" };
+          },
+        }),
+      } as never,
+      {
+        transferReceipts: async () =>
+          new Map(
+            receiptKind === null
+              ? []
+              : [
+                  [
+                    "order_55",
+                    {
+                      source: "BANK_PAIRING",
+                      receivedOn: "2026-10-02",
+                      reference: "OTP előleg 12",
+                      amount: "4800.0000",
+                      currency: "HUF",
+                      recordedBy: null,
+                      advance: receiptKind === "advance",
+                    },
+                  ],
+                ],
+          ),
+        balanceReceipts: async () => balanceRow(),
+        createBalanceReceipt: async (input: Record<string, unknown>) => {
+          if (over.exists) return false;
+          created.push(input);
+          return true;
+        },
+        receiptProformaIsAdvance: async () => receiptKind === "advance",
+        transferRecipients: async () => ["user_9"],
+      } as never,
+      {
+        notifyWebshopTransferReceived: (notice: Record<string, unknown>) =>
+          notices.push(notice),
+      } as never,
+    );
+    return { service, created, notices, shopCalls };
+  }
+  const input = { receivedOn: "2026-10-06", reference: "  OTP hátralék 77 " };
+
+  it("az összeg a végösszeg mínusz az előleg, a webshopnak advance nélkül, a hátralék hivatkozásával megy", async () => {
+    const { service, created, notices, shopCalls } = balanceSetup();
+    await service.recordBalanceManual("order_55", input, USER, NOW);
+    assert.equal(created.length, 1);
+    assert.equal(
+      (created[0]!.amount as Prisma.Decimal).toFixed(4),
+      "8200.0000",
+    );
+    assert.equal(created[0]!.currency, "HUF");
+    assert.equal(created[0]!.reference, "OTP hátralék 77");
+    assert.equal(created[0]!.recordedByUserId, "user_1");
+    assert.equal(created[0]!.source, "MANUAL");
+    assert.deepEqual(shopCalls, [
+      { reference: "OTP hátralék 77", received_at: "2026-10-06", amount: 8200 },
+    ]);
+    assert.equal(notices.length, 1);
+    assert.equal(notices[0]!.displayId, 55);
+  });
+
+  it("előleg nélkül nem rögzít: nincs beérkezés, vagy az egész díjbekérőé volt", async () => {
+    for (const receipt of [null, "whole"] as const) {
+      const { service, created, shopCalls } = balanceSetup({ receipt });
+      await assert.rejects(
+        service.recordBalanceManual("order_55", input, USER, NOW),
+        /csak előleg után/,
+      );
+      assert.equal(created.length + shopCalls.length, 0, String(receipt));
+    }
+  });
+
+  it("a második hátralék 409, nem ír és nem értesít; ha a verseny a táblán dől el, ugyanígy", async () => {
+    const already = balanceSetup({ balance: true });
+    await assert.rejects(
+      already.service.recordBalanceManual("order_55", input, USER, NOW),
+      /már rögzítve/,
+    );
+    assert.equal(already.created.length + already.notices.length, 0);
+    const race = balanceSetup({ exists: true });
+    await assert.rejects(
+      race.service.recordBalanceManual("order_55", input, USER, NOW),
+      /már rögzítve/,
+    );
+    assert.equal(race.notices.length + race.shopCalls.length, 0);
+  });
+
+  it("nincs hátralék, ha az előleg a teljes végösszeg; az előleg napja előtti nap nem megy át", async () => {
+    const whole = balanceSetup({ total: 4800 });
+    await assert.rejects(
+      whole.service.recordBalanceManual("order_55", input, USER, NOW),
+      /nincs fizetendő hátralék/,
+    );
+    const early = balanceSetup();
+    await assert.rejects(
+      early.service.recordBalanceManual(
+        "order_55",
+        { receivedOn: "2026-10-01", reference: "x" },
+        USER,
+        NOW,
+      ),
+      /nem érkezhetett az előleg \(2026-10-02\) előtt/,
+    );
+    assert.equal(early.created.length, 0);
+  });
+
+  it("a Webshop fizetés lezárása az előleg után a rögzített hátralékot is újraküldi", async () => {
+    const { service, shopCalls } = balanceSetup({ balance: true });
+    await service.syncShop("order_55", NOW);
+    assert.deepEqual(shopCalls, [
+      {
+        reference: "OTP előleg 12",
+        received_at: "2026-10-02",
+        amount: 4800,
+        advance: true,
+      },
+      { reference: "OTP hátralék 77", received_at: "2026-10-06", amount: 8200 },
+    ]);
   });
 });

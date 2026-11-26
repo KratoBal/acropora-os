@@ -270,6 +270,7 @@ export class WebshopOrdersService {
       splitDisplayIds,
       proformas,
       receipts,
+      balances,
       externals,
       advanceInvoices,
     ] = await Promise.all([
@@ -299,6 +300,7 @@ export class WebshopOrdersService {
       ),
       this.repository.proformas([id]),
       this.repository.transferReceipts([id]),
+      this.repository.balanceReceipts([id]),
       this.repository.externalInvoices([id]),
       this.repository.invoices([id], "ADVANCE_INVOICE"),
     ]);
@@ -347,6 +349,7 @@ export class WebshopOrdersService {
       advanceInvoice: advanceInvoices.get(id) ?? null,
       proforma,
       transferReceipt,
+      balanceReceipt: balances.get(id) ?? null,
       externalInvoice,
       split: {
         from: splitIds.from
