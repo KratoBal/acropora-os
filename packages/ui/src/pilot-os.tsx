@@ -304,8 +304,14 @@ export function PilotDataTable<Row>({
     if (column.phone === "hide") return "max-md:hidden";
     const base =
       "max-md:flex max-md:items-baseline max-md:justify-between max-md:gap-4 max-md:px-0 max-md:py-1.5 max-md:text-right max-md:first:pl-0 max-md:last:pr-0";
+    /*
+      THE CARD'S TITLE IS A BLOCK, NOT A ROW (Picasso's screen inventory 2026-11-25, R4; acrobot 62594). The other cells are a flex
+      row (the label on the left, the value on the right); the title cell took the same row, so a title made of several parts (the
+      ticket's title, its number under it, the reporter) put them SIDE BY SIDE: the number HJ-2026-019 was squeezed into three lines
+      beside the title. A block stacks them, left-aligned, the full card width.
+    */
     if (column.id === titleId) {
-      return `${base} max-md:justify-start max-md:pb-2 max-md:text-left max-md:font-semibold max-md:before:hidden`;
+      return "max-md:block max-md:px-0 max-md:py-1.5 max-md:pb-2 max-md:text-left max-md:font-semibold max-md:first:pl-0 max-md:last:pr-0 max-md:before:hidden";
     }
     return `${base} max-md:before:shrink-0 max-md:before:text-left max-md:before:text-[11px] max-md:before:font-semibold max-md:before:uppercase max-md:before:tracking-[0.05em] max-md:before:text-pilot-grey-500 ${PHONE_LABEL_CONTENT}${
       typeof column.header === "string" && column.header
