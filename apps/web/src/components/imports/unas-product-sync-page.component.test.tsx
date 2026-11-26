@@ -222,6 +222,11 @@ describe("üres futások összevonása", () => {
       { skippedSourceChangedCount: 1 },
       { similarReferencesUnresolved: 1 },
       { accessoryReferencesUnresolved: 1 },
+      { unchangedCount: 1 },
+      { conflictCount: 1 },
+      { skippedCount: 1 },
+      { similarRelationsWritten: 1 },
+      { accessoryRelationsWritten: 1 },
       { errorCode: "E_X" },
     ]) {
       expect(
