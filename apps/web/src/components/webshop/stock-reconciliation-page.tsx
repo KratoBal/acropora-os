@@ -6,6 +6,7 @@ import {
   CardContent,
   CardHeader,
   PageHeader,
+  Pagination,
   Skeleton,
 } from "@acropora/ui";
 import {
@@ -19,6 +20,9 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { StockItemReconciliationSection } from "./stock-item-reconciliation-section";
 import { unasOrdersApi } from "@/lib/api/unas-orders";
 
+/** A riport egy lapon ennyi eltérést mutat: a teljes lista (a teszten 245 sor) 11 700 px magas lapot adott. */
+export const MISMATCH_PAGE_SIZE = 25;
+
 export function StockReconciliationPage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -29,6 +33,7 @@ export function StockReconciliationPage() {
   const [report, setReport] = useState<StockReconciliationReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mismatchPage, setMismatchPage] = useState(1);
 
   useEffect(() => {
     if (!canView) return;
@@ -56,6 +61,17 @@ export function StockReconciliationPage() {
       />
     );
   }
+
+  const mismatchPages = report
+    ? Math.max(1, Math.ceil(report.mismatches.length / MISMATCH_PAGE_SIZE))
+    : 1;
+  const currentMismatchPage = Math.min(mismatchPage, mismatchPages);
+  const shownMismatches = report
+    ? report.mismatches.slice(
+        (currentMismatchPage - 1) * MISMATCH_PAGE_SIZE,
+        currentMismatchPage * MISMATCH_PAGE_SIZE,
+      )
+    : [];
 
   return (
     <div className="space-y-6">
@@ -99,7 +115,7 @@ export function StockReconciliationPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-dusk-100 bg-white">
-                  {report.mismatches.map((mismatch) => (
+                  {shownMismatches.map((mismatch) => (
                     <tr key={mismatch.variantId}>
                       <td className="px-5 py-3 font-mono text-xs text-dusk-700">
                         {mismatch.sku}
@@ -120,6 +136,26 @@ export function StockReconciliationPage() {
                   ))}
                 </tbody>
               </table>
+              {mismatchPages > 1 ? (
+                <div className="flex flex-col gap-2 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-dusk-500">
+                    {(currentMismatchPage - 1) * MISMATCH_PAGE_SIZE + 1}
+                    {"–"}
+                    {Math.min(
+                      currentMismatchPage * MISMATCH_PAGE_SIZE,
+                      report.mismatches.length,
+                    )}{" "}
+                    / {report.mismatches.length} eltérés
+                  </p>
+                  <Pagination
+                    variant="directionF"
+                    position="bottom"
+                    page={currentMismatchPage}
+                    totalPages={mismatchPages}
+                    onPageChange={setMismatchPage}
+                  />
+                </div>
+              ) : null}
             </div>
           ) : null}
         </CardContent>
