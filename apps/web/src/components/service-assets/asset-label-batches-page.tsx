@@ -382,7 +382,7 @@ export function AssetLabelBatchesPage() {
               return (
                 <li
                   key={batch.id}
-                  className="flex flex-wrap items-center gap-2 border-b pb-2 text-sm last:border-0"
+                  className="flex flex-wrap items-center gap-2 border-b border-pilot-grey-200 pb-2 text-sm last:border-0"
                 >
                   <span className="font-medium">
                     {batchTimestampLabel(batch.createdAt)}

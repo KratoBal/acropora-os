@@ -77,6 +77,20 @@ describe("AssetLabelBatchesPage", () => {
     ).toBeTruthy();
   });
 
+  // Picasso 3.24: a kötegek közti vonal fekete 1 px volt (szín nélküli `border-b`), mindenhol máshol halvány
+  it("a kötegek közti vonal halvány szürke, nem az alapértelmezett fekete", async () => {
+    labels.batches.mockResolvedValue([
+      batch({ id: "k1" }),
+      batch({ id: "k2", createdAt: "2026-09-01T20:14:00.000Z" }),
+    ]);
+    render(<AssetLabelBatchesPage />);
+    const row = (await screen.findAllByText(/10 kód, ebből/))[0]!.closest(
+      "li",
+    )!;
+    expect(row.className).toContain("border-b");
+    expect(row.className).toContain("border-pilot-grey-200");
+  });
+
   /**
    * A BETOLTES KET LISTAT AD VISSZA, ES A LAP MINDKETTOT MUTATJA.
    *

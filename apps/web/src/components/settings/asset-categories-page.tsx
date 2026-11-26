@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { assetCategoriesApi } from "@/lib/api/asset-categories";
+import { ListSearch, useListSearch } from "./settings-list-search";
 
 /**
  * AZ ESZKOZ-KATEGORIAK KARBANTARTASA.
@@ -42,6 +43,10 @@ export function AssetCategoriesPage() {
   const [ujNev, setUjNev] = useState("");
   const [ujKod, setUjKod] = useState("");
   const [mentes, setMentes] = useState(false);
+  const kereso = useListSearch(
+    items,
+    (kategoria) => `${kategoria.name} ${kategoria.code ?? ""}`,
+  );
 
   const betolt = useCallback(
     async (signal?: AbortSignal) => {
@@ -177,35 +182,52 @@ export function AssetCategoriesPage() {
               Még egyetlen kategória sincs felvéve.
             </p>
           ) : (
-            <ul className="divide-y">
-              {items.map((kategoria) => (
-                <li
-                  key={kategoria.id}
-                  className="flex items-center justify-between gap-4 py-3"
-                >
-                  <span
-                    className={
-                      kategoria.isActive
-                        ? "text-sm text-dusk-800"
-                        : "text-sm text-dusk-400 line-through"
-                    }
+            <>
+              {kereso.searchable ? (
+                <ListSearch
+                  query={kereso.query}
+                  onChange={kereso.setQuery}
+                  shown={kereso.shown.length}
+                  total={items.length}
+                />
+              ) : null}
+              {kereso.shown.length === 0 ? (
+                <p className="text-sm text-dusk-500">
+                  Nincs a keresésnek megfelelő kategória.
+                </p>
+              ) : null}
+              <ul className="divide-y">
+                {kereso.shown.map((kategoria) => (
+                  <li
+                    key={kategoria.id}
+                    className="flex items-center justify-between gap-4 py-3"
                   >
-                    {kategoria.name}
-                    {kategoria.code ? (
-                      <span className="ml-2 text-xs text-dusk-400">
-                        {kategoria.code}
-                      </span>
-                    ) : null}
-                  </span>
-                  <Button
-                    variant="secondary"
-                    onClick={() => void allit(kategoria, !kategoria.isActive)}
-                  >
-                    {kategoria.isActive ? "Kivezetés" : "Visszahozás"}
-                  </Button>
-                </li>
-              ))}
-            </ul>
+                    <span
+                      className={
+                        kategoria.isActive
+                          ? "text-sm text-dusk-800"
+                          : "text-sm text-dusk-400 line-through"
+                      }
+                    >
+                      {kategoria.name}
+                      {kategoria.code ? (
+                        <span className="ml-2 text-xs text-dusk-400">
+                          {kategoria.code}
+                        </span>
+                      ) : null}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`${kategoria.isActive ? "Kivezetés" : "Visszahozás"}: ${kategoria.name}`}
+                      onClick={() => void allit(kategoria, !kategoria.isActive)}
+                    >
+                      {kategoria.isActive ? "Kivezetés" : "Visszahozás"}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </CardContent>
       </Card>

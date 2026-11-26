@@ -160,6 +160,21 @@ describe("PartnerDuplicatesPage", () => {
     expect(within(strong).getByText("Nincs találat")).toBeTruthy();
   });
 
+  it("an empty list is one line, not a tall empty box (Picasso 3.28)", async () => {
+    api.report.mockResolvedValue({ ...report(), strong: [], unlinked: [] });
+    render(<PartnerDuplicatesPage />);
+    const strong = await screen.findByRole("region", { name: "Egyező vevők" });
+    const line = within(strong).getByText("Nincs találat").parentElement!;
+    expect(line.tagName).toBe("P");
+    expect(line.textContent).toBe(
+      "Nincs találat: ebben a listában ma nincs tétel.",
+    );
+    // the old empty-state box had its own title and description lines
+    expect(
+      within(strong).queryByText("Ebben a listában ma nincs tétel."),
+    ).toBeNull();
+  });
+
   it("does not call the endpoint without settings.manage", () => {
     auth.session = {
       ...session,

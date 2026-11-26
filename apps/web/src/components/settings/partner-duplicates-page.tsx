@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  EmptyState,
   PageHeader,
   PilotBadge,
   PilotButton,
@@ -156,10 +155,11 @@ function Section({
       {count ? (
         children
       ) : (
-        <EmptyState
-          title="Nincs találat"
-          description="Ebben a listában ma nincs tétel."
-        />
+        /* ÜRES SZAKASZ = EGY SOR (Picasso 3.28): három üres, 290 px magas doboz egymás alatt 1380 px magas lapot adott */
+        <p className="text-sm text-pilot-grey-500">
+          <span className="font-medium">Nincs találat</span>
+          {": ebben a listában ma nincs tétel."}
+        </p>
       )}
     </section>
   );
