@@ -146,6 +146,12 @@ const rowOf = async (fileName: string) =>
   (await screen.findByText(fileName)).closest("tr")!;
 
 describe("MissingInvoicesSuggestionsPage", () => {
+  it("steps back to the Hiányzó számlák list with the shared arrow link", async () => {
+    render(<MissingInvoicesSuggestionsPage />);
+    const back = await screen.findByRole("link", { name: "Hiányzó számlák" });
+    expect(back).toHaveAttribute("href", "/penzugy/hianyzo-szamlak");
+  });
+
   /**
    * MI PIROSÍT: ha az Elfogad az elvetés végpontját hívná (vagy fordítva); ha a
    * döntés után a sor a listán maradna; ha a bizonyosság nem a Jev számából
