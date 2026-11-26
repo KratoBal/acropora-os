@@ -133,10 +133,22 @@ describe("az új hibajegy űrlap szerkezete", () => {
     expect(titles).toEqual(["Kinek és hol?", "Mi a munka?", "Ki felel érte?"]);
   });
 
-  it("a függő mező mondata a súgó stílusát viseli (kicsi, szürke), nem nagy és sötét", () => {
+  // Picasso 3.7: a dependent field is a disabled field saying what it waits for, the why under it in the help style
+  it("a függő mező kikapcsolt mező, ami kimondja, mire vár; az oka a súgó stílusában alatta", () => {
     render(<PilotServiceJobEditorPage />);
-    const hint = screen.getByText(/Előbb válassz partnert/);
-    expect(hint.className).toBe("text-xs text-pilot-grey-400");
+    expect(screen.getByLabelText(/^Helyszín/)).toBeDisabled();
+    expect(
+      screen.getByRole("option", { name: "Előbb válassz partnert" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("A helyszínek a partner saját fájából jönnek.")
+        .className,
+    ).toBe("text-xs text-pilot-grey-400");
+    // the asset field waits for the location the same way
+    const assetWaiting = screen.getByRole("option", {
+      name: "Előbb válassz helyszínt",
+    });
+    expect(assetWaiting.closest("select")).toBeDisabled();
   });
 
   it("a kötelező mezők csillagosak, a többi '(nem kötelező)' (a két jel egy szabály)", () => {

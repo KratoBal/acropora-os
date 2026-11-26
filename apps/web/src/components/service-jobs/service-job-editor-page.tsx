@@ -40,6 +40,7 @@ import {
   type ContractJobChoice,
 } from "./contract-job-picker";
 import { JobAssetPicker } from "./job-asset-picker";
+import { PilotWaitingField } from "@/components/pilot/pilot-waiting-field";
 import { PartnerPicker } from "./partner-picker";
 import {
   toggleAssignee,
@@ -586,16 +587,22 @@ export function ServiceJobEditorPage({
                 requirement="required"
                 htmlFor="hibajegy-helyszin"
                 error={errorOf("Helyszín", "Válassz helyszínt.")}
+                help={
+                  !customer
+                    ? "A helyszínek a partner saját fájából jönnek."
+                    : undefined
+                }
               >
                 {/*
                   HAROM KULON ALLAPOT, HAROM KULON MONDAT: nincs partner / meg toltunk / a partnernek nincs helyszine -- egy ures valaszto ugy
                   nezne ki, mintha a partnernek nem lenne helyszine.
                 */}
+                {/* the disabled field in its place, not a sentence (Picasso 3.7) */}
                 {!customer ? (
-                  <p className={PILOT_FIELD_HINT_CLASS}>
-                    Előbb válassz partnert. A helyszínek a partner saját fájából
-                    jönnek.
-                  </p>
+                  <PilotWaitingField
+                    id="hibajegy-helyszin"
+                    waitingFor="Előbb válassz partnert"
+                  />
                 ) : !departmentsLoaded ? (
                   <p className={PILOT_FIELD_HINT_CLASS}>
                     Helyszínek betöltése...
@@ -666,19 +673,29 @@ export function ServiceJobEditorPage({
               />
             </PilotField>
 
-            <PilotField label="Érintett eszközök" requirement="optional">
+            <PilotField
+              label="Érintett eszközök"
+              requirement="optional"
+              help={
+                !contractChoice && !departmentId
+                  ? "Az eszközök a helyszínhez és az alatta lévő egységekhez tartoznak."
+                  : undefined
+              }
+            >
               {/* A CIMKE `label`, de egy JELOLONEGYZET-LISTA all alatta (nincs `htmlFor`): a csoportra vonatkozik, a sorok a sajat feliratukat viszik. */}
               {contractChoice ? (
                 <p className="text-sm text-pilot-grey-500">
                   A kijelölt szerződéstételek eszközei kerülnek a lapra.
                 </p>
-              ) : (
+              ) : departmentId ? (
                 <JobAssetPicker
                   hintClassName={PILOT_FIELD_HINT_CLASS}
                   departmentId={departmentId}
                   selected={assetIds}
                   onChange={setAssetIds}
                 />
+              ) : (
+                <PilotWaitingField waitingFor="Előbb válassz helyszínt" />
               )}
             </PilotField>
 

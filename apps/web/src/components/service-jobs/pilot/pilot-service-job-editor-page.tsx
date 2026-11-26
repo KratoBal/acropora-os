@@ -24,6 +24,7 @@ import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { buildSiteOptions } from "@/lib/partners/site-tree";
 import { JobAssetPicker } from "../job-asset-picker";
+import { PilotWaitingField } from "@/components/pilot/pilot-waiting-field";
 import { PartnerPicker } from "../partner-picker";
 import {
   toggleAssignee,
@@ -337,12 +338,18 @@ export function PilotServiceJobEditorPage() {
               requirement="required"
               htmlFor="pilot-hibajegy-helyszin"
               error={errorOf("Helyszín", "Válassz helyszínt.")}
+              help={
+                !customer
+                  ? "A helyszínek a partner saját fájából jönnek."
+                  : undefined
+              }
             >
+              {/* the disabled field in its place, not a sentence (Picasso 3.7) */}
               {!customer ? (
-                <p className={PILOT_FIELD_HINT_CLASS}>
-                  Előbb válassz partnert. A helyszínek a partner saját fájából
-                  jönnek.
-                </p>
+                <PilotWaitingField
+                  id="pilot-hibajegy-helyszin"
+                  waitingFor="Előbb válassz partnert"
+                />
               ) : !departmentsLoaded ? (
                 <p className={PILOT_FIELD_HINT_CLASS}>Helyszínek betöltése…</p>
               ) : nincsValaszthatoHelyszin ? (
@@ -368,15 +375,27 @@ export function PilotServiceJobEditorPage() {
               )}
             </PilotField>
 
-            <PilotField label="Eszköz" requirement="optional">
+            <PilotField
+              label="Eszköz"
+              requirement="optional"
+              help={
+                departmentId
+                  ? undefined
+                  : "Az eszközök a helyszínhez és az alatta lévő egységekhez tartoznak."
+              }
+            >
               {/* A `JobAssetPicker` REGI STILUSBAN marad -- tobbszoros
-                  valasztast tud, a Figma egyetlen legordulojenel tobbet. */}
-              <JobAssetPicker
-                hintClassName={PILOT_FIELD_HINT_CLASS}
-                departmentId={departmentId}
-                selected={assetIds}
-                onChange={setAssetIds}
-              />
+                  valasztast tud, a Figma egyetlen legordulojenel tobbet. Helyszin nelkul a kikapcsolt mezo all a helyen (Picasso 3.7). */}
+              {departmentId ? (
+                <JobAssetPicker
+                  hintClassName={PILOT_FIELD_HINT_CLASS}
+                  departmentId={departmentId}
+                  selected={assetIds}
+                  onChange={setAssetIds}
+                />
+              ) : (
+                <PilotWaitingField waitingFor="Előbb válassz helyszínt" />
+              )}
             </PilotField>
           </PilotFormCard>
 
