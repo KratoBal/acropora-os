@@ -1,4 +1,8 @@
 import type { UserRole } from "./auth.js";
+import type {
+  CommonServiceStatus,
+  CommonServiceStatusReason,
+} from "./common-service-status.js";
 
 export type WorksheetVersionStatus =
   "DRAFT" | "AWAITING_SIGNATURE" | "SIGNED" | "REJECTED";
@@ -617,6 +621,9 @@ export interface WorksheetDetail {
   continuedBy: WorksheetChainLink[];
   /** A legmagasabb sorszámú verzió: ez a lap mai állapota. */
   currentVersion: WorksheetVersionDetail;
+  /** A KÖZÖS ÁLLAPOT ÉS AZ OKA, mint a lista-soron (kártya 7f23785c): a legutolsó változat állapotából és tételszámából; opcionális, a régi válasz nélküle épül. */
+  commonStatus?: CommonServiceStatus;
+  commonReason?: CommonServiceStatusReason | null;
   /** Minden verzió, a legújabbtól visszafelé. A lezártak változatlanok. */
   versions: WorksheetVersionSummary[];
 }
@@ -643,6 +650,13 @@ export interface WorksheetListItem {
   departmentPath: string[] | null;
   subject: string;
   status: WorksheetVersionStatus;
+  /**
+   * A KÖZÖS ÁLLAPOT ÉS AZ OKA (kártya 7f23785c, a munkalap válasza; acrobot 62402): a szerver számolja a legutolsó változat állapotából és a tételszámból
+   * (`commonWorksheetStatus`), ugyanúgy a listán és az adatlapon. Opcionális, mint a hibajegynél: a régi válasz és a fixtúrák nélküle épülnek, a felület
+   * ilyenkor a mai megjelenített állapotot (`worksheetDisplayStatus`) mondja. A partner portál a saját megjelenített állapotát számolja, ezt nem olvassa.
+   */
+  commonStatus?: CommonServiceStatus;
+  commonReason?: CommonServiceStatusReason | null;
   /**
    * KIKÜLDTÉK-E A LEGUTOLSÓ VÁLTOZATOT ALÁÍRÁSRA (kártya 28f31715, a partner áttekintése): a jelölő az időbélyegből, ahogy a
    * `hidden`. A partner adatlapja ugyanígy kapuz (`sentForSignatureAt !== null`). Hiányzik a régi válaszból.
