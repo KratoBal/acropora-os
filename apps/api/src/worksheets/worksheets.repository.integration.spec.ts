@@ -582,6 +582,24 @@ describe(
       assert.notEqual(version.closedAt, null);
     });
 
+    it("freezes the creator's name at closing time, so a rename does not reach the sheet (card f450672c)", async () => {
+      const id = await createDraft(bioDepartmentId);
+      const creator = await prisma.worksheetVersion.findFirstOrThrow({
+        where: { worksheetId: id },
+        select: { createdBy: { select: { displayName: true } } },
+      });
+      assert.ok(creator.createdBy?.displayName);
+      assert.deepEqual(await repository.close(id, actorUserId, new Date()), {
+        ok: true,
+      });
+
+      const version = await prisma.worksheetVersion.findFirstOrThrow({
+        where: { worksheetId: id },
+        select: { createdByNameAtClose: true },
+      });
+      assert.equal(version.createdByNameAtClose, creator.createdBy.displayName);
+    });
+
     /**
      * A LEZÁRÁS ELŐ IS ÁLLÍTJA A LAPOT -- ÉS EZ AZ ÁLLÍTÁS A `close()`-T
      * INDÍTJA EL, NEM A KÖZÖS TÖRZSET.

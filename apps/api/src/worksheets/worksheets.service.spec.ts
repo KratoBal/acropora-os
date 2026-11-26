@@ -59,6 +59,7 @@ function versionRow(
     updatedAt: CREATED_AT,
     closedAt: null,
     closedById: null,
+    createdByNameAtClose: null,
     /*
       A KET UJ OSZLOP 2026-09-21 OTA KOTELEZO A DUPLAN IS, es ezt a FORDITO
       kenyszeritette ki -- nem en vettem eszre. A mezok `DateTime?` es `String?`

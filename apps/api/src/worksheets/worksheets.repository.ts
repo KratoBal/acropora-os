@@ -1543,6 +1543,7 @@ export class WorksheetsRepository extends Repository {
               id: true,
               status: true,
               _count: { select: { lines: true } },
+              createdBy: { select: { displayName: true } },
             },
           },
         },
@@ -1580,6 +1581,8 @@ export class WorksheetsRepository extends Repository {
           status: "AWAITING_SIGNATURE",
           closedAt: now,
           closedById: actorUserId,
+          // Freeze the creator's name (card f450672c): the sheet PDF must not follow a later rename or a deleted account.
+          createdByNameAtClose: current.createdBy?.displayName ?? null,
         },
       });
       if (claimed.count !== 1)

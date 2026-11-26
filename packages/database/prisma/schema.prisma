@@ -6440,6 +6440,8 @@ model WorksheetVersion {
   updatedAt    DateTime  @updatedAt
   closedAt     DateTime?
   closedById   String?
+  /// A "FELVETTE" NEV A LEZARAS PILLANATABAN (card f450672c). A lap PDF-je eddig a fiok MOSTANI nevet irta (elo kapcsolat), ezert egy atnevezes vagy egy torolt fiok (SetNull) utan az ujragenerált lap mas bajtokat adott. A close() ide fagyasztja a nevet; amig NULL (piszkozat, vagy a lezaras elotti sor), az elo nev szolgal. A korabban lezart sorokat a migracio a mostani nevvel toltotte ki: az elerheto legjobb ertek, a regebbi nev nem volt tarolva.
+  createdByNameAtClose String?
 
   /// MIKOR KULDTUK KI ALAIRASRA, ES KINEK.
   ///
