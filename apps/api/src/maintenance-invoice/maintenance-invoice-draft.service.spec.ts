@@ -12,7 +12,10 @@ import {
 import { budapestDayKey } from "../dashboard/budapest-day.js";
 import { MaintenanceInvoiceDraftService } from "./maintenance-invoice-draft.service.js";
 import type { CompletionCertificatesRepository } from "../completion-certificates/completion-certificates.repository.js";
-import type { MaintenanceInvoiceRepository } from "./maintenance-invoice.repository.js";
+import {
+  InvoiceSupersededMeanwhile,
+  type MaintenanceInvoiceRepository,
+} from "./maintenance-invoice.repository.js";
 import type { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-credential.provider.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import type { SzamlazzAgentClient } from "../integrations/szamlazz/szamlazz-agent.client.js";
@@ -69,6 +72,9 @@ function service(options: {
   existingInvoice?: unknown;
   /** the cancellation signal of an issued invoice (card 2cd1ed80); the calls are recorded */
   cancelled?: boolean;
+  /** `createDraft` fails with this (a supersede lost to another request), and `existingInvoice` then answers `liveAfterRace` */
+  createError?: Error;
+  liveAfterRace?: unknown;
   clientResponse?: unknown;
   clientError?: Error;
   credentialsError?: Error;
@@ -95,13 +101,17 @@ function service(options: {
       partnerQueries += 1;
       return options.partnerTerms ?? [];
     },
-    existingInvoice: async () => options.existingInvoice ?? null,
+    existingInvoice: async () =>
+      created.length > 0 && options.createError
+        ? (options.liveAfterRace ?? null)
+        : (options.existingInvoice ?? null),
     isCancelled: async (invoice: unknown) => {
       cancelChecks.push(invoice);
       return options.cancelled ?? false;
     },
     createDraft: async (input: unknown) => {
       created.push(input);
+      if (options.createError) throw options.createError;
       return {
         id: "invoice-1",
         status: "DRAFT",
@@ -388,6 +398,69 @@ describe("MaintenanceInvoiceDraftService.draftFor", () => {
     assert.equal(input.completionCertificateId, "cert-1");
     assert.equal(input.customerId, "customer-1");
     assert.equal(input.totals.netAmount.toNumber(), 100000);
+  });
+});
+
+/*
+  SZTORNÓ UTÁN ÚJ SZÁMLA UGYANARRA AZ IGAZOLÁSRA (acrobot 62227). MI PIROSÍT: ha a sztornózott élő számla mellett nem készül új
+  piszkozat, vagy készül, de nem váltja fel a régit (`supersedes`); ha sztornó nélkül is új készül (az idempotencia elveszne);
+  ha egy piszkozatra is sztornót kérdez; ha egy elvesztett verseny után nem az élő számla jön vissza.
+*/
+describe("MaintenanceInvoiceDraftService.draftFor, sztornó után új számla", () => {
+  const issued = {
+    id: "invoice-old",
+    status: "ISSUED",
+    invoiceNumber: "SZ2026-00042",
+    currency: "HUF",
+    netAmount: new Prisma.Decimal(100000),
+    vatAmount: new Prisma.Decimal(27000),
+    grossAmount: new Prisma.Decimal(127000),
+    createdAt: new Date("2026-09-24T18:00:00.000Z"),
+  };
+
+  it("a sztornózott élő számla helyett új piszkozat készül, ami felváltja a régit", async () => {
+    const run = service({ existingInvoice: issued, cancelled: true });
+    const result = await run.service.draftFor("cert-1");
+    assert.equal(result.id, "invoice-1");
+    assert.deepEqual(run.cancelChecks, [
+      { id: "invoice-old", invoiceNumber: "SZ2026-00042" },
+    ]);
+    assert.equal(run.created.length, 1);
+    assert.equal(
+      (run.created[0] as { supersedes?: string }).supersedes,
+      "invoice-old",
+    );
+    assert.equal(run.clientCalls(), 1);
+  });
+
+  it("sztornó nélkül a meglévő kiállított számla jön vissza, új piszkozat és Számlázz.hu-hívás nélkül", async () => {
+    const run = service({ existingInvoice: issued, cancelled: false });
+    const result = await run.service.draftFor("cert-1");
+    assert.equal(result.id, "invoice-old");
+    assert.equal(run.created.length, 0);
+    assert.equal(run.clientCalls(), 0);
+  });
+
+  it("piszkozatra nem kérdez sztornót (piszkozat nem sztornózható)", async () => {
+    const run = service({
+      existingInvoice: { ...issued, status: "DRAFT", invoiceNumber: null },
+      cancelled: true,
+    });
+    const result = await run.service.draftFor("cert-1");
+    assert.equal(result.id, "invoice-old");
+    assert.deepEqual(run.cancelChecks, []);
+    assert.equal(run.created.length, 0);
+  });
+
+  it("ha egy másik kérés váltotta fel előbb, az ő élő számlája jön vissza", async () => {
+    const run = service({
+      existingInvoice: issued,
+      cancelled: true,
+      createError: new InvoiceSupersededMeanwhile(),
+      liveAfterRace: { ...issued, id: "invoice-other", status: "DRAFT" },
+    });
+    const result = await run.service.draftFor("cert-1");
+    assert.equal(result.id, "invoice-other");
   });
 });
 

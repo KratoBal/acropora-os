@@ -49,7 +49,10 @@ import {
 } from "./maintenance-invoice-line-shape.js";
 import { maintenanceInvoiceIssueEnabled } from "./maintenance-invoice-issue.config.js";
 import { effectivePaymentDueDays } from "../customers/partner-payment-terms.js";
-import { MaintenanceInvoiceRepository } from "./maintenance-invoice.repository.js";
+import {
+  InvoiceSupersededMeanwhile,
+  MaintenanceInvoiceRepository,
+} from "./maintenance-invoice.repository.js";
 import { TIG_ISSUED_PDF as ISSUED_PDF } from "../billing/issued-pdf-key.js";
 
 /** The environment the issue switch is read from (a test hands in its own). */
@@ -413,7 +416,22 @@ export class MaintenanceInvoiceDraftService {
     } = {},
   ): Promise<MaintenanceInvoiceSummary> {
     const existing = await this.repository.existingInvoice(certificateId);
-    if (existing) return this.summary(existing);
+    /*
+      SZTORNÓ UTÁN ÚJ SZÁMLA UGYANARRA AZ IGAZOLÁSRA (acrobot döntése, 2026-11-26, 62227): a teljesítés nem változott, csak a számla
+      volt hibás. A sztornó két jelét ugyanaz a kérdés látja, mint a panelt és a csomag kapuját (`isCancelled`); ha a live számla
+      sztornózott, az új piszkozat felváltja (`supersedes`), ugyanabban a tranzakcióban. Sztornó nélkül a meglévő jön vissza, mint eddig.
+    */
+    let supersedes: string | undefined;
+    if (existing) {
+      const cancelled =
+        existing.status === "ISSUED" &&
+        (await this.repository.isCancelled({
+          id: existing.id,
+          invoiceNumber: existing.invoiceNumber ?? null,
+        }));
+      if (!cancelled) return this.summary(existing);
+      supersedes = existing.id;
+    }
 
     const { certificate, customer, mapped } = await this.prepare(
       certificateId,
@@ -470,7 +488,8 @@ export class MaintenanceInvoiceDraftService {
     const signed = certificate.documents.some(
       (document) => document.type === "SIGNED_FORM",
     );
-    const created = await this.repository.createDraft({
+    const created = await this.createDraftOrLive(certificateId, {
+      ...(supersedes ? { supersedes } : {}),
       id: invoiceId,
       completionCertificateId: certificateId,
       customerId: customer.id,
@@ -505,6 +524,27 @@ export class MaintenanceInvoiceDraftService {
           }),
     });
     return this.summary(created);
+  }
+
+  /**
+   * The draft row, or, when another request superseded the cancelled invoice first (two clicks on "new invoice"), the live invoice
+   * that request made: one live invoice per certificate, and the second click gets the same answer as the first.
+   */
+  private async createDraftOrLive(
+    certificateId: string,
+    input: Parameters<MaintenanceInvoiceRepository["createDraft"]>[0],
+  ) {
+    try {
+      return await this.repository.createDraft(input);
+    } catch (error) {
+      if (!(error instanceof InvoiceSupersededMeanwhile)) throw error;
+      const live = await this.repository.existingInvoice(certificateId);
+      if (!live)
+        throw new ConflictException(
+          "A számlát közben más kérés váltotta fel. Töltsd újra a lapot.",
+        );
+      return live;
+    }
   }
 
   /**

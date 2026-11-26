@@ -11,6 +11,12 @@ import type { CertificateAmounts } from "../completion-certificates/completion-c
 /** The draft changed between the read and the conditional delete (an issue started): the transaction rolls back. */
 class DraftChangedDuringDelete extends Error {}
 
+/**
+ * The cancelled invoice was superseded by another request meanwhile (two clicks on "new invoice"): this draft is not written,
+ * and the caller returns the live invoice the other request made.
+ */
+export class InvoiceSupersededMeanwhile extends Error {}
+
 @Injectable()
 export class MaintenanceInvoiceRepository {
   private readonly database = prisma;
@@ -18,13 +24,15 @@ export class MaintenanceInvoiceRepository {
   /**
    * A MÁR LÉTREHOZOTT PISZKOZAT, HA VAN.
    *
-   * Az `Invoice.completionCertificateId @unique` az idempotencia-kulcs
-   * (ADR-014): ha erre a certificate-re már áll piszkozat, ÚJ Számlázz.hu-
-   * hívás nem indul, a meglévő sor jön vissza.
+   * Az igazolás ÉLŐ számlája az idempotencia-kulcs (ADR-014; 2026-11-26 óta
+   * részleges egyedi index, `supersededAt IS NULL`): ha erre a certificate-re
+   * már áll élő számla, ÚJ Számlázz.hu-hívás nem indul, a meglévő sor jön
+   * vissza. Kivétel a sztornózott számla: a szolgáltatás új piszkozattal váltja fel.
    */
   existingInvoice(certificateId: string) {
-    return this.database.invoice.findUnique({
-      where: { completionCertificateId: certificateId },
+    // the LIVE invoice of the certificate: a cancelled one superseded by a new invoice (2026-11-26) is history, not the answer
+    return this.database.invoice.findFirst({
+      where: { completionCertificateId: certificateId, supersededAt: null },
       include: { lines: true },
     });
   }
@@ -308,57 +316,78 @@ export class MaintenanceInvoiceRepository {
     }[];
     /** only the order's certificate can get here (`prepare` refuses a worksheet one without a signature) */
     unsignedAudit?: { userId: string | null; certificateNumber: string };
+    /**
+     * THE CANCELLED INVOICE THIS DRAFT REPLACES on the same certificate (acrobot 62227). The caller saw the cancellation
+     * (`isCancelled`); here it is marked superseded IN THE SAME TRANSACTION as the new row, and only while it is still live: a
+     * second request finds it superseded and gets `InvoiceSupersededMeanwhile` (the partial unique index would refuse it too).
+     */
+    supersedes?: string;
   }) {
-    const create = this.database.invoice.create({
-      data: {
-        id: input.id,
-        direction: "OUTBOUND",
-        documentType: "INVOICE",
-        source: "SZAMLAZZ",
-        status: "DRAFT",
-        invoiceNumber: null,
-        completionCertificateId: input.completionCertificateId,
-        customerId: input.customerId,
-        salesOrderId: null,
-        partnerName: input.partnerName,
-        partnerTaxNumber: input.partnerTaxNumber,
-        currency: input.currency,
-        netAmount: input.totals.netAmount,
-        vatAmount: input.totals.vatAmount,
-        grossAmount: input.totals.grossAmount,
-        pdfStorageKey: input.pdfStorageKey,
-        lines: {
-          create: input.lines.map((line) => ({
-            description: line.description,
-            quantity: line.quantity,
-            unit: line.unit,
-            unitNet: line.unitNet,
-            vatRatePercent: line.vatRatePercent,
-            netAmount: line.netAmount,
-            vatAmount: line.vatAmount,
-            grossAmount: line.grossAmount,
-          })),
-        },
+    const data = {
+      id: input.id,
+      direction: "OUTBOUND",
+      documentType: "INVOICE",
+      source: "SZAMLAZZ",
+      status: "DRAFT",
+      invoiceNumber: null,
+      completionCertificateId: input.completionCertificateId,
+      customerId: input.customerId,
+      salesOrderId: null,
+      partnerName: input.partnerName,
+      partnerTaxNumber: input.partnerTaxNumber,
+      currency: input.currency,
+      netAmount: input.totals.netAmount,
+      vatAmount: input.totals.vatAmount,
+      grossAmount: input.totals.grossAmount,
+      pdfStorageKey: input.pdfStorageKey,
+      lines: {
+        create: input.lines.map((line) => ({
+          description: line.description,
+          quantity: line.quantity,
+          unit: line.unit,
+          unitNet: line.unitNet,
+          vatRatePercent: line.vatRatePercent,
+          netAmount: line.netAmount,
+          vatAmount: line.vatAmount,
+          grossAmount: line.grossAmount,
+        })),
       },
-      include: { lines: true },
-    });
-    if (!input.unsignedAudit) return create;
-    const [invoice] = await this.database.$transaction([
-      create,
-      this.database.auditLog.create({
-        data: {
-          userId: input.unsignedAudit.userId,
-          action: "maintenance-invoice.draft-without-signed-certificate",
-          entityType: "CompletionCertificate",
-          entityId: input.completionCertificateId,
-          metadata: {
-            certificateNumber: input.unsignedAudit.certificateNumber,
-            invoiceId: input.id,
-            acknowledged: true,
+    } satisfies Prisma.InvoiceUncheckedCreateInput;
+    if (!input.unsignedAudit && !input.supersedes)
+      return this.database.invoice.create({ data, include: { lines: true } });
+    const unsignedAudit = input.unsignedAudit;
+    const supersedes = input.supersedes;
+    return this.database.$transaction(async (transaction) => {
+      if (supersedes) {
+        const moved = await transaction.invoice.updateMany({
+          where: {
+            id: supersedes,
+            completionCertificateId: input.completionCertificateId,
+            supersededAt: null,
           },
-        },
-      }),
-    ]);
-    return invoice;
+          data: { supersededAt: new Date() },
+        });
+        if (moved.count !== 1) throw new InvoiceSupersededMeanwhile();
+      }
+      const invoice = await transaction.invoice.create({
+        data,
+        include: { lines: true },
+      });
+      if (unsignedAudit)
+        await transaction.auditLog.create({
+          data: {
+            userId: unsignedAudit.userId,
+            action: "maintenance-invoice.draft-without-signed-certificate",
+            entityType: "CompletionCertificate",
+            entityId: input.completionCertificateId,
+            metadata: {
+              certificateNumber: unsignedAudit.certificateNumber,
+              invoiceId: input.id,
+              acknowledged: true,
+            },
+          },
+        });
+      return invoice;
+    });
   }
 }

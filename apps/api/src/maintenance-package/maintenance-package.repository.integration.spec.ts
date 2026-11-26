@@ -26,6 +26,9 @@ describe(
     let departmentId = "";
 
     async function removeLeftovers() {
+      await prisma.invoice.deleteMany({
+        where: { partnerName: "PKGREPO-vevo" },
+      });
       await prisma.completionCertificate.deleteMany({
         where: { number: { startsWith: "PKGREPO-" } },
       });
@@ -127,6 +130,54 @@ describe(
         Buffer.from(documents[0]!.content!).toString(),
         "%PDF-alairt-uj.pdf",
       );
+    });
+
+    /*
+      SZTORNÓ UTÁN ÚJ SZÁMLA UGYANARRA AZ IGAZOLÁSRA (acrobot 62227): egy igazoláshoz két kiállított számla is tartozhat, a régi
+      felváltva (`supersededAt`). MI PIROSÍT: ha a csomag a felváltott (sztornózott) számlát kapja, vagy kettőt.
+    */
+    it("két kiállított számlából az élőt adja: a felváltott sztornózott nem jön vissza", async () => {
+      const { id } = await job("KT-2097-010");
+      const certificate = await prisma.completionCertificate.create({
+        data: { serviceJobId: id, number: "PKGREPO-010" },
+        select: { id: true },
+      });
+      const invoice = (
+        number: string,
+        supersededAt: Date | null,
+        createdAt: string,
+      ) =>
+        prisma.invoice.create({
+          data: {
+            direction: "OUTBOUND",
+            documentType: "INVOICE",
+            source: "SZAMLAZZ",
+            status: "ISSUED",
+            invoiceNumber: number,
+            partnerName: "PKGREPO-vevo",
+            customerId,
+            completionCertificateId: certificate.id,
+            supersededAt,
+            createdAt: new Date(createdAt),
+          },
+          select: { id: true },
+        });
+      // the superseded one is the NEWER row on purpose: ordering alone would pick it, so only the live filter can give the right one
+      await invoice(
+        "PKGREPO-SZ-OLD",
+        new Date("2097-01-06T09:00:00Z"),
+        "2097-01-06T09:00:00Z",
+      );
+      const live = await invoice(
+        "PKGREPO-SZ-NEW",
+        null,
+        "2097-01-05T09:00:00Z",
+      );
+
+      const data = await repository.packageData(id);
+      assert.deepEqual(data?.completionCertificate?.invoices, [
+        { id: live.id, invoiceNumber: "PKGREPO-SZ-NEW" },
+      ]);
     });
 
     it("csak kiállított példánynál az az egy; igazolás nélkül a completionCertificate null", async () => {
