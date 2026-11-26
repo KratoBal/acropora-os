@@ -193,6 +193,22 @@ const MEZO_FEJLECEK = [
 const COLUMNS =
   "md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto_minmax(0,1fr)_auto]";
 
+/**
+ * A PILOT TÉTELSOR KÉT SORBAN, MINDEN SZÉLESSÉGEN (picasso leltár 3.21, a stage-kép 2026-11-26): egy sorban hat oszlop állt a 760 px-es
+ * űrlap-oszlopban, a megnevezés csonkult ("Cápasuli kis medence (35m3)"), a munkaóra-négyzet felirat nélkül állt a fejléc alatt, a Törlés
+ * két sor magasra nyúlt. Most az első sor a megnevezés és a kiegészítő sor (teljes szélesség), a második a négy rövid mező a saját
+ * feliratával és a Törlés; fejlécsor nincs, mert a felirat minden mező fölött áll.
+ */
+const PILOT_SHORT_FIELDS =
+  "grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_minmax(0,1fr)_auto] sm:items-end";
+
+/** A pilot tételsor rövid mezőjének felirata: minden szélességen látszik (nincs fejlécsor). */
+function FieldLabel({ children }: { children: string }) {
+  return (
+    <span className="text-xs font-medium text-pilot-grey-500">{children}</span>
+  );
+}
+
 /** A keskeny nézet felirata. Széles nézetben a fejlécsor mondja ugyanezt. */
 function NarrowLabel({ children }: { children: string }) {
   return (
@@ -252,17 +268,6 @@ export function WorksheetLineEditor({
             Még nincs tétel. Tétel nélküli munkalap nem zárható le.
           </p>
         ) : null}
-        {lines.length ? (
-          <div
-            className={`hidden gap-2 text-xs font-medium text-pilot-grey-400 md:grid ${COLUMNS}`}
-            aria-hidden="true"
-          >
-            {MEZO_FEJLECEK.map((fejlec) => (
-              <span key={fejlec}>{fejlec}</span>
-            ))}
-            <span />
-          </div>
-        ) : null}
         <div className="space-y-3">
           {lines.map((line, index) => {
             const egysegFigyelmeztetes = munkaoraEgysegFigyelmeztetes({
@@ -272,10 +277,10 @@ export function WorksheetLineEditor({
             return (
               <div
                 key={index}
-                // telefonon: a megnevezés teljes szélesség, alatta a mennyiség és az egység egy sorban, alatta a munkaóra és a hányan (picasso 3.7 terve)
-                className={`grid grid-cols-2 gap-2 border-b border-pilot-grey-100 pb-3 last:border-0 last:pb-0 ${COLUMNS}`}
+                // két sor (lásd PILOT_SHORT_FIELDS): a megnevezés teljes szélességben, alatta a rövid mezők; telefonon a rövidek kettesével
+                className="space-y-2 border-b border-pilot-grey-100 pb-3 last:border-0 last:pb-0"
               >
-                <div className="col-span-2 space-y-2 md:col-span-1">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
                   <PilotInput
                     aria-label={`${index + 1}. tétel megnevezése`}
                     value={line.description}
@@ -291,37 +296,37 @@ export function WorksheetLineEditor({
                     onChange={(value) => update(index, { detail: value })}
                   />
                 </div>
-                <div className="space-y-1">
-                  <NarrowLabel>Mennyiség</NarrowLabel>
-                  <PilotInput
-                    aria-label={`${index + 1}. tétel mennyisége`}
-                    value={line.quantity}
-                    disabled={disabled}
-                    inputMode="decimal"
-                    onChange={(value) => update(index, { quantity: value })}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <NarrowLabel>Mértékegység</NarrowLabel>
-                  <PilotInput
-                    aria-label={`${index + 1}. tétel mértékegysége`}
-                    value={line.unit}
-                    disabled={disabled}
-                    onChange={(value) => update(index, { unit: value })}
-                  />
-                  {egysegFigyelmeztetes ? (
-                    <p
-                      role="status"
-                      className="text-xs leading-5 text-pilot-amber-700"
-                      data-testid={`tetel-${index + 1}-egyseg-figyelmeztetes`}
-                    >
-                      {egysegFigyelmeztetes}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="space-y-1">
-                  <NarrowLabel>Munkaóra</NarrowLabel>
-                  <label className="flex h-10 items-center gap-2 text-sm text-pilot-grey-700">
+                <div className={PILOT_SHORT_FIELDS}>
+                  <div className="space-y-1">
+                    <FieldLabel>Mennyiség</FieldLabel>
+                    <PilotInput
+                      aria-label={`${index + 1}. tétel mennyisége`}
+                      value={line.quantity}
+                      disabled={disabled}
+                      inputMode="decimal"
+                      onChange={(value) => update(index, { quantity: value })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <FieldLabel>Mértékegység</FieldLabel>
+                    <PilotInput
+                      aria-label={`${index + 1}. tétel mértékegysége`}
+                      value={line.unit}
+                      disabled={disabled}
+                      onChange={(value) => update(index, { unit: value })}
+                    />
+                    {egysegFigyelmeztetes ? (
+                      <p
+                        role="status"
+                        className="text-xs leading-5 text-pilot-amber-700"
+                        data-testid={`tetel-${index + 1}-egyseg-figyelmeztetes`}
+                      >
+                        {egysegFigyelmeztetes}
+                      </p>
+                    ) : null}
+                  </div>
+                  {/* a négyzet felirata maga mellett áll ("Munkaóra"), nem egy fejlécben fölötte */}
+                  <label className="flex h-10 items-center gap-2 self-end text-sm text-pilot-grey-700">
                     <input
                       type="checkbox"
                       aria-label={`${index + 1}. tétel munkaóra`}
@@ -334,34 +339,41 @@ export function WorksheetLineEditor({
                         })
                       }
                     />
+                    Munkaóra
                   </label>
+                  <div className="space-y-1">
+                    <FieldLabel>Hányan</FieldLabel>
+                    <PilotInput
+                      aria-label={`${index + 1}. tételen hányan dolgoztak`}
+                      value={line.workerCount}
+                      disabled={disabled || line.kind !== "LABOR"}
+                      inputMode="numeric"
+                      title={
+                        line.kind === "LABOR"
+                          ? "Hányan dolgoztak ezen a tételen"
+                          : "Csak munkaóra-tételnél adható meg"
+                      }
+                      onChange={(value) =>
+                        update(index, { workerCount: value })
+                      }
+                    />
+                  </div>
+                  <div className="self-end">
+                    <PilotButton
+                      type="button"
+                      variant="secondary"
+                      disabled={disabled}
+                      aria-label={`${index + 1}. tétel törlése`}
+                      onClick={() =>
+                        onChange(
+                          lines.filter((_, position) => position !== index),
+                        )
+                      }
+                    >
+                      Törlés
+                    </PilotButton>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <NarrowLabel>Hányan</NarrowLabel>
-                  <PilotInput
-                    aria-label={`${index + 1}. tételen hányan dolgoztak`}
-                    value={line.workerCount}
-                    disabled={disabled || line.kind !== "LABOR"}
-                    inputMode="numeric"
-                    title={
-                      line.kind === "LABOR"
-                        ? "Hányan dolgoztak ezen a tételen"
-                        : "Csak munkaóra-tételnél adható meg"
-                    }
-                    onChange={(value) => update(index, { workerCount: value })}
-                  />
-                </div>
-                <PilotButton
-                  type="button"
-                  variant="secondary"
-                  disabled={disabled}
-                  aria-label={`${index + 1}. tétel törlése`}
-                  onClick={() =>
-                    onChange(lines.filter((_, position) => position !== index))
-                  }
-                >
-                  Törlés
-                </PilotButton>
               </div>
             );
           })}
