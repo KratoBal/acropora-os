@@ -15,6 +15,7 @@ import type { AquariumListResponse } from "@acropora/types";
 
 import { partnerApi } from "@/lib/api";
 import { WATER_BODY_LABEL } from "@/lib/aquarium-labels";
+import { PHONE_CELL, PHONE_TITLE_CELL } from "@/lib/phone-table";
 
 /**
  * AZ AKVÁRIUM-LISTA A PORTÁLON -- PILOT-STÍLUS (Balázs döntése, emlék 1847,
@@ -235,8 +236,8 @@ export function AquariumList() {
       {data && data.items.length > 0 ? (
         <>
           <div className="flex-1 overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse text-sm">
-              <thead>
+            <table className="w-full border-collapse text-sm max-md:block md:min-w-[720px]">
+              <thead className="max-md:sr-only">
                 <tr className="border-b border-pilot-grey-100">
                   {[
                     "Név",
@@ -257,15 +258,17 @@ export function AquariumList() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="max-md:block">
                 {data.items.map((item, index) => (
                   <tr
                     key={item.id}
                     className={`border-b border-pilot-grey-100 transition-colors hover:bg-pilot-aqua-50/40 ${
                       index % 2 === 0 ? "bg-white" : "bg-pilot-grey-50/50"
-                    }`}
+                    } max-md:block max-md:px-5 max-md:py-3`}
                   >
-                    <td className="whitespace-nowrap px-4 py-3">
+                    <td
+                      className={`whitespace-nowrap px-4 py-3 ${PHONE_TITLE_CELL}`}
+                    >
                       <Link
                         href={`/akvariumok/${item.id}`}
                         className="font-medium text-pilot-grey-900 no-underline hover:text-pilot-aqua-700 hover:underline"
@@ -276,18 +279,30 @@ export function AquariumList() {
                         {item.aquariumNumber}
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-pilot-grey-500">
+                    <td
+                      data-label="Helyszín"
+                      className={`whitespace-nowrap px-4 py-3 text-pilot-grey-500 ${PHONE_CELL}`}
+                    >
                       {item.departmentName ?? "Nincs megadva"}
                     </td>
-                    <td className="px-4 py-3 text-pilot-grey-600">
+                    <td
+                      data-label="Típus"
+                      className={`px-4 py-3 text-pilot-grey-600 ${PHONE_CELL}`}
+                    >
                       {WATER_BODY_LABEL[item.waterBodyType]}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums text-pilot-grey-700">
+                    <td
+                      data-label="Liter"
+                      className={`px-4 py-3 text-right font-mono tabular-nums text-pilot-grey-700 ${PHONE_CELL}`}
+                    >
                       {item.systemVolumeLiters != null
                         ? `${litersFormatter.format(item.systemVolumeLiters)} l`
                         : "—"}
                     </td>
-                    <td className="px-4 py-3">
+                    <td
+                      data-label="Karbantartók"
+                      className={`px-4 py-3 ${PHONE_CELL}`}
+                    >
                       <div className="flex -space-x-1.5">
                         {item.maintainers.map((maintainer) => (
                           <PilotAvatar
@@ -299,7 +314,10 @@ export function AquariumList() {
                         ))}
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-pilot-grey-500">
+                    <td
+                      data-label="Utolsó vízmérés"
+                      className={`whitespace-nowrap px-4 py-3 text-pilot-grey-500 ${PHONE_CELL}`}
+                    >
                       {item.lastMeasuredAt ? (
                         lastMeasuredFormatter.format(
                           new Date(item.lastMeasuredAt),
