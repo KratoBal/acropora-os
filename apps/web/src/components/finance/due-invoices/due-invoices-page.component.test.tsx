@@ -378,7 +378,7 @@ describe("entering a supplier bank account by hand", () => {
     const rowOf = async (name: string) =>
       (await screen.findByText(name)).closest("tr")!;
     expect(
-      within(await rowOf("Hiányos Kft.")).getByText("Számlaszám megadása"),
+      within(await rowOf("Hiányos Kft.")).getByText("Bankszámlaszám megadása"),
     ).toBeInTheDocument();
     expect(
       within(await rowOf("PDF Kft.")).getByText("Csere"),
@@ -396,7 +396,7 @@ describe("entering a supplier bank account by hand", () => {
     api.list.mockResolvedValue(response([missing]));
     render(<DueInvoicesPage />);
     await screen.findByText("Hiányos Kft.");
-    expect(screen.queryByText("Számlaszám megadása")).toBeNull();
+    expect(screen.queryByText("Bankszámlaszám megadása")).toBeNull();
   });
 
   it("saves the typed account for the row and reloads the list", async () => {
@@ -407,7 +407,7 @@ describe("entering a supplier bank account by hand", () => {
     });
     const user = userEvent.setup();
     render(<DueInvoicesPage />);
-    await user.click(await screen.findByText("Számlaszám megadása"));
+    await user.click(await screen.findByText("Bankszámlaszám megadása"));
     await user.type(
       screen.getByLabelText(/Bankszámlaszám: Hiányos Kft\./),
       "11773016-11111018",
@@ -431,7 +431,7 @@ describe("entering a supplier bank account by hand", () => {
     );
     const user = userEvent.setup();
     render(<DueInvoicesPage />);
-    await user.click(await screen.findByText("Számlaszám megadása"));
+    await user.click(await screen.findByText("Bankszámlaszám megadása"));
     await user.type(
       screen.getByLabelText(/Bankszámlaszám:/),
       "11773016-11111019",

@@ -826,13 +826,14 @@ export function PilotContractsPage() {
                     </Link>
                     {/*
                       NATÍV `label` + rejtett `input[type=file]`, PilotButton
-                      "primary" kinézetével -- egy nézhetőleg gomb, ami
+                      "secondary" kinézetével (Picasso 3.22: öt zöld elsődleges
+                      gomb állt egy képernyőn) -- egy nézhetőleg gomb, ami
                       valójában a fájl-választót nyitja meg. Ugyanaz a minta,
                       mint a régi kódban, csak a pilot stílussal: egy
                       beágyazott `<button>` a `<label>`-ben NEM váltaná ki a
                       natív fájl-választót ugyanolyan megbízhatóan.
                     */}
-                    <label className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md bg-pilot-aqua-600 px-3.5 py-1.5 text-sm font-medium text-white transition-all duration-100 hover:bg-pilot-aqua-700 active:bg-pilot-aqua-800">
+                    <label className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md border border-pilot-grey-200 bg-white px-3.5 py-1.5 text-sm font-medium text-pilot-grey-900 transition-all duration-100 hover:bg-pilot-grey-50 active:bg-pilot-grey-100">
                       {uploading === contract.id
                         ? "Feltöltés…"
                         : "PDF feltöltése"}

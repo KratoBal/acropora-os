@@ -596,3 +596,37 @@ describe("PilotContractsPage -- beszerzési szerződés", () => {
     ).toBe(true);
   });
 });
+
+describe("PilotContractsPage szerződés-kártya (Picasso 3.22)", () => {
+  const contract = (id: string) =>
+    ({
+      id,
+      number: `SZ-2026-${id}`,
+      kind: "PURCHASE",
+      title: `Szerződés ${id}`,
+      customer: { id: "customer-1", displayName: "Fővárosi Állatkert" },
+      validFrom: "2026-01-01T00:00:00.000Z",
+      validTo: null,
+      items: [],
+      documents: [],
+    }) as never;
+
+  beforeEach(() => {
+    auth.session = session();
+    api.list.mockReset().mockResolvedValue([contract("1"), contract("2")]);
+    api.customers.mockReset().mockResolvedValue([]);
+    worksheetsApi.departments.mockReset().mockResolvedValue({ items: [] });
+    assetsApi.list.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  it("a PDF feltöltése nem zöld elsődleges gomb: a kártyákon nincs elsődleges gomb", async () => {
+    render(<PilotContractsPage />);
+    const labels = await screen.findAllByText("PDF feltöltése");
+    expect(labels).toHaveLength(2);
+    for (const label of labels) {
+      const box = label.closest("label")!;
+      expect(box.className).not.toContain("bg-pilot-aqua-600");
+      expect(box.className).toContain("border-pilot-grey-200");
+    }
+  });
+});
