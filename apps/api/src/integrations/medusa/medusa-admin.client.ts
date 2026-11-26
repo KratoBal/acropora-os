@@ -819,6 +819,8 @@ export interface MedusaWithdrawal {
 
 export interface MedusaOrderDetailRow {
   id: string;
+  /** Medusa's own order state (`pending`, `completed`, `canceled`, ...); an older answer lacks it. */
+  status?: string | null;
   display_id: number;
   created_at: string;
   email: string | null;
@@ -2050,6 +2052,8 @@ export function describeMedusaFailure(error: unknown): string {
 /** A rendelés-részlet mezői (`order`); a fizetés `data`-ja csak szerveren marad. */
 export const ORDER_DETAIL_FIELDS = [
   "id",
+  // Medusa's own state: `canceled` after the shop's cancel (barracuda N3a: the OS stops the balance, the final invoice and the pairing)
+  "status",
   "display_id",
   "created_at",
   "email",

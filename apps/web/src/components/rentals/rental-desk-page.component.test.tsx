@@ -8,7 +8,12 @@ import type {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RentalDeskPage } from "./rental-desk-page";
-import { emptyRentalForm, rentalRequest, type RentalForm } from "./rental-form";
+import {
+  emptyRentalForm,
+  rentalMissing,
+  rentalRequest,
+  type RentalForm,
+} from "./rental-form";
 import {
   emptyRentalReturnForm,
   rentalReturnRequest,
@@ -151,6 +156,28 @@ describe("the rental request", () => {
     ).toBe(false);
   });
 
+  // Picasso R11: the form row names the empty required fields, the same ones rentalRequest asks for
+  it("names the empty required fields by their labels; a chosen customer drops the renter's", () => {
+    expect(rentalMissing(emptyRentalForm(NOW), null)).toEqual([
+      "Eszköz",
+      "Név",
+      "Telefon",
+      "E-mail",
+      "Irányítószám",
+      "Város",
+      "Utca, házszám",
+    ]);
+    expect(
+      rentalMissing({ ...typed, startsAt: "", plannedReturnAt: " " }, null),
+    ).toEqual(["Kezdés", "Tervezett visszahozás"]);
+    expect(
+      rentalMissing({ ...emptyRentalForm(NOW), equipmentId: "eq-1" }, {
+        id: "c-1",
+      } as never),
+    ).toEqual([]);
+    expect(rentalMissing(typed, null)).toEqual([]);
+  });
+
   it("sends only the id of a chosen customer, whatever is typed", () => {
     const request = rentalRequest({ ...typed, phone: "" }, known);
     expect(request.ok && request.input.customerId).toBe("c-1");
@@ -242,6 +269,12 @@ describe("RentalDeskPage", () => {
 
   it("offers the device's deposit and the fee, and records with a chosen customer", async () => {
     render(<RentalDeskPage now={() => NOW} />);
+    // Picasso R11: before anything is chosen, the row names what is missing
+    expect(
+      await screen.findByText(
+        "Hiányzik: Eszköz, Név, Telefon, E-mail, Irányítószám, Város, Utca, házszám",
+      ),
+    ).toBeTruthy();
 
     await screen.findByRole("option", { name: /Ozmózis víztisztító/ });
     fireEvent.change(screen.getByLabelText("Eszköz"), {
@@ -258,7 +291,14 @@ describe("RentalDeskPage", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Ezt választom" }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Bérlés rögzítése" }));
+    // Picasso R11: the button at the form's end, the missing fields beside it, gone once everything is there
+    const create = screen.getByRole("button", { name: "Bérlés létrehozása" });
+    expect(
+      screen.getByLabelText("Megjegyzés").compareDocumentPosition(create) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.queryByText(/^Hiányzik:/)).toBeNull();
+    fireEvent.click(create);
 
     await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
     expect(api.create).toHaveBeenCalledWith("token-1", {

@@ -40,6 +40,7 @@ import {
   QUOTE_STATUS,
 } from "./quote-format";
 import { useUrlSort } from "@/lib/navigation/use-url-sort";
+import { menuEyebrow } from "@/components/navigation";
 
 export const QUOTES_PATH = "/ajanlatok";
 /** The sortable columns: the table's column id -> the server's sort field (`QUOTE_SORT_FIELDS`). */
@@ -234,7 +235,8 @@ export function QuoteListPage() {
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
       <PilotPageHeader
-        eyebrow="Értékesítés / Árajánlatok"
+        // the line above the title is the page's menu entry (Picasso R7)
+        eyebrow={menuEyebrow("/ajanlatok") ?? undefined}
         title="Árajánlatok"
         description="Projekt- és értékesítési ajánlatok, verziókkal és ügyfélstátusszal."
         actions={

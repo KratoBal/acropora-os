@@ -31,6 +31,7 @@ import {
   rentalPreview,
   rentalRequest,
   type RentalForm,
+  rentalMissing,
 } from "./rental-form";
 import { RentalReturnPanel } from "./rental-return-panel";
 import { RentalReturnedList } from "./rental-returned-list";
@@ -191,6 +192,8 @@ export function RentalDeskPage({
       );
     }
   };
+
+  const missing = rentalMissing(form, customer);
 
   const save = async () => {
     const request = rentalRequest(form, customer);
@@ -502,9 +505,27 @@ export function RentalDeskPage({
                 onChange={(event) => set("note")(event.target.value)}
               />
             </label>
-            <Button disabled={saving} onClick={() => void save()}>
-              {saving ? "Rögzítés…" : "Bérlés rögzítése"}
-            </Button>
+            {/*
+              THE FORM'S ONE BUTTON ROW (Picasso R11, acrobot 62575): the missing fields on the left ("Hiányzik: ..."), the button on the
+              right, as the shared pilot form row (`PilotFormActions`). Drawn with this page's own (dusk) parts: the page is not on the
+              pilot set yet, and the two must not mix on one page (no-dusk-twin-in-pilot).
+            */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-h-5 sm:flex-1">
+                {missing.length ? (
+                  <p
+                    role="status"
+                    aria-live="polite"
+                    className="text-sm font-medium text-red-700"
+                  >
+                    Hiányzik: {missing.join(", ")}
+                  </p>
+                ) : null}
+              </div>
+              <Button disabled={saving} onClick={() => void save()}>
+                {saving ? "Létrehozás…" : "Bérlés létrehozása"}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : null}

@@ -57,14 +57,21 @@ export const sv = {
   // A pill KÖZÖS FORMÁJA; a színe mellé vagy a nem aktív (pillTabIdle), vagy az aktív (pillTabActive) sor kerül, SOHA
   // mindkettő: két ütköző hover-háttér egy elemen a lefordított CSS sorrendjén múlna, nem az osztályok sorrendjén, és
   // tailwind-merge nincs a repóban (barracuda a #2005-ön: a fehér felirat szürke háttéren eltűnhetett volna).
+  // narrower on the phone (the service lists' 390 px header: five tabs on as few lines as they fit)
   pillTab:
-    "whitespace-nowrap rounded-lg px-3.5 py-2 text-[13px] transition-colors",
+    "whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] transition-colors sm:px-3.5",
   pillTabIdle:
     "font-medium text-pilot-grey-600 hover:bg-pilot-grey-100 hover:text-pilot-grey-900",
   // Balázs 2026-11-02 20:51 UTC (msg 1566917720782667828): a halványzöld aktív fül alig látszott; teli zöld, fehér félkövér
   // felirattal, a repó többi erős zöld vezérlője szerint (bg-pilot-aqua-600 text-white). A pill egyetlen hívója a Hiányzó számlák.
   pillTabActive:
     "bg-pilot-aqua-600 font-bold text-white hover:bg-pilot-aqua-600 hover:text-white",
+  // THE ONE TAB SHAPE OF THE LISTS (Picasso's screen inventory 2026-11-25, R9; acrobot 62497): every list's tabs are this pill,
+  // because Balázs said twice that the other two did not show the active tab (2026-10-01: the underline; 2026-11-02: the pale
+  // green). A tab's number stands after its label, in the label's colour: white on the active tab, grey on the others.
+  pillTabCount: "ml-1.5 tabular-nums text-xs",
+  pillTabCountIdle: "font-normal text-pilot-grey-400",
+  pillTabCountActive: "font-semibold text-white",
 
   /** `.search` -- a kereso mezo kerete. */
   search:

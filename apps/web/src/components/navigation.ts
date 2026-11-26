@@ -850,3 +850,20 @@ export function isNavigationItemActive(
  */
 export const allNavigationPages: AppNavigationItem[] =
   navigationItems(mainNavigation);
+
+/**
+ * THE GREY LINE ABOVE A PAGE TITLE FOLLOWS THE MENU (Picasso's screen inventory 2026-11-25, R7; acrobot 62575). The lists said
+ * "Szerviz / Munkatér" over three of their pages and "Pénzügy / Árajánlatok" over the quotes long after the quotes moved under
+ * Értékesítés (Balázs, 2026-10-26): a hand-written line does not follow the menu when the menu moves. This one is the page's own
+ * menu entry, "<menu group> / <menu item>", read from the menu itself (the same matching that marks the entry as current).
+ * `null`: the path is under no menu entry.
+ */
+export function menuEyebrow(pathname: string): string | null {
+  for (const group of mainNavigation)
+    for (const item of group.children)
+      if (isNavigationItemActive(pathname, item, allNavigationPages))
+        return group.label === item.label
+          ? group.label
+          : `${group.label} / ${item.label}`;
+  return null;
+}

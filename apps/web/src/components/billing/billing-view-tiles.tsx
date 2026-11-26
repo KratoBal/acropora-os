@@ -1,6 +1,9 @@
 "use client";
 
-import { useRef, type KeyboardEvent } from "react";
+import { ServiceListTabs } from "@acropora/ui";
+
+/** The id of the list the view tabs show (`aria-controls`); the list page puts it on its `tabpanel`. */
+export const BILLING_VIEW_PANEL_ID = "billing-view-panel";
 
 /**
  * A SZÁMLÁZÁS HÁROM NÉZETE (Balázs újraterv-promptja, acrobot 25869): a nézet
@@ -29,63 +32,17 @@ export function BillingViewTiles({
   active: BillingView;
   onSelect: (view: BillingView) => void;
 }) {
-  const refs = useRef<(HTMLButtonElement | null)[]>([]);
-
-  const onKeyDown = (
-    event: KeyboardEvent<HTMLButtonElement>,
-    index: number,
-  ) => {
-    const last = BILLING_VIEWS.length - 1;
-    const target =
-      event.key === "ArrowRight"
-        ? index === last
-          ? 0
-          : index + 1
-        : event.key === "ArrowLeft"
-          ? index === 0
-            ? last
-            : index - 1
-          : event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? last
-              : null;
-    if (target === null) return;
-    event.preventDefault();
-    refs.current[target]?.focus();
-  };
-
+  // the lists' one tab shape (Picasso R9) and the shared tab keyboard (barracuda on #2991): the arrows and Home/End this
+  // component wrote for itself now live in the shared tab row, for every list; the tab ids stay `billing-view-<view>`
   return (
-    <div
-      role="tablist"
-      aria-label="Számlázási nézet"
-      className="flex gap-0 overflow-x-auto border-b border-pilot-grey-200"
-    >
-      {BILLING_VIEWS.map((view, index) => {
-        const selected = view === active;
-        return (
-          <button
-            key={view}
-            ref={(element) => {
-              refs.current[index] = element;
-            }}
-            type="button"
-            role="tab"
-            id={`billing-view-${view}`}
-            aria-selected={selected}
-            tabIndex={selected ? 0 : -1}
-            onClick={() => onSelect(view)}
-            onKeyDown={(event) => onKeyDown(event, index)}
-            className={`-mb-px cursor-pointer whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-pilot-aqua-700 ${
-              selected
-                ? "border-pilot-aqua-600 text-pilot-aqua-700"
-                : "border-transparent text-pilot-grey-500 hover:text-pilot-grey-800"
-            }`}
-          >
-            {TITLES[view]}
-          </button>
-        );
-      })}
-    </div>
+    <ServiceListTabs
+      variant="pill"
+      label="Számlázási nézet"
+      idPrefix="billing-view"
+      panelId={BILLING_VIEW_PANEL_ID}
+      active={active}
+      onSelect={(key) => onSelect(key as BillingView)}
+      tabs={BILLING_VIEWS.map((view) => ({ key: view, label: TITLES[view] }))}
+    />
   );
 }

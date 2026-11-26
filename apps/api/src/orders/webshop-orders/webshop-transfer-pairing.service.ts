@@ -3,6 +3,7 @@ import { Injectable } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 
 import { balanceDueOf } from "./webshop-order-detail.rules.js";
+import { cancelledOrderOf } from "./webshop-order-invoice.rules.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import {
   BANK_TRANSFER_PROVIDER_ID,
@@ -87,12 +88,14 @@ export class WebshopTransferPairingService {
     let unread = 0;
     const orderOf = async (orderId: string) => {
       try {
-        return (await this.orders.source(orderId)).order;
+        return await this.orders.source(orderId);
       } catch {
         unread += 1;
         return null;
       }
     };
+    // a cancelled order pairs nothing (barracuda N3a): its pairing turns into a review, and nothing is written
+    const cancelledOrders = new Set<string>();
 
     const targets: PairingProforma[] = proformas.map((row) => ({
       id: row.id,
@@ -102,8 +105,11 @@ export class WebshopTransferPairingService {
       currency: row.currency,
     }));
     for (const row of balances) {
-      const order = await orderOf(row.orderId);
-      if (!order) continue;
+      const source = await orderOf(row.orderId);
+      if (!source) continue;
+      const { order } = source;
+      if (cancelledOrderOf(order, source.status?.status))
+        cancelledOrders.add(row.orderId);
       const due = balanceDueOf(
         order.total,
         { advance: true, amount: row.advanceAmount.toFixed(4) },
@@ -178,9 +184,12 @@ export class WebshopTransferPairingService {
 
       if (decision.kind === "paired" && !balance) {
         // the manual button's check: a receipt is only for an order still paid by transfer
-        const order = await orderOf(target.orderId);
-        if (!order) continue;
-        if (
+        const source = await orderOf(target.orderId);
+        if (!source) continue;
+        const { order } = source;
+        if (cancelledOrderOf(order, source.status?.status))
+          cancelledOrders.add(target.orderId);
+        else if (
           orderPaymentProviderId(
             primaryPaymentCollection(order.payment_collections),
           ) !== BANK_TRANSFER_PROVIDER_ID
@@ -189,6 +198,15 @@ export class WebshopTransferPairingService {
           outcome.reason =
             "A rendelés már nem előre utalásos: kézzel kell eldönteni, mire jött az utalás.";
         }
+      }
+
+      if (
+        outcome.decision === "paired" &&
+        cancelledOrders.has(target.orderId)
+      ) {
+        outcome.decision = "review";
+        outcome.reason =
+          "A rendelés le van mondva (vagy sikertelenül lezárt): az utalás visszatérítés, kézzel kell rendezni.";
       }
 
       if (mode === "write" && outcome.decision === "paired") {

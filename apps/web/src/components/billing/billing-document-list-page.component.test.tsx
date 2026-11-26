@@ -689,7 +689,15 @@ describe("BillingDocumentListPage", () => {
       "Nyugták",
     ]);
     expect(screen.queryByText(/Saját és külső rendszerben/)).toBeNull();
-    for (const tab of tabs) expect(tab.className).toContain("border-b-2");
+    // the lists' one tab shape (Picasso R9): the solid green pill, the active tab filled
+    for (const tab of tabs) expect(tab).toHaveClass("rounded-lg");
+    const active = tabs.filter(
+      (tab) => tab.getAttribute("aria-selected") === "true",
+    );
+    expect(active).toHaveLength(1);
+    expect(active[0]).toHaveClass("bg-pilot-aqua-600", "text-white");
+    for (const tab of tabs.filter((tab) => tab !== active[0]))
+      expect(tab).not.toHaveClass("bg-pilot-aqua-600");
   });
 
   it("one pager, at the bottom: the top only carries the count", async () => {

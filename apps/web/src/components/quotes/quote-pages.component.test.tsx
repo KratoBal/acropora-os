@@ -79,6 +79,7 @@ const api = vi.hoisted(() => ({
   costing: vi.fn(),
   addBlock: vi.fn(),
   reorderBlocks: vi.fn(),
+  reorderItems: vi.fn(),
   updateBlock: vi.fn(),
   deleteBlock: vi.fn(),
   addItem: vi.fn(),
@@ -434,12 +435,14 @@ describe("Új árajánlat (567:190)", () => {
     api.create.mockResolvedValue({ id: "q9" });
     render(<QuoteNewPage />);
     const submit = screen.getByRole("button", { name: "Ajánlat létrehozása" });
-    expect((submit as HTMLButtonElement).disabled).toBe(true);
-    // a cím önmagában kevés: partner nélkül sem küldhető
+    expect(submit).toHaveAttribute("aria-disabled", "true");
+    // a cím önmagában kevés: partner nélkül sem küldhető (a halvány gomb kattintható, de nem küld)
     fireEvent.change(screen.getByLabelText("Ajánlat címe"), {
       target: { value: "Irodai akvárium" },
     });
-    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    expect(submit).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(submit);
+    expect(api.create).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByLabelText("Partner keresése"), {
       target: { value: "Blue" },
@@ -1685,6 +1688,76 @@ describe("Ajánlat szerkesztő (569:171)", () => {
       "v2",
       { priceDisplay: "NET" },
     ]);
+  });
+
+  /*
+    A TÉTELEK SORRENDJE FEL-LE MOZGATHATÓ, ahogy a blokkoké (Luca, 2026-11-26, acrobot 62604). MI PIROSÍT: ha a tétel soráról hiányzik a feljebb vagy a lejjebb gomb; ha az első
+    tétel feljebb vagy az utolsó lejjebb elküldhető (az API nem is kapna értelmes sorrendet); ha a gomb nem a blokk MINDEN tételének azonosítóját küldi az új
+    sorrendben (a szerver más listát elutasít); ha egy másik blokk tétele kerül a listába.
+  */
+  it("a tétel feljebb és lejjebb mozgatható: a blokk összes tételének azonosítója megy el az új sorrendben, a szélén a gomb tiltott", async () => {
+    const item = (id: string, name: string, position: number) => ({
+      id,
+      position,
+      name,
+      description: null,
+      quantity: "1",
+      unit: "db",
+      unitNetPrice: "1000",
+      vatRatePercent: "27",
+      isOptional: false,
+      source: "STANDALONE" as const,
+      variantId: null,
+      variantLabel: null,
+    });
+    const base = version();
+    const withItems = quote([
+      {
+        ...base,
+        blocks: [
+          {
+            ...base.blocks[0]!,
+            items: [
+              item("i1", "Első tétel", 0),
+              item("i2", "Második tétel", 1),
+              item("i3", "Harmadik tétel", 2),
+            ],
+          },
+        ],
+      },
+    ]);
+    api.detail.mockResolvedValue(withItems);
+    api.reorderItems.mockResolvedValue(withItems);
+    render(<QuoteEditorPage quoteId="q1" />);
+    await screen.findByText("Második tétel");
+
+    const btn = (name: string) =>
+      screen.getByRole("button", { name }) as HTMLButtonElement;
+    // a szélén tiltott
+    expect(btn("Első tétel: feljebb").disabled).toBe(true);
+    expect(btn("Harmadik tétel: lejjebb").disabled).toBe(true);
+    expect(btn("Második tétel: feljebb").disabled).toBe(false);
+    expect(btn("Második tétel: lejjebb").disabled).toBe(false);
+
+    fireEvent.click(btn("Harmadik tétel: feljebb"));
+    await waitFor(() => expect(api.reorderItems).toHaveBeenCalledTimes(1));
+    // (token, ajánlat, verzió, blokk, azonosítók az új sorrendben)
+    expect(api.reorderItems.mock.calls[0]!.slice(1)).toEqual([
+      "q1",
+      "v2",
+      "b1",
+      ["i1", "i3", "i2"],
+    ]);
+    // a lejjebb gomb a másik irányba mozgat: a második tétel lejjebb = a harmadik elé kerül a sorban
+    // (a mentés közben a gombok tiltottak: megvárjuk, míg újra élnek)
+    await waitFor(() =>
+      expect(btn("Második tétel: lejjebb").disabled).toBe(false),
+    );
+    fireEvent.click(btn("Második tétel: lejjebb"));
+    await waitFor(() => expect(api.reorderItems).toHaveBeenCalledTimes(2));
+    expect(api.reorderItems.mock.calls[1]![4]).toEqual(["i1", "i3", "i2"]);
+    // a blokk-mozgatás hívása érintetlen
+    expect(api.reorderBlocks).not.toHaveBeenCalled();
   });
 
   it("új blokk: a szöveges blokk üres dokumentummal, a fejezet szöveg nélkül jön létre", async () => {

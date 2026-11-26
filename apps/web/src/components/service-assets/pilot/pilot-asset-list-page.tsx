@@ -12,6 +12,7 @@ import {
   PilotSelect,
   type PilotTableColumn,
   PAGE_GUTTER_X,
+  ServiceListTabs,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -55,6 +56,7 @@ import {
   PilotButton,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
+import { menuEyebrow } from "@/components/navigation";
 
 /**
  * A FIGMA MAKE TERV ÁTÜLTETÉSE -- ESZKÖZNYILVÁNTARTÁS LISTA (7. kör).
@@ -443,31 +445,21 @@ export function PilotAssetListPage() {
       <div
         className={`border-b border-pilot-grey-100 bg-white ${PAGE_GUTTER_X}`}
       >
-        <div className="flex gap-0 overflow-x-auto">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => selectStatus(t.key)}
-              className={`flex cursor-pointer items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-all ${
-                activeStatus === t.key
-                  ? "border-pilot-aqua-600 text-pilot-aqua-700"
-                  : "border-transparent text-pilot-grey-500 hover:text-pilot-grey-800"
-              }`}
-            >
-              {t.label}
-              <span
-                className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                  activeStatus === t.key
-                    ? "bg-pilot-aqua-100 text-pilot-aqua-700"
-                    : "bg-pilot-grey-100 text-pilot-grey-500"
-                }`}
-              >
-                {tabCounts[t.key] ?? "…"}
-              </span>
-            </button>
-          ))}
-        </div>
+        {/* the lists' one tab shape (Picasso R9) and the shared tab keyboard (arrows, Home, End; barracuda on #2991) */}
+        <ServiceListTabs
+          variant="pill"
+          label="Eszközök szűrése"
+          className="flex flex-wrap gap-1 py-3"
+          idPrefix="eszkoz-ful"
+          panelId="eszkoz-lista"
+          active={activeStatus}
+          onSelect={selectStatus}
+          tabs={TABS.map((t) => ({
+            key: t.key,
+            label: t.label,
+            count: tabCounts[t.key] ?? "…",
+          }))}
+        />
       </div>
 
       <div
@@ -557,79 +549,87 @@ export function PilotAssetListPage() {
         </p>
       ) : null}
 
-      {loading && !data ? (
-        <div
-          className={`space-y-3 ${PAGE_GUTTER_X} py-6`}
-          aria-label="Eszközök betöltése"
-        >
-          <Skeleton className="h-16" />
-          <Skeleton className="h-64" />
-        </div>
-      ) : null}
-
-      {data?.items.length ? (
-        <>
-          <PilotDataTable
-            columns={tableColumns}
-            sort={sort}
-            onSort={onSort}
-            rows={data.items}
-            rowKey={(asset) => asset.id}
-            rowTestId="asset-row"
-            minWidth={
-              tableColumns.length === ASSET_COLUMNS.length
-                ? ASSET_TABLE_MIN_WIDTH
-                : ASSET_TABLE_MIN_WIDTH_WITHOUT_HIERARCHY
-            }
-            onRowActivate={(asset) =>
-              router.push(`/szerviz/eszkozok/${asset.id}`)
-            }
-            rowLabel={(asset) => `${asset.name} megnyitása`}
-          />
+      {/* the panel the tabs show (aria-controls): the list's loading, empty and table states, one at a time */}
+      <div
+        id="eszkoz-lista"
+        role="tabpanel"
+        aria-labelledby={`eszkoz-ful-${activeStatus}`}
+        className="empty:hidden"
+      >
+        {loading && !data ? (
           <div
-            className={`flex items-center justify-between border-t border-pilot-grey-100 bg-white ${PAGE_GUTTER_X} py-3`}
+            className={`space-y-3 ${PAGE_GUTTER_X} py-6`}
+            aria-label="Eszközök betöltése"
           >
-            <div className="flex items-center gap-3">
-              <p className="text-xs text-pilot-grey-400">
-                {data.items.length} / {data.pagination.totalItems} eszköz
-              </p>
-              <PilotSelect
-                aria-label="Hány eszköz egy oldalon"
-                value={params.get("pageSize") ?? DEFAULT_PAGE_SIZE}
-                onChange={(nextValue) => filter("pageSize", nextValue)}
-                chevron
-              >
-                {PAGE_SIZES.map((size) => (
-                  <option key={size} value={String(size)}>
-                    {size} / oldal
-                  </option>
-                ))}
-              </PilotSelect>
-            </div>
-            {/*
+            <Skeleton className="h-16" />
+            <Skeleton className="h-64" />
+          </div>
+        ) : null}
+
+        {data?.items.length ? (
+          <>
+            <PilotDataTable
+              columns={tableColumns}
+              sort={sort}
+              onSort={onSort}
+              rows={data.items}
+              rowKey={(asset) => asset.id}
+              rowTestId="asset-row"
+              minWidth={
+                tableColumns.length === ASSET_COLUMNS.length
+                  ? ASSET_TABLE_MIN_WIDTH
+                  : ASSET_TABLE_MIN_WIDTH_WITHOUT_HIERARCHY
+              }
+              onRowActivate={(asset) =>
+                router.push(`/szerviz/eszkozok/${asset.id}`)
+              }
+              rowLabel={(asset) => `${asset.name} megnyitása`}
+            />
+            <div
+              className={`flex items-center justify-between border-t border-pilot-grey-100 bg-white ${PAGE_GUTTER_X} py-3`}
+            >
+              <div className="flex items-center gap-3">
+                <p className="text-xs text-pilot-grey-400">
+                  {data.items.length} / {data.pagination.totalItems} eszköz
+                </p>
+                <PilotSelect
+                  aria-label="Hány eszköz egy oldalon"
+                  value={params.get("pageSize") ?? DEFAULT_PAGE_SIZE}
+                  onChange={(nextValue) => filter("pageSize", nextValue)}
+                  chevron
+                >
+                  {PAGE_SIZES.map((size) => (
+                    <option key={size} value={String(size)}>
+                      {size} / oldal
+                    </option>
+                  ))}
+                </PilotSelect>
+              </div>
+              {/*
               SZÁMOZOTT GOMBOK, NYÍL NÉLKÜL, A SAJÁT TERVKÖR SZERINT
               (2026-09-25, acrobot döntése): a web Eszköz lista terve
               (`EszközScreen.tsx` 439-447. sor) így adja, sötét (aktív)
               gombbal -- ez a lista saját mintája, nem a "prevNext"
               alapértelmezés.
             */}
-            <Pagination
-              position="bottom"
-              variant="numberedGrey"
-              page={data.pagination.page}
-              totalPages={data.pagination.totalPages}
-              onPageChange={goToPage}
+              <Pagination
+                position="bottom"
+                variant="numberedGrey"
+                page={data.pagination.page}
+                totalPages={data.pagination.totalPages}
+                onPageChange={goToPage}
+              />
+            </div>
+          </>
+        ) : data ? (
+          <div className="p-5">
+            <EmptyState
+              title="Nincs találat"
+              description="Módosítsd a szűrőket, vagy rögzíts új partnereszközt."
             />
           </div>
-        </>
-      ) : data ? (
-        <div className="p-5">
-          <EmptyState
-            title="Nincs találat"
-            description="Módosítsd a szűrőket, vagy rögzíts új partnereszközt."
-          />
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   );
 
@@ -640,12 +640,13 @@ export function PilotAssetListPage() {
     >
       <PageHeader
         className={`${PAGE_GUTTER_X} pb-5 pt-6`}
-        eyebrow="Szerviz"
+        // the line above the title is the page's menu entry (Picasso R7)
+        eyebrow={menuEyebrow("/szerviz/eszkozok") ?? undefined}
         title="Eszköznyilvántartás"
         actions={
           canManage ? (
             <Link href="/szerviz/eszkozok/uj">
-              <PilotButton variant="primary">
+              <PilotButton variant="primary" size="regular">
                 <Icon name="plus" size={14} />
                 Új eszköz
               </PilotButton>

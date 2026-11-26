@@ -125,19 +125,25 @@ describe("a partner-választó az új árajánlatnál", () => {
     );
   });
 
-  it("says why the create button is grey, and drops the sentence when everything is there", async () => {
+  // Picasso R11 (acrobot 62575): the shared form row at the end, the missing fields beside the pale button
+  it("says why the create button is pale beside it, at the form's end, and drops the sentence when everything is there", async () => {
     render(<QuoteNewPage />);
-    expect(createButton()).toBeDisabled();
+    expect(createButton()).toHaveAttribute("aria-disabled", "true");
+    // the button follows the form (it stood in the page header)
+    expect(
+      screen
+        .getByText("Indítási összefoglaló")
+        .compareDocumentPosition(createButton()) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(
       screen.getByText(
-        /még hiányzik: a partner \(válaszd ki a találatok közül\) és az ajánlat címe\./,
+        "Hiányzik: Partner (válaszd ki a találatok közül), Ajánlat címe",
       ),
     ).toBeInTheDocument();
     type("Ajánlat címe", "Cápasuli lámpák beszerzése");
     expect(
-      screen.getByText(
-        /még hiányzik: a partner \(válaszd ki a találatok közül\)\./,
-      ),
+      screen.getByText("Hiányzik: Partner (válaszd ki a találatok közül)"),
     ).toBeInTheDocument();
     type("Partner keresése", "Fővárosi");
     fireEvent.click(
@@ -145,7 +151,8 @@ describe("a partner-választó az új árajánlatnál", () => {
         name: /Fővárosi Állat- és Növénykert/,
       }),
     );
-    expect(screen.queryByText(/még hiányzik/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Hiányzik:/)).not.toBeInTheDocument();
+    expect(createButton()).toHaveAttribute("aria-disabled", "false");
   });
 
   it("says there is no such partner only after a search has answered empty", async () => {

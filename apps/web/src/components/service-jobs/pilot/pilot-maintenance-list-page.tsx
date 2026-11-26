@@ -8,6 +8,7 @@ import {
   Pagination,
   type PilotTableColumn,
   PAGE_GUTTER_X,
+  ServiceListTabs,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -45,6 +46,7 @@ import {
   maintenanceTotal,
   type MaintenanceTab,
 } from "../service-job-list-view";
+import { menuEyebrow } from "@/components/navigation";
 
 /**
  * A KARBANTARTÁS-LISTA A HIBAJEGY-LISTA MINTÁJÁRA (picasso képernyő-leltár 3.9, acrobot 62090). Eddig a régi közös komponens futott itt:
@@ -293,7 +295,8 @@ export function PilotMaintenanceListPage() {
         pilot
       />
       <PageHeader
-        eyebrow="Szerviz / Munkatér"
+        // the line above the title is the page's menu entry (Picasso R7)
+        eyebrow={menuEyebrow("/szerviz/karbantartas") ?? undefined}
         title="Karbantartás"
         description="A karbantartási lapok a szervizmunka életútját és a hozzájuk kapcsolt munkalapokat egy helyen tartják."
         actions={
@@ -308,40 +311,26 @@ export function PilotMaintenanceListPage() {
         }
       />
 
-      <div
+      {/* the lists' one tab shape (Picasso R9) and the shared tab keyboard (arrows, Home, End; barracuda on #2991) */}
+      <ServiceListTabs
+        variant="pill"
+        label="Karbantartások szűrése"
         className="flex flex-wrap gap-0.5 sm:gap-1"
-        role="tablist"
-        aria-label="Karbantartások szűrése"
-      >
-        {MAINTENANCE_TABS.map((entry) => (
-          <button
-            key={entry.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === entry.id}
-            onClick={() =>
-              update({
-                tab: entry.id === "progress" ? null : entry.id,
-                page: null,
-              })
-            }
-            className={`cursor-pointer rounded-md px-2.5 py-2 text-sm transition-colors sm:px-4 ${
-              tab === entry.id
-                ? "bg-pilot-aqua-50 font-semibold text-pilot-aqua-700"
-                : "text-pilot-grey-600 hover:text-pilot-grey-900"
-            }`}
-          >
-            {entry.label}
-            {counts ? (
-              <span
-                className={`ml-1.5 tabular-nums ${tab === entry.id ? "" : "text-pilot-grey-400"}`}
-              >
-                {counts[entry.id]}
-              </span>
-            ) : null}
-          </button>
-        ))}
-      </div>
+        idPrefix="karbantartas-ful"
+        panelId="karbantartas-lista"
+        active={tab}
+        onSelect={(key) =>
+          update({
+            tab: key === "progress" ? null : (key as MaintenanceTab),
+            page: null,
+          })
+        }
+        tabs={MAINTENANCE_TABS.map((entry) => ({
+          key: entry.id,
+          label: entry.label,
+          count: counts ? counts[entry.id] : undefined,
+        }))}
+      />
 
       <div className="flex flex-wrap items-center gap-3">
         <input
@@ -377,61 +366,69 @@ export function PilotMaintenanceListPage() {
         />
       ) : null}
 
-      {loading && !data ? (
-        <div
-          className="flex flex-col gap-3"
-          aria-label="Karbantartási lapok betöltése..."
-        >
-          {[0, 1, 2].map((row) => (
-            <Skeleton key={row} className="h-20" />
-          ))}
-        </div>
-      ) : null}
-
-      {data && data.items.length === 0 && !pageGone ? (
-        <PilotCard className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-          <p className="text-sm font-semibold text-pilot-grey-700">
-            {appliedSearch ? "Nincs találat" : "Nincs karbantartási lap"}
-          </p>
-          <p className="max-w-xs text-xs text-pilot-grey-400">
-            {appliedSearch
-              ? "Erre a keresésre nincs karbantartási lap ezen a fülön."
-              : tab === "progress"
-                ? "Folyamatban lévő karbantartási lap jelenleg nincs. A lezártakat a fenti füleken nézheted meg."
-                : "Ezen a fülön most nincs karbantartási lap."}
-          </p>
-        </PilotCard>
-      ) : null}
-
-      {data && data.items.length > 0 ? (
-        <PilotCard className="overflow-hidden">
-          <PilotDataTable
-            columns={PILOT_MAINTENANCE_COLUMNS}
-            rows={data.items}
-            rowKey={(job) => job.id}
-            rowTestId="maintenance-job-row"
-            minWidth={MAINTENANCE_TABLE_MIN_WIDTH}
-            onRowActivate={(job) => router.push(maintenanceSheetHref(job))}
-            rowLabel={(job) => `${job.jobNumber} ${job.title} megnyitása`}
-            rowClassName={(job) => (job.hidden ? "opacity-50" : "")}
-          />
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-pilot-grey-100 px-4 py-3 text-xs text-pilot-grey-500">
-            {/* a találatszám a SZŰRT halmazé (a szerver adja), a sor-tartomány az oldalé */}
-            <span>
-              {pageRange(data, page)} {TAB_NOUN[tab]}
-            </span>
+      {/* the panel the tabs show (aria-controls): the list's loading, empty and table states, one at a time */}
+      <div
+        id="karbantartas-lista"
+        role="tabpanel"
+        aria-labelledby={`karbantartas-ful-${tab}`}
+        className="empty:hidden"
+      >
+        {loading && !data ? (
+          <div
+            className="flex flex-col gap-3"
+            aria-label="Karbantartási lapok betöltése..."
+          >
+            {[0, 1, 2].map((row) => (
+              <Skeleton key={row} className="h-20" />
+            ))}
           </div>
-          {data.pagination && data.pagination.totalPages > 1 ? (
-            <Pagination
-              variant="directionF"
-              position="bottom"
-              page={data.pagination.page}
-              totalPages={data.pagination.totalPages}
-              onPageChange={goToPage}
+        ) : null}
+
+        {data && data.items.length === 0 && !pageGone ? (
+          <PilotCard className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+            <p className="text-sm font-semibold text-pilot-grey-700">
+              {appliedSearch ? "Nincs találat" : "Nincs karbantartási lap"}
+            </p>
+            <p className="max-w-xs text-xs text-pilot-grey-400">
+              {appliedSearch
+                ? "Erre a keresésre nincs karbantartási lap ezen a fülön."
+                : tab === "progress"
+                  ? "Folyamatban lévő karbantartási lap jelenleg nincs. A lezártakat a fenti füleken nézheted meg."
+                  : "Ezen a fülön most nincs karbantartási lap."}
+            </p>
+          </PilotCard>
+        ) : null}
+
+        {data && data.items.length > 0 ? (
+          <PilotCard className="overflow-hidden">
+            <PilotDataTable
+              columns={PILOT_MAINTENANCE_COLUMNS}
+              rows={data.items}
+              rowKey={(job) => job.id}
+              rowTestId="maintenance-job-row"
+              minWidth={MAINTENANCE_TABLE_MIN_WIDTH}
+              onRowActivate={(job) => router.push(maintenanceSheetHref(job))}
+              rowLabel={(job) => `${job.jobNumber} ${job.title} megnyitása`}
+              rowClassName={(job) => (job.hidden ? "opacity-50" : "")}
             />
-          ) : null}
-        </PilotCard>
-      ) : null}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-pilot-grey-100 px-4 py-3 text-xs text-pilot-grey-500">
+              {/* a találatszám a SZŰRT halmazé (a szerver adja), a sor-tartomány az oldalé */}
+              <span>
+                {pageRange(data, page)} {TAB_NOUN[tab]}
+              </span>
+            </div>
+            {data.pagination && data.pagination.totalPages > 1 ? (
+              <Pagination
+                variant="directionF"
+                position="bottom"
+                page={data.pagination.page}
+                totalPages={data.pagination.totalPages}
+                onPageChange={goToPage}
+              />
+            ) : null}
+          </PilotCard>
+        ) : null}
+      </div>
     </PilotThemeRoot>
   );
 }

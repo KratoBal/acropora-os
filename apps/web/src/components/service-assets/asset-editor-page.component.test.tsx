@@ -5,7 +5,16 @@ import type {
   AssetOwnerListResponse,
   Session,
 } from "@acropora/types";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import http from "node:http";
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { listedSelect } from "@/test/listed-option";
 import { answered } from "@/test/answered";
 
@@ -79,6 +88,22 @@ vi.mock("@/lib/api/units-of-measure", () => ({
 vi.mock("@/lib/api/asset-categories", () => ({
   assetCategoriesApi: categories,
 }));
+/*
+  NO NETWORK IN THIS FILE (card e0ef2124; barracuda's sweep 2026-11-26): the functions list (`assetFunctionsApi.list`) went to
+  localhost:3000 on every render. An empty list here; the last test below fails if any request goes out.
+*/
+vi.mock("@/lib/api/asset-functions", () => ({
+  assetFunctionsApi: { list: vi.fn().mockResolvedValue({ items: [] }) },
+}));
+const outgoing = vi.spyOn(http, "request");
+afterAll(() => {
+  expect(
+    outgoing.mock.calls.map(([target]) => {
+      const to = target as unknown as { href?: string; path?: string } | string;
+      return typeof to === "string" ? to : (to.href ?? to.path ?? "?");
+    }),
+  ).toEqual([]);
+});
 
 const session: Session = {
   id: "session-1",

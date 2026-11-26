@@ -99,6 +99,7 @@ describe(
       } as unknown as SzamlazzCredentialProvider,
       { put: async () => undefined } as unknown as DocumentStore,
       new BillingDocumentStockRepository(),
+      { of: async () => null } as never,
       client,
       { BILLING_ISSUE_ENABLED: "true" },
     );

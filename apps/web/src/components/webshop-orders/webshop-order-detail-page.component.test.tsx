@@ -401,6 +401,17 @@ describe("WebshopOrderDetailPage", () => {
     ).toBe("tel:+36305550137");
   });
 
+  // the back-step is the shared small left arrow link to the order list (Picasso R12): a link, not a button, and the same target as before
+  it("steps back to the order list with the shared arrow link", async () => {
+    api.detail.mockResolvedValue(detail);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    await screen.findByRole("heading", { name: "#38" });
+    const back = screen.getByRole("link", { name: "Rendelések" });
+    expect(back.getAttribute("href")).toBe("/webshop/rendelesek");
+    expect(back.className).toContain("text-pilot-grey-400");
+    expect(screen.queryByText(/Vissza a rendelésekhez/)).toBeNull();
+  });
+
   it("shows every credit between the totals, so the rows add up to the total (card e62a1a64)", async () => {
     api.detail.mockResolvedValue({
       ...detail,
