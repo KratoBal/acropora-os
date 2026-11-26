@@ -25,6 +25,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import { contentCalendarApi } from "@/lib/api/content-calendar";
 import { urlChoice, useUrlQuery } from "@/lib/navigation/use-url-query";
 import {
@@ -334,17 +335,14 @@ export function ContentCalendarPage() {
 
   return (
     <div className="space-y-6">
+      <PilotBackLink href="/tartalom" flush>
+        Tartalom
+      </PilotBackLink>
       <PageHeader
         title="Tartalomnaptár"
         description="Események, ünnepek, akciók, érkezések és tervezett tartalmak egy helyen."
         actions={
           <div className="flex flex-wrap items-center gap-4">
-            <Link
-              href="/tartalom"
-              className="text-sm font-medium text-pilot-aqua-700 underline-offset-4 hover:underline"
-            >
-              ← Tartalom
-            </Link>
             <Link
               href="/tartalom/naptar/sablon"
               className="text-sm font-medium text-pilot-aqua-700 underline-offset-4 hover:underline"

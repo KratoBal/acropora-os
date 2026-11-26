@@ -199,6 +199,13 @@ describe("the number text fields", () => {
 });
 
 describe("TeachingSourcePage", () => {
+  it("steps back to the content list with the shared arrow link", async () => {
+    render(<TeachingSourcePage contentId="c1" />);
+    await screen.findByLabelText("Érték (szám vagy tartomány)");
+    const back = await screen.findByRole("link", { name: "Tartalom" });
+    expect(back.getAttribute("href")).toBe("/tartalom");
+  });
+
   it("saves the form as the structure, with the version it was made on", async () => {
     api.saveTeachingSource.mockResolvedValue(data(stored({ version: 3 })));
     render(<TeachingSourcePage contentId="c1" />);

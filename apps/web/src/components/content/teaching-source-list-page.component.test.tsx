@@ -58,6 +58,13 @@ const item = (
 // test's own failure even when the page handles it (see the error case)
 
 describe("TeachingSourceListPage", () => {
+  it("steps back to the content list with the shared arrow link", async () => {
+    api.teachingSources.mockResolvedValue([item({})]);
+    render(<TeachingSourceListPage />);
+    const back = await screen.findByRole("link", { name: "Tartalom" });
+    expect(back.getAttribute("href")).toBe("/tartalom");
+  });
+
   it("shows each source with its version, audience and output states, and links to it", async () => {
     api.teachingSources.mockResolvedValue([
       item({

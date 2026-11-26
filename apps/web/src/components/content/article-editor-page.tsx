@@ -28,10 +28,10 @@ import {
   RichTextEditor,
   type RichTextEditorHandle,
 } from "@acropora/ui/rich-text-editor";
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import {
   WebContentPreview,
   type PreviewProductCard,
@@ -440,9 +440,7 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/tartalom" className="text-xs text-pilot-grey-600">
-          ← Tartalom
-        </Link>
+        <PilotBackLink href="/tartalom">Tartalom</PilotBackLink>
         <PageHeader
           title={item.title}
           description={`Cikk · ${CONTENT_STATE_LABELS[item.state]}${
