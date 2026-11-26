@@ -15,7 +15,10 @@ import { callerAddress, IpRateLimiter } from "../../common/ip-rate-limit.js";
 
 /** what the limiter reads of the request */
 type CallerRequest = Parameters<typeof callerAddress>[0];
-import { PublicQuoteAcceptDto } from "./quote-public.dto.js";
+import {
+  PublicQuoteAcceptDto,
+  PublicQuoteTotalBodyDto,
+} from "./quote-public.dto.js";
 import { QuotePublicService } from "./quote-public.service.js";
 
 /**
@@ -51,6 +54,20 @@ export class QuotePublicController {
       length: bytes.length,
       disposition: `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`,
     });
+  }
+
+  /** A végösszeg egy kiválasztásra (kiváltott tétel): a szerver számol, a lap csak mutatja. */
+  @Public()
+  @Post(":token/total")
+  @HttpCode(200)
+  @Header("Cache-Control", "private, no-store")
+  total(
+    @Param("token") token: string,
+    @Body() input: PublicQuoteTotalBodyDto,
+    @Req() request: CallerRequest,
+  ) {
+    QuotePublicController.reads.check(callerAddress(request));
+    return this.service.total(token, input?.selectedOptionalItemIds);
   }
 
   @Public()

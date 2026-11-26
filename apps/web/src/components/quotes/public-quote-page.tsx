@@ -6,7 +6,7 @@ import {
   PilotInput,
   type PilotTableColumn,
 } from "@acropora/ui";
-import type { PublicQuoteDto } from "@acropora/types";
+import type { PublicQuoteDto, PublicQuoteTotalDto } from "@acropora/types";
 import {
   useEffect,
   useMemo,
@@ -38,12 +38,13 @@ async function failure(response: Response, fallback: string): Promise<string> {
 type QuoteItem = PublicQuoteDto["items"][number];
 
 /**
- * THE TAG UNDER AN OPTIONAL ITEM'S NAME (card 2540d9d4, Luca 2026-11-26), as on the PDF. Every optional item is an addition until
- * an option can name the item it replaces; murena's replaced item (`replacesItemId`) adds "a X. tétel helyett" here, in this one
- * place. The item is not read yet.
+ * THE TAG UNDER AN OPTIONAL ITEM'S NAME (card 2540d9d4, Luca 2026-11-26), as on the PDF: an addition, or the item it stands in for
+ * (the server names it: `replacesName`).
  */
-export function optionalItemLabel(_item: QuoteItem): string {
-  return "Opcionális · kiegészítés";
+export function optionalItemLabel(item: QuoteItem): string {
+  return item.replacesName
+    ? `Opcionális · „${item.replacesName}” helyett`
+    : "Opcionális · kiegészítés";
 }
 
 /** The tag as a line of its own under the name. */
@@ -51,6 +52,15 @@ function OptionalTag({ item }: { item: QuoteItem }) {
   return (
     <span className="block text-xs font-semibold text-pilot-aqua-700">
       {optionalItemLabel(item)}
+    </span>
+  );
+}
+
+/** A kiváltott tétel jelölése (a név marad látható, az összeg áthúzva, a végösszegbe nem számít). */
+function ReplacedTag() {
+  return (
+    <span className="block text-xs font-semibold text-pilot-grey-600">
+      Kiváltva
     </span>
   );
 }
@@ -68,18 +78,27 @@ export function quoteItemColumns({
   canChoose,
   chosen,
   setChosen,
+  isReplaced = () => false,
 }: {
   currency: string;
   canChoose: boolean;
   chosen: string[];
   setChosen: Dispatch<SetStateAction<string[]>>;
+  /** a kiváltott tétel (a kiválasztás szerint): áthúzva, "Kiváltva" jelöléssel, a végösszegbe nem számít */
+  isReplaced?: (item: QuoteItem) => boolean;
 }): PilotTableColumn<QuoteItem>[] {
   return [
     {
       id: "name",
       header: "Tétel",
       cell: (item) => (
-        <span className="text-pilot-grey-900">
+        <span
+          className={
+            isReplaced(item)
+              ? "text-pilot-grey-500 line-through"
+              : "text-pilot-grey-900"
+          }
+        >
           {item.isOptional && item.id && canChoose ? (
             <label className="flex items-start gap-2">
               <input
@@ -105,6 +124,7 @@ export function quoteItemColumns({
             <>
               {item.name}
               {item.isOptional ? <OptionalTag item={item} /> : null}
+              {isReplaced(item) ? <ReplacedTag /> : null}
             </>
           )}
         </span>
@@ -125,7 +145,15 @@ export function quoteItemColumns({
       align: "right",
       nowrap: true,
       cell: (item) =>
-        formatQuoteMoney(item.unitNetPrice, currency, { fractionDigits: 2 }),
+        isReplaced(item) ? (
+          <span className="line-through">
+            {formatQuoteMoney(item.unitNetPrice, currency, {
+              fractionDigits: 2,
+            })}
+          </span>
+        ) : (
+          formatQuoteMoney(item.unitNetPrice, currency, { fractionDigits: 2 })
+        ),
     },
     {
       id: "netTotal",
@@ -133,7 +161,14 @@ export function quoteItemColumns({
       width: "130px",
       align: "right",
       nowrap: true,
-      cell: (item) => formatQuoteMoney(item.netTotal, currency),
+      cell: (item) =>
+        isReplaced(item) ? (
+          <span className="line-through">
+            {formatQuoteMoney(item.netTotal, currency)}
+          </span>
+        ) : (
+          formatQuoteMoney(item.netTotal, currency)
+        ),
     },
   ];
 }
@@ -149,6 +184,8 @@ export function PublicQuotePage({ token }: { token: string }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [chosen, setChosen] = useState<string[]>([]);
+  // a kiválasztás végösszege: a SZERVER számolja (kiváltott tétel), a lap csak mutatja
+  const [selection, setSelection] = useState<PublicQuoteTotalDto | null>(null);
   const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [acceptError, setAcceptError] = useState<string | null>(null);
@@ -170,6 +207,26 @@ export function PublicQuotePage({ token }: { token: string }) {
       live = false;
     };
   }, [token]);
+
+  useEffect(() => {
+    if (!chosen.length || quote?.state !== "OPEN") {
+      setSelection(null);
+      return;
+    }
+    let live = true;
+    publicQuotesApi
+      .total(token, { selectedOptionalItemIds: chosen })
+      .then(async (response) => {
+        if (!live) return;
+        setSelection(
+          response.ok ? ((await response.json()) as PublicQuoteTotalDto) : null,
+        );
+      })
+      .catch(() => live && setSelection(null));
+    return () => {
+      live = false;
+    };
+  }, [chosen, quote?.state, token]);
 
   const accept = async () => {
     setBusy(true);
@@ -195,11 +252,18 @@ export function PublicQuotePage({ token }: { token: string }) {
 
   const offered = quote?.items.filter((item) => !item.isOptional) ?? [];
   const optional = quote?.items.filter((item) => item.isOptional) ?? [];
+  // az áthúzott (kiváltott) tétel: elfogadás után a szerver jelölése, előtte a bejelöléskor kért kiválasztás szerint
+  const isReplaced = (item: QuoteItem) =>
+    quote?.state === "ACCEPTED"
+      ? item.replaced
+      : (selection?.replacedItems.includes(quote?.items.indexOf(item) ?? -1) ??
+        false);
   const columns = quoteItemColumns({
     currency: quote?.currency ?? "HUF",
     canChoose: quote?.state === "OPEN",
     chosen,
     setChosen,
+    isReplaced,
   });
   const rowKey = (item: QuoteItem) =>
     item.id ?? `${quote?.items.indexOf(item)}-${item.name}`;
@@ -284,14 +348,28 @@ export function PublicQuotePage({ token }: { token: string }) {
             ) : null}
             <div className="space-y-1 border-t border-pilot-grey-100 px-4 py-3 text-right text-sm">
               <p className="font-semibold text-pilot-grey-900">
-                Nettó összesen:{" "}
-                {formatQuoteMoney(quote.netTotal, quote.currency)} + ÁFA
+                {quote.state === "ACCEPTED" && quote.acceptedNetTotal
+                  ? "Elfogadott nettó összeg: "
+                  : "Nettó összesen: "}
+                {formatQuoteMoney(
+                  quote.state === "ACCEPTED" && quote.acceptedNetTotal
+                    ? quote.acceptedNetTotal
+                    : quote.netTotal,
+                  quote.currency,
+                )}{" "}
+                + ÁFA
               </p>
-              {optional.length ? (
+              {selection && chosen.length ? (
+                <p className="font-semibold text-pilot-aqua-700">
+                  A kiválasztott tételekkel:{" "}
+                  {formatQuoteMoney(selection.netTotal, quote.currency)} + ÁFA
+                </p>
+              ) : null}
+              {optional.length && quote.state !== "ACCEPTED" ? (
                 <p className="text-pilot-grey-600">
                   Az opcionális tételekkel együtt:{" "}
                   {formatQuoteMoney(
-                    Number(quote.netTotal) + Number(quote.optionalNetTotal),
+                    quote.netTotalWithOptionals,
                     quote.currency,
                   )}{" "}
                   + ÁFA
