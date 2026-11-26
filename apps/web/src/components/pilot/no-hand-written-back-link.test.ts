@@ -39,12 +39,6 @@ const MIND = fajlok(ROOT).map((ut) => ({
  */
 const MEG_ATALLITANDO = [
   "components/billing/billing-document-editor.tsx",
-  "components/content/article-editor-page.tsx",
-  "components/content/content-calendar-page.tsx",
-  "components/content/content-calendar-template-page.tsx",
-  "components/content/content-results-summary-page.tsx",
-  "components/content/teaching-source-list-page.tsx",
-  "components/content/teaching-source-page.tsx",
   "components/knowledge-base/claim-store-page.tsx",
   "components/messages/messages-page.tsx",
 ];
@@ -132,6 +126,12 @@ describe("a visszalépés egy alakja", () => {
       "components/pos/pilot/pilot-pos-sale-detail-page.tsx",
       "components/pos/pilot/pilot-pos-summary-page.tsx",
       "components/pos/pos-sale-detail-page.tsx",
+      "components/content/article-editor-page.tsx",
+      "components/content/content-calendar-page.tsx",
+      "components/content/content-calendar-template-page.tsx",
+      "components/content/content-results-summary-page.tsx",
+      "components/content/teaching-source-list-page.tsx",
+      "components/content/teaching-source-page.tsx",
       "components/contracts/pilot/pilot-contract-detail-page.tsx",
       "components/partner-orders/partner-order-detail-page.tsx",
       "components/quotes/quote-pdf-page.tsx",

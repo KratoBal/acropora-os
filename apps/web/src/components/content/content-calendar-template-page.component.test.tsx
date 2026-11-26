@@ -114,6 +114,13 @@ describe("templateTimingLabel", () => {
 });
 
 describe("ContentCalendarTemplatePage", () => {
+  it("steps back to the calendar with the shared arrow link", async () => {
+    api.template.mockResolvedValue(SEEDED);
+    render(<ContentCalendarTemplatePage />);
+    const back = await screen.findByRole("link", { name: "Naptár" });
+    expect(back.getAttribute("href")).toBe("/tartalom/naptar");
+  });
+
   it("lists every event kind, its rows with channel and timing, a switched-off row as such, and a kind without rows says so", async () => {
     api.template.mockResolvedValue(SEEDED);
     render(<ContentCalendarTemplatePage />);

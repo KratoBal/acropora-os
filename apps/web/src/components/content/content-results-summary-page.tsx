@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import { contentResultsApi } from "@/lib/api/content-results";
 import { CHANNEL_LABELS } from "./content-history";
 
@@ -79,17 +80,12 @@ export function ContentResultsSummaryPage() {
 
   return (
     <div className="space-y-6">
+      <PilotBackLink href="/tartalom" flush>
+        Tartalom
+      </PilotBackLink>
       <PageHeader
         title="Tartalom eredményei"
         description="Kézzel felvitt heti számokból: elérés, kattintás, előjegyzés. A csatornák statisztikája nincs bekötve."
-        actions={
-          <Link
-            href="/tartalom"
-            className="text-sm font-medium text-pilot-aqua-700 underline-offset-4 hover:underline"
-          >
-            ← Tartalom
-          </Link>
-        }
       />
       <div className="flex flex-wrap items-end gap-3">
         <label className="space-y-1 text-sm text-dusk-700">
