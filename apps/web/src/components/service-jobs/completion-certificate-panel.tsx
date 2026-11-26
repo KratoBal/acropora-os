@@ -156,7 +156,7 @@ export function CompletionCertificatePanel({
           <div key={certificate.id} className="rounded-lg border p-3 text-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-medium">{certificate.number}</span>
-              <label className="cursor-pointer text-brand-700 underline">
+              <label className="cursor-pointer text-pilot-aqua-700 underline">
                 Aláírt PDF feltöltése
                 <input
                   type="file"
@@ -175,7 +175,7 @@ export function CompletionCertificatePanel({
                 <li key={documentSummary.id}>
                   <button
                     type="button"
-                    className="text-brand-700 underline"
+                    className="text-pilot-aqua-700 underline"
                     onClick={() =>
                       void download(
                         certificate.id,

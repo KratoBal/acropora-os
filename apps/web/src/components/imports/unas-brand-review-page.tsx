@@ -589,7 +589,7 @@ function ReviewTable({
                         </>
                       ) : (
                         <Link
-                          className="rounded-lg border border-dusk-200 px-3 py-2 text-xs font-semibold text-brand-700"
+                          className="rounded-lg border border-dusk-200 px-3 py-2 text-xs font-semibold text-pilot-aqua-700"
                           href={`/admin/brands/new?name=${encodeURIComponent(candidate.brandName)}&sourceName=${encodeURIComponent(candidate.brandName)}&source=UNAS&returnTo=${encodeURIComponent(`/admin/imports/unas/${batchId}/review`)}`}
                         >
                           Márka létrehozása
@@ -811,7 +811,7 @@ function ApplyReport({ result }: { result: UnasApplySummary }) {
           JSON letöltése
         </Button>
         <Link
-          className="inline-flex items-center rounded-lg px-4 text-sm font-semibold text-brand-700"
+          className="inline-flex items-center rounded-lg px-4 text-sm font-semibold text-pilot-aqua-700"
           href="/products"
         >
           Terméklista

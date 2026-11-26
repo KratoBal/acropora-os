@@ -21,6 +21,20 @@ const NO_PURPLE_LINKS = [
   "content/content-results-summary-page.tsx",
   "content/content-create-page.tsx",
   "tasks/task-board-page.tsx",
+  // the second sweep (Picasso 3.19 to 3.23): the product, work sheet, certificate and landing page links
+  "products/dose-effect-list-page.tsx",
+  "products/manufacturer-claim-queue-page.tsx",
+  "products/product-dose-effects-card.tsx",
+  "products/product-manufacturer-claims-card.tsx",
+  "seo-landing/seo-landing-list-page.tsx",
+  "worksheets/worksheet-material-requests.tsx",
+  "worksheets/worksheet-entries.tsx",
+  "service-jobs/completion-certificate-panel.tsx",
+  "brands/catalog-actions-panel.tsx",
+  "imports/unas-brand-review-page.tsx",
+  "settings/settings-overview-page.tsx",
+  "settings/mail-image-picker.tsx",
+  "service/service-detail-chrome.tsx",
 ] as const;
 
 describe("link and primary colours", () => {

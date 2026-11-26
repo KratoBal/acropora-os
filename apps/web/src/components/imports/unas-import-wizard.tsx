@@ -262,7 +262,7 @@ export function UnasImportWizard() {
               }}
               className={`flex min-h-72 flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center transition ${
                 dragging
-                  ? "border-brand-500 bg-brand-50"
+                  ? "border-pilot-aqua-600 bg-pilot-aqua-50"
                   : "border-dusk-300 bg-dusk-50"
               }`}
               aria-label="UNAS XLSX feltöltési terület"
