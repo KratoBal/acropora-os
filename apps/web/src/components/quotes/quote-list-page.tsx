@@ -151,7 +151,7 @@ export function QuoteListPage() {
     {
       id: "quote",
       header: "Ajánlat",
-      width: "28%",
+      width: "24%",
       sortable: true,
       cell: (row) => (
         <div className="min-w-0">
@@ -163,18 +163,34 @@ export function QuoteListPage() {
     {
       id: "partner",
       header: "Partner",
-      width: "18%",
+      width: "16%",
       cell: (row) => row.customerName ?? "—",
     },
     {
       id: "total",
-      header: "Összeg",
-      width: "14%",
+      header: "Nettó összeg",
+      width: "12%",
       cell: (row) => (
         <span className="font-semibold">
           {row.latestVersion
             ? formatQuoteMoney(
                 row.latestVersion.netTotal,
+                row.latestVersion.currency,
+              )
+            : "—"}
+        </span>
+      ),
+    },
+    {
+      // a bruttó a szerver számítása, a PDF végösszegével azonos (soronkénti ÁFA, egyszer kerekítve): a lista nem számol maga (Luca, 2026-11-26)
+      id: "grossTotal",
+      header: "Bruttó összeg",
+      width: "12%",
+      cell: (row) => (
+        <span className="font-semibold">
+          {row.latestVersion?.grossTotal !== undefined
+            ? formatQuoteMoney(
+                row.latestVersion.grossTotal,
                 row.latestVersion.currency,
               )
             : "—"}

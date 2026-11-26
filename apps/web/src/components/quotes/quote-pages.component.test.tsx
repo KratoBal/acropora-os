@@ -174,6 +174,7 @@ const LIST: QuoteListResponse = {
         priceDisplay: "NET",
         publishedAt: null,
         netTotal: "4860000.0000",
+        grossTotal: "6172200",
       },
     },
   ],
@@ -324,6 +325,53 @@ describe("Lejárt ajánlat és szűrők (P8)", () => {
 });
 
 describe("Árajánlatok lista (567:2)", () => {
+  /*
+    A LISTA A NETTÓ MELLETT A BRUTTÓ ÖSSZEGET IS MUTATJA (Luca, 2026-11-26, acrobot 62637). MI PIROSÍT: ha a bruttó oszlop hiányzik; ha az értéket a
+    web számolja a nettóból (a szerver számítása a PDF-é: soronkénti ÁFA, egyszer kerekítve, a web nem találhat ki képletet); ha a régi válasz (bruttó
+    nélkül) hibát vagy nullát mutat kötőjel helyett; ha az oszlopfejlécek elcsúsznak.
+  */
+  it("a nettó és a bruttó összeg két oszlop, a bruttó a szerver értéke, régi válasznál kötőjel", async () => {
+    // a nettó x 1,27 = 6 172 200: de a web a SZERVER értékét mutatja, ezért egy szándékosan eltérő érték jelenik meg
+    api.list.mockResolvedValue({
+      ...LIST,
+      items: [
+        {
+          ...LIST.items[0]!,
+          latestVersion: {
+            ...LIST.items[0]!.latestVersion!,
+            grossTotal: "5555555",
+          },
+        },
+      ],
+    });
+    const { unmount } = render(<QuoteListPage />);
+    const row = (await screen.findByText("AJ-2026-0042")).closest("tr")!;
+    const headers = screen
+      .getAllByRole("columnheader")
+      .map((header) => header.textContent);
+    expect(headers).toContain("Nettó összeg");
+    expect(headers).toContain("Bruttó összeg");
+    const text = (row.textContent ?? "").replace(/[\s\u00a0]+/g, " ");
+    expect(text).toContain("4 860 000 Ft");
+    expect(text).toContain("5 555 555 Ft");
+    expect(text).not.toContain("6 172 200 Ft");
+    unmount();
+
+    // régi válasz: nincs bruttó mező
+    const { grossTotal: _omitted, ...old } = LIST.items[0]!.latestVersion!;
+    api.list.mockResolvedValue({
+      ...LIST,
+      items: [{ ...LIST.items[0]!, latestVersion: old }],
+    });
+    render(<QuoteListPage />);
+    const oldRow = (await screen.findByText("AJ-2026-0042")).closest("tr")!;
+    const cells = Array.from(oldRow.querySelectorAll("td")).map((cell) =>
+      (cell.textContent ?? "").replace(/[\s\u00a0]+/g, " ").trim(),
+    );
+    expect(cells).toContain("4 860 000 Ft");
+    expect(cells).toContain("—");
+  });
+
   it("a sorban a partner, a nettó összeg, az állapot és a készítő áll", async () => {
     render(<QuoteListPage />);
     const row = (await screen.findByText("AJ-2026-0042")).closest("tr")!;
