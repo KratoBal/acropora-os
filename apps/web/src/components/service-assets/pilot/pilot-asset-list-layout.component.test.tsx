@@ -210,3 +210,23 @@ describe("az eszközkód és a matricakód olvasható", () => {
     expect(label.parentElement!.className).not.toContain("text-[11px]");
   });
 });
+
+// Picasso R9 (acrobot 62497): the lists' one tab shape, the solid green pill; and the asset tabs are real tabs now
+describe("the asset list's tabs", () => {
+  it("are a tab list, one selected, filled green; the others plain", async () => {
+    api.list.mockResolvedValue(listOf([row()]));
+    render(<PilotAssetListPage />);
+    await screen.findAllByText("Kompresszor");
+    const list = screen.getByRole("tablist", { name: "Eszközök szűrése" });
+    const tabs = within(list).getAllByRole("tab");
+    const selected = tabs.filter(
+      (tab) => tab.getAttribute("aria-selected") === "true",
+    );
+    expect(selected).toHaveLength(1);
+    expect(selected[0]).toHaveClass("bg-pilot-aqua-600", "text-white");
+    for (const tab of tabs.filter((tab) => tab !== selected[0])) {
+      expect(tab).not.toHaveClass("bg-pilot-aqua-600");
+      expect(tab).not.toHaveClass("border-b-2");
+    }
+  });
+});

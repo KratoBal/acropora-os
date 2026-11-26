@@ -32,6 +32,8 @@ export function PurchasingTabs({ active }: { active: string }) {
   return (
     <PilotLinkTabs
       label="Beszerzés oldalai"
+      // the lists' one tab shape (Picasso R9, acrobot 62497)
+      variant="solid"
       tabs={tabs}
       renderLink={({ href, className, children, ...rest }) => (
         <Link href={href} className={className} {...rest}>
