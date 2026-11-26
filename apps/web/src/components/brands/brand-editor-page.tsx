@@ -365,7 +365,21 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
             </div>
           </PilotCard>
         ) : null}
-        <div className="flex justify-end">
+        {/*
+          A MENTÉS HATÓKÖRE EGY MONDATBAN (picasso leltár 3.23, 2026-11-26): a gomb a lap közepén áll, alatta még az Aliasok, a Használat
+          és az Audit; nem derült ki, hogy azokra is vonatkozik-e. Nem: az alias a saját gombjával azonnal felkerül, az archiválás külön
+          művelet.
+        */}
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {brand ? (
+            <p
+              className="mr-auto text-sm text-pilot-grey-500"
+              data-testid="brand-save-scope"
+            >
+              A Változások mentése a fenti adatokat menti. Az aliasok a saját
+              gombjukkal azonnal felkerülnek, az archiválás külön művelet.
+            </p>
+          ) : null}
           <PilotButton type="submit" disabled={busy}>
             {busy ? "Mentés…" : "Változások mentése"}
           </PilotButton>
@@ -375,7 +389,8 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
         <>
           <PilotCard className="p-6">
             <h2 className="font-semibold">Aliasok</h2>
-            <div className="mt-4 flex gap-2">
+            {/* a gomb nem törhet két sorra (leltár 3.23): a választó keskeny, a gomb nem zsugorodik; telefonon egymás alatt */}
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
               <PilotInput
                 aria-label="Új alias"
                 value={alias}
@@ -384,18 +399,21 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
               />
               <PilotSelect
                 aria-label="Alias forrása"
+                className="sm:w-40 sm:shrink-0"
                 value={aliasSource}
                 onChange={setAliasSource}
               >
                 <option value="MANUAL">{aliasSourceLabel("MANUAL")}</option>
                 <option value="UNAS">{aliasSourceLabel("UNAS")}</option>
               </PilotSelect>
-              <PilotButton
-                disabled={busy || !alias.trim()}
-                onClick={() => void addAlias()}
-              >
-                Alias hozzáadása
-              </PilotButton>
+              <div className="shrink-0 whitespace-nowrap">
+                <PilotButton
+                  disabled={busy || !alias.trim()}
+                  onClick={() => void addAlias()}
+                >
+                  Alias hozzáadása
+                </PilotButton>
+              </div>
             </div>
             <div className="mt-4 space-y-2">
               {brand.aliases.map((item) => (

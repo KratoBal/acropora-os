@@ -103,6 +103,17 @@ describe("PilotMeasurementHistoryPage", () => {
     expect(screen.queryByText("ReefClub akvárium")).toBeNull();
   });
 
+  // picasso leltár 3.23 (R12): a visszalépés a többi akvárium-oldal "‹" nyila, nem morzsa; a lap neve a cím
+  it("steps back to the aquarium with the shared back link, and the title names the page", async () => {
+    render(<PilotMeasurementHistoryPage aquariumId="aq-1" />);
+    const back = await screen.findByRole("link", { name: /Korall medence/ });
+    expect(back.getAttribute("href")).toBe("/akvariumok/aq-1");
+    expect(
+      screen.getByRole("heading", { name: "Mérési előzmények" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Akváriumok" })).toBeNull();
+  });
+
   it("an occasion's row downloads its measurement report PDF", async () => {
     render(<PilotMeasurementHistoryPage aquariumId="aq-1" />);
     fireEvent.click(await screen.findByText("PDF letöltése"));

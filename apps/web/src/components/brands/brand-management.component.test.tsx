@@ -173,6 +173,25 @@ describe("Brand management UI", () => {
     endpoint is a 404); the uploaded address not landing in the URL field, so
     the save would not store it; a failed upload not said.
   */
+  /*
+    PICASSO LELTÁR 3.23: a Változások mentése a lap közepén áll, alatta Aliasok, Használat, Audit. What turns these red: the sentence on
+    the save's scope missing on an existing brand (or shown on a new one, which has no aliases); the alias button free to wrap.
+  */
+  it("says what the save covers on an existing brand, and the alias button does not wrap", async () => {
+    render(<BrandEditorPage brandId="b1" />);
+    await screen.findByText("Használat és források");
+    expect(screen.getByTestId("brand-save-scope").textContent).toContain(
+      "az archiválás külön művelet",
+    );
+    expect(
+      screen.getByRole("button", { name: "Alias hozzáadása" }).parentElement!
+        .className,
+    ).toContain("whitespace-nowrap");
+    cleanup();
+    render(<BrandEditorPage />);
+    expect(screen.queryByTestId("brand-save-scope")).toBeNull();
+  });
+
   it("offers the logo upload only where the home page editor is served, and the address goes into the save", async () => {
     render(<BrandEditorPage brandId="b1" />);
     await screen.findByText("Használat és források");
