@@ -157,4 +157,45 @@ describe("SeoLandingEditorPage", () => {
     expect(screen.getByText("Nincs hozzáférésed")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mentés" })).toBeNull();
   });
+
+  // Picasso 3.23: an empty category list was a black-framed box with no text; the publish switch looked like a plain checkbox
+  it("LP-ED-EMPTY-LIST: an empty list says so, and a search with no match says that", async () => {
+    api.options.mockResolvedValue({ categories: [], brands: options.brands });
+    render(<SeoLandingEditorPage />);
+    expect(
+      await screen.findByText("Nincs elérhető kategória."),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Márkák keresése"), {
+      target: { value: "zzz" },
+    });
+    expect(
+      screen.getByText("Nincs a keresésnek megfelelő elem."),
+    ).toBeInTheDocument();
+    // the filled brand list shows no such line
+    fireEvent.change(screen.getByLabelText("Márkák keresése"), {
+      target: { value: "" },
+    });
+    expect(screen.getByText("Kessil")).toBeInTheDocument();
+    expect(screen.queryByText("Nincs elérhető márka.")).toBeNull();
+  });
+
+  it("LP-ED-PUBLISH-NOTE: the publish checkbox says what it does", async () => {
+    render(<SeoLandingEditorPage />);
+    await screen.findByLabelText("Cím");
+    expect(
+      screen.getByText(
+        "Bekapcsolva a válogatás a mentéskor megjelenik a webshopban.",
+      ),
+    ).toBeInTheDocument();
+    const box = screen.getByRole("checkbox", {
+      name: /Közzétéve a webshopban/,
+    });
+    expect(box.closest("label")!.textContent).toContain("mentéskor");
+  });
+
+  it("LP-ED-LIST-BORDER: the choice lists have the soft border, not the default black", async () => {
+    render(<SeoLandingEditorPage />);
+    const item = await screen.findByText("Kessil");
+    expect(item.closest("ul")!.className).toContain("border-pilot-grey-200");
+  });
 });
