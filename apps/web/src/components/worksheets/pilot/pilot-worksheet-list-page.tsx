@@ -12,7 +12,7 @@ import {
   PilotSelect,
   type PilotTableColumn,
   PAGE_GUTTER_X,
-  sv,
+  ServiceListTabs,
 } from "@acropora/ui";
 import {
   commonServiceStatusLabel,
@@ -761,31 +761,21 @@ export function PilotWorksheetListPage() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-1" role="tablist">
-        {FIGMA_TAB_ORDER.map((tab) => {
-          const active = activeStatus === tab.key;
-          return (
-            <button
-              key={tab.key || "all"}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => selectStatus(tab.key)}
-              // the lists' one tab shape (Picasso R9, acrobot 62497): the solid green pill
-              className={`cursor-pointer ${sv.pillTab} ${
-                active ? sv.pillTabActive : sv.pillTabIdle
-              }`}
-            >
-              {tab.label}
-              <span
-                className={`${sv.pillTabCount} ${active ? sv.pillTabCountActive : sv.pillTabCountIdle}`}
-              >
-                {tabCount(tab.key) ?? "–"}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {/* the lists' one tab shape (Picasso R9) and the shared tab keyboard (arrows, Home, End; barracuda on #2991); "Összes" is the empty status */}
+      <ServiceListTabs
+        variant="pill"
+        label="Munkalapok szűrése"
+        className="flex flex-wrap gap-1"
+        idPrefix="munkalap-ful"
+        panelId="munkalap-lista"
+        active={activeStatus || "all"}
+        onSelect={(key) => selectStatus(key === "all" ? "" : key)}
+        tabs={FIGMA_TAB_ORDER.map((tab) => ({
+          key: tab.key || "all",
+          label: tab.label,
+          count: tabCount(tab.key) ?? "–",
+        }))}
+      />
 
       <div className="flex flex-wrap items-center gap-3">
         <input
@@ -995,63 +985,73 @@ export function PilotWorksheetListPage() {
         </ul>
       ) : null}
 
-      {loading && !data ? (
-        <div className="space-y-3">
-          <Skeleton className="h-16" />
-          <Skeleton className="h-64" />
-        </div>
-      ) : data?.items.length ? (
-        <PilotCard className="overflow-hidden">
-          <PilotDataTable
-            columns={columns}
-            sort={sort}
-            onSort={onSort}
-            rows={data.items}
-            rowKey={(worksheet) => worksheet.id}
-            rowTestId="worksheet-row"
-            minWidth={WORKSHEET_TABLE_MIN_WIDTH}
-            onRowActivate={(worksheet) =>
-              router.push(`/szerviz/munkalapok/${worksheet.id}`)
-            }
-            rowLabel={(worksheet) =>
-              `${worksheetListLines(worksheet).main} megnyitása`
-            }
-            rowClassName={(worksheet) => (worksheet.hidden ? "opacity-50" : "")}
-          />
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-pilot-grey-100 px-4 py-3 text-xs text-pilot-grey-500">
-            <span>
-              {data.items.length} / {data.pagination.totalItems} munkalap
-            </span>
-            <Pagination
-              position="bottom"
-              page={data.pagination.page}
-              totalPages={data.pagination.totalPages}
-              onPageChange={goToPage}
-            />
+      {/* the panel the tabs show (aria-controls): the list's loading, empty and table states, one at a time */}
+      <div
+        id="munkalap-lista"
+        role="tabpanel"
+        aria-labelledby={`munkalap-ful-${activeStatus || "all"}`}
+        className="empty:hidden"
+      >
+        {loading && !data ? (
+          <div className="space-y-3">
+            <Skeleton className="h-16" />
+            <Skeleton className="h-64" />
           </div>
-        </PilotCard>
-      ) : data ? (
-        <EmptyState
-          title={hasFilters ? "Nincs találat" : "Nincs munkalap"}
-          description={
-            hasFilters
-              ? "Módosítsd a keresést, vagy töröld a szűrőket."
-              : mineOnly
-                ? "Rád jelenleg nincs munkalap kiosztva."
-                : "Vegyél fel új munkalapot."
-          }
-          action={
-            !hasFilters && canManage ? (
-              <Link href="/szerviz/munkalapok/uj">
-                <PilotButton variant="primary" size="regular">
-                  <Icon name="plus" size={14} />
-                  Új munkalap
-                </PilotButton>
-              </Link>
-            ) : undefined
-          }
-        />
-      ) : null}
+        ) : data?.items.length ? (
+          <PilotCard className="overflow-hidden">
+            <PilotDataTable
+              columns={columns}
+              sort={sort}
+              onSort={onSort}
+              rows={data.items}
+              rowKey={(worksheet) => worksheet.id}
+              rowTestId="worksheet-row"
+              minWidth={WORKSHEET_TABLE_MIN_WIDTH}
+              onRowActivate={(worksheet) =>
+                router.push(`/szerviz/munkalapok/${worksheet.id}`)
+              }
+              rowLabel={(worksheet) =>
+                `${worksheetListLines(worksheet).main} megnyitása`
+              }
+              rowClassName={(worksheet) =>
+                worksheet.hidden ? "opacity-50" : ""
+              }
+            />
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-pilot-grey-100 px-4 py-3 text-xs text-pilot-grey-500">
+              <span>
+                {data.items.length} / {data.pagination.totalItems} munkalap
+              </span>
+              <Pagination
+                position="bottom"
+                page={data.pagination.page}
+                totalPages={data.pagination.totalPages}
+                onPageChange={goToPage}
+              />
+            </div>
+          </PilotCard>
+        ) : data ? (
+          <EmptyState
+            title={hasFilters ? "Nincs találat" : "Nincs munkalap"}
+            description={
+              hasFilters
+                ? "Módosítsd a keresést, vagy töröld a szűrőket."
+                : mineOnly
+                  ? "Rád jelenleg nincs munkalap kiosztva."
+                  : "Vegyél fel új munkalapot."
+            }
+            action={
+              !hasFilters && canManage ? (
+                <Link href="/szerviz/munkalapok/uj">
+                  <PilotButton variant="primary" size="regular">
+                    <Icon name="plus" size={14} />
+                    Új munkalap
+                  </PilotButton>
+                </Link>
+              ) : undefined
+            }
+          />
+        ) : null}
+      </div>
     </PilotThemeRoot>
   );
 }

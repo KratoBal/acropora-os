@@ -55,6 +55,7 @@ import {
   BILLING_VIEWS,
   BillingViewTiles,
   type BillingView,
+  BILLING_VIEW_PANEL_ID,
 } from "./billing-view-tiles";
 
 const PAGE_SIZE = String(BILLING_DOCUMENT_LIST_PAGE_SIZE.default);
@@ -130,6 +131,7 @@ export function BillingDocumentListPage() {
       />
       <BillingViewTiles active={view} onSelect={selectView} />
       <div
+        id={BILLING_VIEW_PANEL_ID}
         role="tabpanel"
         aria-labelledby={`billing-view-${view}`}
         className="space-y-6"
