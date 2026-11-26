@@ -534,6 +534,27 @@ describe("StockSyncOutboxPage paging", () => {
     );
   });
 
+  it("with a status chosen the pager counts that status's rows, not all of them", async () => {
+    api.summary.mockResolvedValue(
+      summary({ counts: counts({ PENDING: 100, FAILED: 30 }) }),
+    );
+    render(<StockSyncOutboxPage />);
+    await screen.findByText("ACR-001");
+    // all statuses: 130 rows, 6 pages
+    expect(
+      screen.getByRole("navigation", { name: /Lapozás/ }).textContent,
+    ).toMatch(/1\. \/ 6 oldal/);
+    fireEvent.change(screen.getByLabelText("Állapot szűrő"), {
+      target: { value: "FAILED" },
+    });
+    // 30 failed rows: 2 pages
+    await waitFor(() =>
+      expect(
+        screen.getByRole("navigation", { name: /Lapozás/ }).textContent,
+      ).toMatch(/1\. \/ 2 oldal/),
+    );
+  });
+
   it("a total that fits one page has no pager", async () => {
     api.summary.mockResolvedValue(
       summary({ counts: counts({ PENDING: 3, FAILED: 2 }) }),
