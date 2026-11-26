@@ -8,8 +8,8 @@ import {
   pilotBadgeVariantForTone,
 } from "@acropora/ui";
 import {
+  partnerWorksheetVersionLabel,
   worksheetListLines,
-  worksheetStatusLabel,
   worksheetStatusTone,
   type ServiceJobLinkedWorksheet,
 } from "@acropora/types";
@@ -99,7 +99,7 @@ export function LinkedWorksheetsCard({
                       worksheetStatusTone(item.status),
                     )}
                   >
-                    {worksheetStatusLabel[item.status]}
+                    {partnerWorksheetVersionLabel[item.status]}
                   </PilotBadge>
                 </li>
               );

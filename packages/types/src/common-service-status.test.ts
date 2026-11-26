@@ -9,6 +9,8 @@ import {
   commonWorksheetStatus,
   partnerClosedReasonLabel,
   partnerStatusFromCommon,
+  partnerWorksheetState,
+  partnerWorksheetVersionLabel,
   type CommonJobWorksheetFacts,
   type CommonServiceState,
 } from "./common-service-status.js";
@@ -300,5 +302,47 @@ describe("partner-rövidítés a közösből", () => {
     }
     assert.deepEqual(kapott, vart);
     assert.equal(partnerClosedReasonLabel.CANCELLED, "Nem teljesült");
+  });
+});
+
+/*
+  A PARTNER MUNKALAPJA (kártya 7f23785c; acrobot 62704). MI PIROSÍT: ha a lap a
+  belső Folyamatban-t vagy egy ötödik, Elutasítva jelvényt kap a partner négy
+  szava helyett; ha az elutasítás jelzése elvész vagy más lapra is ráül; ha a
+  verzió-felirat nem a partner szavait mondja.
+*/
+describe("partner munkalapja a közösből", () => {
+  it("minden verzió-állapot és tételszám a négy partner-szó egyikére, az elutasított jelölve", () => {
+    const kapott: Record<string, string> = {};
+    for (const status of [
+      "DRAFT",
+      "REJECTED",
+      "AWAITING_SIGNATURE",
+      "SIGNED",
+    ] as WorksheetVersionStatus[])
+      for (const lines of [0, 3]) {
+        const state = partnerWorksheetState(status, lines);
+        kapott[`${status}/${lines}`] =
+          `${state.status}${state.rejected ? " elutasítva" : ""}`;
+      }
+    assert.deepEqual(kapott, {
+      "DRAFT/0": "NEW",
+      "DRAFT/3": "IN_PROGRESS",
+      "REJECTED/0": "IN_PROGRESS elutasítva",
+      "REJECTED/3": "IN_PROGRESS elutasítva",
+      "AWAITING_SIGNATURE/0": "COMPLETED",
+      "AWAITING_SIGNATURE/3": "COMPLETED",
+      "SIGNED/0": "CLOSED",
+      "SIGNED/3": "CLOSED",
+    });
+  });
+
+  it("a verzió-felirat a partner szavaival", () => {
+    assert.deepEqual(partnerWorksheetVersionLabel, {
+      DRAFT: "Új és feldolgozás alatt",
+      AWAITING_SIGNATURE: "Elkészült",
+      SIGNED: "Lezárva",
+      REJECTED: "Elutasítva",
+    });
   });
 });

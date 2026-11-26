@@ -72,7 +72,15 @@ export function parseQuoteRichText(
       if (marks.length)
         result.marks = marks as NonNullable<QuoteRichText["marks"]>;
     }
-  } else if (n.text !== undefined || n.marks !== undefined) return null;
+  } else if (n.text !== undefined) return null;
+  else if (n.marks !== undefined) {
+    /*
+      A SORTÖRÉS NEM VISEL FORMÁZÁST, DE A BEILLESZTÉS RÁTEHETI (Luca 2026-11-26, AJ-2026-0021): a ProseMirror a beillesztett `<b>` jelölését a
+      benne lévő `<br>`-re is ráteszi, és az egész blokk elutasítva nem volt menthető. Egy sortörésen a jelölés értelmetlen, ezért CSENDBEN
+      eldobjuk (a szöveg jelölése megmarad); más csomóponton a jelölés továbbra is érvénytelen.
+    */
+    if (n.type !== "hardBreak" || !Array.isArray(n.marks)) return null;
+  }
   if (n.content !== undefined) {
     if (!Array.isArray(n.content)) return null;
     const children = n.content.map((c) => parseQuoteRichText(c, depth + 1));
@@ -132,7 +140,8 @@ export function quoteRichTextFromEditor(value: unknown, depth = 0): unknown {
   if (!n || depth > QUOTE_RICH_TEXT_MAX_DEPTH) return value;
   const out: Record<string, unknown> = { type: n.type };
   if (n.text !== undefined) out.text = n.text;
-  if (Array.isArray(n.marks) && n.marks.length)
+  // jelölés csak a szövegen áll (a beillesztett sortörés is kaphat egyet, az a sémában nem érvényes)
+  if (n.type === "text" && Array.isArray(n.marks) && n.marks.length)
     out.marks = n.marks.map((m) => {
       const r = record(m);
       return r ? { type: r.type } : m;

@@ -792,16 +792,31 @@ describe("a partner munkalap-adatlapja", () => {
      * tetelei szama szerint "Új" vagy "Folyamatban". A felirat tovabbra is a
      * kozos szotarbol jon, csak a megjelenitett allapot tablajabol.
      */
+    /*
+     * 2026-11-26 A PARTNER NEGY SZAVA A KOZOSBOL (kartya 7f23785c, acrobot
+     * 62704): a jelveny a partnerWorksheetState-bol jon, a tetelszammal, a
+     * listan es az adatlapon ugyanazzal a komponenssel; a belso megjelenitett
+     * allapot (Folyamatban, Elutasitva jelveny) a portalon sehol.
+     */
     assert.match(
       olvas(MUNKALAP_RESZLET),
-      /worksheetDisplayStatusLabel\[\s*worksheetDisplayStatus\(current\.status, current\.lines\.length\)/,
+      /<PartnerWorksheetStatus\s+status=\{current\.status\}\s+lineCount=\{current\.lines\.length\}/,
     );
     assert.match(
       olvas(MUNKALAP_LISTA),
-      /worksheetDisplayStatusLabel\[\s*worksheetDisplayStatus\(\s*worksheet\.status,\s*worksheet\.lineCount/,
+      /<PartnerWorksheetStatus\s+status=\{worksheet\.status\}\s+lineCount=\{worksheet\.lineCount \?\? 0\}/,
     );
-    /* ES A NYERS ERTEK SEHOL: egy bennmaradt alak a masik helyen allna. */
-    assert.doesNotMatch(olvas(MUNKALAP_LISTA), /\{worksheet\.status\}/);
+    for (const fajl of [MUNKALAP_RESZLET, MUNKALAP_LISTA])
+      assert.doesNotMatch(olvas(fajl), /worksheetDisplayStatus/);
+    /*
+     * ES A NYERS ERTEK SEHOL SZOVEGKENT: egy bennmaradt alak a masik helyen
+     * allna. Csak a kirajzolt szoveget nezi (a `status={worksheet.status}`
+     * prop a jelveny bemenete, nem kiirt ertek).
+     */
+    assert.doesNotMatch(
+      olvas(MUNKALAP_LISTA),
+      /(^|[^=])\{worksheet\.status\}/m,
+    );
   });
 
   /**
