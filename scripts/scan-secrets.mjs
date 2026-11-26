@@ -137,18 +137,93 @@ const SZAVAKRA_BOMLIK = (value) => {
   return parts.length >= 2 && parts.every((p) => /^[A-Za-z]+$/.test(p));
 };
 
+/*
+  THE SHAPES FOLLOW THE CI'S TRIVY, NOT LOOSER (card 9ff5f090; OS #2856, 2026-11-25): a test fixture carrying
+  `sk_live_` and sixteen characters went through this hook, and the API image's trivy secret scan stopped the PR as
+  CRITICAL. This list wanted twenty; trivy's `stripe-secret-token` takes ten to thirty-two, in any case. A local guard
+  looser than the authoritative one only moves the refusal to CI, where it costs a run. The shapes below are trivy's
+  built-in rules (pkg/fanal/secret/builtin-rules.go, read 2026-11-26) for the providers we use, plus the ones trivy does
+  not carry and we hold keys of: OpenAI, Anthropic, Coolify, and Brevo (LOW in trivy, a real key to us).
+
+  Not here, and why: a Stripe PUBLISHABLE key (`pk_`) is public by design; an Expo access token has no fixed prefix, so
+  it is caught only by group B (a secret-named key with a high-entropy value).
+
+  EVERY RULE CARRIES ITS SAMPLE (`minta`), built by joining pieces at run time so no key-shaped literal sits in this file
+  for trivy or a reader to trip on. `kalibral()` runs before every scan: a rule that no longer catches its own sample
+  stops the run, so an edit cannot quietly break a pattern (the calibration the hook and the three CI calls all run).
+*/
+const darab = (...parts) => parts.join("");
 const A_RULES = [
   {
     nev: "PEM privat kulcs",
     re: /-----BEGIN (?:RSA |OPENSSH |EC |DSA |PGP )?PRIVATE KEY-----[\s\S]{0,40}?([A-Za-z0-9+/=]{40,})/,
+    minta: darab("-----BEGIN ", "PRIVATE KEY-----\n", "MIIEv".repeat(10)),
   },
-  { nev: "GitHub token", re: /\bghp_[A-Za-z0-9]{36}\b/ },
-  { nev: "GitHub fine-grained token", re: /\bgithub_pat_[A-Za-z0-9_]{50,}\b/ },
-  { nev: "AWS hozzaferesi kulcs", re: /\bAKIA[0-9A-Z]{16}\b/ },
-  { nev: "Google API kulcs", re: /\bAIza[0-9A-Za-z_-]{35}\b/ },
-  { nev: "Slack token", re: /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/ },
-  { nev: "Stripe titkos kulcs", re: /\bsk_(?:live|test)_[A-Za-z0-9]{20,}\b/ },
+  {
+    nev: "GitHub token",
+    re: /\b(?:gh[pou]_[A-Za-z0-9]{36}|ghs_[A-Za-z0-9._-]{36,}|ghr_[A-Za-z0-9]{76})\b/,
+    minta: darab("gh", "o_", "Ab12".repeat(9)),
+  },
+  {
+    nev: "GitHub fine-grained token",
+    re: /\bgithub_pat_[A-Za-z0-9_]{50,}\b/,
+    minta: darab("github", "_pat_", "Ab12".repeat(13)),
+  },
+  {
+    nev: "AWS hozzaferesi kulcs",
+    re: /\b(?:A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}\b/,
+    minta: darab("AS", "IA", "ABCD2345EFGH6789"),
+  },
+  {
+    nev: "Google API kulcs",
+    re: /\bAIza[0-9A-Za-z_-]{35}\b/,
+    minta: darab("AI", "za", "Ab12Cd34Ef56Gh78Ij90Kl12Mn34Op56Qr7"),
+  },
+  {
+    nev: "Slack token",
+    re: /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/,
+    minta: darab("xo", "xb-", "1234567890"),
+  },
+  {
+    nev: "Stripe titkos vagy korlatozott kulcs",
+    re: /\b[rs]k_(?:live|test)_[A-Za-z0-9]{10,}\b/i,
+    // the #2856 shape: sixteen characters, which the old twenty-minimum let through
+    minta: darab("sk", "_live_", "Ab12Cd34Ef56Gh78"),
+  },
+  {
+    nev: "Brevo API vagy SMTP kulcs",
+    re: /\bx(?:keysib|smtpsib)-[a-f0-9]{64}-[A-Za-z0-9]{16}\b/,
+    minta: darab("xkey", "sib-", "0a1b2c3d".repeat(8), "-", "Ab12Cd34Ef56Gh78"),
+  },
+  {
+    nev: "OpenAI API kulcs",
+    re: /\bsk-(?:(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}|[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}\b)/,
+    minta: darab("sk", "-proj-", "Ab12Cd34Ef56Gh78Ij90Kl"),
+  },
+  {
+    nev: "Anthropic API kulcs",
+    re: /\bsk-ant-(?:api|admin)\d{2}-[A-Za-z0-9_-]{20,}/,
+    minta: darab("sk", "-ant-", "api03-", "Ab12Cd34Ef56Gh78Ij90Kl"),
+  },
+  {
+    nev: "Coolify API token",
+    // Laravel Sanctum's shape, which Coolify issues: the token's id, a bar, forty characters
+    re: /\b\d+\|[A-Za-z0-9]{40}\b/,
+    minta: darab("12", "|", "Ab12Cd34Ef".repeat(4)),
+  },
 ];
+
+const PEM = A_RULES[0];
+
+/** Every rule must catch its own sample: a rule that does not is broken, and the run stops before it guards nothing. */
+const kalibral = () => {
+  const vak = A_RULES.filter(({ re, minta }) => !re.test(minta)).map(({ nev }) => nev);
+  if (vak.length > 0) {
+    console.error(`A titok-kereses mintai elromlottak, nem fognak meg a sajat peldajukat: ${vak.join(", ")}`);
+    process.exit(2);
+  }
+};
+kalibral();
 
 const URL_JELSZO = /:\/\/[A-Za-z0-9._%-]+:([^@\s/]{12,})@/;
 const B_KULCS =
@@ -160,6 +235,17 @@ for (const file of files) {
   if (file.endsWith("scan-secrets.mjs")) continue; // a sajat mintai
   const content = read(file);
   if (content === null || content.includes("\0")) continue;
+
+  /*
+    A PRIVATE KEY SPANS LINES: its header and its body are never on one line, so a per-line test of the PEM rule never
+    matched a real key, and the old loop's whole-file test of it stopped every OTHER rule on every line of that file
+    (found 2026-11-26 while calibrating card 9ff5f090: a file with a key block reported nothing, not even the key). The
+    PEM rule now reads the whole file once, and is reported at the header's line.
+  */
+  if (PEM.re.test(content)) {
+    const sor = content.split("\n").findIndex((l) => l.includes("PRIVATE KEY-----"));
+    talalatok.push(`${file}:${sor + 1}  ${PEM.nev}`);
+  }
 
   content.split("\n").forEach((line, i) => {
     const hol = `${file}:${i + 1}`;
@@ -175,12 +261,11 @@ for (const file of files) {
       return;
     }
 
+    // a key spans lines, so the PEM rule reads the whole file (above); the rest are one-line shapes, each checked on its own
     for (const { nev, re } of A_RULES) {
-      if (
-        re.test(line) ||
-        (re.source.includes("PRIVATE KEY") && re.test(content))
-      ) {
-        if (re.test(line)) talalatok.push(`${hol}  ${nev}`);
+      if (re === PEM.re) continue;
+      if (re.test(line)) {
+        talalatok.push(`${hol}  ${nev}`);
         break;
       }
     }
