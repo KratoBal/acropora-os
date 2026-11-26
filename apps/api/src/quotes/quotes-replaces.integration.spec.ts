@@ -70,8 +70,8 @@ describe(
       (
         (dto.versions as Json[]).find((x) => x.id === id)!.blocks as Json[]
       ).flatMap((b) => b.items as Json[]);
-    const byName = (dto: Json, name: string) =>
-      items(dto).find((i) => i.name === name)!;
+    const byName = (dto: Json, name: string, id = versionId) =>
+      items(dto, id).find((i) => i.name === name)!;
     const line = (name: string, over: Json = {}) => ({
       source: "STANDALONE",
       name,
@@ -81,10 +81,15 @@ describe(
       vatRatePercent: "27",
       ...over,
     });
-    const add = async (blockPath: string, name: string, over: Json = {}) => {
+    const add = async (
+      blockPath: string,
+      name: string,
+      over: Json = {},
+      inVersion = versionId,
+    ) => {
       const res = await request(blockPath + "/items", "POST", line(name, over));
       assert.equal(res.status, 201, `${name}: ${JSON.stringify(res.body)}`);
-      return byName(res.body, name).id as string;
+      return byName(res.body, name, inVersion).id as string;
     };
     const patch = (itemId: string, body: Json) =>
       request(v(`/items/${itemId}`), "PATCH", body);
@@ -218,11 +223,13 @@ describe(
           .blocks as Json[]
       ).find((x) => x.title === "Második")!.id as string;
       const c = await add(v(`/blocks/${secondId}`), "C a második blokkban");
+      const d = await add(v(`/blocks/${secondId}`), "D szintén ott");
       const oc = await add(v(`/blocks/${secondId}`), "OC opcionális ott", {
         isOptional: true,
         replacesItemId: c,
       });
-      assert.equal((await patch(o2, { replacesItemId: c })).status, 200);
+      // an optional line of the FIRST block replaces a line of the block that is deleted
+      assert.equal((await patch(o2, { replacesItemId: d })).status, 200);
       const gone = await request(v(`/blocks/${secondId}`), "DELETE");
       assert.equal(gone.status, 200, JSON.stringify(gone.body));
       assert.equal(await replaces(o2), null);
@@ -305,11 +312,13 @@ describe(
             .blocks as Json[]
         ).find((x) => x.title === "Törlendő")!.id
       }`;
-      const base = await add(blockPath, "Törlendő régi");
-      await add(blockPath, "Törlendő új", {
-        isOptional: true,
-        replacesItemId: base,
-      });
+      const base = await add(blockPath, "Törlendő régi", {}, ver);
+      await add(
+        blockPath,
+        "Törlendő új",
+        { isOptional: true, replacesItemId: base },
+        ver,
+      );
       const res = await fetch(url + `/quotes/${id}`, { method: "DELETE" });
       assert.ok(res.status < 300, `DELETE answered ${res.status}`);
       assert.equal(await prisma.quote.count({ where: { id } }), 0);
