@@ -453,3 +453,94 @@ describe("UserEditorPage gépi fiók jelölő", () => {
     });
   });
 });
+
+describe("UserEditorPage új és meglévő fiók űrlapja (Picasso 3.20)", () => {
+  const existing = {
+    id: "u9",
+    firstName: "Béla",
+    lastName: "Nagy",
+    displayName: "Nagy Béla",
+    nickname: null,
+    email: "bela@acropora.local",
+    role: "VIEWER",
+    isActive: true,
+    hasPassword: true,
+    createdAt: "2026-11-01T10:00:00.000Z",
+    updatedAt: "2026-11-25T10:00:00.000Z",
+    notificationRoles: [],
+    serviceCapabilities: [],
+    isServiceAccount: false,
+    customerId: null,
+    supplierId: null,
+  };
+
+  beforeEach(() => {
+    auth.session = session;
+    router.push.mockReset();
+    vi.mocked(usersApi.detail).mockReset();
+  });
+
+  it("új fióknál a gomb a létrehozást mondja, nem a változások mentését", () => {
+    render(<UserEditorPage />);
+    expect(
+      screen.getByRole("button", { name: "Felhasználó létrehozása" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Változások mentése" }),
+    ).toBeNull();
+  });
+
+  it("meglévő fióknál a gomb a változások mentését mondja", async () => {
+    vi.mocked(usersApi.detail).mockResolvedValue(existing as never);
+    render(<UserEditorPage userId="u9" />);
+    expect(
+      await screen.findByRole("button", { name: "Változások mentése" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Felhasználó létrehozása" }),
+    ).toBeNull();
+  });
+
+  it("a kötelező mezők csillagot kapnak (a felolvasónak kötelező), a becenév nem kötelező; a jelszó is kötelező új fióknál", () => {
+    render(<UserEditorPage />);
+    for (const name of ["Vezetéknév", "Keresztnév", "E-mail cím", "Jelszó"]) {
+      const label = screen.getByText(name, { selector: "label" });
+      expect(label.textContent, name).toContain("*");
+      expect(label.textContent, name).toContain("(kötelező)");
+    }
+    const nick = screen.getByText("Becenév", { selector: "label" });
+    expect(nick.textContent).toContain("(nem kötelező)");
+    expect(nick.textContent).not.toContain("*");
+  });
+
+  it("a jelszó az e-mail mellett áll, nem a lap végén", () => {
+    render(<UserEditorPage />);
+    const email = screen.getByLabelText("E-mail cím");
+    const password = screen.getByLabelText("Jelszó");
+    const role = screen.getByLabelText("Szerepkör");
+    // dokumentum-sorrend: e-mail, jelszó, szerepkör
+    expect(
+      email.compareDocumentPosition(password) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      password.compareDocumentPosition(role) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("meglévő fióknál nincs jelszó mező az alapadatok között", async () => {
+    vi.mocked(usersApi.detail).mockResolvedValue(existing as never);
+    render(<UserEditorPage userId="u9" />);
+    await screen.findByRole("button", { name: "Változások mentése" });
+    expect(screen.queryByLabelText("Jelszó")).toBeNull();
+  });
+
+  it("a partner-kötés felirata érthető, és megmondja, mit jelent", () => {
+    render(<UserEditorPage />);
+    expect(screen.getByText("Partnerhez kötött fiók")).toBeTruthy();
+    expect(
+      screen.getByText(/csak annak a partnernek az adatait látja/),
+    ).toBeTruthy();
+    expect(screen.queryByText("Vevő nevében lép be")).toBeNull();
+  });
+});

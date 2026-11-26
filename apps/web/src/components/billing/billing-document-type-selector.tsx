@@ -49,11 +49,11 @@ export function BillingDocumentTypeSelector({
   return (
     <section
       aria-label="Számlázz.hu bizonylat"
-      className="rounded-xl border border-pilot-accent-warm bg-pilot-accent-warm-soft px-5 py-4"
+      className="rounded-xl border border-pilot-grey-200 bg-white px-5 py-4"
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-pilot-accent-warm-text">
+          <h2 className="text-sm font-semibold text-pilot-grey-900">
             Számlázz.hu
           </h2>
           <p className="mt-1 text-xs leading-5 text-pilot-grey-700">

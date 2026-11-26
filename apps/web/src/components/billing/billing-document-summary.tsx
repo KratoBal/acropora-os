@@ -119,7 +119,7 @@ export function BillingDocumentSummary({
           <PilotBadge variant="grey">{paymentMethod}</PilotBadge>
         ) : null}
       </div>
-      <p className="mt-4 rounded-lg bg-pilot-accent-warm-soft px-4 py-3 text-xs text-pilot-accent-warm-text">
+      <p className="mt-4 rounded-lg bg-pilot-grey-50 px-4 py-3 text-xs text-pilot-grey-700">
         A bizonylat számát a Számlázz.hu adja a sikeres kiállításkor. Addig ez
         egy belső vázlat.
       </p>

@@ -93,7 +93,11 @@ describe("WebshopPriceRulesPage", () => {
       ).value,
     ).toBe("");
     expect(screen.getByText("A webshopban nincs beállítva.")).toBeTruthy();
-    expect(screen.getAllByText("A webshop alapértéke.")).toHaveLength(3);
+    // ONE summary sentence, not the same line under each of the three default fields (Picasso 3.20)
+    expect(screen.queryByText("A webshop alapértéke.")).toBeNull();
+    expect(
+      screen.getAllByText(/3 mező a webshop alapértékén áll/),
+    ).toHaveLength(1);
     expect(
       screen.getByText(
         "A webshop környezeti beállításából jön; csak akkor íródik felül, ha itt megváltoztatod.",

@@ -49,6 +49,25 @@ import { UserVisibleUnits } from "./user-visible-units";
  */
 const allNavigationItems = allNavigationPages;
 
+/**
+ * A KÖTELEZŐ ÉS A NEM KÖTELEZŐ MEZŐ JELÖLÉSE (Picasso 3.20): ugyanaz a két jel, mint a Bérlés, az új hibajegy és a munkalap űrlapján: a kötelező mező címkéje után piros csillag (a felolvasónak
+ * "kötelező"), a nem kötelezőé után szürkén "(nem kötelező)". A mezők kötelezősége a szerver szabálya (név, e-mail, új fióknál a jelszó): ez a felirat csak kimondja.
+ */
+function Requirement({ kind }: { kind: "required" | "optional" }) {
+  return kind === "required" ? (
+    <>
+      <span aria-hidden="true" className="text-red-600">
+        {" *"}
+      </span>
+      <span className="sr-only"> (kötelező)</span>
+    </>
+  ) : (
+    <span className="ml-1.5 text-xs font-normal text-dusk-400">
+      (nem kötelező)
+    </span>
+  );
+}
+
 export function UserEditorPage({ userId }: { userId?: string }) {
   const { session } = useAuth();
   const router = useRouter();
@@ -286,21 +305,42 @@ export function UserEditorPage({ userId }: { userId?: string }) {
         <Card className="p-6">
           <h2 className="font-semibold">Alapadatok</h2>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField label="Vezetéknév">
+            <FormField
+              label={
+                <>
+                  Vezetéknév
+                  <Requirement kind="required" />
+                </>
+              }
+            >
               <Input
                 aria-label="Vezetéknév"
                 value={lastName}
                 onChange={(event) => setLastName(event.target.value)}
               />
             </FormField>
-            <FormField label="Keresztnév">
+            <FormField
+              label={
+                <>
+                  Keresztnév
+                  <Requirement kind="required" />
+                </>
+              }
+            >
               <Input
                 aria-label="Keresztnév"
                 value={firstName}
                 onChange={(event) => setFirstName(event.target.value)}
               />
             </FormField>
-            <FormField label="Becenév">
+            <FormField
+              label={
+                <>
+                  Becenév
+                  <Requirement kind="optional" />
+                </>
+              }
+            >
               <Input
                 aria-label="Becenév"
                 value={nickname}
@@ -308,7 +348,14 @@ export function UserEditorPage({ userId }: { userId?: string }) {
                 onChange={(event) => setNickname(event.target.value)}
               />
             </FormField>
-            <FormField label="E-mail cím">
+            <FormField
+              label={
+                <>
+                  E-mail cím
+                  <Requirement kind="required" />
+                </>
+              }
+            >
               <Input
                 type="email"
                 aria-label="E-mail cím"
@@ -316,6 +363,25 @@ export function UserEditorPage({ userId }: { userId?: string }) {
                 onChange={(event) => setEmail(event.target.value)}
               />
             </FormField>
+            {/* A JELSZÓ AZ E-MAIL MELLETT ÁLL, NEM A LAP VÉGÉN (Picasso 3.20): új fióknál kötelező, tehát a többi kötelező mezővel együtt kell látszania */}
+            {!user ? (
+              <FormField
+                label={
+                  <>
+                    Jelszó
+                    <Requirement kind="required" />
+                  </>
+                }
+              >
+                <Input
+                  type="password"
+                  aria-label="Jelszó"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Legalább 8 karakter"
+                />
+              </FormField>
+            ) : null}
             <FormField label="Szerepkör">
               <Select
                 aria-label="Szerepkör"
@@ -348,7 +414,10 @@ export function UserEditorPage({ userId }: { userId?: string }) {
             magyarazo mondat ezert all mellette, nem a sugoban.
           */}
           <div className="mt-4">
-            <FormField label="Vevő nevében lép be">
+            <FormField
+              label="Partnerhez kötött fiók"
+              description="Ha itt egy partnert választasz, a fiók csak annak a partnernek az adatait látja. Üresen a fiók saját kolléga."
+            >
               <PartnerPicker
                 id="felhasznalo-vevo"
                 value={customerId}
@@ -520,19 +589,6 @@ export function UserEditorPage({ userId }: { userId?: string }) {
               </label>
             </div>
           ) : null}
-          {!user ? (
-            <div className="mt-4">
-              <FormField label="Jelszó">
-                <Input
-                  type="password"
-                  aria-label="Jelszó"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Legalább 8 karakter"
-                />
-              </FormField>
-            </div>
-          ) : null}
           {user ? (
             <div className="mt-4 flex items-center gap-2">
               <Badge variant={user.isActive ? "success" : "neutral"}>
@@ -566,7 +622,13 @@ export function UserEditorPage({ userId }: { userId?: string }) {
         </Card>
         <div className="flex justify-end">
           <Button type="submit" disabled={busy}>
-            {busy ? "Mentés…" : "Változások mentése"}
+            {busy
+              ? userId
+                ? "Mentés…"
+                : "Létrehozás…"
+              : userId
+                ? "Változások mentése"
+                : "Felhasználó létrehozása"}
           </Button>
         </div>
       </form>

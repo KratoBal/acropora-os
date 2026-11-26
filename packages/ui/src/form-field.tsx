@@ -3,7 +3,7 @@ import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "./utils";
 
 export interface FormFieldProps extends HTMLAttributes<HTMLDivElement> {
-  label: string;
+  label: ReactNode;
   htmlFor?: string;
   description?: string;
   error?: string;

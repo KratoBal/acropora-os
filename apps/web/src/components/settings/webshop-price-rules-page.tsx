@@ -30,9 +30,11 @@ import { webshopPriceRulesApi } from "@/lib/api/webshop-price-rules";
  * megváltoztatott érték íródik. Csak a teszt OS-en látszik.
  */
 
-/** A forrás az ember nyelvén; a `row` (valaki tárolta) nem kap megjegyzést. */
+/**
+ * A forrás az ember nyelvén; a `row` (valaki tárolta) nem kap megjegyzést. AZ ALAPÉRTÉK NEM KAP MEZŐNKÉNTI MEGJEGYZÉST (Picasso 3.20): tizenegyszer ugyanaz a mondat zaj volt;
+ * helyette EGY összesítő mondat áll a lap tetején (`defaultCount`).
+ */
 const SOURCE_NOTES: Partial<Record<WebshopPriceRuleSource, string>> = {
-  default: "A webshop alapértéke.",
   env: "A webshop környezeti beállításából jön; csak akkor íródik felül, ha itt megváltoztatod.",
   row_invalid:
     "A tárolt érték a határokon kívül esik, ezért a webshop ezt használja helyette.",
@@ -119,6 +121,14 @@ export function WebshopPriceRulesPage() {
     }
   };
 
+  const defaultCount = rules
+    ? WEBSHOP_PRICE_RULES.filter(
+        (rule) =>
+          rules.values[rule.field] !== null &&
+          rules.sources[rule.field] === "default",
+      ).length
+    : 0;
+
   return (
     <PilotThemeRoot className="space-y-6">
       <PilotPageHeader
@@ -144,6 +154,13 @@ export function WebshopPriceRulesPage() {
       {saved ? (
         <p role="status" className="text-sm text-pilot-grey-600">
           {saved}
+        </p>
+      ) : null}
+
+      {defaultCount > 0 ? (
+        <p role="note" className="text-sm text-pilot-grey-600">
+          {defaultCount} mező a webshop alapértékén áll; a webshopba csak a
+          megváltoztatott érték íródik.
         </p>
       ) : null}
 

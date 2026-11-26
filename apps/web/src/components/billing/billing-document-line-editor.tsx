@@ -452,7 +452,7 @@ export function BillingDocumentLineEditor({
 
       <div className="mt-4">
         <PilotCallout
-          tone="warm"
+          tone="aqua"
           title="A sorösszegek automatikusan számolódnak"
           description="A Számlázz.hu a végleges, a szerveren újraszámolt összegeket és tételadatokat kapja meg."
         />
