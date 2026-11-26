@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { Session, UnasOrderListResponse } from "@acropora/types";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -167,5 +167,108 @@ describe("what the page says about the deletion check", () => {
       await screen.findByText(/nem sikerült lekérdezni/),
     ).toBeInTheDocument();
     expect(screen.queryByText(/nem fut/)).not.toBeInTheDocument();
+  });
+});
+
+describe("UNAS-rendelések lista (Picasso 3.18)", () => {
+  const unasOrder = (
+    id: string,
+    label: string,
+    over: Record<string, unknown> = {},
+  ) => ({
+    id,
+    orderNumber: `UNAS-${id}`,
+    status: "OPEN",
+    unasStatusLabel: label,
+    buyerName: `Vevő ${id}`,
+    paymentName: "Bankkártya",
+    shippingName: "GLS",
+    totalGross: "16590",
+    currency: "HUF",
+    lineCount: 1,
+    createdAt: "2026-09-01T10:00:00.000Z",
+    orderedAt: "2026-09-01T10:00:00.000Z",
+    statusChangedAt: "2026-09-01T10:00:00.000Z",
+    buyerSignals: {
+      isNewCustomer: false,
+      otherOpenOrderCount: 0,
+      otherUnsuccessfulOrderCount: 0,
+      isRegistered: true,
+    },
+    unasDeletedAt: null,
+    ...over,
+  });
+  const list = (items: unknown[]) =>
+    api.list.mockResolvedValue({
+      items,
+      pagination: {
+        page: 1,
+        pageSize: 50,
+        totalItems: items.length,
+        totalPages: 1,
+      },
+    } as UnasOrderListResponse);
+
+  // the table and the phone cards both render (CSS hides one), so a number appears twice: the table row is the first
+  const tableRow = async (id: string) =>
+    (await screen.findAllByText(`UNAS-${id}`))[0]!.closest("tr")!;
+
+  it("a cím kisbetűs, mint minden más lapon", async () => {
+    list([unasOrder("a", "Feldolgozásra vár")]);
+    render(createElement(WebshopOrdersPage));
+    expect(
+      await screen.findByRole("heading", { name: "UNAS megrendelések" }),
+    ).toBeTruthy();
+  });
+
+  it("a sor nincs a státusz színére festve: egy jel van, a jelvény", async () => {
+    list([
+      unasOrder("a", "Feldolgozásra vár"),
+      unasOrder("b", "Visszaigazolva"),
+      unasOrder("c", "Készletezés alatt"),
+      unasOrder("d", "Kiszállítás"),
+    ]);
+    render(createElement(WebshopOrdersPage));
+    await tableRow("a");
+    for (const id of ["a", "b", "c", "d"]) {
+      const row = await tableRow(id);
+      expect(row.className, id).not.toMatch(
+        /bg-(rose|emerald|amber|orange|sky|violet|pink)-/,
+      );
+    }
+  });
+
+  it("az ismeretlen státuszváltási idő nem ír ki szöveget, az ismert kora látszik", async () => {
+    list([
+      unasOrder("a", "Feldolgozásra vár", { statusChangedAt: null }),
+      unasOrder("b", "Visszaigazolva"),
+    ]);
+    render(createElement(WebshopOrdersPage));
+    await tableRow("a");
+    expect(screen.queryByText("Státuszváltás ideje ismeretlen")).toBeNull();
+    expect(screen.getAllByText(/napja|órája|perce/).length).toBeGreaterThan(0);
+  });
+
+  it("a dátum és az összeg nem tör két sorra", async () => {
+    list([unasOrder("a", "Feldolgozásra vár")]);
+    render(createElement(WebshopOrdersPage));
+    const row = await tableRow("a");
+    const cells = within(row).getAllByRole("cell");
+    // dátum (2.), összeg (5.)
+    expect(cells[1]!.className).toContain("whitespace-nowrap");
+    expect(cells[4]!.className).toContain("whitespace-nowrap");
+  });
+
+  it("a nézet fülként vált: alapból a nyitottak, az Összes a lezártakat is mutatja", async () => {
+    list([
+      unasOrder("a", "Feldolgozásra vár"),
+      unasOrder("z", "Megrendelés lezárva"),
+    ]);
+    render(createElement(WebshopOrdersPage));
+    await tableRow("a");
+    expect(screen.queryAllByText("UNAS-z")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Összes" }));
+    expect((await screen.findAllByText("UNAS-z")).length).toBeGreaterThan(0);
+    expect(screen.getByText("2 rendelés")).toBeTruthy();
   });
 });

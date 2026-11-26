@@ -79,7 +79,7 @@ describe("navigation", () => {
     expect(
       group("Webshop").children.map((item) => [item.href, item.label]),
     ).toEqual([
-      ["/webshop", "UNAS Megrendelések"],
+      ["/webshop", "UNAS megrendelések"],
       // 2026-10-05: az új webshop rendelései, a UNAS lista mellett
       ["/webshop/rendelesek", "Rendelések"],
       ["/vevok", "Vevők"],
@@ -234,7 +234,7 @@ describe("navigation", () => {
       [
         "Webshop",
         [
-          "UNAS Megrendelések",
+          "UNAS megrendelések",
           "Rendelések",
           "Vevők",
           "Termékek a webshopban",
@@ -441,7 +441,7 @@ describe("navigation", () => {
     ["/feladataim", "my-tasks", "Feladataim"],
     ["/uzenetek", "messages", "Üzenetek"],
     ["/pos", "pos", "POS"],
-    ["/webshop", "webshop-orders", "UNAS Megrendelések"],
+    ["/webshop", "webshop-orders", "UNAS megrendelések"],
     ["/webshop/rendelesek", "webshop-medusa-orders", "Rendelések"],
     ["/vevok", "webshop-customers", "Vevők"],
     ["/webshop/termekek", "webshop-products", "Termékek a webshopban"],

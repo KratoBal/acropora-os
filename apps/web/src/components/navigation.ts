@@ -312,7 +312,7 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         href: "/webshop",
         // Balázs, 2026-10-05 11:31 UTC: a mai lista UNAS-adat, csak megtekintő;
         // az új bolt rendeléseitől így különül el. Az útvonal nem változik.
-        label: "UNAS Megrendelések",
+        label: "UNAS megrendelések",
         icon: "cart",
         entryId: "webshop-orders",
       },

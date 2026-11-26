@@ -7,7 +7,7 @@ import {
   PilotBadge,
   PilotCard,
   PilotCardHeader,
-  PilotSelect,
+  PilotSegmentedControl,
   PilotButton,
 } from "@acropora/ui";
 import {
@@ -23,18 +23,18 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { unasOrdersApi } from "@/lib/api/unas-orders";
 
+/**
+ * A STÁTUSZ JELÖLÉSE EGY JEL, NEM KÉT (Picasso 3.18): a sor teljes háttere négy színre volt festve (rózsaszín, narancs, zöld, kék), és mellette ott állt a státusz-jelvény: két jel ugyanarra.
+ * A sor fehér marad, a státuszt a jelvény (ikon és szó) mondja.
+ */
 const DETAILED_STATUS = {
-  "Feldolgozásra vár": { icon: "●", row: "bg-rose-50", closed: false },
-  Visszaigazolva: { icon: "✓", row: "bg-emerald-50", closed: false },
-  "Készletezés alatt": { icon: "◆", row: "bg-amber-50", closed: false },
-  Kiszállítás: { icon: "➜", row: "bg-orange-50", closed: false },
-  Átvehető: { icon: "⌂", row: "bg-sky-50", closed: false },
-  "Megrendelés lezárva": { icon: "■", row: "bg-violet-50", closed: true },
-  "Sikertelenül lezárt rendelés": {
-    icon: "×",
-    row: "bg-pink-50",
-    closed: true,
-  },
+  "Feldolgozásra vár": { icon: "●", closed: false },
+  Visszaigazolva: { icon: "✓", closed: false },
+  "Készletezés alatt": { icon: "◆", closed: false },
+  Kiszállítás: { icon: "➜", closed: false },
+  Átvehető: { icon: "⌂", closed: false },
+  "Megrendelés lezárva": { icon: "■", closed: true },
+  "Sikertelenül lezárt rendelés": { icon: "×", closed: true },
 } as const;
 
 type DetailedStatus = keyof typeof DETAILED_STATUS;
@@ -215,7 +215,7 @@ export function WebshopOrdersPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="UNAS Megrendelések"
+        title="UNAS megrendelések"
         description="A UNAS-ból automatikusan (5 percenként) szinkronizált rendelések"
         actions={
           canManage ? (
@@ -252,22 +252,16 @@ export function WebshopOrdersPage() {
         <PilotCardHeader
           title="Rendelések"
           action={
-            <label className="text-xs text-dusk-500">
-              Nézet{" "}
-              <PilotSelect
-                aria-label="Rendelések nézete"
-                value={view}
-                onChange={(nextValue) =>
-                  setView(nextValue === "all" ? "all" : "open")
-                }
-                chevron
-              >
-                <option value="open">Nyitott</option>
-                <option value="all">Összes</option>
-              </PilotSelect>
-              {" · "}
-              {visibleOrders.length.toLocaleString("hu-HU")} rendelés
-            </label>
+            <div className="flex flex-wrap items-center gap-3">
+              <PilotSegmentedControl
+                options={["Nyitott", "Összes"]}
+                value={view === "all" ? "Összes" : "Nyitott"}
+                onChange={(next) => setView(next === "Összes" ? "all" : "open")}
+              />
+              <span className="text-xs text-dusk-500">
+                {visibleOrders.length.toLocaleString("hu-HU")} rendelés
+              </span>
+            </div>
           }
         />
         <div className="space-y-2 p-5">
@@ -296,7 +290,7 @@ export function WebshopOrdersPage() {
                       <tr
                         key={order.id}
                         onClick={() => router.push(`/webshop/${order.id}`)}
-                        className={`cursor-pointer transition hover:bg-dusk-50 ${detailedStatus(order)?.row ?? "bg-white"}`}
+                        className="cursor-pointer transition hover:bg-dusk-50"
                       >
                         <td className="px-5 py-3 text-sm font-medium text-dusk-900">
                           {order.orderNumber}
@@ -304,7 +298,7 @@ export function WebshopOrdersPage() {
                             {order.lineCount} tétel
                           </p>
                         </td>
-                        <td className="px-4 py-3 text-sm text-dusk-600">
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-dusk-600">
                           {formatOrderDate(order)}
                         </td>
                         <td className="px-4 py-3 text-sm text-dusk-600">
@@ -337,7 +331,7 @@ export function WebshopOrdersPage() {
                           {order.paymentName ?? "—"}
                           {order.shippingName ? ` · ${order.shippingName}` : ""}
                         </td>
-                        <td className="px-4 py-3 text-right text-sm font-semibold text-dusk-900">
+                        <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-dusk-900">
                           {formatMoney(order.totalGross, "HUF", {
                             fractionDigits: 2,
                           })}
@@ -346,9 +340,11 @@ export function WebshopOrdersPage() {
                           <PilotBadge variant={statusVariant(order)}>
                             {detailedStatus(order)?.icon} {statusLabel(order)}
                           </PilotBadge>
-                          <p className="mt-1 text-xs text-dusk-500">
-                            {formatStatusAge(order.statusChangedAt)}
-                          </p>
+                          {order.statusChangedAt ? (
+                            <p className="mt-1 text-xs text-dusk-500">
+                              {formatStatusAge(order.statusChangedAt)}
+                            </p>
+                          ) : null}
                         </td>
                       </tr>
                     ))}
@@ -361,11 +357,13 @@ export function WebshopOrdersPage() {
                     key={order.id}
                     type="button"
                     onClick={() => router.push(`/webshop/${order.id}`)}
-                    className={`w-full rounded border p-3 text-left text-sm ${detailedStatus(order)?.row ?? "bg-white"}`}
+                    className="w-full rounded border bg-white p-3 text-left text-sm"
                   >
                     <p className="font-medium">
-                      {detailedStatus(order)?.icon} {statusLabel(order)} ·{" "}
-                      {formatStatusAge(order.statusChangedAt)}
+                      {detailedStatus(order)?.icon} {statusLabel(order)}
+                      {order.statusChangedAt
+                        ? ` · ${formatStatusAge(order.statusChangedAt)}`
+                        : ""}
                     </p>
                     <p>{order.buyerName ?? "Ismeretlen vevő"}</p>
                     <p className="text-xs text-dusk-500">{order.orderNumber}</p>
