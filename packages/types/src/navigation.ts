@@ -831,6 +831,18 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     /**
+     * THE ORDER BACKLOG SETTING (Picasso 3.8): how many days without movement
+     * before the Orders list calls an open order backlogged. Moved here from the
+     * list, where it sat as a field next to the filters. Seen with the same right
+     * as the Orders list; the page itself only lets `quotes.manage` save.
+     */
+    id: "partner-order-backlog",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.QUOTES_VIEW),
+    feature: "quotes",
+  },
+  {
+    /**
      * AZ ESZKOZ-FUNKCIOK KARBANTARTASA.
      *
      * Balazs kerese, 2026-09-22 (kanban 68add892): „ugyanolyan menut [...]

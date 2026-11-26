@@ -263,6 +263,7 @@ describe("navigation", () => {
           "Szállítási jelzők feltöltése",
           "Ajánlat szövegrészletek",
           "Ajánlatsablonok",
+          "Hátralékos megrendelések",
         ],
       ],
     ]);
@@ -417,6 +418,7 @@ describe("navigation", () => {
       ["Törzsadatok", "shipping-fill"],
       ["Árajánlat", "quote-snippets"],
       ["Árajánlat", "quote-templates"],
+      ["Árajánlat", "partner-order-backlog"],
     ]);
     // egy alcsoport csak a Beállításokban él
     for (const entry of mainNavigation.filter(
@@ -526,6 +528,11 @@ describe("navigation", () => {
       "Ajánlat szövegrészletek",
     ],
     ["/beallitasok/ajanlat-sablonok", "quote-templates", "Ajánlatsablonok"],
+    [
+      "/beallitasok/megrendeles-hatralek",
+      "partner-order-backlog",
+      "Hátralékos megrendelések",
+    ],
   ];
 
   it("keeps exactly the same pages, entries and labels as before the move", () => {
@@ -877,6 +884,8 @@ describe("navigation", () => {
     "/beallitasok/partner-atvezetes": "settings.manage",
     // a82ed229: a szállítási jelzők feltöltése, ugyanaz a jog, mint a végponté
     "/beallitasok/szallitasi-jelzok": "settings.manage",
+    // Picasso 3.8: a hátralék-határ beállítása, ugyanaz a jog, mint a Megrendelések listáé
+    "/beallitasok/megrendeles-hatralek": "quotes.view",
     // AZ ESZKOZ-KATEGORIAK UGYANAZ A FAJTA TETEL, es ugyanaz a bontas: a
     // szerelo HASZNALJA a listat (az eszkoz-szerkeszto legordulojet
     // `service.view` olvassa), de nem IRJA. Ha az iras is `service.view`
