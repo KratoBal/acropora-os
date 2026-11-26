@@ -28,6 +28,7 @@ import {
   ShippingFilterSelect,
   ShippingFlagsCell,
 } from "@/components/products/shipping-flags";
+import { isNegativeStock } from "@/components/products/product-list-page";
 import { productApi } from "@/lib/api/products";
 
 const PAGE_SIZE = 25;
@@ -100,7 +101,19 @@ export const PRODUCT_COLUMNS: PilotTableColumn<ProductRow>[] = [
     id: "stock",
     header: "Készlet",
     width: "110px",
-    cell: (item) => formatStock(item.stockOnHand),
+    cell: (item) =>
+      isNegativeStock(item.stockOnHand) ? (
+        // a negative stock is flagged as on the Termékek list (#2922; Picasso 3.19: here it stood plain among the others)
+        <span
+          title="Negatív készlet"
+          className="font-semibold text-pilot-red-700"
+        >
+          {formatStock(item.stockOnHand)}
+          <span className="sr-only"> (negatív készlet)</span>
+        </span>
+      ) : (
+        formatStock(item.stockOnHand)
+      ),
   },
   {
     // a82ed229: the shipping flags; "nincs vizsgálva" is not "nincs korlát"
