@@ -1748,6 +1748,14 @@ describe("Ajánlat szerkesztő (569:171)", () => {
       "b1",
       ["i1", "i3", "i2"],
     ]);
+    // a lejjebb gomb a másik irányba mozgat: a második tétel lejjebb = a harmadik elé kerül a sorban
+    // (a mentés közben a gombok tiltottak: megvárjuk, míg újra élnek)
+    await waitFor(() =>
+      expect(btn("Második tétel: lejjebb").disabled).toBe(false),
+    );
+    fireEvent.click(btn("Második tétel: lejjebb"));
+    await waitFor(() => expect(api.reorderItems).toHaveBeenCalledTimes(2));
+    expect(api.reorderItems.mock.calls[1]![4]).toEqual(["i1", "i3", "i2"]);
     // a blokk-mozgatás hívása érintetlen
     expect(api.reorderBlocks).not.toHaveBeenCalled();
   });
