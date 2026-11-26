@@ -119,6 +119,19 @@ export class DuplicateClaim extends ClaimReviewConflict {
 }
 
 /**
+ * The decision on a found twin: refused unless the editor confirmed it; a
+ * confirmed repeat is audited with the id of the claim it repeats.
+ */
+export function duplicateGuard(
+  duplicateOf: string | null,
+  confirmDuplicate: boolean,
+): { duplicateOf?: string; duplicateConfirmed?: true } {
+  if (!duplicateOf) return {};
+  if (!confirmDuplicate) throw new DuplicateClaim(duplicateOf);
+  return { duplicateOf, duplicateConfirmed: true };
+}
+
+/**
  * THE FIRST VERIFIED CLAIM THAT THE ONE BEING ACCEPTED REPEATS, or null. The query takes the four things a claim is said to be (the subject, the effect, the direction, the source: acrobot) and only
  * VERIFIED ones (a withdrawn or discarded copy does not block a correct one); the species and the quantity are compared in `isSameClaim`. Oldest first: the first acceptance is the original.
  */
@@ -529,8 +542,10 @@ export class ClaimReviewRepository {
         sourceId: source.id,
         columns: plan.claim,
       });
-      if (duplicateOf && !input.confirmDuplicate)
-        throw new DuplicateClaim(duplicateOf);
+      const duplicateAudit = duplicateGuard(
+        duplicateOf,
+        input.confirmDuplicate === true,
+      );
       const now = new Date();
       for (const a of plan.anchors) {
         const { count } = await tx.knowledgeFieldAnchor.updateMany({
@@ -606,7 +621,7 @@ export class ClaimReviewRepository {
               source: plan.source,
               applicability: input.applicability,
               ...(readOff ? { imageCompared: true } : {}),
-              ...(duplicateOf ? { duplicateOf, duplicateConfirmed: true } : {}),
+              ...duplicateAudit,
             },
             decisions: plan.anchors.map((a) => ({
               anchorId: a.id,

@@ -352,6 +352,10 @@ describe("Állítás ellenőrzése", () => {
         "Mennyiség: a szám nem közvetlenül az egység előtt áll a horgonyban.",
       ),
     ).toBeTruthy();
+    // a refusal that is not a repeat offers no confirmation
+    expect(
+      screen.queryByRole("button", { name: "Mégis elfogadom" }),
+    ).toBeNull();
     expect(api.reviewQueue).toHaveBeenCalledTimes(1);
   });
 

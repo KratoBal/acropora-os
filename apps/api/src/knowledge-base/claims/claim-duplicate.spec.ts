@@ -8,6 +8,7 @@ import {
 } from "./claim-review.js";
 import {
   DuplicateClaim,
+  duplicateGuard,
   findVerifiedDuplicate,
 } from "./claim-review.repository.js";
 
@@ -189,5 +190,27 @@ describe("DuplicateClaim and the confirmation", () => {
       () => parseReviewInput({ ...body, confirmDuplicate: "yes" }),
       /confirmDuplicate: true or false/,
     );
+  });
+});
+
+describe("duplicateGuard", () => {
+  it("no twin: nothing to refuse and nothing to audit", () => {
+    assert.deepEqual(duplicateGuard(null, false), {});
+    assert.deepEqual(duplicateGuard(null, true), {});
+  });
+
+  it("a twin without confirmation is refused, naming it", () => {
+    assert.throws(
+      () => duplicateGuard("claim-1", false),
+      (error: unknown) =>
+        error instanceof DuplicateClaim && error.existingClaimId === "claim-1",
+    );
+  });
+
+  it("a confirmed twin passes and the audit names the claim it repeats", () => {
+    assert.deepEqual(duplicateGuard("claim-1", true), {
+      duplicateOf: "claim-1",
+      duplicateConfirmed: true,
+    });
   });
 });
