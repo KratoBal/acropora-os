@@ -629,4 +629,11 @@ describe("PilotContractsPage szerződés-kártya (Picasso 3.22)", () => {
       expect(box.className).toContain("border-pilot-grey-200");
     }
   });
+
+  it("the header names the page's place in the menu, like the other list pages (Picasso 3.22)", async () => {
+    render(<PilotContractsPage />);
+    expect(
+      await screen.findByText("Értékesítés / Szerződések"),
+    ).toBeInTheDocument();
+  });
 });

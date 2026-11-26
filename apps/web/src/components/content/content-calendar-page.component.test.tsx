@@ -40,11 +40,17 @@ vi.mock("@/components/auth/auth-provider", () => ({
 vi.mock("next/link", () => ({
   default: ({
     href,
+    className,
     children,
   }: {
     href: string;
+    className?: string;
     children: React.ReactNode;
-  }) => <a href={href}>{children}</a>,
+  }) => (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  ),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -153,6 +159,16 @@ describe("ContentCalendarPage", () => {
     render(<ContentCalendarPage />);
     const back = await screen.findByRole("link", { name: "Tartalom" });
     expect(back.getAttribute("href")).toBe("/tartalom");
+  });
+
+  it("the template link is drawn as a small secondary button, and stays a link (Picasso 3.26)", async () => {
+    api.feed.mockReturnValue(new Promise(() => {}));
+    render(<ContentCalendarPage />);
+    const template = await screen.findByRole("link", { name: "Sablon" });
+    expect(template.getAttribute("href")).toBe("/tartalom/naptar/sablon");
+    expect(template.className).toContain("border-dusk-200");
+    expect(template.className).toContain("h-8");
+    expect(template.className).not.toContain("underline");
   });
 
   it("reads the Monday-to-Sunday week of the URL day, and shows the loading state, not an empty calendar, while it waits", async () => {

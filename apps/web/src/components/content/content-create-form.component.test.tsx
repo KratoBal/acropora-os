@@ -104,6 +104,18 @@ describe("putting a piece in, as it happens in production", () => {
     expect(screen.queryByLabelText("Szöveg")).toBeNull();
   });
 
+  // the form's actions at its end on the right, Mégse then the primary (Picasso 3.26, R11)
+  it("Mégse stands before Mentés, in a row on the right", async () => {
+    render(<ContentCreatePage />);
+    const save = await screen.findByRole("button", { name: "Mentés" });
+    const cancel = screen.getByRole("button", { name: "Mégse" });
+    expect(save.parentElement).toBe(cancel.parentElement);
+    expect(save.parentElement!.className).toContain("justify-end");
+    expect(
+      cancel.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   /**
    * A LISTA MÁR NEM VISZ FEL, CSAK ÁTENGED.
    *
