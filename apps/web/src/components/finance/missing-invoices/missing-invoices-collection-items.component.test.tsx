@@ -194,6 +194,21 @@ describe("CollectionItemsSection", () => {
     ).toBeInTheDocument();
   });
 
+  it("before the collector judged any file there is no row of (0) filters, and the page says so (Picasso 3.25)", async () => {
+    const zero = Object.fromEntries(
+      Object.keys(counts).map((name) => [name, 0]),
+    ) as typeof counts;
+    api.collectionItems.mockResolvedValueOnce(
+      response({ items: [], counts: zero }),
+    );
+    render(<CollectionItemsSection token="token-1" />);
+    expect(
+      await screen.findByText("A gyűjtő még egy fájlról sem döntött."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Ítélet szerint" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Mind" })).toBeNull();
+  });
+
   it("shows the server's error instead of an empty list", async () => {
     api.collectionItems.mockRejectedValueOnce(new Error("Nincs jogosultság."));
     render(<CollectionItemsSection token="token-1" />);

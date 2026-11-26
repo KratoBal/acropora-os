@@ -298,7 +298,13 @@ describe("GlsSettlementsPage", () => {
     render(createElement(GlsSettlementsPage));
     expect(
       await screen.findByText(
-        "Ok: a Gmail-feldolgozás kapcsolója értéke se nem true, se nem false. A GLS-fájlokat addig kézzel töltsd fel.",
+        (_, element) =>
+          element?.tagName === "P" &&
+          Boolean(
+            element.textContent?.endsWith(
+              "Ok: a Gmail-feldolgozás kapcsolója értéke se nem true, se nem false. A GLS-fájlokat addig kézzel töltsd fel.",
+            ),
+          ),
       ),
     ).toBeTruthy();
   });
@@ -306,7 +312,13 @@ describe("GlsSettlementsPage", () => {
   it("offers no pull by hand without a Gmail key", async () => {
     render(createElement(GlsSettlementsPage));
     await screen.findByText(
-      "Ok: be van kapcsolva, de nincs Gmail-kulcs. A GLS-fájlokat addig kézzel töltsd fel.",
+      (_, element) =>
+        element?.tagName === "P" &&
+        Boolean(
+          element.textContent?.endsWith(
+            "Ok: be van kapcsolva, de nincs Gmail-kulcs. A GLS-fájlokat addig kézzel töltsd fel.",
+          ),
+        ),
     );
     expect(
       screen.queryByRole("button", { name: "Gmail ellenőrzése most" }),
