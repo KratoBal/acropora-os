@@ -160,6 +160,14 @@ describe("PilotAquariumListPage filters and table width", () => {
       (screen.getByRole("combobox", { name: "Típus" }) as HTMLSelectElement)
         .value,
     ).toBe("");
+    // the empty choice is the one shown. React selects the first option when the value matches none, so this also holds without the check in the select itself: what really changes is the request below
+    for (const name of ["Tulajdon", "Típus"]) {
+      expect(
+        (screen.getByRole("combobox", { name }) as HTMLSelectElement)
+          .selectedIndex,
+        name,
+      ).toBe(0);
+    }
     const query = api.list.mock.calls.at(-1)![1] as URLSearchParams;
     expect(query.has("ownershipType")).toBe(false);
     expect(query.has("waterBodyType")).toBe(false);
