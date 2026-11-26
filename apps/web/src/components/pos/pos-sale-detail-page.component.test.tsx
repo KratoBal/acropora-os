@@ -102,6 +102,14 @@ beforeEach(() => {
 });
 
 describe("PosSaleDetailPage", () => {
+  it("visszalép a pénztárhoz a közös nyíl-linkkel", async () => {
+    auth.session = cookieSession;
+    api.getSale.mockResolvedValue(saleDetail);
+    render(createElement(PosSaleDetailPage, { saleId: "sale-1" }));
+    const back = await screen.findByRole("link", { name: "Pénztár" });
+    expect(back).toHaveAttribute("href", "/pos");
+  });
+
   it("orders.view jogosultság nélkül megtagadja a hozzáférést, és nem indul API-hívás", () => {
     auth.session = null;
 
