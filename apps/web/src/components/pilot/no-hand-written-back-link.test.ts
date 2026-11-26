@@ -37,11 +37,8 @@ const MIND = fajlok(ROOT).map((ut) => ({
  * csökkenhet. (A leltár első mérése csak a „Vissza a listához" felirattal számolt: 14 oldal; a szélesebb keresés, a „Vissza a ..." és a „← " is,
  * 33 oldalt talált: ez a pontos lista.)
  */
-const MEG_ATALLITANDO = [
-  "components/billing/billing-document-editor.tsx",
-  "components/knowledge-base/claim-store-page.tsx",
-  "components/messages/messages-page.tsx",
-];
+// ÜRES (R12 10. köteg, 2026-11-26): minden lap átállt. A lista marad, hogy egy új, kézzel írt visszalépés a harmadik tesztben azonnal pirosat adjon.
+const MEG_ATALLITANDO: string[] = [];
 
 /** MÁS JELENTÉSŰ „Vissza ..." SZÖVEGEK (nem oldal-visszalépés), indokkal: ezeken a guard nem kér komponenst. */
 const MAS_JELENTESU = new Map<string, string>([
@@ -137,6 +134,9 @@ describe("a visszalépés egy alakja", () => {
       "components/quotes/quote-pdf-page.tsx",
       "components/service-assets/asset-editor-page.tsx",
       "components/worksheets/worksheet-entry-page.tsx",
+      "components/billing/billing-document-editor.tsx",
+      "components/knowledge-base/claim-store-page.tsx",
+      "components/messages/messages-page.tsx",
     ]) {
       const f = MIND.find((x) => x.ut === ut);
       expect(f, ut).toBeDefined();
