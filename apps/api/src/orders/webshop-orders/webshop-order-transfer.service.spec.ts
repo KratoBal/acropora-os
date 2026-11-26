@@ -31,6 +31,8 @@ function setup(
     receipt?: boolean;
     /** A beérkezés díjbekérője előleg-díjbekérő (2b). */
     advance?: boolean;
+    /** the advance proforma's number; `undefined`: "D-CRPR-7" */
+    advanceNumber?: string | null;
   } = {},
 ) {
   const created: Record<string, unknown>[] = [];
@@ -90,7 +92,15 @@ function setup(
         return true;
       },
       transferRecipients: async () => ["user_9", "user_7"],
-      receiptProformaIsAdvance: async () => over.advance ?? false,
+      receiptAdvanceProforma: async () =>
+        over.advance
+          ? {
+              number:
+                over.advanceNumber === undefined
+                  ? "D-CRPR-7"
+                  : over.advanceNumber,
+            }
+          : null,
       // no balance in these cases (S3 has its own setup below)
       balanceReceipts: async () => new Map(),
       // a lezárás a TÁROLT beérkezést küldi: a rögzítés után ez már áll
@@ -266,6 +276,48 @@ describe("closing the payment in the shop", () => {
     assert.equal("advance" in full.shopCalls[0]!.receipt, false);
   });
 
+  /*
+    THE NUMBER FOR THE BALANCE'S TRANSFER (acrobot 63071, commerce #914). MI PIROSÍT: the advance's receipt goes to the shop without
+    the advance proforma's number; a full proforma's receipt carries one; or a number the shop would refuse is sent (the shop
+    answers 400, and the whole advance would stay unrecorded there).
+  */
+  it("an advance's receipt carries the proforma's number; a full one carries none, nor does a number the shop would refuse", async () => {
+    const { service, shopCalls } = setup({ advance: true });
+    await service.recordManual(
+      "order_55",
+      { receivedOn: "2026-10-06", reference: "ELO-1" },
+      USER,
+      NOW,
+    );
+    assert.equal(shopCalls[0]!.receipt.balance_reference, "D-CRPR-7");
+
+    const full = setup();
+    await full.service.recordManual(
+      "order_55",
+      { receivedOn: "2026-10-06", reference: "OTP 1" },
+      USER,
+      NOW,
+    );
+    assert.equal("balance_reference" in full.shopCalls[0]!.receipt, false);
+
+    for (const advanceNumber of [null, "D CRPR 7", "<7>"]) {
+      const odd = setup({ advance: true, advanceNumber });
+      await odd.service.recordManual(
+        "order_55",
+        { receivedOn: "2026-10-06", reference: "ELO-1" },
+        USER,
+        NOW,
+      );
+      // still an advance for the shop, only without the number
+      assert.equal(odd.shopCalls[0]!.receipt.advance, true);
+      assert.equal(
+        "balance_reference" in odd.shopCalls[0]!.receipt,
+        false,
+        String(advanceNumber),
+      );
+    }
+  });
+
   it("a shop failure keeps the OS record and the notice", async () => {
     const { service, created, notices } = setup({ shop: new Error("503") });
     await service.recordManual(
@@ -423,7 +475,8 @@ describe("Hátralék beérkezett (S3)", () => {
           created.push(input);
           return true;
         },
-        receiptProformaIsAdvance: async () => receiptKind === "advance",
+        receiptAdvanceProforma: async () =>
+          receiptKind === "advance" ? { number: "D-CRPR-7" } : null,
         transferRecipients: async () => ["user_9"],
       } as never,
       {
@@ -526,6 +579,8 @@ describe("Hátralék beérkezett (S3)", () => {
         received_at: "2026-10-02",
         amount: 4800,
         advance: true,
+        // the resend brings the proforma's number too: an order recorded before it gets it this way (commerce #914)
+        balance_reference: "D-CRPR-7",
       },
       { reference: "OTP hátralék 77", received_at: "2026-10-06", amount: 8200 },
     ]);
