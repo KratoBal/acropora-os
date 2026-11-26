@@ -45,11 +45,16 @@ export class FilesystemDocumentStore implements DocumentStore {
   private readonly logger = new Logger(FilesystemDocumentStore.name);
 
   /** `isMountPoint`: whether the root is a mounted volume (the default reads the kernel's mount table; a test passes its own). */
+  /**
+   * `isMountPoint`: whether the root is a mounted volume (the default reads the kernel's mount table). `startedAtMs`: when this
+   * process started (the default); a document older than it was on the volume before this run. A test passes its own.
+   */
   constructor(
     rootDirectory: string,
     private readonly isMountPoint: (
       root: string,
     ) => Promise<boolean> = rootIsMountPoint,
+    private readonly startedAtMs: number = PROCESS_STARTED_AT_MS,
   ) {
     this.root = path.resolve(rootDirectory);
   }
@@ -281,6 +286,20 @@ export class FilesystemDocumentStore implements DocumentStore {
         reason: `A jelölő fájl hiányzik, és a tároló gyökere nem csatolási pont, tehát a kötet nincs csatolva: ${marker}`,
       };
     }
+    /*
+      CSAK HA A KÖTETEN MÁR A FUTÁS ELŐTT IS VOLT ADAT (barracuda, #3057): egy ROSSZ, üres kötet is csatolási pont (a Coolify
+      egy újratelepítésnél más néven újat hoz létre, vagy a név elírva). Ha arra is letenné, minden új dokumentum oda menne,
+      a régiek pedig hiányoznának: az adat kettéválna. A 2026-11-25-i eset más volt: a kötet és a régi adat ott volt, csak a
+      jelölő veszett el. A kettőt az választja szét, hogy van-e a köteten e folyamat indulása ELŐTT írt dokumentum. A "van-e
+      adat" kevés lenne: több hívó (számla, sztornó, ajánlat, üzenet) állapot-kérdés nélkül ír, tehát egy rossz kötetre az első
+      írás után már lenne "adat"; a futás előtti viszont nem lehet rajta.
+    */
+    if (!(await this.holdsDocumentFromBefore())) {
+      return {
+        state: "not-configured",
+        reason: `A tároló gyökere csatolt kötet, de jelölő nélküli, és nincs rajta e futás előtti dokumentum (üres vagy új kötet): első beállításnál a jelölőt kézzel kell letenni: ${marker}`,
+      };
+    }
     try {
       // `wx`: egy közben letett jelölőt nem ír felül
       const handle = await open(marker, "wx");
@@ -301,6 +320,15 @@ export class FilesystemDocumentStore implements DocumentStore {
       `A dokumentumtár jelölője hiányzott, a gyökér csatolt kötet, ezért pótoltam: ${marker}. Aki vagy ami törölte, azt meg kell keresni.`,
     );
     return null;
+  }
+
+  /** Whether a document of our layout on the volume was written before this process started (the first one found ends it). */
+  private async holdsDocumentFromBefore(): Promise<boolean> {
+    for await (const key of this.list()) {
+      const entry = await stat(this.resolveWithin(key)).catch(() => null);
+      if (entry && entry.mtimeMs < this.startedAtMs) return true;
+    }
+    return false;
   }
 
   /**
@@ -342,6 +370,9 @@ export class FilesystemDocumentStore implements DocumentStore {
  * legrosszabb helyen derül ki, a felhasználó első feltöltésénél.
  */
 export const MARKER_FILE = ".acropora-document-store";
+
+/** When this process started: a document older than this was on the volume before this run. */
+const PROCESS_STARTED_AT_MS = Date.now() - process.uptime() * 1000;
 
 /**
  * The mount points in `/proc/self/mountinfo` (its fifth field; the kernel writes a space, a tab, a newline and a backslash

@@ -7,6 +7,7 @@ import {
   readdir,
   readFile,
   rm,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -462,7 +463,12 @@ describe("a lost marker, and whether the root is a mounted volume", () => {
       path.join(tmpdir(), "document-store-mounted-"),
     );
     try {
-      const store = new FilesystemDocumentStore(mounted, async () => true);
+      // the process "started" now: the document below was written before it
+      const store = new FilesystemDocumentStore(
+        mounted,
+        async () => true,
+        Date.now() + 60_000,
+      );
       // the data of before is there: a document written while the marker still stood
       await mkdir(path.join(mounted, "assets", "asset-1"), { recursive: true });
       await writeFile(
@@ -478,6 +484,42 @@ describe("a lost marker, and whether the root is a mounted volume", () => {
       assert.deepEqual(await store.get(key), Uint8Array.from([7]));
     } finally {
       await rm(mounted, { recursive: true, force: true });
+    }
+  });
+
+  /*
+    A WRONG, EMPTY VOLUME (barracuda on #3057: Coolify making a new volume under another name, or a typo). It is a mount point
+    too. WHAT TURNS THIS RED: the marker put on it (new documents would go there and the old ones would be missing), or put
+    after the first write some caller makes without asking the state (billing, quotes, messages do).
+  */
+  it("a mounted volume with no document from before this run stays not-configured, even after a write", async () => {
+    const empty = await mkdtemp(path.join(tmpdir(), "document-store-empty-"));
+    try {
+      const startedAt = Date.now() - 60_000;
+      const store = new FilesystemDocumentStore(
+        empty,
+        async () => true,
+        startedAt,
+      );
+      const first = await store.describe();
+      assert.equal(first.state, "not-configured");
+      assert.match(
+        "reason" in first ? first.reason : "",
+        /kézzel kell letenni/,
+      );
+
+      // a caller that writes without asking the state: its file is from this run, not from before
+      await store.put(key, Uint8Array.from([1]));
+      assert.equal((await store.describe()).state, "not-configured");
+      assert.equal((await readdir(empty)).includes(MARKER_FILE), false);
+
+      // the same file, older than the run: that is the volume of before, and the marker comes back
+      const file = path.join(empty, "assets", "asset-1", "doc-1");
+      const old = new Date(startedAt - 3_600_000);
+      await utimes(file, old, old);
+      assert.deepEqual(await store.describe(), { state: "ready" });
+    } finally {
+      await rm(empty, { recursive: true, force: true });
     }
   });
 
