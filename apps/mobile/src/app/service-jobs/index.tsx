@@ -46,10 +46,8 @@ import {
   serviceJobStatTiles,
 } from "@/lib/service-jobs/list-card";
 import { BottomNav } from "@/components/home/BottomNav";
-import {
-  serviceJobStatusLabel,
-  shortPath,
-} from "@/lib/service-jobs/service-job-status";
+import { serviceJobStateText } from "@/lib/service-jobs/common-status";
+import { shortPath } from "@/lib/service-jobs/service-job-status";
 import {
   ujJegyEszkozzel,
   valaszthatoEszkozok,
@@ -411,9 +409,7 @@ export default function ServiceJobListScreen() {
                 <Text style={styles.title}>{item.title}</Text>
                 <Text style={styles.number}>{item.jobNumber}</Text>
               </View>
-              <Text style={styles.status}>
-                {serviceJobStatusLabel(item.status)}
-              </Text>
+              <Text style={styles.status}>{serviceJobStateText(item)}</Text>
             </View>
             {item.reporterPersonName && item.reporterName ? (
               <Text style={styles.meta}>Bejelentő: {item.reporterName}</Text>

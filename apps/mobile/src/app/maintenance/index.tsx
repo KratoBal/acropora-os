@@ -25,6 +25,7 @@ import {
   readCachedServiceJobs,
   rememberServiceJobs,
 } from "@/lib/offline/service-job-cache";
+import { maintenanceBadgeText } from "@/lib/service-jobs/common-status";
 import { serviceJobCardMeta } from "@/lib/service-jobs/list-card";
 import { MAINTENANCE_LIST_COPY } from "@/lib/service-jobs/maintenance-list-copy";
 import {
@@ -55,7 +56,7 @@ const CACHE_KEY = ["offline-service-jobs"] as const;
  * A MENTETT MÁSOLAT A HIBAJEGYEK MÁSOLATA IS, EGY TÁBLA (`cached_service_jobs`): ezt a képernyő CSAK a szerver válaszából frissíti, soronként felülírva, és semmit nem töröl belőle, tehát a másolat nem zsugorodik, és a
  * Hibajegyek lista teljes másolata sem. Térerő nélkül a másolatból a karbantartási sorok látszanak (`cachedMaintenanceForTab`), az ismeretlen készségűek csak az Összes fülön, és ezt a szám kimondja.
  *
- * A SOR NEM MUTAT HIBAJEGY-ÁLLAPOTOT: a karbantartásnak nincs állapotgépe, a jelvény a készség (Kész / Folyamatban). A sor megnyitja a közös adatlapot, ami a fajta szerint nevezi meg magát.
+ * A SOR NEM MUTAT HIBAJEGY-ÁLLAPOTOT: a karbantartásnak nincs állapotgépe, a jelvény a közös állapot szava (Lezárt / Folyamatban), közös állapot nélküli válasznál a készség (Kész / Folyamatban) -- `maintenanceBadgeText`. A sor megnyitja a közös adatlapot, ami a fajta szerint nevezi meg magát.
  */
 export default function MaintenanceListScreen() {
   const router = useRouter();
@@ -202,10 +203,8 @@ export default function MaintenanceListScreen() {
                 <Text style={styles.title}>{item.title}</Text>
                 <Text style={styles.number}>{item.jobNumber}</Text>
               </View>
-              {item.maintenanceDone === undefined ? null : (
-                <Text style={styles.badge}>
-                  {item.maintenanceDone ? "Kész" : "Folyamatban"}
-                </Text>
+              {maintenanceBadgeText(item) === null ? null : (
+                <Text style={styles.badge}>{maintenanceBadgeText(item)}</Text>
               )}
             </View>
             {item.customerName ? (

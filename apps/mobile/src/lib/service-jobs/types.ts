@@ -36,6 +36,13 @@ export interface ServiceJobListItem {
   title: string;
   kind: "REPAIR" | "MAINTENANCE";
   status: ServiceJobStatusValue;
+  /**
+   * A KÖZÖS ÁLLAPOT ÉS AZ OKA (kártya 7f23785c, 5. szelet): a szerver számolja, a telefon csak kirajzolja (`common-status.ts`). ELHAGYHATÓ ÉS
+   * SZÖVEG, nem szűk típus: a régi válasz és a mentett másolat nélküle épül, egy újabb szerver pedig olyan értéket küldhet, amit ez a
+   * build nem ismer; mindkettőnél a mai tartalék (a tárolt állapot neve) áll. A partner-alakban nincs.
+   */
+  commonStatus?: string | null;
+  commonReason?: string | null;
   partnerStatusLabel: string;
   customerName: string | null;
   /** A helyszín teljes útja, a gyökértől lefelé. `null`, ha nincs helyszín. */
