@@ -61,6 +61,34 @@ export function rentalPreview(
 }
 
 /**
+ * THE REQUIRED FIELDS STILL EMPTY, by their labels, for the form's one button row (Picasso R11, acrobot 62575: "Hiányzik: ..." beside the
+ * button). The same fields `rentalRequest` asks for, in the form's order; the saving itself still goes through `rentalRequest`.
+ */
+export function rentalMissing(
+  form: RentalForm,
+  customer: RentalCustomerSummary | null,
+): string[] {
+  const empty = (key: keyof RentalForm) => form[key].trim() === "";
+  return [
+    form.equipmentId === "" ? "Eszköz" : null,
+    ...(customer
+      ? []
+      : (
+          [
+            ["name", "Név"],
+            ["phone", "Telefon"],
+            ["email", "E-mail"],
+            ["postalCode", "Irányítószám"],
+            ["city", "Város"],
+            ["line1", "Utca, házszám"],
+          ] as const
+        ).map(([key, label]) => (empty(key) ? label : null))),
+    empty("startsAt") ? "Kezdés" : null,
+    empty("plannedReturnAt") ? "Tervezett visszahozás" : null,
+  ].filter((label): label is string => label !== null);
+}
+
+/**
  * The request, or the first thing the desk has to fix. A chosen existing customer wins over the typed fields; without one,
  * the typed renter must be complete (name, phone, e-mail, address: Balázs, 2026-11-06).
  */

@@ -434,12 +434,14 @@ describe("Új árajánlat (567:190)", () => {
     api.create.mockResolvedValue({ id: "q9" });
     render(<QuoteNewPage />);
     const submit = screen.getByRole("button", { name: "Ajánlat létrehozása" });
-    expect((submit as HTMLButtonElement).disabled).toBe(true);
-    // a cím önmagában kevés: partner nélkül sem küldhető
+    expect(submit).toHaveAttribute("aria-disabled", "true");
+    // a cím önmagában kevés: partner nélkül sem küldhető (a halvány gomb kattintható, de nem küld)
     fireEvent.change(screen.getByLabelText("Ajánlat címe"), {
       target: { value: "Irodai akvárium" },
     });
-    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    expect(submit).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(submit);
+    expect(api.create).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByLabelText("Partner keresése"), {
       target: { value: "Blue" },
