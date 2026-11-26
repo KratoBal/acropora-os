@@ -762,6 +762,26 @@ export const WEBSHOP_CARD_PAYMENT_STATE_LABELS: Record<
   expired: "A fizetési link lejárt",
 };
 
+/**
+ * A KÁRTYÁS FIZETÉS FELIRATA AZ ADATLAPON (card d31a66a3, nautilus 63452 a 160. és 161. teszt-rendelésen): a `paid` állapot mindig
+ * „Linken fizetve” volt, pedig a `paid` a webshop saját állapota, és nem mondja meg sem azt, hogy link volt-e, sem azt, hogy a pénz
+ * azóta visszament. A felirat a rendelés fizetési állapotából (`payment.state`) és a link meglétéből áll össze:
+ * visszatérített kártyás rendelés „Visszatérítve” / „Részben visszatérítve”; link nélküli `paid` „Kártyáról levonva”;
+ * a link után fizetett marad „Linken fizetve”. Más kártya-állapotot nem érint (a zárolás, a link és a lejárat felirata változatlan).
+ */
+export function webshopCardPaymentLabel(
+  card: { state: WebshopCardPaymentState; link: unknown },
+  paymentState: WebshopOrderPaymentState | null | undefined,
+): string {
+  if (card.state !== "paid")
+    return WEBSHOP_CARD_PAYMENT_STATE_LABELS[card.state];
+  if (paymentState === "REFUNDED") return "Visszatérítve";
+  if (paymentState === "PARTIALLY_REFUNDED") return "Részben visszatérítve";
+  return card.link
+    ? WEBSHOP_CARD_PAYMENT_STATE_LABELS.paid
+    : "Kártyáról levonva";
+}
+
 /** A zárolás lejáratának jelzése: két napon belül (`soon`) vagy már lejárt (`expired`). */
 export type WebshopHoldWarning = "soon" | "expired" | null;
 

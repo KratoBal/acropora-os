@@ -12,7 +12,7 @@ import {
   WEBSHOP_ORDER_PAYMENT_STATE_LABELS,
   WEBSHOP_PROFORMA_DUE_DAYS,
   WEBSHOP_PARCEL_SIZES,
-  WEBSHOP_CARD_PAYMENT_STATE_LABELS,
+  webshopCardPaymentLabel,
   glsDeliveryLabel,
   type WebshopOrderAddress,
   type WebshopOrderDetail,
@@ -2147,7 +2147,7 @@ function CardPaymentSection({
   return (
     <div className="space-y-3 border-t border-pilot-grey-100 pt-3">
       <Field label="Kártyás fizetés">
-        {WEBSHOP_CARD_PAYMENT_STATE_LABELS[card.state]}
+        {webshopCardPaymentLabel(card, order.payment?.state)}
       </Field>
       {card.holdWarning && card.holdExpiresAt ? (
         <p
