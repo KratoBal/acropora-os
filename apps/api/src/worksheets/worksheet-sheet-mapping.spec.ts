@@ -4,7 +4,11 @@ import { describe, it } from "node:test";
 import type { WorksheetDetail, WorksheetVersionDetail } from "@acropora/types";
 
 import { worksheetSheetLines } from "./worksheet-sheet-content.js";
-import { worksheetSheetInput } from "./worksheet-sheet-mapping.js";
+import { worksheetSheetDocument } from "./worksheet-sheet-document.js";
+import {
+  entriesUpToClose,
+  worksheetSheetInput,
+} from "./worksheet-sheet-mapping.js";
 
 function version(
   overrides: Partial<WorksheetVersionDetail> = {},
@@ -278,5 +282,57 @@ describe("a leképezés minden mezőt kiolvas", () => {
       [],
       `a leképezés nem tölti ki: ${hianyzo.join(", ")}`,
     );
+  });
+});
+
+/*
+  A LEZARAS UTAN IRT NAPLOSOR NEM KERUL A KIADOTT LAPRA (card 30d40cd4). MI PIROSIT: ha a szuro elmarad (vagy a hatar a lezaras UTANRA tolodik), az utolag irt sor mas bajtokat ad az ujragenerald gombnak. KONTROLL: szuro nelkul a hash valoban kulonbozik (a mérés nem mindenre azonos), piszkozatnal minden sor szamit, es a hatar egyenlosege bent van.
+*/
+describe("a lezaras utan irt naplosor", () => {
+  const lezaras = "2026-09-17T20:00:00.000Z";
+  const at = new Date("2026-09-20T10:00:00.000Z");
+  const elozo = {
+    body: "Szivattyú zajos.",
+    authorName: "Szerelő Sándor",
+    createdAt: new Date("2026-09-17T19:00:00.000Z"),
+  };
+  const utolag = {
+    body: "Utólag írt sor.",
+    authorName: "Szerelő Sándor",
+    createdAt: new Date("2026-09-18T08:00:00.000Z"),
+  };
+
+  async function hash(
+    rows: readonly { body: string; authorName: string | null }[],
+  ): Promise<string> {
+    const input = worksheetSheetInput(
+      detail(),
+      version(),
+      rows.map(({ body, authorName }) => ({ body, authorName })),
+    );
+    return (await worksheetSheetDocument(input, { creationDate: at })).sha256;
+  }
+
+  it("nem valtoztatja meg a lap bajtjait", async () => {
+    const szurt = entriesUpToClose([elozo, utolag], lezaras);
+    assert.deepEqual(szurt, [elozo]);
+    assert.equal(await hash(szurt), await hash([elozo]));
+  });
+
+  it("KONTROLL: szuro nelkul a hash kulonbozik", async () => {
+    assert.notEqual(await hash([elozo, utolag]), await hash([elozo]));
+  });
+
+  it("piszkozatnal (nincs lezaras) minden sor szamit", () => {
+    assert.deepEqual(entriesUpToClose([elozo, utolag], null), [elozo, utolag]);
+  });
+
+  it("a lezaras pillanataban irt sor bent van, az egy ezredmasodperccel kesobbi kint", () => {
+    const pont = { ...elozo, createdAt: new Date(lezaras) };
+    const kesobb = {
+      ...elozo,
+      createdAt: new Date("2026-09-17T20:00:00.001Z"),
+    };
+    assert.deepEqual(entriesUpToClose([pont, kesobb], lezaras), [pont]);
   });
 });

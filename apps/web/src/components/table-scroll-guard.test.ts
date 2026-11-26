@@ -54,9 +54,14 @@ function unboxedTables(): { unboxed: string[]; total: number } {
   let total = 0;
   for (const file of tsxUnder(SRC)) {
     const rel = relative(SRC, file);
+    const text = readFileSync(file, "utf8");
+    // ONLY A FILE THAT WRITES `<table` CAN HOLD ONE (a JSX table always does), so the rest are not parsed: parsing every .tsx
+    // into an AST took 3.7 s here and timed out at vitest's 5 s on a loaded CI runner (#3053, 2026-11-26). The count of tables
+    // is the same, so the `total` floor below still proves the walk sees them.
+    if (!text.includes("<table")) continue;
     const sf = ts.createSourceFile(
       file,
-      readFileSync(file, "utf8"),
+      text,
       ts.ScriptTarget.Latest,
       true,
       ts.ScriptKind.TSX,
