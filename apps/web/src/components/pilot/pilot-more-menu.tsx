@@ -3,25 +3,33 @@
 import { PilotButton } from "@acropora/ui";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
-export type QuoteMoreMenuItem = {
+export type PilotMoreMenuItem = {
   key: string;
   label: string;
-  /** A red item: the action closes a deal or discards work (Elutasítás, Visszavonás). */
+  /** A red item: the action closes a deal, discards work or ends a case for good (Elutasítás, Visszavonás, Meghiúsultnak jelölés). */
   danger?: boolean;
   disabled?: boolean;
   onSelect: () => void;
 };
 
 /**
- * A "Továbbiak" MENU a header-gombsor végén (Picasso 3.4, acrobot 61933): a ritkább műveletek egy gomb mögött, hogy az
- * adatlapon egy elsődleges gomb és legfeljebb egy-két másodlagos álljon. Lenyitó gomb (`aria-expanded`), a panel sima
+ * A "Továbbiak" MENU (Picasso 3.4, acrobot 61933; az árajánlat adatlapjáról közös Pilot komponens lett, hogy a hibajegy
+ * Következő lépés doboza is ezt használja, Picasso 3.2): a ritkább műveletek egy gomb mögött, hogy az adatlapon egy
+ * elsődleges gomb és legfeljebb egy-két másodlagos álljon. A gomb és a panel felirata paraméter (alapból "Továbbiak" és
+ * "További műveletek"). Lenyitó gomb (`aria-expanded`), a panel sima
  * gombokból áll; Escape, kívülre kattintás és egy elem kiválasztása is bezárja, és Escape után a fókusz a lenyitó
  * gombra tér vissza. Nincs nyílbillentyű-kezelés: ez nem `role="menu"`, hanem egy lenyíló gombcsoport.
  */
-export function QuoteMoreMenu({
+export function PilotMoreMenu({
   items,
+  label = "Továbbiak",
+  groupLabel = "További műveletek",
 }: {
-  items: readonly QuoteMoreMenuItem[];
+  items: readonly PilotMoreMenuItem[];
+  /** The toggle button's text. */
+  label?: string;
+  /** The panel's accessible name. */
+  groupLabel?: string;
 }): ReactNode {
   const [open, setOpen] = useState(false);
   const panelId = useId();
@@ -55,12 +63,12 @@ export function QuoteMoreMenu({
         aria-controls={panelId}
         onClick={() => setOpen((value) => !value)}
       >
-        Továbbiak
+        {label}
       </PilotButton>
       <div
         id={panelId}
         role="group"
-        aria-label="További műveletek"
+        aria-label={groupLabel}
         hidden={!open}
         className="absolute right-0 top-full z-20 mt-1 flex w-60 flex-col rounded-md bg-white py-1 shadow-lg ring-1 ring-pilot-grey-200"
       >

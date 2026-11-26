@@ -47,7 +47,10 @@ import {
   quoteMailState,
   QuoteSendDrawer,
 } from "./quote-send";
-import { QuoteMoreMenu, type QuoteMoreMenuItem } from "./quote-more-menu";
+import {
+  PilotMoreMenu,
+  type PilotMoreMenuItem,
+} from "@/components/pilot/pilot-more-menu";
 import { QuotePartnerEditor } from "./quote-partner-editor";
 import { canEditQuoteTitle, QuoteTitleEditor } from "./quote-title-editor";
 
@@ -209,7 +212,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   // Picasso 3.4 (acrobot 61933): one primary button (Szerkesztés / Új verzió), the send next to it where a published
   // version exists, everything else behind "Továbbiak". The delete stays out of the menu, at the bottom of the page.
   const titleEditable = canEditQuoteTitle(quote, canManage);
-  const moreItems: QuoteMoreMenuItem[] = [
+  const moreItems: PilotMoreMenuItem[] = [
     ...(editable && canManage
       ? [
           {
@@ -395,7 +398,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
                   </PilotButton>
                 )
               ) : null}
-              <QuoteMoreMenu items={moreItems} />
+              <PilotMoreMenu items={moreItems} />
             </div>
           ) : undefined
         }
