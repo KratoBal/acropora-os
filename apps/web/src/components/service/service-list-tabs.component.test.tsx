@@ -46,6 +46,24 @@ describe("the shared tab row's keyboard", () => {
     }
   });
 
+  // barracuda on #3002: an active key that names no tab (an unknown status in the address) must not leave the row unreachable
+  it("an active key that names no tab: the first tab is in the Tab order, and none is selected", () => {
+    render(
+      <ServiceListTabs
+        variant="pill"
+        label="Szűrés"
+        tabs={TABS}
+        active="nincs-ilyen"
+        onSelect={vi.fn()}
+      />,
+    );
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs.map((tab) => tab.tabIndex)).toEqual([0, -1, -1]);
+    expect(
+      tabs.every((tab) => tab.getAttribute("aria-selected") === "false"),
+    ).toBe(true);
+  });
+
   it("the arrows move the focus round the row, Home and End to the ends, and the focus alone does not switch", () => {
     const { tab, onSelect } = draw();
     tab(/Kész/).focus();
