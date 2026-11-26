@@ -371,6 +371,33 @@ describe("cleanMailBody", () => {
       "Csöpög.",
     );
   });
+  // barracuda's note on #2993: a client that wraps Gmail's Hungarian header (the "időpontban" on the first line, the address and "ezt írta:" on the second)
+  // must be cut at the FIRST line, or its half stays in the report text
+  it("cuts a wrapped Hungarian reply header at its first line", () => {
+    assert.equal(
+      cleanMailBody(
+        "Csöpög a cső.\n2026. nov. 25., Sze, 10:12 időpontban\nSzerelő Sándor <szerelo@acropora.example> ezt írta:\n> régi levél",
+      ).text,
+      "Csöpög a cső.",
+    );
+    // the same wrap with a blank line before it, and the writer's own lines kept above
+    assert.equal(
+      cleanMailBody(
+        "A szűrő csöpög.\nA telefonban a szerelő ezt írta:\nA cső is folyik.\n\n2026. nov. 25., Sze, 10:12 időpontban\nSzerelő Sándor <szerelo@acropora.example> ezt írta:\n> régi levél",
+      ).text,
+      "A szűrő csöpög.\nA telefonban a szerelő ezt írta:\nA cső is folyik.",
+    );
+  });
+  it("an 'időpontban' line of the writer's own is kept when no 'írta:' line follows", () => {
+    assert.equal(
+      cleanMailBody("Az időpontban megegyeztünk.\nHétfőn jövünk.").text,
+      "Az időpontban megegyeztünk.\nHétfőn jövünk.",
+    );
+    assert.equal(
+      cleanMailBody("Az időpontban megegyeztünk.\nÉs ő ezt írta: igen.").text,
+      "Az időpontban megegyeztünk.\nÉs ő ezt írta: igen.",
+    );
+  });
   it("cuts an Outlook style header block and a forwarded divider", () => {
     const outlook =
       "Lásd lent.\n\nFrom: Anna <anna@acropora.hu>\nSent: Monday, November 16, 2026 10:00\nTo: ticket@acropora.hu\nrégi";
