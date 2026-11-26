@@ -1,4 +1,5 @@
 "use client";
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import {
   Alert,
   Icon,
@@ -329,12 +330,9 @@ export function PilotMeasurementHistoryPage({
           A VISSZALÉPÉS A KÖZÖS MINTA (picasso leltár 3.23, R12): a többi akvárium-oldalon "‹" visszanyíl áll, itt eddig morzsa
           (Akváriumok / név / Mérési előzmények). A nyíl az adatlapra visz; a lap neve a címben áll.
         */}
-        <Link
-          href={`/akvariumok/${aquariumId}`}
-          className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
-        >
-          <Icon name="chevron-left" size={12} /> {aquarium.name}
-        </Link>
+        <PilotBackLink href={`/akvariumok/${aquariumId}`}>
+          {aquarium.name}
+        </PilotBackLink>
         <PageHeader
           title="Mérési előzmények"
           meta={

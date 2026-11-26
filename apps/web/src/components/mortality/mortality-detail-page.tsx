@@ -1,5 +1,6 @@
 "use client";
 
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import {
   Alert,
   Icon,
@@ -139,13 +140,7 @@ export function MortalityDetailPage({ recordId }: { recordId: string }) {
 
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
-      <nav aria-label="Morzsamenü" className="text-sm text-pilot-grey-500">
-        <Link href={MORTALITY_LIST_PATH} className="hover:underline">
-          Elhullási napló
-        </Link>
-        {"  /  "}
-        <span className="text-pilot-grey-700">#{record.recordNumber}</span>
-      </nav>
+      <PilotBackLink href={MORTALITY_LIST_PATH}>Elhullási napló</PilotBackLink>
       <PilotPageHeader
         eyebrow="Belső nyilvántartás"
         title={livestockTitle(record)}

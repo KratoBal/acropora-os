@@ -1,5 +1,9 @@
 "use client";
 import {
+  PilotBackLink,
+  backLinkLabel,
+} from "@/components/pilot/pilot-back-link";
+import {
   Alert,
   ConfirmDialog,
   PageHeader,
@@ -19,7 +23,6 @@ import {
   servedNavigationFeatures,
   type BrandDetail,
 } from "@acropora/types";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -219,17 +222,15 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
     );
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={brand ? brand.name : "Új márka"}
-        description="Kanonikus identitás, megjelenés, aliasok és forráskapcsolatok."
-        actions={
-          <Link href={backToList.href}>
-            <PilotButton variant="secondary">
-              {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
-            </PilotButton>
-          </Link>
-        }
-      />
+      <div>
+        <PilotBackLink href={backToList.href}>
+          {backLinkLabel(backToList, "Márkák")}
+        </PilotBackLink>
+        <PageHeader
+          title={brand ? brand.name : "Új márka"}
+          description="Kanonikus identitás, megjelenés, aliasok és forráskapcsolatok."
+        />
+      </div>
       {error ? (
         <Alert
           variant="danger"

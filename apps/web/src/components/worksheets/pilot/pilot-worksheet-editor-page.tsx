@@ -1,8 +1,8 @@
 "use client";
 
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import {
   Alert,
-  Icon,
   PageHeader,
   PilotField,
   PilotFieldPair,
@@ -14,7 +14,6 @@ import {
   PAGE_GUTTER_X,
 } from "@acropora/ui";
 import { hasPermission, PERMISSIONS } from "@acropora/types";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -238,13 +237,7 @@ export function PilotWorksheetEditorPage({
   return (
     <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
       <div className={`${PAGE_GUTTER_X} pt-6`}>
-        <Link
-          href={backHref}
-          className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
-        >
-          <Icon name="chevron-left" size={12} />
-          Vissza a munkalapra
-        </Link>
+        <PilotBackLink href={backHref}>Vissza a munkalapra</PilotBackLink>
         <PageHeader
           title="Munkalap szerkesztése"
           description="A piszkozat teljes tartalma cserélődik a mentéskor."

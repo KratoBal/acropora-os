@@ -1,5 +1,9 @@
 "use client";
 import {
+  PilotBackLink,
+  backLinkLabel,
+} from "@/components/pilot/pilot-back-link";
+import {
   Alert,
   Badge,
   Button,
@@ -22,7 +26,6 @@ import {
   SERVICE_CAPABILITIES,
   type ServiceCapabilityValue,
 } from "@acropora/types";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -322,24 +325,22 @@ export function UserEditorPage({ userId }: { userId?: string }) {
       : {};
   return (
     <div className="space-y-6">
-      <PageHeader
-        // név nélküli (gépi, smoke) fióknál a cím üres h1 volt: a megjelenő név, végül az e-mail áll a helyén (a 3.23 utáni stage-kép)
-        title={
-          user
-            ? `${user.lastName} ${user.firstName}`.trim() ||
-              user.displayName ||
-              user.email
-            : "Új felhasználó"
-        }
-        description="Név, e-mail, jelszó és szerepkör alapú jogosultságok."
-        actions={
-          <Link href={backToList.href}>
-            <Button variant="secondary">
-              {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
-            </Button>
-          </Link>
-        }
-      />
+      <div>
+        <PilotBackLink href={backToList.href}>
+          {backLinkLabel(backToList, "Felhasználók")}
+        </PilotBackLink>
+        <PageHeader
+          // név nélküli (gépi, smoke) fióknál a cím üres h1 volt: a megjelenő név, végül az e-mail áll a helyén (a 3.23 utáni stage-kép)
+          title={
+            user
+              ? `${user.lastName} ${user.firstName}`.trim() ||
+                user.displayName ||
+                user.email
+              : "Új felhasználó"
+          }
+          description="Név, e-mail, jelszó és szerepkör alapú jogosultságok."
+        />
+      </div>
       {error ? (
         <Alert
           variant="danger"

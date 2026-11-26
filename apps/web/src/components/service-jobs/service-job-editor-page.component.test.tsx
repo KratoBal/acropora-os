@@ -159,16 +159,13 @@ describe("ServiceJobEditorPage", () => {
     render(<ServiceJobEditorPage />);
     await screen.findByText("Kinek és hol?");
 
-    // a morzsa (fent) és a Mégse (a gombsorban) két külön gomb, ugyanoda visznek
-    const fentre = screen.getByRole("button", { name: "Hibajegyek" });
+    // a bal felső nyíl-link (a közös visszalépés, picasso R12) és a Mégse (a gombsorban) két külön vezérlő, ugyanoda visznek
+    const fentre = screen.getByRole("link", { name: "Hibajegyek" });
     const megse = screen.getByRole("button", { name: "Mégse" });
     expect(fentre).not.toBe(megse);
-    fireEvent.click(fentre);
+    expect(fentre.getAttribute("href")).toBe("/szerviz/hibajegyek");
     fireEvent.click(megse);
-    expect(navigation.push.mock.calls).toEqual([
-      ["/szerviz/hibajegyek"],
-      ["/szerviz/hibajegyek"],
-    ]);
+    expect(navigation.push.mock.calls).toEqual([["/szerviz/hibajegyek"]]);
   });
 
   /*
@@ -185,8 +182,9 @@ describe("ServiceJobEditorPage", () => {
       screen.getByRole("heading", { name: "Új karbantartási lap" }),
     ).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Új hibajegy" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Karbantartás" }));
-    expect(navigation.push).toHaveBeenLastCalledWith("/szerviz/karbantartas");
+    expect(
+      screen.getByRole("link", { name: "Karbantartás" }).getAttribute("href"),
+    ).toBe("/szerviz/karbantartas");
     fireEvent.click(screen.getByRole("button", { name: "Mégse" }));
     expect(navigation.push).toHaveBeenLastCalledWith("/szerviz/karbantartas");
   });

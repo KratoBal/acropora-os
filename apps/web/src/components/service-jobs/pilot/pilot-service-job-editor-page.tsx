@@ -1,5 +1,6 @@
 "use client";
 
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import {
   Alert,
   PageHeader,
@@ -266,25 +267,7 @@ export function PilotServiceJobEditorPage() {
       className="flex min-h-screen flex-col bg-pilot-grey-50"
     >
       <div className={`${PAGE_GUTTER_X} pt-6`}>
-        <nav className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400">
-          <button
-            type="button"
-            onClick={() => router.push("/szerviz/hibajegyek")}
-            className="cursor-pointer transition-colors hover:text-pilot-aqua-600"
-          >
-            Szerviz
-          </button>
-          <span>/</span>
-          <button
-            type="button"
-            onClick={() => router.push("/szerviz/hibajegyek")}
-            className="cursor-pointer transition-colors hover:text-pilot-aqua-600"
-          >
-            Hibajegyek
-          </button>
-          <span>/</span>
-          <span className="font-medium text-pilot-grey-700">Új hibajegy</span>
-        </nav>
+        <PilotBackLink href="/szerviz/hibajegyek">Hibajegyek</PilotBackLink>
         <PageHeader title="Új hibajegy" />
       </div>
 

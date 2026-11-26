@@ -1,4 +1,5 @@
 "use client";
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import {
   Alert,
   Button,
@@ -17,7 +18,6 @@ import {
   type SeoLandingOptions,
   type SeoLandingPage,
 } from "@acropora/types";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -185,15 +185,13 @@ export function SeoLandingEditorPage({ landingId }: { landingId?: string }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={page ? page.title : "Új válogatás"}
-        description="Kiemelt termékválogatás saját címmel a webshopban."
-        actions={
-          <Link href={SEO_LANDING_LIST_PATH}>
-            <Button variant="secondary">Vissza a listához</Button>
-          </Link>
-        }
-      />
+      <div>
+        <PilotBackLink href={SEO_LANDING_LIST_PATH}>Válogatások</PilotBackLink>
+        <PageHeader
+          title={page ? page.title : "Új válogatás"}
+          description="Kiemelt termékválogatás saját címmel a webshopban."
+        />
+      </div>
       {error ? (
         <Alert
           variant="danger"

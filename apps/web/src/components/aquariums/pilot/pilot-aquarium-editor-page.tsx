@@ -1,4 +1,5 @@
 "use client";
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import { useAssistantEntity } from "@/components/assistant/page-context";
 import {
   Alert,
@@ -23,7 +24,6 @@ import {
   type WorksheetDepartmentSummary,
   servedNavigationFeatures,
 } from "@acropora/types";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -481,12 +481,11 @@ export function PilotAquariumEditorPage({
       className="flex min-h-screen flex-col bg-pilot-grey-50"
     >
       <div className={`${PAGE_GUTTER_X} pt-6`}>
-        <Link
+        <PilotBackLink
           href={isEdit ? `/akvariumok/${aquariumId}` : "/akvariumok"}
-          className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
         >
-          <Icon name="chevron-left" size={12} /> Akváriumok
-        </Link>
+          Akváriumok
+        </PilotBackLink>
         <PageHeader
           title={isEdit ? name || "Akvárium szerkesztése" : "Új akvárium"}
           meta={
