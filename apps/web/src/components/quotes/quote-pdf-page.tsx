@@ -13,10 +13,11 @@ import {
   PERMISSIONS,
   type QuoteDetailDto,
 } from "@acropora/types";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { PilotBackLink } from "@/components/pilot/pilot-back-link";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { quotesApi } from "@/lib/api/quotes";
 
@@ -32,7 +33,6 @@ import { QUOTES_PATH } from "./quote-list-page";
  */
 export function QuotePdfPage({ quoteId }: { quoteId: string }) {
   const { session } = useAuth();
-  const router = useRouter();
   const search = useSearchParams();
   const token = session?.token ?? "";
   const canView = Boolean(
@@ -127,6 +127,16 @@ export function QuotePdfPage({ quoteId }: { quoteId: string }) {
 
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
+      <PilotBackLink
+        href={
+          draft
+            ? `${QUOTES_PATH}/${quote.id}/szerkesztes`
+            : `${QUOTES_PATH}/${quote.id}`
+        }
+        flush
+      >
+        {draft ? "Szerkesztő" : "Ajánlat"}
+      </PilotBackLink>
       <PilotPageHeader
         eyebrow="Értékesítés / Árajánlatok"
         title={`PDF előnézet · ${quote.quoteNumber} v${version.versionNumber}`}
@@ -140,19 +150,6 @@ export function QuotePdfPage({ quoteId }: { quoteId: string }) {
         }
         actions={
           <div className="flex flex-wrap gap-3">
-            <PilotButton
-              variant="secondary"
-              size="regular"
-              onClick={() =>
-                router.push(
-                  draft
-                    ? `${QUOTES_PATH}/${quote.id}/szerkesztes`
-                    : `${QUOTES_PATH}/${quote.id}`,
-                )
-              }
-            >
-              {draft ? "Vissza a szerkesztőhöz" : "Vissza az adatlapra"}
-            </PilotButton>
             {url ? (
               <a
                 href={url}

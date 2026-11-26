@@ -641,13 +641,10 @@ describe("egy megrendelés", () => {
   });
 
   // Picasso 3.29: three ways back (a blue link, a breadcrumb-like eyebrow, the menu), blue links in a green system, seven equal Csatolás buttons
-  it("has one way back (a green link), no breadcrumb-like eyebrow, and green links", async () => {
+  it("has one way back (the shared arrow link), no breadcrumb-like eyebrow, and green links", async () => {
     render(<PartnerOrderDetailPage orderId="o1" />);
-    const back = await screen.findByRole("link", {
-      name: /Vissza a megrendelésekhez/,
-    });
-    expect(back.className).toContain("text-pilot-aqua-700");
-    expect(back.className).not.toContain("blue");
+    const back = await screen.findByRole("link", { name: "Megrendelések" });
+    expect(back.getAttribute("href")).toBe("/megrendelesek");
     expect(screen.queryByText("Értékesítés / Megrendelések")).toBeNull();
     const quoteLink = screen.getByRole("link", { name: /^AJ-/ });
     expect(quoteLink.className).toContain("text-pilot-aqua-700");

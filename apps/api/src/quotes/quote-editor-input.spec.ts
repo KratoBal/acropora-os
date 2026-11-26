@@ -18,10 +18,133 @@ const para = (text: string, marks?: unknown[]) => ({
 });
 
 describe("quote rich text on the server (decision 5)", () => {
+  /*
+    URGENT BUG HUNT (card fa6d7fa6, Luca 2026-11-26): the shapes below are the PATCH bodies the real editor sent from the test OS
+    (measured in a browser: one bold letter, nested bullet list, mixed formatting with a hard break). Each must be accepted for every
+    text kind, as stored AND as the save path sees it (blockContent).
+    WHAT TURNS IT RED: if the server starts rejecting marks on a split text run, a list inside a list item, a hard break or an italic run.
+  */
+  const FROM_EDITOR: Array<[string, unknown]> = [
+    [
+      "one bold letter splits the run in three",
+      doc({
+        type: "paragraph",
+        content: [
+          { type: "text", text: "a" },
+          { type: "text", text: "l", marks: [{ type: "bold" }] },
+          { type: "text", text: "ma" },
+        ],
+      }),
+    ],
+    [
+      "a bullet list with a nested list and bold items",
+      doc({
+        type: "bulletList",
+        content: [
+          {
+            type: "listItem",
+            content: [
+              para("egy", [{ type: "bold" }]),
+              {
+                type: "bulletList",
+                content: [{ type: "listItem", content: [para("beljebb")] }],
+              },
+            ],
+          },
+        ],
+      }),
+    ],
+    [
+      "mixed: two paragraphs, a hard break, italic, an ordered list",
+      doc(
+        para("a", [{ type: "bold" }, { type: "italic" }]),
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "elso" },
+            { type: "hardBreak" },
+            { type: "text", text: "masodik" },
+          ],
+        },
+        { type: "paragraph" },
+        {
+          type: "orderedList",
+          content: [{ type: "listItem", content: [para("elem")] }],
+        },
+      ),
+    ],
+  ];
+  for (const [name, value] of FROM_EDITOR)
+    for (const kind of [
+      "TEXT",
+      "TERMS",
+      "SECTION",
+      "OPTIONS",
+      "SUMMARY",
+    ] as const)
+      it(`accepts ${name} on a ${kind} block, unchanged`, () => {
+        assert.deepEqual(blockContent(kind, value), value);
+      });
+
   it("keeps the allowed subset", () => {
     const value = doc(para("Szia", [{ type: "bold" }]));
     assert.deepEqual(richTextInput(value), value);
   });
+
+  /*
+    LUCA 2026-11-26 (card fa6d7fa6, AJ-2026-0021): a pasted bold paragraph with line breaks arrives with the bold mark ON the hardBreak node
+    (ProseMirror applies the pasted <b> to the <br>). The whole block was refused. A line break carries no formatting: the mark is dropped,
+    the text keeps its own. WHAT TURNS IT RED: if that shape is refused again, if the mark reaches the stored JSON, if the text loses its bold,
+    or if a mark on any OTHER non-text node is let through.
+  */
+  it("accepts a pasted bold line break, stores it without the mark, and keeps the text's bold", () => {
+    const pasted = doc({
+      type: "paragraph",
+      content: [
+        { type: "text", text: "elso", marks: [{ type: "bold" }] },
+        { type: "hardBreak", marks: [{ type: "bold" }] },
+        { type: "text", text: "masodik", marks: [{ type: "bold" }] },
+      ],
+    });
+    for (const kind of ["TEXT", "TERMS", "SECTION"] as const)
+      assert.deepEqual(
+        blockContent(kind, pasted),
+        doc({
+          type: "paragraph",
+          content: [
+            { type: "text", text: "elso", marks: [{ type: "bold" }] },
+            { type: "hardBreak" },
+            { type: "text", text: "masodik", marks: [{ type: "bold" }] },
+          ],
+        }),
+      );
+  });
+
+  for (const [name, value] of [
+    [
+      "a mark on a paragraph",
+      doc({ type: "paragraph", marks: [{ type: "bold" }] }),
+    ],
+    [
+      "a mark on a list item",
+      doc({
+        type: "bulletList",
+        content: [
+          { type: "listItem", marks: [{ type: "bold" }], content: [para("x")] },
+        ],
+      }),
+    ],
+    [
+      "a non-array mark list on a line break",
+      doc({
+        type: "paragraph",
+        content: [{ type: "hardBreak", marks: "bold" }],
+      }),
+    ],
+  ] as Array<[string, unknown]>)
+    it(`still refuses ${name}`, () => {
+      assert.throws(() => richTextInput(value), { status: 400 } as object);
+    });
 
   // what a paste or a shortcut could bring in: none may reach the stored JSON
   for (const [name, value] of [

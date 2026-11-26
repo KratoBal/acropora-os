@@ -1,6 +1,8 @@
 import type { Prisma } from "@acropora/database";
 import type { BillingDocumentFinalInvoiceNotice } from "@acropora/types";
 
+import { acceptedItemIds } from "../quotes/quote-accepted-items.js";
+
 /**
  * A VÉGSZÁMLA-VÁZLAT TÉTELEI AZ AJÁNLATBÓL (kártya 2650d371, Balázs kérdése 2026-11-16: "az elszámolásban is tudjátok majd kezelni?").
  *
@@ -62,6 +64,7 @@ export interface MilestoneRow {
 export interface QuoteItemRow extends QuoteBasisItem {
   id: string;
   isOptional: boolean;
+  replacesItemId: string | null;
 }
 
 /**
@@ -75,13 +78,13 @@ export function quoteBasisFrom(
   items: readonly QuoteItemRow[],
 ): QuoteBasis | null {
   if (milestone.quote.acceptedVersionId !== milestone.versionId) return null;
-  const selected = new Set(selectedOptionalItemIds);
+  const accepted = acceptedItemIds(items, selectedOptionalItemIds);
   return {
     quoteNumber: milestone.quote.quoteNumber,
     percent: milestone.percent,
     otherProformaMilestones: milestone.otherProformaMilestones,
     items: items
-      .filter((item) => !item.isOptional || selected.has(item.id))
+      .filter((item) => accepted.has(item.id))
       .map(
         ({
           name,

@@ -376,6 +376,7 @@ export class BillingDocumentsRepository {
       select: {
         id: true,
         isOptional: true,
+        replacesItemId: true,
         name: true,
         quantity: true,
         unit: true,

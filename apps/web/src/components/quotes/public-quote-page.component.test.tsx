@@ -63,6 +63,66 @@ describe("Az elfogadó link oldala (#1582 P4b)", () => {
     ).toBeTruthy();
   });
 
+  /*
+    AZ OPCIONÁLIS TÉTELEK KÜLÖN (kártya 2540d9d4, Luca 2026-11-26). MI PIROSÍT: az opcionális tétel a kínált tételek között áll
+    (a régi lista), a csoport nem mondja ki, hogy nem része a végösszegnek, a tétel nem viseli a címkét, vagy a végösszeg alatt nincs
+    ott az opcionálisokkal együtt számolt összeg (vagy opció nélküli ajánlaton mégis ott van).
+  */
+  it("az opcionális tétel külön csoportban, címkével, és a végösszeg alatt az opcionálisokkal együtt", async () => {
+    // the option FIRST in the list: the group must still come after the offered item
+    const [offered, option] = page().items;
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          reply(200, page({ items: [option!, offered!] })),
+        ),
+    );
+    render(<PublicQuotePage token="tok-123" />);
+    const group = await screen.findByRole("heading", {
+      name: "Opcionális tételek",
+    });
+    const rows = screen.getAllByTestId("quote-item-row");
+    expect(rows.map((row) => row.textContent?.includes("Fedőlap"))).toEqual([
+      false,
+      true,
+    ]);
+    // the heading stands between the offered row and the option
+    expect(
+      rows[0]!.compareDocumentPosition(group) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      group.compareDocumentPosition(rows[1]!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByText(/Nem részei a végösszegnek\./)).toBeTruthy();
+    expect(rows[1]!.textContent).toContain("Opcionális · kiegészítés");
+    expect(rows[0]!.textContent).not.toContain("Opcionális");
+    expect(
+      screen.getByText(
+        /Az opcionális tételekkel együtt:\s*120\s000 Ft\s*\+ ÁFA/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("opció nélkül nincs opcionális csoport és nincs együttes összeg", async () => {
+    const [offered] = page().items;
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          reply(200, page({ items: [offered!], optionalNetTotal: "0.00" })),
+        ),
+    );
+    render(<PublicQuotePage token="tok-123" />);
+    await screen.findByText(/Nettó összesen:/);
+    expect(screen.queryByText("Opcionális tételek")).toBeNull();
+    expect(screen.queryByText(/opcionális tételekkel együtt/)).toBeNull();
+  });
+
   it("a kért opcióval, a megadott névvel, egy kérés-azonosítóval fogad el", async () => {
     const fetchMock = vi
       .fn()

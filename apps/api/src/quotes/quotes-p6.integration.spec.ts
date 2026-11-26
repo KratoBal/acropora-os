@@ -58,6 +58,8 @@ interface Line {
   quantity: number;
   optional?: boolean;
   selected?: boolean;
+  /** KIVÁLTOTT TÉTEL: the index (in `lines`) of the earlier line this optional line stands in for */
+  replaces?: number;
   /** P7: the customer line's net unit price and VAT rate */
   unitNetPrice?: string;
   vatRate?: string;
@@ -165,6 +167,7 @@ describe(
       });
       const selected: string[] = [];
       const bomIds: string[] = [];
+      const itemIds: string[] = [];
       for (const [position, line] of lines.entries()) {
         const item = await prisma.quoteItem.create({
           data: {
@@ -178,8 +181,11 @@ describe(
             unitNetPrice: line.unitNetPrice ?? "1000",
             vatRatePercent: line.vatRate ?? "27",
             isOptional: line.optional ?? false,
+            replacesItemId:
+              line.replaces === undefined ? null : itemIds[line.replaces]!,
           },
         });
+        itemIds.push(item.id);
         if (line.selected) selected.push(item.id);
         const bom = await prisma.quoteBomItem.create({
           data: {
@@ -611,6 +617,49 @@ describe(
       );
     });
 
+    // KIVÁLTOTT TÉTEL (card 2540d9d4): a chosen optional line takes the replaced line's place in the project's request; MI PIROSÍT: ha a
+    // kiváltott sor a kérésen marad, vagy ha a ki nem választott opcionális kiszorítja
+    it("a chosen optional line replaces its line in the project's request, an unchosen one replaces nothing", async () => {
+      const chosen = await acceptedQuote("replace-yes", [
+        { kind: "CUSTOM", name: "Régi szűrő", quantity: 1 },
+        {
+          kind: "CUSTOM",
+          name: "Új szűrő",
+          quantity: 1,
+          optional: true,
+          selected: true,
+          replaces: 0,
+        },
+      ]);
+      const unchosen = await acceptedQuote("replace-no", [
+        { kind: "CUSTOM", name: "Régi szűrő", quantity: 1 },
+        {
+          kind: "CUSTOM",
+          name: "Új szűrő",
+          quantity: 1,
+          optional: true,
+          selected: false,
+          replaces: 0,
+        },
+      ]);
+      const names: string[][] = [];
+      for (const q of [chosen, unchosen]) {
+        const plan = await preview(q.quoteId);
+        const res = await execute(q.quoteId, plan.body!.planHash);
+        assert.equal(res.status, 200, JSON.stringify(res.body));
+        const items = await prisma.materialRequestItem.findMany({
+          where: { materialRequest: { projectId: res.body!.projectId } },
+          select: { name: true },
+        });
+        names.push(items.map((i) => i.name).sort());
+      }
+      assert.deepEqual(
+        names,
+        [["Új szűrő"], ["Régi szűrő"]],
+        "REPLACE-HANDOFF",
+      );
+    });
+
     it("a quote not accepted gives a 409", async () => {
       const q = await acceptedQuote("open", [
         { kind: "SERVICE", name: "Beüzemelés", quantity: 1 },
@@ -697,6 +746,36 @@ describe(
         ],
         "PROFORMA-SPLIT",
       );
+    });
+
+    // KIVÁLTOTT TÉTEL: a díjbekérő a kiváltott sor nélkül, a helyére lépő opcionális sorral számol; MI PIROSÍT: ha a kiváltott sor a díjbekérőn marad
+    it("a milestone's proforma leaves out the replaced line and counts the chosen optional one", async () => {
+      const c = await customer("replace");
+      const q = await acceptedQuote(
+        "pf-replace",
+        [
+          { kind: "CUSTOM", name: "Tartó", quantity: 1, unitNetPrice: "1000" },
+          { kind: "CUSTOM", name: "Régi", quantity: 1, unitNetPrice: "5000" },
+          {
+            kind: "CUSTOM",
+            name: "Új",
+            quantity: 1,
+            unitNetPrice: "3000",
+            optional: true,
+            selected: true,
+            replaces: 1,
+          },
+        ],
+        { customerId: c, milestones: [["Teljes összeg", 100]] },
+      );
+      const m = await firstMilestone(q.quoteId);
+      const res = await proformaDraft(q.quoteId, m.id);
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+      const invoice = await prisma.invoice.findUniqueOrThrow({
+        where: { id: res.body!.invoiceId },
+      });
+      // 1000 + 3000 (the 5000 line is replaced), not 1000 + 5000 + 3000
+      assert.equal(invoice.netAmount?.toString(), "4000", "REPLACE-PROFORMA");
     });
 
     it("the proforma's line text and note carry the milestone's EXACT percent: 40 stays 40, not 4 (Luca, 2026-11-17, task t-20261117-dijbekero-szazalek)", async () => {

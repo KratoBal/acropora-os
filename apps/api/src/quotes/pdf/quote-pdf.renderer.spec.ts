@@ -595,6 +595,50 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
   });
 
   /**
+   * THE OPTIONAL ITEMS OF A SECTION (card 2540d9d4, Luca 2026-11-26). What must fail: an optional item among the offered rows (the
+   * old layout, a "+" before its price); an optional item without its tag; the group without the band saying it is not part of the
+   * total; the summary without the total with the options, or with that row on a quote that has none.
+   */
+  it("a section's optional items stand apart at its bottom, each tagged, and the summary adds the total with them", async () => {
+    const linesOf = async (items: QuotePdfItem[]) =>
+      (
+        await readPdfTextLines(
+          (
+            await renderQuotePdf(
+              input([block("SECTION", { title: "Akvárium", items })]),
+            )
+          ).bytes,
+        )
+      ).map((l) => l.text);
+    // the option is FIRST in the block: the group must still come after the offered rows
+    const lines = await linesOf([
+      item("Opció elöl", { isOptional: true, unitNetPrice: d("10000") }),
+      item("Medence"),
+      item("Világítás", { unitNetPrice: d("50000") }),
+    ]);
+    const all = lines.join(" | ");
+    const at = (needle: string) => lines.findIndex((t) => t.includes(needle));
+    const band = "Opcionális tételek · Nem részei a végösszegnek.";
+    assert.ok(at("Medence") >= 0 && at("Medence") < at("Világítás"), all);
+    assert.ok(at("Világítás") < at(band), all);
+    assert.ok(at(band) < at("Opció elöl"), all);
+    assert.equal(lines[at("Opció elöl") + 1], "Opcionális · kiegészítés", all);
+    assert.equal(
+      lines.filter((t) => t === "Opcionális · kiegészítés").length,
+      1,
+      all,
+    );
+    // no "+" before an amount (the footer's phone number has one, without Ft)
+    assert.doesNotMatch(all, /\+\s?\d[\d\s\u00a0]* Ft/);
+    // offered: 150 000 net, 190 500 gross; with the option: 160 000 net, 203 200 gross
+    assert.match(all, /BRUTTÓ VÉGÖSSZEG · OPCIÓK NÉLKÜL 190 500 Ft/);
+    assert.match(all, /Az opcionális tételekkel együtt 203 200 Ft/);
+
+    const plain = (await linesOf([item("Medence")])).join(" | ");
+    assert.doesNotMatch(plain, /opcionális|Opcionális/);
+  });
+
+  /**
    * LUCA'S SAMPLE (AJ-2026-0005 v1, the zoo's four items): it printed on two
    * pages, with the summary alone on the second. What must fail: a quote of
    * four to six items that does not fit one page; a total that is not the sum
@@ -753,10 +797,15 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
       "OPTIONAL ITEMS",
       "Not included in the total.",
       "Item Quantity Gross unit price Gross total",
+      "Optional · addition",
+      "Including the optional items",
       "Acropora Kft. · MARINE AQUARIUMS · DESIGN · INSTALLATION",
     ])
       assert.ok(text.includes(needle), `${needle}: ${text}`);
-    assert.doesNotMatch(text, /ÁRAJÁNLAT|Érvényes|Nem részei|Tétel neve/);
+    assert.doesNotMatch(
+      text,
+      /ÁRAJÁNLAT|Érvényes|Nem részei|Tétel neve|Opcionális|kiegészítés/,
+    );
   });
 
   it("the money is in Ft, and the design's Noto Sans pair is embedded", async () => {

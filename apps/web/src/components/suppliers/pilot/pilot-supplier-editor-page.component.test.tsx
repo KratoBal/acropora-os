@@ -67,6 +67,13 @@ describe("PilotSupplierEditorPage", () => {
     navigation.push.mockReset();
   });
 
+  it("steps back to the partner list with the shared arrow link", () => {
+    render(<PilotSupplierEditorPage />);
+
+    const back = screen.getByRole("link", { name: "Partnerek" });
+    expect(back.getAttribute("href")).toBe("/partnerek");
+  });
+
   /** The Partners menu no longer holds suppliers only, so the screen must not
    * call every new record a supplier. The list page carries the same label and
    * is asserted in its own spec: changing one of the two and leaving the other

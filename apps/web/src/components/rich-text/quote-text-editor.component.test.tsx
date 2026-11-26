@@ -22,6 +22,11 @@ interface Peldany {
     selectAll(): boolean;
     toggleBold(): boolean;
     toggleOrderedList(): boolean;
+    toggleBulletList(): boolean;
+    toggleItalic(): boolean;
+    splitBlock(): boolean;
+    setHardBreak(): boolean;
+    setTextSelection(range: { from: number; to: number }): boolean;
     insertContent(
       tartalom: string,
       opciok?: { applyInputRules?: boolean },
@@ -58,6 +63,19 @@ const szoveg = (raw: string) =>
   [...raw.matchAll(/"text":"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]).join("");
 
 describe("az ajánlati szöveg szerkesztője", () => {
+  // Picasso 3.21 (acrobot 62633): an empty quote text block is about four lines tall, not a 192 px box; the mails keep the taller area
+  it("üresen négy sornyi magas (min-h-24), a levél-szerkesztő marad a magasabb", async () => {
+    megjelenit();
+    const box = await screen.findByLabelText("Ajánlat szöveg");
+    expect(box.className).toContain("min-h-24");
+    expect(box.className).not.toContain("min-h-48");
+    render(
+      <RichTextEditor aria-label="Levél törzse" value="" onChange={vi.fn()} />,
+    );
+    const mail = await screen.findByLabelText("Levél törzse");
+    expect(mail.className).toContain("min-h-48");
+  });
+
   it("`# ` és `> ` beírás után a kimenet átmegy a sémán, a szöveg megmarad", () => {
     const { editor, utolso } = megjelenit();
     act(() => {
@@ -97,6 +115,76 @@ describe("az ajánlati szöveg szerkesztője", () => {
       expect(editor().schema.marks[mark]).toBeUndefined();
     for (const node of ["heading", "blockquote", "codeBlock", "horizontalRule"])
       expect(editor().schema.nodes[node]).toBeUndefined();
+  });
+
+  /*
+    URGENT BUG HUNT (card fa6d7fa6, Luca 2026-11-26): what the editor sends for the formatting changes the report names (one bold letter, a
+    new paragraph, a bullet list, mixed formatting) passes the shared schema, which the server applies to the save. The same shapes were
+    measured in a real browser on the test OS (all 200). WHAT TURNS IT RED: if any of these editor outputs is outside the subset.
+  */
+  it("egy betű félkövér: a kimenet átmegy a sémán, és csak az a betű jelölt", () => {
+    const { editor, utolso } = megjelenit();
+    act(() => {
+      editor().commands.insertContent("alma");
+      editor().commands.setTextSelection({ from: 2, to: 3 });
+      editor().commands.toggleBold();
+    });
+    const { raw, parsed } = utolso();
+    expect(validateQuoteRichText(parsed).ok).toBe(true);
+    expect(raw).toContain(
+      '{"type":"text","text":"l","marks":[{"type":"bold"}]}',
+    );
+    expect(szoveg(raw)).toBe("alma");
+  });
+
+  it("új bekezdés és felsorolás: a kimenet átmegy a sémán, a szöveg megmarad", () => {
+    const { editor, utolso } = megjelenit();
+    act(() => {
+      editor().commands.insertContent("alma");
+      editor().commands.splitBlock();
+      editor().commands.insertContent("körte");
+      editor().commands.toggleBulletList();
+    });
+    const { raw, parsed } = utolso();
+    expect(validateQuoteRichText(parsed).ok).toBe(true);
+    expect(raw).toContain('"type":"bulletList"');
+    expect(szoveg(raw)).toBe("almakörte");
+  });
+
+  it("vegyes formázás (félkövér, dőlt, sortörés, felsorolás): a kimenet átmegy a sémán", () => {
+    const { editor, utolso } = megjelenit();
+    act(() => {
+      editor().commands.insertContent("alma");
+      editor().commands.selectAll();
+      editor().commands.toggleBold();
+      editor().commands.toggleItalic();
+      editor().commands.toggleBulletList();
+    });
+    const { raw, parsed } = utolso();
+    expect(validateQuoteRichText(parsed).ok).toBe(true);
+    expect(raw).toContain('"marks":[{"type":"bold"},{"type":"italic"}]');
+    expect(raw).not.toContain("attrs");
+  });
+
+  /*
+    LUCA 2026-11-26 (card fa6d7fa6, AJ-2026-0021 Feltételek blokk): egy BEILLESZTETT, FÉLKÖVÉR bekezdés sortörésekkel. A ProseMirror a beillesztett
+    `<b>` jelölését a benne lévő `<br>`-re is ráteszi (`{"type":"hardBreak","marks":[bold]}`), a közös séma pedig csak a szöveg csomópontnak enged
+    jelölést: a szerver az egész dokumentumot elutasította ("A szöveg nem megengedett formázást tartalmaz"), a blokk nem volt menthető.
+    MI PIROSÍT: ha a kimenetben egy sortörés jelölést visel; ha a félkövér szöveg jelölése a sortörés miatt elvész; ha a kimenet nem megy át a sémán.
+  */
+  it("beillesztett félkövér szövegben a sortörés nem visel jelölést, a szöveg jelölése megmarad, és a kimenet átmegy a sémán", () => {
+    const { editor, utolso } = megjelenit();
+    act(() => {
+      editor().view.pasteHTML(
+        "<p><strong>első sor<br>második sor<br><br>negyedik sor</strong></p>",
+      );
+    });
+    const { raw, parsed } = utolso();
+    expect(raw).toContain('{"type":"hardBreak"}');
+    expect(raw).not.toMatch(/"type":"hardBreak","marks"/);
+    expect(raw).toContain('"text":"második sor","marks":[{"type":"bold"}]');
+    expect(szoveg(raw)).toBe("első sormásodik sornegyedik sor");
+    expect(validateQuoteRichText(parsed).ok).toBe(true);
   });
 
   it("a számozott lista attribútumai nem kerülnek a kimenetbe", () => {

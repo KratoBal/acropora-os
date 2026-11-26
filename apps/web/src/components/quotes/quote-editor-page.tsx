@@ -42,6 +42,7 @@ import { quotesApi } from "@/lib/api/quotes";
 
 import { bomLineName, QuoteBomDrawer } from "./quote-bom-drawer";
 import {
+  blockSaveError,
   errorText,
   formatQuantity,
   formatQuoteMoney,
@@ -265,7 +266,11 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
   }, [canManage, canView, loadCosting, quoteId, token]);
 
   /** Egy írás: a válasz a friss ajánlat, utána a kalkuláció is frissül. */
-  const write = async (action: () => Promise<QuoteDetailDto>) => {
+  const write = async (
+    action: () => Promise<QuoteDetailDto>,
+    /** a hibát a hívó mutatja (a blokk a saját gombja alatt), nem az oldal tetején */
+    onError?: (cause: unknown) => void,
+  ) => {
     setBusy(true);
     setError(null);
     try {
@@ -274,7 +279,8 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
       await loadCosting(next);
       return true;
     } catch (cause) {
-      setError(errorText(cause, "A módosítás nem menthető."));
+      if (onError) onError(cause);
+      else setError(errorText(cause, "A módosítás nem menthető."));
       return false;
     } finally {
       setBusy(false);
@@ -519,9 +525,17 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
                     quotesApi.deleteBlock(token, quote.id, v.id, block.id),
                 })
               }
-              onSave={(patch) =>
-                write(() =>
-                  quotesApi.updateBlock(token, quote.id, v.id, block.id, patch),
+              onSave={(patch, onError) =>
+                write(
+                  () =>
+                    quotesApi.updateBlock(
+                      token,
+                      quote.id,
+                      v.id,
+                      block.id,
+                      patch,
+                    ),
+                  onError,
                 )
               }
               onAddItem={() => setItemDrawer({ blockId: block.id, item: null })}
@@ -790,10 +804,13 @@ function BlockCard({
   last: boolean;
   onMove: (delta: number) => void;
   onDelete: () => void;
-  onSave: (patch: {
-    title?: string | null;
-    content?: unknown;
-  }) => Promise<boolean>;
+  onSave: (
+    patch: {
+      title?: string | null;
+      content?: unknown;
+    },
+    onError: (cause: unknown) => void,
+  ) => Promise<boolean>;
   onAddItem: () => void;
   onEditItem: (item: Item) => void;
   onMoveItem: (index: number, delta: number) => void;
@@ -808,6 +825,10 @@ function BlockCard({
       : EMPTY;
   const [title, setTitle] = useState(block.title ?? "");
   const [text, setText] = useState(initialText);
+  const [saveError, setSaveError] = useState<{
+    message: string;
+    hint: string | null;
+  } | null>(null);
   // the title is saved trimmed, so it is compared trimmed
   const dirty = title.trim() !== (block.title ?? "") || text !== initialText;
   /*
@@ -893,17 +914,28 @@ function BlockCard({
         {block.kind !== "PAGE_BREAK" && dirty ? (
           <PilotButton
             disabled={busy}
-            onClick={() =>
-              void onSave({
-                title: title.trim() || null,
-                ...(TEXT_KINDS.has(block.kind)
-                  ? { content: JSON.parse(text) as unknown }
-                  : {}),
-              })
-            }
+            onClick={() => {
+              setSaveError(null);
+              void onSave(
+                {
+                  title: title.trim() || null,
+                  ...(TEXT_KINDS.has(block.kind)
+                    ? { content: JSON.parse(text) as unknown }
+                    : {}),
+                },
+                (cause) => setSaveError(blockSaveError(cause)),
+              );
+            }}
           >
             Blokk mentése
           </PilotButton>
+        ) : null}
+        {/* a mentés hibája ITT, a gomb alatt (acrobot 62710): az oldal tetején egy hosszú ajánlatnál nem látszott */}
+        {saveError ? (
+          <div role="alert" className="space-y-1 text-sm text-pilot-red-700">
+            <p>{saveError.message}</p>
+            {saveError.hint ? <p>{saveError.hint}</p> : null}
+          </div>
         ) : null}
 
         {ITEM_KINDS.has(block.kind) ? (
@@ -968,7 +1000,8 @@ function BlockCard({
                       </PilotButton>
                     ) : null}
                     <PilotButton
-                      variant="ghost"
+                      // the delete looks dangerous, not like the quiet edit beside it (Picasso 3.21, acrobot 62633)
+                      variant="danger"
                       aria-label={`${item.name}: törlés`}
                       disabled={busy}
                       onClick={() => onDeleteItem(item)}
