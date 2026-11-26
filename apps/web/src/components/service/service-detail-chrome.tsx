@@ -25,7 +25,7 @@ export function ServiceBackLink({
   return (
     <Link
       href={href}
-      className="mb-[18px] inline-flex items-center gap-[7px] text-xs text-muted hover:text-brand-700"
+      className="mb-[18px] inline-flex items-center gap-[7px] text-xs text-muted hover:text-pilot-aqua-700"
     >
       <ServiceIcon name="arrowLeft" className="size-4" />
       {children}

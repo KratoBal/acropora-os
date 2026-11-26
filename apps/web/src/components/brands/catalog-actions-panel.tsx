@@ -292,7 +292,7 @@ export function CatalogActionsPanel({ token }: { token: string }) {
                       {runSummary(run.output)}
                     </pre>
                     <details>
-                      <summary className="cursor-pointer text-xs text-brand-700">
+                      <summary className="cursor-pointer text-xs text-pilot-aqua-700">
                         Teljes kimenet
                       </summary>
                       <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded bg-dusk-50 p-2 text-xs">

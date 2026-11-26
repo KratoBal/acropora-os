@@ -128,7 +128,7 @@ export function ManufacturerClaimQueuePage() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Link
                   href={`/products/${encodeURIComponent(claim.productId)}`}
-                  className="font-medium text-brand-600 underline"
+                  className="font-medium text-pilot-aqua-700 underline"
                 >
                   {claim.productName}
                 </Link>

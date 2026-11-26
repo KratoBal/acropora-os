@@ -507,7 +507,7 @@ export function ProductManufacturerClaimsCard({
                             ? `/tartalom/${encodeURIComponent(item.id)}/cikk`
                             : "/tartalom"
                         }
-                        className="text-brand-600 underline"
+                        className="text-pilot-aqua-700 underline"
                       >
                         {item.title}
                       </Link>{" "}
@@ -667,7 +667,7 @@ export function ProductManufacturerClaimsCard({
       <p className="text-xs">
         <Link
           href="/products/gyartoi-allitasok"
-          className="text-brand-600 underline"
+          className="text-pilot-aqua-700 underline"
         >
           Az összes gyártói állítás, ellenőrzésre várók
         </Link>

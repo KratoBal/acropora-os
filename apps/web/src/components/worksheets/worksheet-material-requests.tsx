@@ -380,7 +380,7 @@ export function WorksheetMaterialRequests({
               {request.status !== "DRAFT" ? (
                 <Link
                   href={`/szerviz/anyagigenyek/${encodeURIComponent(request.id)}`}
-                  className="mt-2 inline-block text-xs font-semibold text-brand-700 underline"
+                  className="mt-2 inline-block text-xs font-semibold text-pilot-aqua-700 underline"
                 >
                   Részletek és állapot
                 </Link>
