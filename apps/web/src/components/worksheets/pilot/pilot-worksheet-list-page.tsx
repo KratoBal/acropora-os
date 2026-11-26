@@ -307,19 +307,27 @@ export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
   },
   {
     id: "serviceJob",
-    // a sorban hibajegy (HJ-) és karbantartási lap (KT-) száma is áll: a fejléc semleges
+    // a sorban hibajegy (HJ-) és karbantartási lap (KT-) száma is áll: a fejléc semleges, a cella kimondja a fajtát (picasso 3.9)
     header: "Jegy / lap",
-    width: "110px",
+    width: "120px",
     nowrap: true,
     cell: (worksheet) =>
       worksheet.serviceJob ? (
-        <Link
-          href={serviceJobRef(worksheet.serviceJob).href}
-          onClick={(event) => event.stopPropagation()}
-          className="font-mono text-xs text-pilot-aqua-700 hover:text-pilot-aqua-800"
-        >
-          {worksheet.serviceJob.jobNumber}
-        </Link>
+        <>
+          {/* a fajta a jegyé, nem az előtagé: egy régi karbantartási lap HJ-számot is viselhet */}
+          <span className="block text-xs text-pilot-grey-500">
+            {worksheet.serviceJob.kind === "MAINTENANCE"
+              ? "Karbantartás"
+              : "Hibajegy"}
+          </span>
+          <Link
+            href={serviceJobRef(worksheet.serviceJob).href}
+            onClick={(event) => event.stopPropagation()}
+            className="font-mono text-xs text-pilot-aqua-700 hover:text-pilot-aqua-800"
+          >
+            {worksheet.serviceJob.jobNumber}
+          </Link>
+        </>
       ) : (
         <span className="text-pilot-grey-400">—</span>
       ),
