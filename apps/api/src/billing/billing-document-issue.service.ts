@@ -35,6 +35,8 @@ import type { DocumentStore } from "../service-assets/document-store/document-st
 import { budapestDayKey } from "../dashboard/budapest-day.js";
 import {
   proformaPaidOf,
+  webshopFinalInvoiceProblem,
+  webshopFinalOrder,
   webshopOverbillingProblem,
   webshopTransferInvoiceProblem,
   webshopOrderOf,
@@ -325,6 +327,15 @@ export class BillingDocumentIssueService {
     // AZ ELŐRE UTALÁS SZÁMLÁJA A SZERKESZTŐBŐL IS (barracuda a #2884-en): összeg fillérre, előleg, Autokassza, a rendelés oldalával azonos szabállyal
     const transferProblem = await this.webshopTransferInvoice(row);
     if (transferProblem) throw new ConflictException(transferProblem);
+    // A WEBSHOP VÉGSZÁMLÁJA A HÁTRALÉKRA (S4, acrobot 62375): a fizetendője a beérkezett hátralék fillérre, különben megáll
+    const finalOrder = webshopFinalOrder(row);
+    const webshopFinalProblem = finalOrder
+      ? webshopFinalInvoiceProblem(
+          row,
+          await this.documents.webshopBalanceFacts(finalOrder),
+        )
+      : null;
+    if (webshopFinalProblem) throw new ConflictException(webshopFinalProblem);
 
     // WHAT THE WINDOW SHOWED IS WHAT THE INVOICE CARRIES (card 7ba97e0d): the same summary again, the shown values
     // compared by their digest, the three dates checked by the shared rule and put into the invoice

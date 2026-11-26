@@ -49,6 +49,13 @@ const shortagesNow: {
 } = { map: new Map(), asked: [] };
 const NO_AUDIT = {
   recordStatusChange: async () => undefined,
+  // the order's invoice, or its issued final invoice (S4): the fake's own invoices here
+  settlingInvoices(
+    this: { invoices: (ids: string[]) => unknown },
+    ids: string[],
+  ) {
+    return this.invoices(ids);
+  },
   invoices: async () => new Map(),
   staleThresholds: async () => thresholdsNow.list,
   osCustomerByKey: async () => null,
@@ -699,6 +706,13 @@ describe("WebshopOrdersService.changeStatus", () => {
       },
       recordStatusMailResent: async (input: unknown) =>
         void audited.push(input),
+      // the order's invoice, or its issued final invoice (S4): the fake's own invoices here
+      settlingInvoices(
+        this: { invoices: (ids: string[]) => unknown },
+        ids: string[],
+      ) {
+        return this.invoices(ids);
+      },
       invoices: async () =>
         options.invoice === false
           ? new Map()

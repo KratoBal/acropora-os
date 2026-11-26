@@ -5,6 +5,7 @@ import { after, before, describe, it } from "node:test";
 
 import { Prisma, prisma } from "@acropora/database";
 
+import { BillingDocumentsRepository } from "../../billing/billing-documents.repository.js";
 import { integrationDatabaseGate } from "../../common/integration-database.js";
 import { WEBSHOP_ADVANCE_TAG } from "./webshop-order-invoice.rules.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
@@ -143,6 +144,91 @@ describe(
         (await repository.balanceReceipts([`${ORDER}4`])).has(`${ORDER}4`),
         false,
       );
+    });
+
+    // S4: the billing reads the balance for the final invoice's "paid" and its check
+    it("the billing reads the order's balance, and nothing for an order without one", async () => {
+      await advanceIn(5);
+      await repository.createBalanceReceipt(balance(5));
+      const billing = new BillingDocumentsRepository();
+      const facts = await billing.webshopBalanceFacts(`${ORDER}5`);
+      assert.equal(facts?.amount.toFixed(4), "8200.0000");
+      assert.equal(facts?.currency, "HUF");
+      assert.equal(await billing.webshopBalanceFacts(`${ORDER}9`), null);
+    });
+
+    // S4: the issued final invoice invoices the order (the invoice step, the parcel, the list), a draft does not, an invoice wins
+    it("the order's settling invoice: an issued final invoice counts, its draft does not, an invoice comes first", async () => {
+      const doc = (
+        n: number,
+        documentType: "INVOICE" | "FINAL_INVOICE",
+        status: "DRAFT" | "ISSUED",
+      ) =>
+        prisma.invoice.create({
+          data: {
+            direction: "OUTBOUND",
+            source: "MANUAL",
+            partnerName: "Kitalalt Vevo",
+            documentType,
+            status,
+            invoiceNumber: status === "ISSUED" ? `${documentType}-${n}` : null,
+            sourceType: "WEBSHOP_ORDER",
+            sourceId: `${ORDER}${n}`,
+            grossAmount: new Prisma.Decimal("13000"),
+            currency: "HUF",
+          },
+        });
+      await doc(6, "FINAL_INVOICE", "DRAFT");
+      const issued = await doc(7, "FINAL_INVOICE", "ISSUED");
+      const invoice = await doc(8, "INVOICE", "DRAFT");
+      await doc(8, "FINAL_INVOICE", "ISSUED");
+      const settling = await repository.settlingInvoices([
+        `${ORDER}6`,
+        `${ORDER}7`,
+        `${ORDER}8`,
+      ]);
+      assert.equal(settling.has(`${ORDER}6`), false);
+      assert.equal(settling.get(`${ORDER}7`)?.id, issued.id);
+      assert.equal(settling.get(`${ORDER}8`)?.id, invoice.id);
+    });
+
+    // barracuda on #2980: a final invoice relabelled as MANUAL still counts as the order's, through the advance invoice it deducts
+    it("the order's other invoices include a final invoice relabelled as MANUAL, by its advance invoice", async () => {
+      const advance = await prisma.invoice.create({
+        data: {
+          direction: "OUTBOUND",
+          source: "MANUAL",
+          partnerName: "Kitalalt Vevo",
+          documentType: "ADVANCE_INVOICE",
+          status: "ISSUED",
+          invoiceNumber: "IT-ELO-10",
+          sourceType: "WEBSHOP_ORDER",
+          sourceId: `${ORDER}10`,
+          grossAmount: new Prisma.Decimal("4800"),
+          currency: "HUF",
+        },
+      });
+      await prisma.invoice.create({
+        data: {
+          direction: "OUTBOUND",
+          source: "MANUAL",
+          partnerName: "Kitalalt Vevo",
+          documentType: "FINAL_INVOICE",
+          status: "ISSUED",
+          invoiceNumber: "IT-VEG-10",
+          sourceType: "MANUAL",
+          sourceId: `${ORDER}10-relabelled`,
+          referencedInvoiceId: advance.id,
+          grossAmount: new Prisma.Decimal("13000"),
+          currency: "HUF",
+        },
+      });
+      const billing = new BillingDocumentsRepository();
+      const others = await billing.webshopOrderInvoices(`${ORDER}10`, "none");
+      assert.deepEqual(others.map((row) => row.documentType).sort(), [
+        "ADVANCE_INVOICE",
+        "FINAL_INVOICE",
+      ]);
     });
 
     after(async () => {

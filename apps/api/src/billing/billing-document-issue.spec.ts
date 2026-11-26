@@ -14,6 +14,8 @@ import {
   webshopOverbillingProblem,
   webshopTransferInvoiceProblem,
   type WebshopOrderInvoiceFact,
+  finalPaidByBalance,
+  webshopFinalInvoiceProblem,
 } from "./billing-document-issue.js";
 import { toSzamlazzAgentInput } from "./billing-document-szamlazz.adapter.js";
 import { finalLineOfQuoteItem } from "./billing-final-lines.js";
@@ -869,6 +871,11 @@ describe("an invoice paid by the recorded transfer", () => {
           cancelled: false,
         };
       },
+      // a final invoice of a webshop order asks the balance (S4); none of these cases is one
+      webshopBalanceFacts: async (orderId: string) => {
+        asked.push(`balance ${orderId}`);
+        return null;
+      },
       webshopTransferFacts: async (orderId: string, proformaId: string) => {
         asked.push(`transfer ${orderId} ${proformaId}`);
         return facts();
@@ -1101,5 +1108,119 @@ describe("the webshop order of a document", () => {
       }),
       null,
     );
+  });
+});
+
+/*
+  A WEBSHOP VÉGSZÁMLÁJA A HÁTRALÉKRA (kártya d31a66a3, S4; acrobot 62375). MI PIROSÍT: hátralék nélkül kimegy; a fizetendő (bruttó
+  mínusz előleg) eltér a hátraléktól, és mégis kimegy, vagy az üzenet nem nevezi meg a két összeget és a különbséget; más pénznem
+  átmegy; a fillérre egyező végszámla megáll vagy nem "fizetve"; egy nem webshop végszámla is ezt a szabályt kapja.
+*/
+describe("a webshop order's final invoice against the balance (S4)", () => {
+  // a 13000 HUF order: the advance invoice 4800, the final invoice the whole order (13000 gross), the balance 8200
+  const final = (gross = "13000") =>
+    row({
+      documentType: "FINAL_INVOICE",
+      sourceType: "WEBSHOP_ORDER",
+      sourceId: "order_38",
+      referencedInvoice: {
+        id: "adv-1",
+        documentType: "ADVANCE_INVOICE",
+        invoiceNumber: "E-ELO-1",
+        grossAmount: d("4800"),
+        currency: "HUF",
+        correctionInvoices: [],
+      },
+      lines: [
+        line({
+          quantity: d("1"),
+          unit: "db",
+          unitNet: d(new Prisma.Decimal(gross).dividedBy("1.27").toFixed(4)),
+          vatRatePercent: d("27"),
+          netAmount: d(new Prisma.Decimal(gross).dividedBy("1.27").toFixed(4)),
+          vatAmount: d(
+            new Prisma.Decimal(gross)
+              .minus(new Prisma.Decimal(gross).dividedBy("1.27"))
+              .toFixed(4),
+          ),
+          grossAmount: d(gross),
+        }),
+      ],
+    }) as BillingDocumentRow;
+  const balance = (amount = "8200", currency = "HUF") => ({
+    amount: d(amount),
+    currency,
+  });
+
+  it("the payable is the balance to the fillér: no problem, and it goes out paid", () => {
+    assert.equal(webshopFinalInvoiceProblem(final(), balance()), null);
+    assert.equal(finalPaidByBalance(final(), balance()), true);
+  });
+
+  it("no balance yet: it stops, and is not paid", () => {
+    assert.match(
+      webshopFinalInvoiceProblem(final(), null) ?? "",
+      /a hátralék beérkezése után/,
+    );
+    assert.equal(finalPaidByBalance(final(), null), false);
+  });
+
+  it("a payable 1 Ft off the balance stops, naming both amounts and the difference", () => {
+    const problem = webshopFinalInvoiceProblem(final("13001"), balance()) ?? "";
+    assert.match(problem, /fizetendője .*8201\.00 HUF/);
+    assert.match(problem, /hátralék 8200\.00 HUF/);
+    assert.match(problem, /eltérés 1\.00 HUF/);
+    assert.equal(finalPaidByBalance(final("13001"), balance()), false);
+  });
+
+  // barracuda on #2980: the editor relabels a final invoice draft as MANUAL; its advance invoice (issued) still names the order
+  it("a final invoice relabelled as MANUAL keeps the rule through the advance invoice it deducts", () => {
+    const relabelled = {
+      ...final("13001"),
+      sourceType: "MANUAL",
+      sourceId: null,
+      referencedInvoice: {
+        ...final().referencedInvoice!,
+        sourceType: "WEBSHOP_ORDER",
+        sourceId: "order_38",
+      },
+    } as BillingDocumentRow;
+    assert.match(
+      webshopFinalInvoiceProblem(relabelled, null) ?? "",
+      /a hátralék beérkezése után/,
+    );
+    assert.match(
+      webshopFinalInvoiceProblem(relabelled, balance()) ?? "",
+      /eltérés 1\.00 HUF/,
+    );
+    assert.equal(finalPaidByBalance(relabelled, balance()), false);
+    // and through the advance's own proforma, when the advance draft was relabelled before it was issued
+    const viaProforma = {
+      ...relabelled,
+      referencedInvoice: {
+        ...final().referencedInvoice!,
+        sourceType: "MANUAL",
+        sourceId: null,
+        proformaInvoice: { sourceType: "WEBSHOP_ORDER", sourceId: "order_38" },
+      },
+    } as BillingDocumentRow;
+    assert.match(
+      webshopFinalInvoiceProblem(viaProforma, null) ?? "",
+      /a hátralék beérkezése után/,
+    );
+  });
+
+  it("another currency stops; a final invoice that is not a webshop order's is not this rule's", () => {
+    assert.match(
+      webshopFinalInvoiceProblem(final(), balance("8200", "EUR")) ?? "",
+      /pénzneme/,
+    );
+    const other = {
+      ...final(),
+      sourceType: "MANUAL",
+      sourceId: null,
+    } as BillingDocumentRow;
+    assert.equal(webshopFinalInvoiceProblem(other, null), null);
+    assert.equal(finalPaidByBalance(other, balance()), false);
   });
 });

@@ -273,8 +273,9 @@ export class WebshopOrdersService {
       balances,
       externals,
       advanceInvoices,
+      finalInvoices,
     ] = await Promise.all([
-      this.repository.invoices([id]),
+      this.repository.settlingInvoices([id]),
       this.parcels.activeParcelsFor([id]),
       // csak megjelenítés: ha a webshop ezt nem adja, az adatlap nélküle áll
       client.orderPayment(id).catch((error: unknown) => {
@@ -303,6 +304,7 @@ export class WebshopOrdersService {
       this.repository.balanceReceipts([id]),
       this.repository.externalInvoices([id]),
       this.repository.invoices([id], "ADVANCE_INVOICE"),
+      this.repository.invoices([id], "FINAL_INVOICE"),
     ]);
     /*
       A VEVŐ JELZÉSEI (a lista „korábbi sikertelen” és „másik nyitott”
@@ -347,6 +349,7 @@ export class WebshopOrdersService {
       internalNote,
       deliveryNote: deliveryNotes.get(id) ?? null,
       advanceInvoice: advanceInvoices.get(id) ?? null,
+      finalInvoice: finalInvoices.get(id) ?? null,
       proforma,
       transferReceipt,
       balanceReceipt: balances.get(id) ?? null,
@@ -547,7 +550,7 @@ export class WebshopOrdersService {
     if (storePickup)
       return { storePickup, invoiceNumber: null, hasParcel: false };
     const [invoices, parcels, externals] = await Promise.all([
-      this.repository.invoices([id]),
+      this.repository.settlingInvoices([id]),
       this.parcels.activeParcelsFor([id]),
       this.repository.externalInvoices([id]),
     ]);
@@ -608,7 +611,7 @@ export class WebshopOrdersService {
       externals,
       shortages,
     ] = await Promise.all([
-      this.repository.invoices(ids),
+      this.repository.settlingInvoices(ids),
       this.parcels.activeParcelsFor(ids),
       this.repository.staleThresholds(),
       this.repository.proformas(ids),

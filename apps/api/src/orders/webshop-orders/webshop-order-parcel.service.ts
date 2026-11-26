@@ -129,7 +129,10 @@ export class WebshopOrderParcelService {
     now = new Date(),
   ): Promise<WebshopOrderParcelResult> {
     const { order, status } = await this.orders.source(orderId);
-    const invoice = (await this.repository.invoices([orderId])).get(orderId);
+    // the invoice, or after an advance the issued final invoice (S4): either releases the parcel
+    const invoice = (await this.repository.settlingInvoices([orderId])).get(
+      orderId,
+    );
     // előre utalásnál a Számlázz.hu számlája is számít (bb3a6bd5; az Autokassza ma ki van kapcsolva, d31a66a3 S1)
     const external =
       invoice?.status === "ISSUED"

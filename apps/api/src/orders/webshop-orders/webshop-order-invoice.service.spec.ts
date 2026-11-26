@@ -113,6 +113,12 @@ function setup(
     gross?: string;
     /** The order's advance invoice row (d31a66a3, S2); absent: none. */
     advanceInvoice?: WebshopOrderInvoiceRow;
+    /** The order's final invoice row (S4); absent: none. */
+    finalInvoice?: WebshopOrderInvoiceRow;
+    /** The balance after the advance (S3); absent: none recorded. */
+    balance?: { amount: string; receivedOn?: string };
+    /** The advance invoice's gross (S4), alapból 4800.00. */
+    advanceGross?: string;
   } = {},
 ) {
   const calls: string[] = [];
@@ -147,10 +153,37 @@ function setup(
     },
   } as unknown as WebshopOrdersService;
   const repository = {
+    // the order's invoice, or its issued final invoice (S4): the fake's own invoices here
+    settlingInvoices(
+      this: { invoices: (ids: string[]) => unknown },
+      ids: string[],
+    ) {
+      return this.invoices(ids);
+    },
     invoices: async (ids: string[], type?: string) =>
       type === "ADVANCE_INVOICE"
         ? new Map(over.advanceInvoice ? [[ids[0]!, over.advanceInvoice]] : [])
-        : new Map(over.invoice ? [[ids[0]!, over.invoice]] : []),
+        : type === "FINAL_INVOICE"
+          ? new Map(over.finalInvoice ? [[ids[0]!, over.finalInvoice]] : [])
+          : new Map(over.invoice ? [[ids[0]!, over.invoice]] : []),
+    balanceReceipts: async (ids: string[]) =>
+      new Map(
+        over.balance
+          ? [
+              [
+                ids[0]!,
+                {
+                  source: "MANUAL",
+                  receivedOn: over.balance.receivedOn ?? "2026-10-09",
+                  reference: "UT-38-B",
+                  amount: over.balance.amount,
+                  currency: "HUF",
+                  recordedBy: null,
+                },
+              ],
+            ]
+          : [],
+      ),
     customerByKey: async (key: string) => {
       calls.push(`customerByKey ${key}`);
       return over.linked ?? null;
@@ -254,7 +287,28 @@ function setup(
       });
       return doc(input.id);
     },
-    detail: async (id: string) => doc(id),
+    // the advance invoice (S4) has its own gross; every other document the draft's
+    detail: async (id: string) =>
+      id.startsWith("adv-")
+        ? {
+            ...doc(id),
+            customer: { id: "cust_adv" },
+            totals: {
+              ...doc(id).totals,
+              grossAmount: over.advanceGross ?? "4800.00",
+            },
+          }
+        : doc(id),
+    finalFromAdvance: async (
+      advanceId: string,
+      _user: unknown,
+      options: { lines?: unknown[] },
+    ) => {
+      calls.push(
+        `final from ${advanceId} with ${options.lines?.length ?? "its own"} lines`,
+      );
+      return { ...doc(`final-${advanceId}`), status: "DRAFT" };
+    },
     update: async (id: string, input: { expectedUpdatedAt: string }) => {
       calls.push(`update draft ${id} at ${input.expectedUpdatedAt}`);
       return doc(id);
@@ -1031,5 +1085,86 @@ describe("WebshopOrderInvoiceService, the confirmation window (card 7ba97e0d)", 
       send: false,
     });
     assert.equal(quiet.mail, null);
+  });
+});
+
+/*
+  A VÉGSZÁMLA A HÁTRALÉKRA (kártya d31a66a3, S4; acrobot 62375). MI PIROSÍT: hátralék, kiállított előlegszámla vagy előleg nélkül
+  (teljes utalásnál) is készül; nem a rendelés teljes soraiból, nem a hátralék napjára, nem az előlegszámlából készül; egy fillérre
+  nem egyező fizetendő mégis kiállításra kerül, vagy az üzenet nem nevezi meg a két összeget; a kiállított végszámla újra kimegy.
+*/
+describe("the final invoice on the balance (S4)", () => {
+  // the order is 18900 gross: the advance invoice 4800, the balance 14100
+  const ready = {
+    receipt: { amount: "4800.0000", advance: true },
+    balance: { amount: "14100.0000", receivedOn: "2026-10-09" },
+    advanceInvoice: { id: "adv-1", status: "ISSUED", number: "E-1" },
+    provider: "pp_acropora_transfer",
+  } as const;
+
+  it("made from the advance invoice with the whole order's lines, on the balance's day, then the window", async () => {
+    const { service, calls } = setup({ ...ready });
+    const summary = await service.finalSummary("order_38", USER, NOW);
+    assert.equal(summary.documentId, "final-adv-1");
+    assert.ok(
+      // the order's own line (one item, no shipping), not the advance proforma's: invoiceDraftOf, not the default
+      calls.includes("final from adv-1 with 1 lines"),
+      calls.join(" | "),
+    );
+    assert.ok(calls.includes("days final-adv-1 2026-10-09"), calls.join(" | "));
+    assert.ok(calls.includes("summary final-adv-1"));
+  });
+
+  it("needs the balance, the issued advance invoice and an advance transfer", async () => {
+    for (const [over, pattern] of [
+      [{ ...ready, balance: undefined }, /hátralék beérkezése után/],
+      [
+        { ...ready, advanceInvoice: undefined },
+        /előbb állítsd ki az előlegszámlát/,
+      ],
+      [
+        {
+          ...ready,
+          advanceInvoice: { id: "adv-1", status: "DRAFT", number: null },
+        },
+        /előbb állítsd ki az előlegszámlát/,
+      ],
+      [
+        { ...ready, receipt: { amount: "18900.0000", advance: false } },
+        /teljes összeg érkezett/,
+      ],
+    ] as const) {
+      const { service, calls } = setup(over as never);
+      await assert.rejects(
+        service.finalSummary("order_38", USER, NOW),
+        pattern,
+      );
+      assert.ok(!calls.some((call) => call.startsWith("final from")));
+    }
+  });
+
+  it("a payable off the balance stops before the window, naming both amounts and the difference", async () => {
+    const { service, calls } = setup({
+      ...ready,
+      balance: { amount: "14000.0000" },
+    });
+    await assert.rejects(
+      service.finalSummary("order_38", USER, NOW),
+      (error: Error) =>
+        /fizetendője .*14100\.00 HUF/.test(error.message) &&
+        /hátralék 14000\.00 HUF/.test(error.message) &&
+        /eltérés 100\.00 HUF/.test(error.message),
+    );
+    assert.ok(!calls.some((call) => call.startsWith("summary")));
+  });
+
+  it("an issued final invoice is answered, not issued again", async () => {
+    const { service, calls } = setup({
+      ...ready,
+      finalInvoice: { id: "final-adv-1", status: "ISSUED", number: "V-1" },
+    });
+    await service.issueFinal("order_38", USER, NOW);
+    assert.ok(!calls.some((call) => call.startsWith("issue ")));
+    assert.ok(!calls.some((call) => call.startsWith("final from")));
   });
 });

@@ -12,6 +12,7 @@ import { foreignFeedInvoicesOf } from "../orders/webshop-orders/webshop-foreign-
 import { WEBSHOP_ADVANCE_TAG } from "../orders/webshop-orders/webshop-order-invoice.rules.js";
 import type {
   WebshopOrderInvoiceFact,
+  WebshopBalanceFacts,
   WebshopTransferFacts,
 } from "./billing-document-issue.js";
 import type { NormalizedBillingDraft } from "./billing-document-draft.js";
@@ -64,6 +65,11 @@ const DETAIL_INCLUDE = {
       invoiceNumber: true,
       grossAmount: true,
       currency: true,
+      // a webshop-végszámla rendelése (barracuda a #2980-on): a szerkesztő a végszámla-vázlat forrását átírhatja, a hivatkozott
+      // előlegszámláét nem (kiállított); az előleg rendelése a saját forrása, vagy (átírt előleg-vázlatból) a díjbekérőjéé
+      sourceType: true,
+      sourceId: true,
+      proformaInvoice: { select: { sourceType: true, sourceId: true } },
       // a végszámla kiállítása előtt: sztornózták-e közben az előleget
       correctionInvoices: {
         where: { documentType: "STORNO", status: "ISSUED" },
@@ -404,12 +410,27 @@ export class BillingDocumentsRepository {
   ): Promise<WebshopOrderInvoiceFact[]> {
     const rows = await this.database.invoice.findMany({
       where: {
-        // the order's documents by their own source, OR by the proforma they settle (a draft relabelled in the editor)
+        // the order's documents by their own source, OR by the proforma they settle (a draft relabelled in the editor), OR (a final
+        // invoice relabelled in the editor, barracuda on #2980) by the advance invoice they deduct, or that advance's proforma
         OR: [
           { sourceType: "WEBSHOP_ORDER", sourceId: orderId },
           {
             proformaInvoice: {
               is: { sourceType: "WEBSHOP_ORDER", sourceId: orderId },
+            },
+          },
+          {
+            referencedInvoice: {
+              is: {
+                OR: [
+                  { sourceType: "WEBSHOP_ORDER", sourceId: orderId },
+                  {
+                    proformaInvoice: {
+                      is: { sourceType: "WEBSHOP_ORDER", sourceId: orderId },
+                    },
+                  },
+                ],
+              },
             },
           },
         ],
@@ -473,6 +494,21 @@ export class BillingDocumentsRepository {
       currency: receipt.currency,
       advance: proforma?.tags.includes(WEBSHOP_ADVANCE_TAG) ?? false,
     };
+  }
+
+  /**
+   * THE BALANCE THAT CAME IN AFTER AN ADVANCE (card d31a66a3, S4): the order's recorded balance receipt (S3). `null`: none yet.
+   */
+  async webshopBalanceFacts(
+    orderId: string,
+  ): Promise<WebshopBalanceFacts | null> {
+    const balance = await this.database.webshopBalanceReceipt.findUnique({
+      where: { orderId },
+      select: { amount: true, currency: true },
+    });
+    return balance
+      ? { amount: balance.amount, currency: balance.currency }
+      : null;
   }
 
   /**

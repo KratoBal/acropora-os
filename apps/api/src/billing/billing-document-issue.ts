@@ -407,12 +407,34 @@ export function webshopOrderOf(row: {
     sourceType?: string | null;
     sourceId?: string | null;
   } | null;
+  /**
+   * A FINAL INVOICE'S ADVANCE (barracuda on #2980): the editor can relabel a final invoice draft too, and a final invoice has no
+   * proforma of its own, only the advance invoice it deducts (issued, so its source holds), or that advance's proforma.
+   */
+  referencedInvoice?: {
+    sourceType?: string | null;
+    sourceId?: string | null;
+    proformaInvoice?: {
+      sourceType?: string | null;
+      sourceId?: string | null;
+    } | null;
+  } | null;
 }): string | null {
-  if (row.sourceType === "WEBSHOP_ORDER" && row.sourceId) return row.sourceId;
-  const proforma = row.proformaInvoice;
-  return proforma?.sourceType === "WEBSHOP_ORDER" && proforma.sourceId
-    ? proforma.sourceId
-    : null;
+  const ofSource = (
+    source?: {
+      sourceType?: string | null;
+      sourceId?: string | null;
+    } | null,
+  ) =>
+    source?.sourceType === "WEBSHOP_ORDER" && source.sourceId
+      ? source.sourceId
+      : null;
+  return (
+    ofSource(row) ??
+    ofSource(row.proformaInvoice) ??
+    ofSource(row.referencedInvoice) ??
+    ofSource(row.referencedInvoice?.proformaInvoice)
+  );
 }
 
 /**
@@ -487,6 +509,89 @@ export function webshopTransferInvoiceProblem(
   return null;
 }
 
+/** The balance that came in after a webshop advance (`BillingDocumentsRepository.webshopBalanceFacts`, card d31a66a3, S3). */
+export interface WebshopBalanceFacts {
+  amount: Prisma.Decimal;
+  currency: string;
+}
+
+/**
+ * A webshop order's final invoice: the order (`webshopOrderOf`: its own source, or the advance invoice it deducts, so a draft
+ * relabelled in the editor keeps it, barracuda on #2980), with that advance invoice. `null`: not one.
+ */
+export const webshopFinalOrder = (row: BillingDocumentRow): string | null =>
+  row.documentType === "FINAL_INVOICE" && row.referencedInvoice
+    ? webshopOrderOf(row)
+    : null;
+
+/** What the final invoice leaves to pay: its gross minus the advance it deducts (the Számlázz.hu deduction). */
+const finalPayable = (row: BillingDocumentRow, gross: string) =>
+  new Prisma.Decimal(gross).minus(row.referencedInvoice?.grossAmount ?? 0);
+
+const money = (amount: Prisma.Decimal, currency: string) =>
+  `${amount.toFixed(2)} ${currency}`;
+
+/**
+ * A WEBSHOP ORDER'S FINAL INVOICE ON THE SHARED ISSUE (card d31a66a3, S4; acrobot 62375). After an advance the final invoice is
+ * issued once the balance came in, and what it leaves to pay (its gross minus the advance) must be that balance to the fillér:
+ * the customer has paid it already, so a final invoice of another amount would be a storno candidate. On a difference (the
+ * final invoice rounds per line, the advance per VAT rate) it stops and names both amounts and the difference; the person
+ * settles it by hand. The billing editor's issue meets the same rule. Other documents pass.
+ */
+export function webshopFinalInvoiceProblem(
+  row: BillingDocumentRow,
+  balance: WebshopBalanceFacts | null,
+): string | null {
+  if (!webshopFinalOrder(row)) return null;
+  if (!balance)
+    return "A webshop rendelés végszámlája a hátralék beérkezése után állítható ki: előbb rögzítsd a hátralékot a rendelés oldalán.";
+  const input = buildIssueInput(row);
+  if (!input.ok) return null;
+  return finalBalanceMismatch(
+    input.totals.grossAmount,
+    row.referencedInvoice?.grossAmount ?? new Prisma.Decimal(0),
+    row.currency,
+    balance,
+  );
+}
+
+/**
+ * THE ONE COMPARISON OF A FINAL INVOICE AND THE BALANCE (S4), for the shared issue and the order page alike, so both say the
+ * same: what the final invoice leaves to pay (its gross minus the advance) against the balance that came in, to the fillér.
+ * `null`: they match.
+ */
+export function finalBalanceMismatch(
+  finalGross: string,
+  advanceGross: Prisma.Decimal | string,
+  currency: string,
+  balance: WebshopBalanceFacts,
+): string | null {
+  if (balance.currency.trim().toUpperCase() !== currency.trim().toUpperCase())
+    return `A végszámla pénzneme (${currency}) nem a beérkezett hátraléké (${balance.currency}). A végszámla nem megy ki: rendezd kézzel.`;
+  const advance = new Prisma.Decimal(advanceGross);
+  const payable = new Prisma.Decimal(finalGross).minus(advance);
+  if (sameFiller(payable.toFixed(2), balance.amount)) return null;
+  return `A végszámla fizetendője (bruttó ${money(new Prisma.Decimal(finalGross), currency)} mínusz az előleg ${money(advance, currency)}) ${money(payable, currency)}, a beérkezett hátralék ${money(balance.amount, balance.currency)}; az eltérés ${money(payable.minus(balance.amount), currency)}. A végszámla nem megy ki: a vevő már fizetett, rendezd kézzel.`;
+}
+
+/** Is this webshop final invoice paid by the recorded balance (S4): what it leaves to pay is the balance to the fillér. */
+export function finalPaidByBalance(
+  row: BillingDocumentRow,
+  balance: WebshopBalanceFacts | null,
+): boolean {
+  if (!webshopFinalOrder(row) || !balance) return false;
+  if (
+    balance.currency.trim().toUpperCase() !== row.currency.trim().toUpperCase()
+  )
+    return false;
+  const input = buildIssueInput(row);
+  if (!input.ok) return false;
+  return sameFiller(
+    finalPayable(row, input.totals.grossAmount).toFixed(2),
+    balance.amount,
+  );
+}
+
 /**
  * THE ONE READING OF "THE PROFORMA THIS DOCUMENT SETTLES IS PAID", for the window, the preview and the issue alike: an advance
  * invoice by the Számlázz.hu feed (card 00926d89), a webshop order's invoice and advance invoice by the OS transfer receipt
@@ -502,8 +607,16 @@ export async function proformaPaidOf(
       orderId: string,
       proformaId: string,
     ): Promise<WebshopTransferFacts | null>;
+    webshopBalanceFacts(orderId: string): Promise<WebshopBalanceFacts | null>;
   },
 ): Promise<boolean> {
+  // a webshop order's final invoice: the recorded balance says "paid" (S4); it settles no proforma of its own
+  const finalOrder = webshopFinalOrder(row);
+  if (finalOrder)
+    return finalPaidByBalance(
+      row,
+      await documents.webshopBalanceFacts(finalOrder),
+    );
   const proforma = row.proformaInvoice;
   if (!proforma?.invoiceNumber) return false;
   const order = webshopOrderOf(row);
