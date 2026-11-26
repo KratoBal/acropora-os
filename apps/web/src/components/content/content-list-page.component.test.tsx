@@ -96,6 +96,19 @@ describe("what the content list says when the load fails", () => {
     expect(screen.queryByText("A lista nem tölthető be")).toBeNull();
   });
 
+  // Picasso 3.26: an empty section is one status line, not a tall framed box
+  it("an empty section is one line of text, not a framed empty-state box", async () => {
+    render(<ContentListPage />);
+    const line = await screen.findByText("Semmi nem vár képre.");
+    expect(line.tagName).toBe("P");
+    expect(line.getAttribute("role")).toBe("status");
+    expect(line.textContent).toContain(
+      "Ha ez váratlan, töltsd újra az oldalt.",
+    );
+    // the old box was a block with its own title and description elements
+    expect(line.querySelector("h3, h2, [data-slot]")).toBeNull();
+  });
+
   /**
    * A HIBAÜZENET LEGFELÜL ÁLL, a szekciók előtt. Az átrendezés után lejjebb
    * csúszott volna, mint ahol korábban volt -- egy hiba, amit görgetni kell,
