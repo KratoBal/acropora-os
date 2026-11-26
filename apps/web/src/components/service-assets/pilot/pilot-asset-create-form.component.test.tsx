@@ -151,6 +151,16 @@ describe("az új eszköz a közös űrlap-vázon", () => {
     expect(api.create).not.toHaveBeenCalled();
   });
 
+  it("az Enter is a gombsor útját járja: hiányzó mezőnél a hiba a mezőnél áll, és nem ment", async () => {
+    await megjelenit();
+    fireEvent.submit(screen.getByLabelText("Eszköz neve").closest("form")!);
+    expect(
+      await screen.findByText("Add meg az eszköz nevét."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Válassz partnert.")).toBeInTheDocument();
+    expect(api.create).not.toHaveBeenCalled();
+  });
+
   it("kitöltve a hiány eltűnik, és a mentés létrehozza az eszközt", async () => {
     await megjelenit();
     fireEvent.change(screen.getByLabelText("Partner"), {

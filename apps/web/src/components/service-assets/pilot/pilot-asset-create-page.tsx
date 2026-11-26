@@ -567,7 +567,14 @@ export function PilotAssetCreatePage() {
       </div>
 
       <div className={`${PAGE_GUTTER_X} py-6`}>
-        <form onSubmit={(event) => void submit(event)} onBlur={rogzit}>
+        {/* az Enter is a gombsor útját járja (hiány a mezőnél, betöltés alatt semmi), nem a submit-et közvetlenül (barracuda, #2968) */}
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmitClick();
+          }}
+          onBlur={rogzit}
+        >
           <PilotFormLayout
             top={
               <>
