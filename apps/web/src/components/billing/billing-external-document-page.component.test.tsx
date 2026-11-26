@@ -132,7 +132,7 @@ describe("BillingExternalDocumentPage", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/nem adja/)).toBeNull();
-    // a KONTROLL a gombokra: a „Vissza a listához” link mellett egyetlen gomb, a „Papíron megvan”
+    // a KONTROLL a gombokra: a „Számlák” visszalépés-link mellett egyetlen gomb, a „Papíron megvan”
     // (Balázs, 2026-11-03); szerkesztés, sztornó, újraküldés nincs
     expect(
       screen.getAllByRole("button").map((button) => button.textContent),
@@ -140,9 +140,10 @@ describe("BillingExternalDocumentPage", () => {
     expect(
       screen.queryByText(/Szerkesztés|Sztornó|Újraküldés|Nyomtatás|Letöltés/),
     ).toBeNull();
-    expect(
-      screen.getByRole("link", { name: /Vissza a listához/ }),
-    ).toHaveAttribute("href", "/penzugy/szamlazas");
+    expect(screen.getByRole("link", { name: "Számlák" })).toHaveAttribute(
+      "href",
+      "/penzugy/szamlazas",
+    );
   });
 
   it("shows the payments Számlázz.hu recorded, its own bank pairing too", async () => {

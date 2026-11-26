@@ -32,23 +32,69 @@ const MIND = fajlok(ROOT).map((ut) => ({
   forras: kod(readFileSync(ut, "utf8")),
 }));
 
-/** A MÉG ÁT NEM ÁLLÍTOTT LAPOK: ma „Vissza a listához" gombbal vagy hivatkozással lépnek vissza. Csak csökkenhet. */
+/**
+ * A MÉG ÁT NEM ÁLLÍTOTT LAPOK: ma „Vissza a ...", „Vissza" vagy „← ..." szöveggel lépnek vissza (a közös komponenst nem használják). Csak
+ * csökkenhet. (A leltár első mérése csak a „Vissza a listához" felirattal számolt: 14 oldal; a szélesebb keresés, a „Vissza a ..." és a „← " is,
+ * 33 oldalt talált: ez a pontos lista.)
+ */
 const MEG_ATALLITANDO = [
-  "components/billing/billing-external-document-page.tsx",
-  "components/billing/billing-incoming-document-page.tsx",
-  "components/billing/billing-incoming-review-page.tsx",
+  "components/billing/billing-document-editor.tsx",
+  "components/content/article-editor-page.tsx",
+  "components/content/content-calendar-page.tsx",
+  "components/content/content-calendar-template-page.tsx",
+  "components/content/content-results-summary-page.tsx",
+  "components/content/teaching-source-list-page.tsx",
+  "components/content/teaching-source-page.tsx",
+  "components/contracts/pilot/pilot-contract-detail-page.tsx",
   "components/customers/customer-detail-page.tsx",
   "components/customers/customer-editor-page.tsx",
   "components/finance/foxpost-settlements-page.tsx",
   "components/finance/gls-settlements-page.tsx",
+  "components/finance/missing-invoices/missing-invoices-month-page.tsx",
+  "components/finance/missing-invoices/missing-invoices-suggestions-page.tsx",
   "components/finance/simplepay-settlements-page.tsx",
   "components/finance/stripe-settlements-page.tsx",
   "components/inventory/inventory-count-detail-page.tsx",
+  "components/knowledge-base/claim-store-page.tsx",
+  "components/messages/messages-page.tsx",
+  "components/partner-orders/partner-order-detail-page.tsx",
+  "components/pos/pilot/pilot-pos-internal-use-page.tsx",
+  "components/pos/pilot/pilot-pos-sale-detail-page.tsx",
+  "components/pos/pilot/pilot-pos-summary-page.tsx",
+  "components/pos/pos-sale-detail-page.tsx",
   "components/products/product-detail-page.tsx",
+  "components/purchasing/nav-incoming-invoice-detail-page.tsx",
+  "components/purchasing/price-list-suggestions-page.tsx",
   "components/purchasing/purchase-invoice-detail-page.tsx",
+  "components/quotes/quote-pdf-page.tsx",
+  "components/service-assets/asset-editor-page.tsx",
   "components/suppliers/pilot/pilot-supplier-editor-page.tsx",
+  "components/webshop-orders/webshop-order-detail-page.tsx",
   "components/webshop/webshop-order-detail-page.tsx",
+  "components/worksheets/worksheet-entry-page.tsx",
 ];
+
+/** MÁS JELENTÉSŰ „Vissza ..." SZÖVEGEK (nem oldal-visszalépés), indokkal: ezeken a guard nem kér komponenst. */
+const MAS_JELENTESU = new Map<string, string>([
+  [
+    "components/billing/billing-document-email-drawer.tsx",
+    "a levél-fiók lépése (Levél előnézete / Vissza a szerkesztéshez), nem oldal",
+  ],
+  [
+    "components/users/user-permission-table.tsx",
+    "a jogosultság-sablon visszaállítása, nem oldal",
+  ],
+  [
+    "components/homepage-content/homepage-footer-editor.tsx",
+    "a kirakat saját láblécére visszaállítás, nem oldal",
+  ],
+  [
+    "components/service-assets/pilot/pilot-asset-detail-page.tsx",
+    "az eszköz adatlap saját nyila a léptetővel egy sorban áll (a közös osztályok nélkül, saját elrendezés)",
+  ],
+]);
+
+const VISSZA = /Vissza a |"Vissza"|← /;
 
 describe("a visszalépés egy alakja", () => {
   it("POZITÍV KONTROLL: a kiolvasás nem üres halmazt ad, és a komponens létezik", () => {
@@ -69,15 +115,13 @@ describe("a visszalépés egy alakja", () => {
     expect(kezi).toEqual([]);
   });
 
-  it("a még át nem állított lapok listája pontosan a Vissza a listához feliratú, a közös komponenst nem használó lapok", () => {
+  it("a még át nem állított lapok listája pontosan a Vissza vagy ← szövegű, a közös komponenst nem használó lapok", () => {
     const valos = MIND.filter(
-      (f) =>
-        f.forras.includes("Vissza a listához") &&
-        !f.forras.includes("PilotBackLink"),
+      (f) => VISSZA.test(f.forras) && !f.forras.includes("PilotBackLink"),
     )
       .map((f) => f.ut)
       .sort();
-    expect(valos).toEqual([...MEG_ATALLITANDO].sort());
+    expect(valos).toEqual([...MEG_ATALLITANDO, ...MAS_JELENTESU.keys()].sort());
   });
 
   it("az átállított lapok a közös komponenst használják, és nincs bennük Vissza a listához", () => {
@@ -90,6 +134,10 @@ describe("a visszalépés egy alakja", () => {
       "components/service-jobs/pilot/pilot-service-job-detail-page.tsx",
       "components/worksheets/pilot/pilot-worksheet-detail-page.tsx",
       "components/mortality/mortality-detail-page.tsx",
+      "components/billing/billing-document-detail-page.tsx",
+      "components/billing/billing-external-document-page.tsx",
+      "components/billing/billing-incoming-document-page.tsx",
+      "components/billing/billing-incoming-review-page.tsx",
     ]) {
       const f = MIND.find((x) => x.ut === ut);
       expect(f, ut).toBeDefined();

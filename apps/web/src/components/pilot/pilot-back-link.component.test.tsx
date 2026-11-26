@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   PILOT_BACK_LINK_CLASSES,
+  PILOT_BACK_LINK_FLUSH_CLASSES,
   PilotBackLink,
   backLinkLabel,
 } from "./pilot-back-link";
@@ -21,6 +22,22 @@ describe("PilotBackLink", () => {
     expect(link.className).toContain("text-xs");
     expect(link.querySelector("svg")).not.toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
+  });
+});
+
+describe("PilotBackLink flush", () => {
+  // a számla-lapok gyökere `space-y-6`: ott a szülő adja a távolságot a fejlécig, a link alsó margója kettőzné
+  it("alsó margó nélküli változat, a többi osztály azonos", () => {
+    render(
+      <PilotBackLink href="/penzugy/szamlazas" flush>
+        Számlák
+      </PilotBackLink>,
+    );
+    const link = screen.getByRole("link", { name: "Számlák" });
+    expect(link.className).toBe(PILOT_BACK_LINK_FLUSH_CLASSES);
+    expect(link.className).not.toContain("mb-3");
+    expect(link.className).toBe(PILOT_BACK_LINK_CLASSES.replace("mb-3 ", ""));
+    expect(link.className).toContain("text-pilot-grey-400");
   });
 });
 

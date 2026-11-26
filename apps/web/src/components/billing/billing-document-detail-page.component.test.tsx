@@ -1223,7 +1223,7 @@ describe("copying an issued document into a new draft", () => {
     api.detail.mockResolvedValue(detail());
     render(<BillingDocumentDetailPage documentId="doc-1" />);
     expect(
-      await screen.findByRole("link", { name: "Vissza a számlákhoz" }),
+      await screen.findByRole("link", { name: "Számlák" }),
     ).toHaveAttribute("href", "/penzugy/szamlazas");
   });
 
