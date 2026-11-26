@@ -228,6 +228,12 @@ function netTotals(v: QuoteRow["versions"][number]) {
   let optional = new Prisma.Decimal(0);
   let offeredGross = new Prisma.Decimal(0);
   let optionalGross = new Prisma.Decimal(0);
+  // KIVÁLTOTT TÉTEL (card 2540d9d4, Luca): az opciók összege az opciók HATÁSA az összegre: a helyükre lépő opció a kiváltott tétel árát vonja le,
+  // nem hozzáadódik (150 000 + 30 000 + 20 000 helyett, ha a 30 000 az 50 000 helyére lép: 0). Kiváltás nélkül a sima összeg.
+  const replaced = new Set<string>();
+  for (const b of v.blocks)
+    for (const i of b.items)
+      if (i.isOptional && i.replacesItemId) replaced.add(i.replacesItemId);
   for (const b of v.blocks)
     for (const i of b.items) {
       const line = i.quantity.times(i.unitNetPrice);
@@ -240,6 +246,10 @@ function netTotals(v: QuoteRow["versions"][number]) {
       } else {
         offered = offered.plus(line);
         offeredGross = offeredGross.plus(gross);
+        if (replaced.has(i.id)) {
+          optional = optional.minus(line);
+          optionalGross = optionalGross.minus(gross);
+        }
       }
     }
   return {

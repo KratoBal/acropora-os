@@ -1813,6 +1813,30 @@ describe("Ajánlat szerkesztő (569:171)", () => {
     expect(screen.queryByText(/^bruttó /)).toBeNull();
   });
 
+  /*
+    AZ OPCIÓK HATÁSA ELŐJELLEL (Luca 2026-11-26, kártya 2540d9d4): a kiváltó opció a kiváltott tétel árát vonja le, ezért a szerver összege 0 vagy
+    negatív is lehet. MI PIROSÍT: ha a nulla "+0"-nak, a negatív "+-"-nak rajzolódik; ha a pozitív elveszti a pluszt; ha a sor a szerver összege
+    helyett a saját összeadását mutatja.
+  */
+  it("a belső kalkuláció opciók sora előjellel mutatja a szerver összegét: plusz, nulla, mínusz", async () => {
+    const shown = async (net: string, gross: string) => {
+      api.detail.mockResolvedValue(
+        quote([version({ optionalNetTotal: net, optionalGrossTotal: gross })]),
+      );
+      const view = render(<QuoteEditorPage quoteId="q1" />);
+      await screen.findByText("Belső kalkuláció");
+      const label = await screen.findByText("Kiválasztott opciók");
+      const text = label.parentElement!.textContent ?? "";
+      view.unmount();
+      return text;
+    };
+    expect(await shown("30000.0000", "38100")).toMatch(/\+30\s000 Ft/);
+    expect(await shown("0.0000", "0")).toMatch(/Kiválasztott opciók\s*0 Ft/);
+    const negative = await shown("-30000.0000", "-38100");
+    expect(negative).toMatch(/-30\s000 Ft/);
+    expect(negative).not.toMatch(/\+-/);
+  });
+
   it("az árak megjelenítése ajánlatonként váltható: a verzió értékét mutatja, váltáskor elküldi", async () => {
     api.detail.mockResolvedValue(quote([version({ priceDisplay: "GROSS" })]));
     api.updateVersion.mockResolvedValue(

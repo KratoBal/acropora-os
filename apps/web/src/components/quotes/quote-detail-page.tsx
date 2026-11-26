@@ -29,6 +29,7 @@ import {
   errorText,
   formatQuoteDay,
   formatQuoteMoney,
+  signedQuoteMoney,
   isAbort,
   QUOTE_STATUS,
   QUOTE_VERSION_STATUS,
@@ -455,7 +456,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
             label="Opciók"
             value={
               latest
-                ? `+${formatQuoteMoney(latest.optionalNetTotal, latest.currency)}`
+                ? signedQuoteMoney(latest.optionalNetTotal, latest.currency)
                 : "—"
             }
           />

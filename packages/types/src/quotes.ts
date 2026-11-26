@@ -134,7 +134,10 @@ export interface QuoteInternalVersion extends Omit<
   publishedAt: string | null;
   /** the offered (non-optional) lines' net total, exact decimal (P1) */
   netTotal: string;
-  /** the optional lines' net total, shown apart (P1) */
+  /**
+   * the optional lines' net total, shown apart (P1): what the options ADD when every one is chosen. An option that stands in for a line takes
+   * that line's price off (KIVÁLTOTT TÉTEL), so it can be zero or negative.
+   */
   optionalNetTotal: string;
   /**
    * the offered and the optional lines' GROSS totals as the PDF counts them (each line's own VAT rate, summed unrounded, rounded once:
