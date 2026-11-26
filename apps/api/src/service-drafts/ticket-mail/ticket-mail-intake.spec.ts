@@ -161,6 +161,21 @@ describe("draftContentOf", () => {
     assert.equal(content.originalProblem, "A szűrő csöpög.");
   });
 
+  // the ec7b947b test mail (acrobot 2026-11-26): the draft's report text keeps the writer's own two lines after their own "ezt írta:" sentence
+  it("the report text keeps the writer's own lines around an 'ezt írta:' sentence and drops only the quoted old mail", () => {
+    const content = draftContentOf(
+      message({
+        subject: "flotta-próba: idézett válasz teszt",
+        text: "A szűrő a 3-as medencénél csöpög.\nA telefonban a szerelő ezt írta:\nA cső a csőnél is folyik, kérlek jöjjetek ki.\n\n2026. nov. 25., Sze, 10:12 időpontban Szerelő Sándor <szerelo@acropora.example> ezt írta:\n> Kérlek nézzétek meg a szűrőt.\n> Ez a régi levél, ez összecsukva kell legyen.",
+      }),
+    );
+    assert.equal(
+      content.originalProblem,
+      "A szűrő a 3-as medencénél csöpög.\nA telefonban a szerelő ezt írta:\nA cső a csőnél is folyik, kérlek jöjjetek ki.",
+    );
+    assert.ok(!content.originalProblem.includes("régi levél"));
+  });
+
   it("without a subject the title is the first line of the text; without either, fixed words", () => {
     assert.equal(
       draftContentOf(message({ subject: null })).title,
