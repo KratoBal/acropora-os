@@ -304,7 +304,7 @@ export function PosTerminalPage() {
                     <p className="text-sm font-semibold text-dusk-900">
                       {product.productName}
                     </p>
-                    <p className="font-mono text-xs text-dusk-500">
+                    <p className="font-mono text-[13px] text-dusk-500">
                       {product.sku}
                     </p>
                   </div>
@@ -316,7 +316,7 @@ export function PosTerminalPage() {
                           })
                         : "Nincs ár"}
                     </p>
-                    <p className="text-xs text-dusk-500">
+                    <p className="text-[13px] text-dusk-500">
                       Készlet: {product.currentStock} {product.unit}
                     </p>
                   </div>
@@ -349,7 +349,7 @@ export function PosTerminalPage() {
                     <p className="font-medium text-dusk-900">
                       {sale.orderNumber}
                     </p>
-                    <p className="text-xs text-dusk-500">
+                    <p className="text-[13px] text-dusk-500">
                       {new Date(sale.createdAt).toLocaleTimeString("hu-HU")} ·{" "}
                       {sale.paymentMethod
                         ? PAYMENT_METHOD_LABEL[sale.paymentMethod]
@@ -370,7 +370,7 @@ export function PosTerminalPage() {
           <Card>
             <CardHeader>
               <h2 className="text-sm font-semibold text-dusk-900">Kosár</h2>
-              <span className="text-xs text-dusk-500">
+              <span className="text-[13px] text-dusk-500">
                 {cart.length.toLocaleString("hu-HU")} tétel
               </span>
             </CardHeader>
@@ -391,20 +391,20 @@ export function PosTerminalPage() {
                           <p className="text-sm font-semibold text-dusk-900">
                             {line.productName}
                           </p>
-                          <p className="font-mono text-xs text-dusk-500">
+                          <p className="font-mono text-[13px] text-dusk-500">
                             {line.sku}
                           </p>
                         </div>
                         <button
                           type="button"
                           onClick={() => removeLine(line.variantId)}
-                          className="shrink-0 text-xs text-rose-600 hover:underline"
+                          className="shrink-0 text-[13px] text-rose-600 hover:underline"
                         >
                           Eltávolítás
                         </button>
                       </div>
                       <div className="mt-2 grid grid-cols-3 gap-2">
-                        <label className="text-xs text-dusk-500">
+                        <label className="text-[13px] text-dusk-500">
                           Mennyiség ({line.unit})
                           <input
                             type="number"
@@ -420,7 +420,7 @@ export function PosTerminalPage() {
                             className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
                           />
                         </label>
-                        <label className="text-xs text-dusk-500">
+                        <label className="text-[13px] text-dusk-500">
                           Egységár (Ft, bruttó)
                           <input
                             type="number"
@@ -436,7 +436,7 @@ export function PosTerminalPage() {
                             className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
                           />
                         </label>
-                        <label className="text-xs text-dusk-500">
+                        <label className="text-[13px] text-dusk-500">
                           Kedvezmény (%)
                           <input
                             type="number"
@@ -470,7 +470,7 @@ export function PosTerminalPage() {
               )}
 
               <div className="border-t border-dusk-100 pt-3">
-                <label className="mb-3 block text-xs text-dusk-500">
+                <label className="mb-3 block text-[13px] text-dusk-500">
                   Végösszeg kedvezmény (%)
                   <input
                     type="number"
@@ -496,7 +496,7 @@ export function PosTerminalPage() {
               </div>
 
               <div>
-                <p className="mb-1 text-xs text-dusk-500">Fizetési mód</p>
+                <p className="mb-1 text-[13px] text-dusk-500">Fizetési mód</p>
                 <Select
                   value={paymentMethod}
                   onChange={(event) =>

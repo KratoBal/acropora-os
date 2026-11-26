@@ -180,8 +180,9 @@ export function QuoteTemplatesPage() {
         <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {shown.map((template) => (
             <li key={template.id}>
-              <PilotCard>
-                <div className="space-y-3 p-5">
+              {/* A KÁRTYÁK EGY SORBAN EGYENLŐ MAGASAK, A GOMBOK ALUL EGY VONALBAN (Picasso 3.19): a jobb oldali kártya gombjai lejjebb álltak, mert a kártya magassága eltért */}
+              <PilotCard className="h-full">
+                <div className="flex h-full flex-col gap-3 p-5">
                   <div className="flex items-start justify-between gap-3">
                     <h2 className="font-semibold text-pilot-grey-900">
                       {template.name}
@@ -201,7 +202,7 @@ export function QuoteTemplatesPage() {
                       .filter(Boolean)
                       .join(" · ")}
                   </p>
-                  <div className="flex gap-2">
+                  <div className="mt-auto flex gap-2 pt-1">
                     <PilotButton
                       variant="secondary"
                       aria-label={`${template.name}: szerkesztés`}

@@ -89,6 +89,17 @@ beforeEach(() => {
   api.list.mockReset().mockResolvedValue(PAGES);
 });
 
+// Picasso 3.19 (acrobot 62278): the page title is the menu name
+describe("SeoLandingListPage title", () => {
+  it("the heading is Válogatások, the name the menu uses", async () => {
+    render(<SeoLandingListPage />);
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Válogatások" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Webshop válogatások")).toBeNull();
+  });
+});
+
 describe("SeoLandingListPage sorting", () => {
   it("the default order is the server's", async () => {
     render(<SeoLandingListPage />);
