@@ -117,6 +117,33 @@ beforeEach(() => {
 });
 
 describe("FoxpostSettlementsPage", () => {
+  /*
+    A RÉSZLET A LISTA HELYÉN ÁLL (ugyanaz az URL), ezért a nyíl GOMB, nem link: a kattintás a kijelölést törli, és sehova nem navigál.
+    MI PIROSÍT: ha a nyíl linkké válik (útvonalat kapna), ha a kattintás URL-t ír vagy lapot vált, ha a részlet a kattintás után is marad.
+  */
+  it("the arrow in the detail clears the selection and navigates nowhere", async () => {
+    api.detail.mockResolvedValue({
+      ...settlements.items[0]!,
+      gmailMessageId: "gmail-message-1",
+      xlsxFileName: "foxpost.xlsx",
+      pdfFileName: "foxpost.pdf",
+      lines: [],
+    });
+    render(createElement(FoxpostSettlementsPage));
+    await answered(api.reports);
+    fireEvent.click(await screen.findByText("26H31"));
+    await screen.findByRole("button", { name: "Elszámolások" });
+    const replaced = urlNavigation.replace.mock.calls.length;
+    expect(screen.queryByRole("link", { name: "Elszámolások" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Elszámolások" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Elszámolások" })).toBeNull(),
+    );
+    expect(screen.getByText("26H31")).toBeInTheDocument();
+    expect(urlNavigation.push).not.toHaveBeenCalled();
+    expect(urlNavigation.replace.mock.calls.length).toBe(replaced);
+  });
+
   it("says the automatic pull is off, and why, as the server reads it", async () => {
     // Measured on production 2026-09-29: the pull never ran by itself in
     // seven weeks, and the page said nothing. This line is that finding.

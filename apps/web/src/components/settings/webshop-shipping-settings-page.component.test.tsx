@@ -66,6 +66,14 @@ beforeEach(() => {
 });
 
 describe("WebshopShippingSettingsPage", () => {
+  // Picasso 3.25 (acrobot 62633): the unit stands beside every field, not only in the card title
+  it("every fee and threshold field has its forint unit beside it", async () => {
+    render(createElement(WebshopShippingSettingsPage));
+    const field = await screen.findByLabelText("Foxpost díja");
+    expect(field.closest("label")!.textContent).toContain("Ft");
+    expect(screen.getAllByText("Ft")).toHaveLength(6);
+  });
+
   it("shows the six values, the unset and the default one marked", async () => {
     render(createElement(WebshopShippingSettingsPage));
     expect(

@@ -30,6 +30,10 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { quotesApi } from "@/lib/api/quotes";
 
 import { errorText, isAbort } from "./quote-format";
+import {
+  ListSearch,
+  useListSearch,
+} from "@/components/settings/settings-list-search";
 
 export const SNIPPET_KIND_LABEL: Record<QuoteSnippetKindValue, string> = {
   INTRO: "Bevezető",
@@ -69,6 +73,7 @@ export function QuoteSnippetsPage() {
     session && hasPermission(session.user, PERMISSIONS.QUOTES_TEMPLATES_MANAGE),
   );
   const [items, setItems] = useState<QuoteSnippetDto[] | null>(null);
+  const kereso = useListSearch(items ?? [], (snippet) => snippet.name);
   const [showArchived, setShowArchived] = useState(false);
   const [draft, setDraft] = useState<Draft>(NEW);
   const [error, setError] = useState<string | null>(null);
@@ -336,47 +341,63 @@ export function QuoteSnippetsPage() {
               description="A fenti űrlappal vehetsz fel újat."
             />
           ) : (
-            <ul
-              aria-label="Szövegrészletek"
-              className="divide-y divide-dusk-100"
-            >
-              {items.map((snippet) => (
-                <li
-                  key={snippet.id}
-                  className="flex flex-wrap items-center justify-between gap-3 py-3"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-dusk-900">
-                      {snippet.name}
-                    </span>
-                    <Badge variant="info">
-                      {SNIPPET_KIND_LABEL[snippet.kind]}
-                    </Badge>
-                    {snippet.archivedAt ? <Badge>Archivált</Badge> : null}
-                  </div>
-                  {snippet.archivedAt ? null : (
-                    <div className="flex gap-2">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        aria-label={`${snippet.name}: szerkesztés`}
-                        onClick={() => edit(snippet)}
-                      >
-                        Szerkesztés
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        aria-label={`${snippet.name}: archiválás`}
-                        onClick={() => setArchiving(snippet)}
-                      >
-                        Archiválás
-                      </Button>
+            <>
+              {/* the settings lists' search and quiet row actions (Picasso 3.24, #2940's pattern; acrobot 62633) */}
+              {kereso.searchable ? (
+                <ListSearch
+                  query={kereso.query}
+                  onChange={kereso.setQuery}
+                  shown={kereso.shown.length}
+                  total={items.length}
+                />
+              ) : null}
+              {kereso.shown.length === 0 ? (
+                <p className="text-sm text-dusk-500">
+                  Nincs a keresésnek megfelelő szövegrészlet.
+                </p>
+              ) : null}
+              <ul
+                aria-label="Szövegrészletek"
+                className="divide-y divide-dusk-100"
+              >
+                {kereso.shown.map((snippet) => (
+                  <li
+                    key={snippet.id}
+                    className="flex flex-wrap items-center justify-between gap-3 py-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-dusk-900">
+                        {snippet.name}
+                      </span>
+                      <Badge variant="info">
+                        {SNIPPET_KIND_LABEL[snippet.kind]}
+                      </Badge>
+                      {snippet.archivedAt ? <Badge>Archivált</Badge> : null}
                     </div>
-                  )}
-                </li>
-              ))}
-            </ul>
+                    {snippet.archivedAt ? null : (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`${snippet.name}: szerkesztés`}
+                          onClick={() => edit(snippet)}
+                        >
+                          Szerkesztés
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`${snippet.name}: archiválás`}
+                          onClick={() => setArchiving(snippet)}
+                        >
+                          Archiválás
+                        </Button>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </CardContent>
       </Card>

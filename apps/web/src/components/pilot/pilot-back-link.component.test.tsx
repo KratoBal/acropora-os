@@ -1,9 +1,10 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   PILOT_BACK_LINK_CLASSES,
   PILOT_BACK_LINK_FLUSH_CLASSES,
+  PilotBackButton,
   PilotBackLink,
   backLinkLabel,
 } from "./pilot-back-link";
@@ -45,5 +46,34 @@ describe("backLinkLabel", () => {
   it("az előző lapról jövőnek Vissza, különben a lista neve", () => {
     expect(backLinkLabel({ fromWithinApp: true }, "Márkák")).toBe("Vissza");
     expect(backLinkLabel({ fromWithinApp: false }, "Márkák")).toBe("Márkák");
+  });
+});
+
+/*
+  A NYÍL GOMB-VÁLTOZATA: ugyanaz a megjelenés, mint a linké, de művelet (egy ugyanazon az URL-en élő nézetből lép ki). MI PIROSÍT: ha link lesz belőle
+  (útvonalat kapna); ha a kattintás nem hívja az onClick-et; ha az osztályok elmozdulnak a link megjelenésétől (egy alak a cél); ha a gomb elküldene egy űrlapot.
+*/
+describe("PilotBackButton", () => {
+  it("gomb, a link osztályaival és nyíllal, a kattintás az onClick-et hívja", () => {
+    const onClick = vi.fn();
+    render(<PilotBackButton onClick={onClick}>Elszámolások</PilotBackButton>);
+    const button = screen.getByRole("button", { name: "Elszámolások" });
+    expect(button.getAttribute("type")).toBe("button");
+    expect(button.className).toContain(PILOT_BACK_LINK_CLASSES);
+    expect(button.querySelector("svg")).not.toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+    fireEvent.click(button);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("flush: alsó margó nélkül, a többi osztály azonos", () => {
+    render(
+      <PilotBackButton onClick={() => undefined} flush>
+        Elszámolások
+      </PilotBackButton>,
+    );
+    const button = screen.getByRole("button", { name: "Elszámolások" });
+    expect(button.className).toContain(PILOT_BACK_LINK_FLUSH_CLASSES);
+    expect(button.className).not.toContain("mb-3");
   });
 });
