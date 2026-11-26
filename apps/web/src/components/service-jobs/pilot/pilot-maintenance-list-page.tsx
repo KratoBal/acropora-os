@@ -46,6 +46,7 @@ import {
   maintenanceTotal,
   type MaintenanceTab,
 } from "../service-job-list-view";
+import { menuEyebrow } from "@/components/navigation";
 
 /**
  * A KARBANTARTÁS-LISTA A HIBAJEGY-LISTA MINTÁJÁRA (picasso képernyő-leltár 3.9, acrobot 62090). Eddig a régi közös komponens futott itt:
@@ -294,7 +295,8 @@ export function PilotMaintenanceListPage() {
         pilot
       />
       <PageHeader
-        eyebrow="Szerviz / Munkatér"
+        // the line above the title is the page's menu entry (Picasso R7)
+        eyebrow={menuEyebrow("/szerviz/karbantartas") ?? undefined}
         title="Karbantartás"
         description="A karbantartási lapok a szervizmunka életútját és a hozzájuk kapcsolt munkalapokat egy helyen tartják."
         actions={

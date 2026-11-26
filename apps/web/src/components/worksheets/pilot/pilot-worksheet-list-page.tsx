@@ -55,6 +55,7 @@ import {
   PilotCard,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
+import { menuEyebrow } from "@/components/navigation";
 
 /**
  * A FIGMA MAKE TERV ÁTÜLTETÉSE -- MUNKALAPOK LISTA (8. kör, 1/3 rész).
@@ -698,14 +699,15 @@ export function PilotWorksheetListPage() {
       className={`flex min-h-screen flex-col gap-6 bg-pilot-grey-50 ${PAGE_GUTTER_X} py-8`}
     >
       <PageHeader
-        eyebrow="Szerviz / Munkatér"
+        // the line above the title is the page's menu entry (Picasso R7)
+        eyebrow={menuEyebrow("/szerviz/munkalapok") ?? undefined}
         title="Munkalapok"
         description="A helyszíni munka teljes életútja: kiosztás, tételek, napló, átadás és aláírás."
         actions={
           canManage ? (
             <Link href="/szerviz/munkalapok/uj">
               <PilotButton variant="primary" size="regular">
-                <Icon name="plus" size={13} />
+                <Icon name="plus" size={14} />
                 Új munkalap
               </PilotButton>
             </Link>
@@ -1041,8 +1043,8 @@ export function PilotWorksheetListPage() {
           action={
             !hasFilters && canManage ? (
               <Link href="/szerviz/munkalapok/uj">
-                <PilotButton variant="primary">
-                  <Icon name="plus" size={13} />
+                <PilotButton variant="primary" size="regular">
+                  <Icon name="plus" size={14} />
                   Új munkalap
                 </PilotButton>
               </Link>

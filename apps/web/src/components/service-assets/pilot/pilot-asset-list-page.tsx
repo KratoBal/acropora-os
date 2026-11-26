@@ -55,6 +55,7 @@ import {
   PilotButton,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
+import { menuEyebrow } from "@/components/navigation";
 
 /**
  * A FIGMA MAKE TERV ÁTÜLTETÉSE -- ESZKÖZNYILVÁNTARTÁS LISTA (7. kör).
@@ -645,12 +646,13 @@ export function PilotAssetListPage() {
     >
       <PageHeader
         className={`${PAGE_GUTTER_X} pb-5 pt-6`}
-        eyebrow="Szerviz"
+        // the line above the title is the page's menu entry (Picasso R7)
+        eyebrow={menuEyebrow("/szerviz/eszkozok") ?? undefined}
         title="Eszköznyilvántartás"
         actions={
           canManage ? (
             <Link href="/szerviz/eszkozok/uj">
-              <PilotButton variant="primary">
+              <PilotButton variant="primary" size="regular">
                 <Icon name="plus" size={14} />
                 Új eszköz
               </PilotButton>

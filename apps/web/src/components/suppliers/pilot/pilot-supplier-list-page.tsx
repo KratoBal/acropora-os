@@ -29,6 +29,7 @@ import {
   PilotSelect,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
+import { menuEyebrow } from "@/components/navigation";
 
 type SupplierRow = SupplierListResponse["items"][number];
 
@@ -295,12 +296,14 @@ export function PilotSupplierListPage() {
       <div className="flex min-h-full flex-col">
         <PageHeader
           className={`${PAGE_GUTTER_X} pt-6`}
+          // the line above the title is the page's menu entry (Picasso R7: the partners had none)
+          eyebrow={menuEyebrow("/partnerek") ?? undefined}
           title="Partnerek"
           description="Beszállítók és szerviz partnerek törzsadatai: kód, kapcsolattartó és elérhetőség."
           actions={
             canManage ? (
               <Link href="/partnerek/uj">
-                <PilotButton type="button" variant="primary">
+                <PilotButton type="button" variant="primary" size="regular">
                   <Icon name="plus" size={14} />
                   Új felvitele
                 </PilotButton>
