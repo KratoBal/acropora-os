@@ -339,6 +339,19 @@ describe("PilotWorksheetListPage -- redesign", () => {
     );
   });
 
+  // Picasso R4 (acrobot 62633): on the phone the three tiles share one row (stacked, they took a screen before the first worksheet)
+  it("the tiles share one row on the phone, the detail line only from sm up", async () => {
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    const tiles = await screen.findByLabelText("Munkalapok állapot szerint");
+    expect(tiles).toHaveClass("grid-cols-3");
+    expect(tiles).not.toHaveClass("grid-cols-1");
+    for (const tile of Array.from(tiles.querySelectorAll("button"))) {
+      const detail = tile.querySelector("span > span:last-child");
+      expect(detail).toHaveClass("hidden", "sm:inline");
+    }
+  });
+
   it("keeps the 'only mine' filter on the assignee", async () => {
     api.list.mockResolvedValue(response([row()]));
     render(<PilotWorksheetListPage />);
