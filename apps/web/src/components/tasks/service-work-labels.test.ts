@@ -51,4 +51,20 @@ describe("a Feladataim jegyének állapota", () => {
       }),
     ).not.toBe("Lezárt");
   });
+
+  it("a munkalap-tétel a közös szavakat kapja a megjelenített állapotából (Elkészült · aláírásra vár, Lezárt, Folyamatban · elutasítva)", () => {
+    const sheet = (status: string) =>
+      ({ ...job(), kind: "WORKSHEET", status }) as MyServiceWorkItem;
+    expect(serviceWorkStatusLabel(sheet("NEW"))).toBe("Új");
+    expect(serviceWorkStatusLabel(sheet("COMPLETED"))).toBe(
+      "Elkészült · aláírásra vár",
+    );
+    expect(serviceWorkStatusTone(sheet("COMPLETED"))).toBe("green");
+    expect(serviceWorkStatusLabel(sheet("CLOSED"))).toBe("Lezárt");
+    expect(serviceWorkStatusTone(sheet("CLOSED"))).toBe("neutral");
+    expect(serviceWorkStatusLabel(sheet("REJECTED"))).toBe(
+      "Folyamatban · elutasítva",
+    );
+    expect(serviceWorkStatusTone(sheet("REJECTED"))).toBe("red");
+  });
 });

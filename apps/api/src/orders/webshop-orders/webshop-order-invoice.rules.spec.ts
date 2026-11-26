@@ -15,6 +15,7 @@ import {
 import {
   advanceProformaDraftOf,
   buyerMismatch,
+  cancelledOrderOf,
   tagsWithAdvance,
   WEBSHOP_ADVANCE_TAG,
   customerKeyOf,
@@ -1038,5 +1039,29 @@ describe("the advance proforma", () => {
       assert.equal(result.ok, false, JSON.stringify(advance));
       assert.match(!result.ok ? result.message : "", message);
     }
+  });
+});
+
+// barracuda N3a: the cancelled order, whichever way the shop cancelled it
+describe("a cancelled webshop order", () => {
+  it("is Medusa's canceled, or the unsuccessful close; any other state is not", () => {
+    assert.equal(
+      cancelledOrderOf({ status: "canceled" }, "confirmed"),
+      "canceled",
+    );
+    assert.equal(
+      cancelledOrderOf({ status: "pending" }, "closed_unsuccessfully"),
+      "closed_unsuccessfully",
+    );
+    for (const [status, business] of [
+      ["pending", "confirmed"],
+      ["completed", "closed"],
+      [undefined, undefined],
+    ] as const)
+      assert.equal(cancelledOrderOf({ status }, business), null);
+  });
+
+  it("the order is read with Medusa's own state", () => {
+    assert.ok(ORDER_DETAIL_FIELDS.split(",").includes("status"));
   });
 });

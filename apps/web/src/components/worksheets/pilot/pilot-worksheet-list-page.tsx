@@ -12,8 +12,10 @@ import {
   PilotSelect,
   type PilotTableColumn,
   PAGE_GUTTER_X,
+  sv,
 } from "@acropora/ui";
 import {
+  commonServiceStatusLabel,
   hasPermission,
   PERMISSIONS,
   type WorksheetCopyResult,
@@ -43,9 +45,10 @@ import { serviceJobRef } from "../service-job-ref";
 import {
   formatDay,
   formatLaborHours,
-  worksheetDisplayLabel,
-  worksheetDisplayPilotVariant,
+  worksheetCommonState,
+  worksheetReasonText,
 } from "../worksheet-labels";
+import { commonPilotVariant } from "@/components/service-jobs/common-status-view";
 import {
   PilotBadge,
   PilotButton,
@@ -130,7 +133,7 @@ const FIGMA_TAB_ORDER: {
   { key: "", label: "Összes" },
   { key: "DRAFT", label: "Új és folyamatban" },
   { key: "AWAITING_SIGNATURE", label: "Elkészült" },
-  { key: "SIGNED", label: "Lezárva" },
+  { key: "SIGNED", label: "Lezárt" },
   { key: "REJECTED", label: "Elutasítva" },
 ];
 
@@ -158,7 +161,7 @@ const STAT_TILES: {
   },
   {
     key: "SIGNED",
-    label: "Lezárva",
+    label: "Lezárt",
     detail: "aláírva",
     tone: "text-pilot-aqua-700",
   },
@@ -270,16 +273,21 @@ export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
     id: "status",
     header: "Állapot",
     width: "130px",
-    cell: (worksheet) => (
-      <PilotBadge
-        variant={worksheetDisplayPilotVariant(
-          worksheet.status,
-          worksheet.lineCount ?? 0,
-        )}
-      >
-        {worksheetDisplayLabel(worksheet.status, worksheet.lineCount ?? 0)}
-      </PilotBadge>
-    ),
+    cell: (worksheet) => {
+      // a KÖZÖS állapot az okkal (kártya 7f23785c): a közös szótár számolja a változatból és a tételszámból
+      const state = worksheetCommonState(worksheet);
+      const reason = worksheetReasonText(state);
+      return (
+        <div className="flex flex-col items-start gap-0.5">
+          <PilotBadge variant={commonPilotVariant(state)}>
+            {commonServiceStatusLabel[state.status]}
+          </PilotBadge>
+          {reason ? (
+            <span className="text-xs text-pilot-grey-500">{reason}</span>
+          ) : null}
+        </div>
+      );
+    },
   },
   {
     id: "createdAt",
@@ -761,14 +769,15 @@ export function PilotWorksheetListPage() {
               role="tab"
               aria-selected={active}
               onClick={() => selectStatus(tab.key)}
-              className={`flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md px-4 py-2 text-sm transition-colors ${
-                active
-                  ? "bg-pilot-aqua-50 font-semibold text-pilot-aqua-700"
-                  : "text-pilot-grey-600 hover:text-pilot-grey-900"
+              // the lists' one tab shape (Picasso R9, acrobot 62497): the solid green pill
+              className={`cursor-pointer ${sv.pillTab} ${
+                active ? sv.pillTabActive : sv.pillTabIdle
               }`}
             >
               {tab.label}
-              <span className="text-xs font-normal text-pilot-grey-400">
+              <span
+                className={`${sv.pillTabCount} ${active ? sv.pillTabCountActive : sv.pillTabCountIdle}`}
+              >
                 {tabCount(tab.key) ?? "–"}
               </span>
             </button>

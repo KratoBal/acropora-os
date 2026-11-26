@@ -25,6 +25,9 @@ import {
 type Order = {
   total: number;
   provider?: string;
+  /** Medusa's own state (barracuda N3a) */
+  status?: string;
+  business?: string;
 };
 
 function setup(
@@ -101,6 +104,7 @@ function setup(
         order: {
           id: orderId,
           total: order.total,
+          status: order.status ?? "pending",
           payment_collections: [
             {
               payment_sessions: [
@@ -112,7 +116,7 @@ function setup(
             },
           ],
         },
-        status: null,
+        status: order.business ? { status: order.business } : null,
       };
     },
   });
@@ -324,6 +328,30 @@ describe("the live bank pairing", () => {
     );
     assert.match(run.outcomes[1]!.reason ?? "", /nem előre utalásos/);
     assert.match(run.outcomes[2]!.reason ?? "", /8000 HUF, a hátraléké 8200/);
+  });
+
+  // barracuda N3a: the money on a cancelled order is a refund case, so its pairing turns into a review and nothing is written
+  it("write: a cancelled or unsuccessfully closed order's pairing is a review, and nothing is written", async () => {
+    const { service, writes } = setup({
+      proformas: [WHOLE],
+      balances: [BALANCE],
+      credits: CREDITS,
+      orders: {
+        order_w: { total: 13000, status: "canceled" },
+        order_b: { total: 13000, business: "closed_unsuccessfully" },
+      },
+    });
+    const run = await service.runOnce("write");
+    assert.deepEqual(writes, []);
+    assert.deepEqual(
+      run.outcomes.map((row) => [row.orderId, row.decision, row.written]),
+      [
+        ["order_w", "review", null],
+        ["order_b", "review", null],
+      ],
+    );
+    for (const row of run.outcomes)
+      assert.match(row.reason ?? "", /le van mondva/);
   });
 
   it("an order the shop does not answer for is left for the next round, the others go on", async () => {

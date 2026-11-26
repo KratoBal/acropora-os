@@ -356,7 +356,8 @@ describe("ResearchDraftPage", () => {
   });
 
   // Picasso 3.17 (acrobot 62278): the eight tabs get the common tab shape (underlined active tab on a rule), not framed pill buttons
-  it("draws the tabs as the common underlined tabs: a rule under the row, the active tab underlined, the others not framed", () => {
+  // the lists' one tab shape (Picasso R9, acrobot 62497): the solid green pill, not the 3.17 underline
+  it("draws the tabs as the lists' one tab shape: a rule under the row, the active tab filled green, the others not framed", () => {
     const { container } = render(
       <KnowledgeBaseTabs active="/tudasbazis/forrasok" />,
     );
@@ -365,15 +366,14 @@ describe("ResearchDraftPage", () => {
     expect(nav.className).not.toContain("flex-wrap gap-2");
     const active = within(container).getByText("Források");
     expect(active.getAttribute("aria-current")).toBe("page");
-    expect(active.className).toContain("border-b-2");
-    expect(active.className).toContain("border-pilot-aqua-600");
+    expect(active).toHaveClass("bg-pilot-aqua-600", "text-white");
     const other = within(container).getByText("Szótár");
-    expect(other.className).toContain("border-transparent");
+    expect(other).not.toHaveClass("bg-pilot-aqua-600");
+    expect(other).not.toHaveClass("border-b-2");
     // no framed button look on any tab
-    for (const tab of container.querySelectorAll("a")) {
-      expect(tab.className).not.toContain("ring-1");
-      expect(tab.className).not.toContain("rounded-lg");
-    }
+    // no frame on any tab (the old bordered button tab): the pill is filled or plain
+    for (const tab of container.querySelectorAll("a"))
+      expect(tab.className).not.toMatch(/(^|\s)ring-1(\s|$)/);
   });
 
   it("shows the tab to an editor", () => {

@@ -26,7 +26,11 @@ import { Prisma } from "@acropora/database";
 
 import { BillingDocumentEmailDraftService } from "../../billing/billing-document-email-draft.service.js";
 import { BillingDocumentEmailService } from "../../billing/billing-document-email.service.js";
-import { finalBalanceMismatch } from "../../billing/billing-document-issue.js";
+import {
+  advanceRateUncovered,
+  finalBalanceMismatch,
+  grossByVatRate,
+} from "../../billing/billing-document-issue.js";
 import { BillingDocumentIssueService } from "../../billing/billing-document-issue.service.js";
 import { BillingDocumentsService } from "../../billing/billing-documents.service.js";
 import type { BillingDocumentDraftDto } from "../../billing/dto/billing-document-draft.dto.js";
@@ -37,6 +41,8 @@ import {
   buyerMismatch,
   customerKeyOf,
   deliveryNoteDraftOf,
+  cancelledOrderOf,
+  cancelledOrderRefusal,
   invoiceDraftOf,
   invoiceRefusal,
   newCustomerOf,
@@ -775,6 +781,12 @@ export class WebshopOrderInvoiceService {
       );
 
     const { order, status } = await this.orders.source(orderId);
+    // a cancelled order gets no final invoice (barracuda N3a), before the status rule, which knows only the unsuccessful close
+    const cancelled = cancelledOrderOf(order, status?.status);
+    if (cancelled)
+      throw new ConflictException(
+        cancelledOrderRefusal(cancelled, "végszámla nem állítható ki"),
+      );
     const refusal = invoiceRefusal(statusOf(status?.status));
     if (refusal) throw new ConflictException(refusal);
     if (
@@ -839,6 +851,13 @@ export class WebshopOrderInvoiceService {
       },
     );
     if (mismatch) throw new ConflictException(mismatch);
+    // the advance rate by rate on the final invoice (barracuda N3b), here too, so the window says it before the issue
+    const uncovered = advanceRateUncovered(
+      grossByVatRate(advance.lines, advance.currency),
+      grossByVatRate(saved.lines, saved.currency),
+      saved.currency,
+    );
+    if (uncovered) throw new ConflictException(uncovered);
     return { kind: "draft", saved, order };
   }
 

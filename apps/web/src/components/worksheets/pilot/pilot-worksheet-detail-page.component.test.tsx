@@ -332,6 +332,46 @@ describe("PilotWorksheetDetailPage -- redesign", () => {
     expect(versions.closest(columns)).toBeNull();
   });
 
+  // a verziótörténet az ok nélkül nem mondhatja az elutasított változatot (barracuda, #2984): ugyanaz a lap két helyen ugyanazt mondja
+  it("a verziótörténet a közös szavakat mondja az okkal: Folyamatban · elutasítva, Elkészült · aláírásra vár, Lezárt", async () => {
+    const version = (n: number, status: string) =>
+      ({
+        id: `v${n}`,
+        version: n,
+        label: `ML-1/${n}`,
+        status,
+        changeReason: null,
+        createdByName: "Készítő",
+        createdAt: "2026-10-01T08:00:00.000Z",
+        closedAt: null,
+        closedByName: null,
+        sentForSignatureAt: null,
+        sentForSignatureToName: null,
+        netAmount: "0",
+        vatAmount: "0",
+        grossAmount: "0",
+        laborHours: "0",
+        signature: null,
+      }) as never;
+    api.detail.mockResolvedValue(
+      sheet({
+        versions: [
+          version(3, "REJECTED"),
+          version(2, "AWAITING_SIGNATURE"),
+          version(1, "SIGNED"),
+        ],
+      }),
+    );
+    render(<PilotWorksheetDetailPage worksheetId="ws-1" />);
+    const card = (await screen.findByText("Verziók")).closest(
+      "section, div",
+    )!.parentElement!;
+    expect(card.textContent).toContain("Folyamatban · elutasítva");
+    expect(card.textContent).toContain("Elkészült · aláírásra vár");
+    expect(card.textContent).toContain("Lezárt");
+    expect(card.textContent).not.toContain("Lezárva");
+  });
+
   it("a signed sheet gives its assignee, asset, log and material editors NO write right, a draft does", async () => {
     api.detail.mockResolvedValue(sheet());
     const draft = render(<PilotWorksheetDetailPage worksheetId="ws-1" />);

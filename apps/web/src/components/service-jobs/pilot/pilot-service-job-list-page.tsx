@@ -10,6 +10,7 @@ import {
   PilotSelect,
   type PilotTableColumn,
   PAGE_GUTTER_X,
+  sv,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -846,17 +847,16 @@ export function PilotServiceJobListPage() {
             role="tab"
             aria-selected={tab === entry.id}
             onClick={() => selectTab(entry.id)}
-            className={`cursor-pointer rounded-md px-2.5 py-2 text-sm transition-colors sm:px-4 ${
-              tab === entry.id
-                ? "bg-pilot-aqua-50 font-semibold text-pilot-aqua-700"
-                : "text-pilot-grey-600 hover:text-pilot-grey-900"
+            // the lists' one tab shape (Picasso R9, acrobot 62497): the solid green pill
+            className={`cursor-pointer ${sv.pillTab} ${
+              tab === entry.id ? sv.pillTabActive : sv.pillTabIdle
             }`}
           >
             {entry.label}
             {/* A FÜL SZÁMA UGYANABBÓL A `commonCounts`-BÓL, mint a csempék (egy függvény, két megjelenítés: pilotTabCounts) */}
             {counts ? (
               <span
-                className={`ml-1.5 tabular-nums ${tab === entry.id ? "" : "text-pilot-grey-400"}`}
+                className={`${sv.pillTabCount} ${tab === entry.id ? sv.pillTabCountActive : sv.pillTabCountIdle}`}
               >
                 {counts[entry.id]}
               </span>

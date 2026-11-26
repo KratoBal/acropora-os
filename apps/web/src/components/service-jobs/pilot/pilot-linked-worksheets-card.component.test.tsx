@@ -138,8 +138,25 @@ describe("a Kapcsolódó munkalapok kártya", () => {
     expect(row).toHaveTextContent("Lámpák átszerelése");
     expect(row).toHaveTextContent("KAR-2026-022");
     expect(row).toHaveTextContent("Állatkert / Középső medence");
-    expect(row).toHaveTextContent("Lezárva");
+    expect(row).toHaveTextContent("Lezárt");
     expect(row.textContent).not.toMatch(/munkaóra|Ft|ár\b/i);
+  });
+
+  // az elutasított lap kártyáján az OK ott van (barracuda, #2984): a hibajegyen ebből látszik, hogy az ügyfél nem írta alá, és cselekedni kell
+  it("az elutasított és az aláírásra váró lap állapota az okkal áll a kártyán", async () => {
+    const base = linked().items[0]!;
+    api.linkedWorksheets.mockResolvedValue(
+      linked({
+        items: [
+          { ...base, worksheetId: "ws-r", status: "REJECTED" },
+          { ...base, worksheetId: "ws-a", status: "AWAITING_SIGNATURE" },
+        ],
+      }),
+    );
+    draw(false);
+    const rows = await screen.findAllByTestId("linked-worksheet");
+    expect(rows[0]).toHaveTextContent("Folyamatban · elutasítva");
+    expect(rows[1]).toHaveTextContent("Elkészült · aláírásra vár");
   });
 
   it("üres listánál kimondja, hogy még nincs kapcsolódó munkalap", async () => {

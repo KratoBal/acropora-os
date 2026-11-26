@@ -107,6 +107,8 @@ function row(status = "DRAFT", invoiceFormat = "ELECTRONIC") {
 
 function setup(
   options: {
+    /** The advance invoice a final invoice deducts, as `find` reads it (barracuda N3b); absent: `find` answers the row itself. */
+    advanceLines?: { vatRatePercent: string; unitNet: string }[];
     status?: string;
     format?: string;
     claim?: boolean;
@@ -164,7 +166,21 @@ function setup(
     ...options.over,
   } as BillingDocumentRow;
   const documents = {
-    find: async () => current,
+    find: async (id: string) =>
+      options.advanceLines && id === "adv-1"
+        ? ({
+            ...row(),
+            id: "adv-1",
+            documentType: "ADVANCE_INVOICE",
+            lines: options.advanceLines.map((line, index) => ({
+              ...row().lines[0]!,
+              id: `adv-line-${index}`,
+              unitNet: d(line.unitNet),
+              netAmount: d(line.unitNet),
+              vatRatePercent: d(line.vatRatePercent),
+            })),
+          } as unknown as BillingDocumentRow)
+        : current,
     partnerTaxHint: async () => options.partnerHint ?? null,
     customerPaymentDueDays: async (id: string) => {
       calls.paymentDaysFor.push(id);
@@ -579,6 +595,37 @@ describe("BillingDocumentIssueService", () => {
     const ok = setup({ over: webshopFinal, balance: { amount: "1000" } });
     assert.equal((await issue(ok.service)).status, "ISSUED");
     assert.match(ok.calls.xml[0] ?? "", /<fizetve>true<\/fizetve>/);
+  });
+
+  /*
+    AZ ELŐLEG KULCSONKÉNT A VÉGSZÁMLÁN (barracuda N3b): az előleg után szerkesztett rendelésen egy kulcs tétele kikerült, és a Számlázz.hu
+    ott negatív sorral vonná le az előleget. MI PIROSÍT: a végszámla mégis foglal vagy kimegy; a lefedett kulcsú előleg megáll.
+  */
+  it("WEBSHOP-FINAL-RATES (barracuda N3b): an advance rate the final invoice does not cover stops before the claim; a covered one goes", async () => {
+    // the final: 1270 at 27%; the advance 270 gross: 127 at 27% and 143 at 5% (the 5% item left the order)
+    const uncovered = setup({
+      over: webshopFinal,
+      balance: { amount: "1000" },
+      advanceLines: [
+        { vatRatePercent: "27", unitNet: "100" },
+        { vatRatePercent: "5", unitNet: "136.19" },
+      ],
+    });
+    await assert.rejects(
+      issue(uncovered.service),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        /előleg 5%-os része 143\.00 HUF/.test(error.message) &&
+        /5%-os tételei csak 0\.00 HUF/.test(error.message),
+    );
+    assert.deepEqual([uncovered.calls.claim, uncovered.calls.generate], [0, 0]);
+    // the same advance all at 27%: covered by the final's 1270
+    const covered = setup({
+      over: webshopFinal,
+      balance: { amount: "1000" },
+      advanceLines: [{ vatRatePercent: "27", unitNet: "212.60" }],
+    });
+    assert.equal((await issue(covered.service)).status, "ISSUED");
   });
 
   it("WEBSHOP-FINAL-RELABELLED (barracuda on #2980): a final invoice written to MANUAL still meets the balance and claims nothing", async () => {

@@ -2,15 +2,11 @@ import type {
   ConversationContextCard,
   ConversationContextType,
   MessageItem,
-  ServiceJobStatusValue,
-  WorksheetDisplayStatus,
 } from "@acropora/types";
-import {
-  commonServiceStateText,
-  worksheetDisplayStatusLabel,
-} from "@acropora/types";
+import { commonServiceStateText } from "@acropora/types";
 
 import { serviceJobStatusLabel } from "@/components/service-jobs/service-job-labels";
+import { commonStateOfDisplayStatus } from "@/components/worksheets/worksheet-labels";
 
 /**
  * AZ ÜZENETEK 4. FÁZISÁNAK TISZTA SZABÁLYAI A WEBEN (terv:
@@ -70,10 +66,12 @@ export function contextStatusLabel(
   // a karbantartási lapnak nincs hibajegy-állapota (Balázs, 2026-11-18 11:31 UTC): a kártya nem mond "Új"-at róla
   if (card.type === "SERVICE_JOB" && card.jobKind === "MAINTENANCE")
     return null;
-  const labels: Record<string, string> =
-    card.type === "WORKSHEET"
-      ? (worksheetDisplayStatusLabel as Record<WorksheetDisplayStatus, string>)
-      : (serviceJobStatusLabel as Record<ServiceJobStatusValue, string>);
+  // a munkalap kártyája a közös szavakkal (kártya 7f23785c, acrobot 62402): a válasz a megjelenített állapot kulcsát hozza
+  if (card.type === "WORKSHEET") {
+    const common = commonStateOfDisplayStatus(card.status);
+    return common ? commonServiceStateText(common) : null;
+  }
+  const labels: Record<string, string> = serviceJobStatusLabel;
   return labels[card.status] ?? null;
 }
 
