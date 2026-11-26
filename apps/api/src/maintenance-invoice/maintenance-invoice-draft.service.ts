@@ -80,6 +80,7 @@ function toSummary(
     syncError?: string | null;
   },
   issueEnabled: boolean,
+  cancelled = false,
 ): MaintenanceInvoiceSummary {
   return {
     id: invoice.id,
@@ -103,6 +104,8 @@ function toSummary(
         }
       : {}),
     issueEnabled,
+    // csak a sztornózott kiállított számlán áll (elhagyva: nem sztornózott), a kimenet többi része változatlan
+    ...(cancelled && invoice.status === "ISSUED" ? { cancelled: true } : {}),
   };
 }
 
@@ -170,8 +173,13 @@ export class MaintenanceInvoiceDraftService {
 
   private summary(
     invoice: Parameters<typeof toSummary>[0],
+    cancelled = false,
   ): MaintenanceInvoiceSummary {
-    return toSummary(invoice, maintenanceInvoiceIssueEnabled(this.environment));
+    return toSummary(
+      invoice,
+      maintenanceInvoiceIssueEnabled(this.environment),
+      cancelled,
+    );
   }
 
   /**
@@ -183,7 +191,16 @@ export class MaintenanceInvoiceDraftService {
     certificateId: string,
   ): Promise<MaintenanceInvoiceSummary | null> {
     const existing = await this.repository.existingInvoice(certificateId);
-    return existing ? this.summary(existing) : null;
+    if (!existing) return null;
+    // a sztornót csak a kiállított számlán kérdezzük (a piszkozat nem sztornózható): a panel és a lépéssor ebből mondja ki
+    const cancelled =
+      existing.status === "ISSUED"
+        ? await this.repository.isCancelled({
+            id: existing.id,
+            invoiceNumber: existing.invoiceNumber ?? null,
+          })
+        : false;
+    return this.summary(existing, cancelled);
   }
 
   /**

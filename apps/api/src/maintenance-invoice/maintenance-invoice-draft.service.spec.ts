@@ -67,6 +67,8 @@ const SUCCESS_RESPONSE = {
 function service(options: {
   certificate?: typeof baseCertificate | null;
   existingInvoice?: unknown;
+  /** the cancellation signal of an issued invoice (card 2cd1ed80); the calls are recorded */
+  cancelled?: boolean;
   clientResponse?: unknown;
   clientError?: Error;
   credentialsError?: Error;
@@ -79,6 +81,7 @@ function service(options: {
   }[];
 }) {
   const created: unknown[] = [];
+  const cancelChecks: unknown[] = [];
   const stored: { key: unknown; bytes: Uint8Array }[] = [];
 
   const certificates = {
@@ -93,6 +96,10 @@ function service(options: {
       return options.partnerTerms ?? [];
     },
     existingInvoice: async () => options.existingInvoice ?? null,
+    isCancelled: async (invoice: unknown) => {
+      cancelChecks.push(invoice);
+      return options.cancelled ?? false;
+    },
     createDraft: async (input: unknown) => {
       created.push(input);
       return {
@@ -151,6 +158,7 @@ function service(options: {
         return audit ? [audit] : [];
       }),
     created,
+    cancelChecks,
     stored,
     clientCalls: () => clientCalls,
     partnerQueries: () => partnerQueries,
@@ -662,6 +670,61 @@ describe("MaintenanceInvoiceDraftService.byCertificate", () => {
       // a valódi kiállítás kapcsolója alapból KI (146ccc61)
       issueEnabled: false,
     });
+  });
+});
+
+/*
+  A SZTORNÓZOTT SZÁMLA JELE (kártya 2cd1ed80, acrobot 62110): a panel és a lépéssor ebből mondja ki, hogy a kiállított számla sztornózva van. MI PIROSÍT: ha a jel
+  nem a repository két jelét (`isCancelled`) hozza; ha piszkozaton vagy kiállítás alatti soron is lekérdezi vagy állítja; ha nem sztornózott kiállított számlán megjelenik.
+*/
+describe("MaintenanceInvoiceDraftService.byCertificate: cancelled", () => {
+  const issued = {
+    id: "invoice-1",
+    status: "ISSUED",
+    currency: "HUF",
+    netAmount: new Prisma.Decimal(100000),
+    vatAmount: new Prisma.Decimal(27000),
+    grossAmount: new Prisma.Decimal(127000),
+    createdAt: new Date("2026-09-24T18:00:00.000Z"),
+    invoiceNumber: "TIG-2026-5",
+    issueDate: new Date("2026-09-25T08:00:00.000Z"),
+  };
+
+  it("an issued invoice that was cancelled says so, and the check gets its id and number", async () => {
+    const { service: subject, cancelChecks } = service({
+      existingInvoice: issued,
+      cancelled: true,
+    });
+    const summary = await subject.byCertificate("cert-1");
+    assert.equal(summary?.status, "ISSUED");
+    assert.equal(summary?.invoiceNumber, "TIG-2026-5");
+    assert.equal(summary?.cancelled, true);
+    assert.deepEqual(cancelChecks, [
+      { id: "invoice-1", invoiceNumber: "TIG-2026-5" },
+    ]);
+  });
+
+  it("an issued invoice that was not cancelled carries no cancelled key", async () => {
+    const { service: subject } = service({
+      existingInvoice: issued,
+      cancelled: false,
+    });
+    const summary = await subject.byCertificate("cert-1");
+    assert.equal(summary?.status, "ISSUED");
+    assert.equal("cancelled" in (summary ?? {}), false);
+  });
+
+  it("a draft and an invoice mid-issue are never asked and never cancelled, even if the signal were true", async () => {
+    for (const status of ["DRAFT", "ISSUING"]) {
+      const { service: subject, cancelChecks } = service({
+        existingInvoice: { ...issued, status, invoiceNumber: null },
+        cancelled: true,
+      });
+      const summary = await subject.byCertificate("cert-1");
+      assert.equal(summary?.status, status);
+      assert.equal("cancelled" in (summary ?? {}), false, status);
+      assert.equal(cancelChecks.length, 0, status);
+    }
   });
 });
 

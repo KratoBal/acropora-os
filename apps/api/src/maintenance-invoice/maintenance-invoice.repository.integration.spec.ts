@@ -99,7 +99,14 @@ describe(
         select: { id: true },
       });
       // one job per certificate: a job has at most one certificate
-      for (const key of ["signed", "unsigned", "failing"]) {
+      for (const key of [
+        "signed",
+        "unsigned",
+        "failing",
+        "plain",
+        "cancelled",
+        "storno",
+      ]) {
         const job = await prisma.serviceJob.create({
           data: {
             jobNumber: `${PREFIX}${key}-${n}`,
@@ -148,6 +155,60 @@ describe(
           },
         },
       ]);
+    });
+
+    /*
+      A SZTORNÓZOTT KIÁLLÍTOTT SZÁMLA JELE (kártya 2cd1ed80): `isCancelled` ugyanazt a jelet adja, mint a számlázás lista, egy KIÁLLÍTOTT STORNO sorból. MI PIROSÍT: ha a
+      sztornó sor nélküli kiállított számla sztornózottnak látszik; ha a kiállított sztornó sor mellett nem látszik; ha egy NEM kiállított (piszkozat) sztornó is számít.
+    */
+    it("isCancelled: an issued invoice with an issued STORNO row is cancelled, a plain issued one and a draft STORNO are not", async () => {
+      const plain = draft(ids.plain!);
+      const cancelled = draft(ids.cancelled!);
+      const storno = draft(ids.storno!);
+      for (const input of [plain, cancelled, storno])
+        await repository.createDraft(input);
+      await prisma.invoice.update({
+        where: { id: plain.id },
+        data: { status: "ISSUED", invoiceNumber: `${PREFIX}P-${n}` },
+      });
+      await prisma.invoice.update({
+        where: { id: cancelled.id },
+        data: { status: "ISSUED", invoiceNumber: `${PREFIX}C-${n}` },
+      });
+      // the correction row starts as a DRAFT storno: not a cancellation yet
+      await prisma.invoice.update({
+        where: { id: storno.id },
+        data: {
+          documentType: "STORNO",
+          status: "DRAFT",
+          referencedInvoiceId: cancelled.id,
+        },
+      });
+      assert.equal(
+        await repository.isCancelled({
+          id: cancelled.id,
+          invoiceNumber: `${PREFIX}C-${n}`,
+        }),
+        false,
+      );
+      await prisma.invoice.update({
+        where: { id: storno.id },
+        data: { status: "ISSUED", invoiceNumber: `${PREFIX}S-${n}` },
+      });
+      assert.equal(
+        await repository.isCancelled({
+          id: cancelled.id,
+          invoiceNumber: `${PREFIX}C-${n}`,
+        }),
+        true,
+      );
+      assert.equal(
+        await repository.isCancelled({
+          id: plain.id,
+          invoiceNumber: `${PREFIX}P-${n}`,
+        }),
+        false,
+      );
     });
 
     it("a failed audit write leaves no draft behind", async () => {

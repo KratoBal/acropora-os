@@ -208,6 +208,14 @@ export function MaintenanceInvoicePanel({
               </div>
             ) : null}
           </dl>
+          {invoice.cancelled ? (
+            // A SZTORNÓZOTT SZÁMLA NEM "KÉSZ" (kártya 2cd1ed80): a szerver ugyanazt a jelet adja, mint a számlázás lista; a lap számlázása újra nyitott
+            <Alert
+              variant="danger"
+              title="Ez a számla sztornózva van"
+              description="A kiállított számlát sztornózták, ezért a karbantartási lap számlázása nincs kész."
+            />
+          ) : null}
           {invoice.status === "ISSUING" ? (
             <Alert
               variant="danger"

@@ -410,6 +410,39 @@ describe("MaintenanceInvoicePanel -- a piszkozat törlése (Luca kérése, KT-20
     expect(screen.getByText("127 000 Ft")).toBeTruthy();
   });
 
+  /*
+    A SZTORNÓZOTT SZÁMLA JELE (kártya 2cd1ed80): a panel kimondja, hogy a kiállított számla sztornózva van. MI PIROSÍT: ha a jelzés nem a szerver `cancelled` jeléből
+    jön; ha egy nem sztornózott kiállított számlán is megjelenik; ha a piszkozaton megjelenne.
+  */
+  it("says a cancelled issued invoice is cancelled, and says nothing on a plain issued one or a draft", async () => {
+    certificatesApi.list.mockResolvedValue([signedCertificate]);
+    invoiceApi.byCertificate.mockResolvedValue({
+      ...invoiceSummary,
+      status: "ISSUED",
+      invoiceNumber: "E-ACR-2026-77",
+      cancelled: true,
+    });
+    const first = render(<MaintenanceInvoicePanel serviceJobId="job-1" />);
+    await screen.findByText("E-ACR-2026-77");
+    expect(screen.getByText("Ez a számla sztornózva van")).toBeTruthy();
+    first.unmount();
+
+    invoiceApi.byCertificate.mockResolvedValue({
+      ...invoiceSummary,
+      status: "ISSUED",
+      invoiceNumber: "E-ACR-2026-78",
+    });
+    const second = render(<MaintenanceInvoicePanel serviceJobId="job-1" />);
+    await screen.findByText("E-ACR-2026-78");
+    expect(screen.queryByText("Ez a számla sztornózva van")).toBeNull();
+    second.unmount();
+
+    invoiceApi.byCertificate.mockResolvedValue({ ...invoiceSummary });
+    render(<MaintenanceInvoicePanel serviceJobId="job-1" />);
+    await screen.findByText("127 000 Ft");
+    expect(screen.queryByText("Ez a számla sztornózva van")).toBeNull();
+  });
+
   it("offers no delete on an issued invoice", async () => {
     certificatesApi.list.mockResolvedValue([signedCertificate]);
     invoiceApi.byCertificate.mockResolvedValue({

@@ -136,6 +136,21 @@ describe("maintenanceProcessSteps", () => {
     expect(byKey(all, "package").tone).toBe("waiting");
   });
 
+  it("a cancelled issued invoice is NOT done: it says Sztornózva with its number and is the next step (card 2cd1ed80)", () => {
+    const cancelled = steps({
+      invoice: { ...invoice("ISSUED", "ACR-2026-9"), cancelled: true },
+    });
+    expect(byKey(cancelled, "invoice")).toMatchObject({
+      state: "Sztornózva: ACR-2026-9",
+      tone: "open",
+      next: true,
+    });
+    // the same issued invoice without the signal stays done, with nothing next
+    const plain = steps({ invoice: invoice("ISSUED", "ACR-2026-9") });
+    expect(byKey(plain, "invoice")).toMatchObject({ tone: "done" });
+    expect(plain.some((step) => step.next)).toBe(false);
+  });
+
   it("an invoice mid-issue asks for a manual check, and the sheet has no invoice yet without a draft", () => {
     expect(
       byKey(steps({ invoice: invoice("ISSUING") }), "invoice"),

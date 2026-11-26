@@ -37,6 +37,12 @@ export interface MaintenanceInvoiceSummary {
   issueEnabled: boolean;
   /** `ISSUING` állapotban: mi történt, amiért kézi ellenőrzés kell. */
   issueNote?: string;
+  /**
+   * A KIÁLLÍTOTT SZÁMLÁT SZTORNÓZTÁK (kártya 2cd1ed80, acrobot 62110): ugyanaz a jel, amit a számlázás lista a saját számlán mutat (kiállított sztornó az OS-ben,
+   * vagy a Számlázz.hu felületén sztornózott iker), nem új forrás. Csak `ISSUED` állapotban lehet igaz; elhagyva (a frissen készült vagy kiállított
+   * számlán) nem sztornózott. Egy sztornózott számla nem "kész": újra kell számlázni, ezért a panel és a lépéssor kimondja.
+   */
+  cancelled?: boolean;
 }
 
 /**
