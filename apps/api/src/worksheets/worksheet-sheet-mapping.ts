@@ -44,6 +44,20 @@ function sheetLine(
   };
 }
 
+/**
+ * A LAPRA CSAK A LEZARAS PILLANATAIG IRT BEJEGYZESEK KERULNEK (card 30d40cd4). A munkanaplo a lezaras utan is nyitva all (az `addEntry` sem nezi az allapotot), a kiadott lap viszont azt mondja, ami a kiadaskor igaz volt: egy utolag irt sor nem valtoztathatja meg az ujragenerald gomb bajtjait. A lezaras es az ujragenerálás UGYANEZT a szurot hasznalja, ezert a kiadott lap es az ujragenerált mindig ugyanazokat a sorokat latja, akkor is, ha egy sor a lezarassal egy idoben szuletett. Piszkozatnal (`closedAt` null) minden sor szamit. A hatar a `createdAt <= closedAt`: egy azonos ezredmasodperces sor bent van.
+ *
+ * AMIT NEM FED: egy korabbi sor szovegenek UTOLAGOS ATIRASA (`updateEntry`) tovabbra is elo, mert a lezaraskori szoveg nincs tarolva.
+ */
+export function entriesUpToClose<T extends { createdAt: Date }>(
+  entries: readonly T[],
+  closedAt: string | null,
+): T[] {
+  if (closedAt === null) return [...entries];
+  const limit = Date.parse(closedAt);
+  return entries.filter((entry) => entry.createdAt.getTime() <= limit);
+}
+
 export function worksheetSheetInput(
   detail: WorksheetDetail,
   version: WorksheetVersionDetail,
