@@ -72,6 +72,11 @@ export interface ReviewInput {
    * and what lets it into an answer.
    */
   imageCompared?: boolean;
+  /**
+   * The editor accepts a claim that is the SAME as one already verified on the same source (card 1e4790e4, acrobot 62304): by default the second copy is refused, with the id of the first;
+   * with this set, it is accepted on purpose and the audit row names the claim it repeats.
+   */
+  confirmDuplicate?: boolean;
 }
 
 export class ReviewInputError extends Error {
@@ -144,11 +149,66 @@ export function parseReviewInput(body: unknown): ReviewInput {
     typeof body.imageCompared !== "boolean"
   )
     throw new ReviewInputError("BAD_BODY", "imageCompared: true or false");
+  if (
+    body.confirmDuplicate !== undefined &&
+    typeof body.confirmDuplicate !== "boolean"
+  )
+    throw new ReviewInputError("BAD_BODY", "confirmDuplicate: true or false");
   return {
     decisions,
     applicability,
     imageCompared: body.imageCompared === true,
+    confirmDuplicate: body.confirmDuplicate === true,
   };
+}
+
+/** A verified claim of the same source, as the duplicate check reads it. */
+export interface DuplicateCandidate {
+  id: string;
+  originalMin: { toString(): string } | null;
+  originalMax: { toString(): string } | null;
+  originalUnit: string | null;
+  evidence: { species: readonly string[] }[];
+}
+
+const sameNumber = (
+  stored: { toString(): string } | null,
+  value: number | null,
+) =>
+  stored === null || stored === undefined
+    ? value === null
+    : value !== null && Number(stored.toString()) === value;
+
+/**
+ * IS THIS VERIFIED CLAIM THE SAME AS THE ONE BEING ACCEPTED (card 1e4790e4)? The subject, the effect, the direction and the source are the query's (a candidate arrives only if all four match); this
+ * compares the rest: the species set (as a set: the order is nobody's decision) and the QUANTITY (the min, the max and the unit): the same effect on the same species from the same source with another
+ * value is another measurement, not a repeat, and refusing it would stop real data.
+ */
+export function isSameClaim(
+  candidate: DuplicateCandidate,
+  columns: Pick<ClaimColumns, "species" | "quantity">,
+): boolean {
+  const species = [...new Set(columns.species)].sort();
+  const stored = [
+    ...new Set(candidate.evidence.flatMap((e) => e.species)),
+  ].sort();
+  if (
+    species.length !== stored.length ||
+    species.some((k, i) => k !== stored[i])
+  )
+    return false;
+  const q = columns.quantity;
+  if (!q)
+    return (
+      candidate.originalMin === null &&
+      candidate.originalMax === null &&
+      candidate.originalUnit === null
+    );
+  return (
+    sameNumber(candidate.originalMin, q.min) &&
+    sameNumber(candidate.originalMax, q.max) &&
+    (candidate.originalUnit ?? null) === q.unit
+  );
 }
 
 export function parseDiscardReason(body: unknown): string {
