@@ -148,7 +148,11 @@ describe("WebshopProductListPage", () => {
           ...reefSalt,
           id: "p-odd",
           name: "Furcsa termék",
-          unasListing: { ...reefSalt.unasListing, externalStatus: "7" },
+          unasListing: {
+            ...reefSalt.unasListing,
+            channel: "UNAS" as const,
+            externalStatus: "7",
+          },
         },
       ]),
     );
