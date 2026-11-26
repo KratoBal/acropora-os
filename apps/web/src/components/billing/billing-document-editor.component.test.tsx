@@ -2261,4 +2261,19 @@ describe("BillingDocumentEditor", () => {
     await screen.findByText("Kiállítva: AC-2026-000009");
     expect(screen.queryByRole("button", { name: "Vázlat törlése" })).toBeNull();
   });
+
+  // Picasso 3.21: three orange (warning-coloured) boxes carried plain information on the new invoice; orange is for something to act on
+  it("the plain information boxes on the new invoice are not the warning colour", async () => {
+    render(<BillingDocumentEditor />);
+    const selector = await screen.findByRole("region", {
+      name: "Számlázz.hu bizonylat",
+    });
+    expect(selector.className).not.toContain("accent-warm");
+    const lines = screen.getByText("A sorösszegek automatikusan számolódnak");
+    expect(
+      lines.closest("div[class]")?.parentElement?.innerHTML ?? "",
+    ).not.toContain("accent-warm");
+    const note = screen.getByText(/A bizonylat számát a Számlázz\.hu adja/);
+    expect(note.className).not.toContain("accent-warm");
+  });
 });
