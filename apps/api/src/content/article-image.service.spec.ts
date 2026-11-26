@@ -21,6 +21,14 @@ import {
   etagMatches,
 } from "./article-image-public.controller.js";
 
+/**
+ * A FIXED INSTANT IN THE MIDDLE OF THE LIMITER'S WINDOW. `IpRateLimiter` counts in wall-clock windows (a minute, ten minutes), so a
+ * test that counts up to the limit and then expects the 429 failed when its calls crossed a window boundary: the count reset and the
+ * last call passed (CI, 2026-11-26, #3068: "Missing expected rejection" on the 121st link request). Frozen through the test context,
+ * restored after the test.
+ */
+const MID_WINDOW = Date.UTC(2026, 10, 26, 12, 4, 30);
+
 /*
   THE ARTICLE IMAGES (acrobot, 2026-10-26, msg 36320). What turns these red:
   - an address handed out that the save would drop (no base, http, or a base
@@ -349,7 +357,8 @@ describe("ArticleImagePublicController", () => {
     X-Forwarded-For hop can be forged, so the shared ceiling must not be able
     to turn an image the memory holds into a 429.
   */
-  it("refuses a caller past its limit with 429 on database reads, and only that caller", async () => {
+  it("refuses a caller past its limit with 429 on database reads, and only that caller", async (t) => {
+    t.mock.method(Date, "now", () => MID_WINDOW);
     const { service } = setup();
     const controller = new ArticleImagePublicController(service);
     const one = request();
@@ -394,7 +403,8 @@ describe("ArticleImagePublicController", () => {
     assert.deepEqual(reads, before);
   });
 
-  it("counts a conditional miss once, not twice", async () => {
+  it("counts a conditional miss once, not twice", async (t) => {
+    t.mock.method(Date, "now", () => MID_WINDOW);
     const { service } = setup();
     const controller = new ArticleImagePublicController(service);
     const one = request({ "if-none-match": '"regi"' });

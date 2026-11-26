@@ -12,6 +12,14 @@ import { signLinkRequest } from "./webshop-invoice.token.js";
 import { WebshopInvoiceService } from "./webshop-invoice.service.js";
 
 /**
+ * A FIXED INSTANT IN THE MIDDLE OF THE LIMITER'S WINDOW. `IpRateLimiter` counts in wall-clock windows (a minute, ten minutes), so a
+ * test that counts up to the limit and then expects the 429 failed when its calls crossed a window boundary: the count reset and the
+ * last call passed (CI, 2026-11-26, #3068: "Missing expected rejection" on the 121st link request). Frozen through the test context,
+ * restored after the test.
+ */
+const MID_WINDOW = Date.UTC(2026, 10, 26, 12, 4, 30);
+
+/**
  * A SZÁMLA-LETÖLTÉS VÉGPONTJAI. MI PIROSÍT: ha egy hiba nem EGYFORMA 404 (a végpont megmondaná, mi létezik); ha a PDF nem
  * csatolmányként, no-store fejlécekkel megy; ha a kérésszám-korlát nem véd (címenként); ha a link-végpont a kérés tartalmát
  * kivétellel fogadja (nem objektum törzs).
@@ -78,7 +86,8 @@ describe("WebshopInvoiceController", () => {
     assert.match(byName["Content-Security-Policy"] ?? "", /sandbox/);
   });
 
-  it("the download limit is per address and counts only AUTHENTIC tokens: the 21st authentic request of one address is refused with 429, another address is not", async () => {
+  it("the download limit is per address and counts only AUTHENTIC tokens: the 21st authentic request of one address is refused with 429, another address is not", async (t) => {
+    t.mock.method(Date, "now", () => MID_WINDOW);
     // the stub plays the service: an authentic token calls the counter, then finds nothing
     const service = controller({
       download: async (_token, _now, onAuthentic) => {
@@ -133,7 +142,8 @@ describe("WebshopInvoiceController", () => {
     assert.equal(WebshopInvoiceController.links.hit("10.0.3.9"), true);
   });
 
-  it("an AUTHENTIC link request does count (the REAL service calls the counter): the 121st from one address is a 429", async () => {
+  it("an AUTHENTIC link request does count (the REAL service calls the counter): the 121st from one address is a 429", async (t) => {
+    t.mock.method(Date, "now", () => MID_WINDOW);
     const secret = "k".repeat(40);
     const real = new WebshopInvoiceService(
       {
