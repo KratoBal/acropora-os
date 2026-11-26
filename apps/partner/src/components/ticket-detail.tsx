@@ -524,7 +524,7 @@ export function TicketDetail({
  *
  * HELYBEN ÁLL, NEM A `@acropora/ui`-BAN: a `next/link`-et használja, a
  * `@acropora/ui` viszont keretfüggetlen marad -- ugyanaz az indok, amiért az
- * `apps/web` saját `ServiceBackLink`-je sem költözött át (lásd a
+ * `apps/web` egykori `ServiceBackLink`-je sem költözött át (azóta megszűnt, ott a `PilotBackLink`; lásd a
  * `packages/ui/src/service-detail-chrome.tsx` fejlécében), és ugyanaz a
  * minta, amit az `asset-detail.tsx` saját `VisszaLink()`-je is követ.
  */

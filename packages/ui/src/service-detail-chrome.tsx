@@ -14,6 +14,7 @@ import { sv } from "./service-theme";
  * a reszletet). Az `apps/web` sajat fajlja innentol csak ujraexportal, a kod
  * valtozatlan.
  *
+ * (UTOLAG, 2026-11-26: az `apps/web` `ServiceBackLink`-je megszunt, ott a `PilotBackLink` all; az alabbi indok a partner helyi peldanyaira ma is igaz.)
  * A `ServiceBackLink` SZANDEKOSAN NEM KOLTOZOTT IDE, es ez a fajl kivetele az
  * elozo bekezdes alol. Az eredetije `next/link`-et hasznal, a `@acropora/ui`
  * viszont keretfuggetlen (lasd `nav-item.tsx`: sima `<a>`-t ad, nem
