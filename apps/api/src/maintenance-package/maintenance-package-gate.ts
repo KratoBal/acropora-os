@@ -25,7 +25,10 @@ import {
  * kell hozzá (arról Luca nem döntött).
  */
 export type MaintenancePackageJobBlockReason =
-  "no-certificate" | "certificate-not-signed" | "no-invoice";
+  | "no-certificate"
+  | "certificate-not-signed"
+  | "no-invoice"
+  | "invoice-cancelled";
 
 export interface MaintenancePackageBlockers {
   worksheets: readonly BlockingPackageWorksheet[];
@@ -50,6 +53,12 @@ export function maintenancePackageBlockers(input: {
    * tartalom. Lásd a modul saját `maintenanceInvoicePresent` helyét lent.
    */
   invoicePresent: boolean;
+  /**
+   * A KIÁLLÍTOTT SZÁMLÁT AZÓTA SZTORNÓZTÁK (kártya 2cd1ed80; barracuda a #2935-ön): ugyanaz a jel, mint a számla-panelen és a
+   * lépéssoron (`MaintenanceInvoiceRepository.isCancelled`). A sztornózott számla nem kiállított számla: a kiküldés megáll. Hiányában
+   * nincs sztornó (a régi hívók és tesztek változatlanok).
+   */
+  invoiceCancelled?: boolean;
   purpose: "download" | "send";
 }): MaintenancePackageBlockers {
   const worksheets = worksheetsBlockingPackage({
@@ -74,6 +83,7 @@ export function maintenancePackageBlockers(input: {
     if (!input.hasCertificate) job.push("no-certificate");
     else if (!input.certificateSigned) job.push("certificate-not-signed");
     if (!input.invoicePresent) job.push("no-invoice");
+    else if (input.invoiceCancelled) job.push("invoice-cancelled");
   }
 
   return { worksheets, linkedWorksheets, job };
@@ -149,6 +159,10 @@ export function maintenancePackageBlockMessage(
     );
   if (blockers.job.includes("no-invoice"))
     reszek.push("Nincs kiállítva számla.");
+  if (blockers.job.includes("invoice-cancelled"))
+    reszek.push(
+      "A kiállított számlát sztornózták: a kiküldéshez új, kiállított számla kell.",
+    );
 
   return [
     "A karbantartási lap dokumentumcsomagja nem adható át, amíg ezek nincsenek rendben.",

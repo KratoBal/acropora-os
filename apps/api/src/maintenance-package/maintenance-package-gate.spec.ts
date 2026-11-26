@@ -53,6 +53,33 @@ describe("maintenancePackageBlockers", () => {
   });
 
   /*
+    A SZTORNÓZOTT SZÁMLA NEM KIÁLLÍTOTT SZÁMLA (kártya 2cd1ed80; barracuda a #2935-ön): a felület a #2927 óta így mondja, a szerver
+    kapuja eddig a sztornózott számlát jelenlévőnek vette. MI PIROSÍT: ha sztornózott számlával a kiküldés átmegy; ha a letöltést
+    megállítja; ha a mondat nem mondja ki, hogy a számlát sztornózták.
+  */
+  it("sztornózott számlával a kiküldés megáll, saját okkal; a letöltés nem", () => {
+    const send = maintenancePackageBlockers(
+      input({ purpose: "send", invoicePresent: true, invoiceCancelled: true }),
+    );
+    assert.deepEqual(send.job, ["invoice-cancelled"]);
+    assert.match(
+      maintenancePackageBlockMessage(send),
+      /A kiállított számlát sztornózták: a kiküldéshez új, kiállított számla kell\./,
+    );
+    const download = maintenancePackageBlockers(
+      input({ invoicePresent: true, invoiceCancelled: true }),
+    );
+    assert.equal(maintenancePackageIsBlocked(download), false);
+    // without an issued invoice the old reason stands alone
+    assert.deepEqual(
+      maintenancePackageBlockers(
+        input({ purpose: "send", invoiceCancelled: true }),
+      ).job,
+      ["no-invoice"],
+    );
+  });
+
+  /*
     LUCA DÖNTÉSE (2026-11-18 14:43 UTC, acrobot 55966): „ha le akarom tölteni a csomagot, akkor tudjam letölteni. ne legyenek feltételek. egy feltétel maradjon, hogy a munkalap legyen lezárva.”
     A LETÖLTÉS tehát az igazolást nem kéri (se kiállítva, se aláírva): a csomagba bekerül, ha van. A KIKÜLDÉS kapuja marad (arról nem döntött). MI PIROSÍT: ha a letöltés igazolás
     hiányában blokkol; ha a kiküldés már nem kéri az igazolást vagy az aláírt példányát; ha a lezárt, de példány nélküli munkalap letöltésnél átmegy.
