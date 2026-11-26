@@ -444,9 +444,12 @@ export function NavConnectionSettingsPage() {
               </FormField>
             </div>
 
-            <Button type="submit" disabled={saving || !complete}>
-              {saving ? "Mentés és ellenőrzés…" : "Mentés és ellenőrzés"}
-            </Button>
+            {/* the form's primary at its end, on the right (Picasso 3.22, R11): it stood at the bottom left */}
+            <div className="flex justify-end">
+              <Button type="submit" disabled={saving || !complete}>
+                {saving ? "Mentés és ellenőrzés…" : "Mentés és ellenőrzés"}
+              </Button>
+            </div>
           </form>
         </CardContent>
       </Card>

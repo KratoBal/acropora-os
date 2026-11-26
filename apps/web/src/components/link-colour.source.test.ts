@@ -52,8 +52,9 @@ describe("link and primary colours", () => {
     );
     expect(
       count("content/content-calendar-page.tsx", /text-pilot-aqua-700/g),
-      // was 3 before the back arrow became the shared grey PilotBackLink (R12 batch 9): the green links left are the Sablon link and the entry links
-    ).toBeGreaterThanOrEqual(2);
+      // was 3 before the back arrow became the shared grey PilotBackLink (R12 batch 9), 2 before the Sablon link became the header's
+      // small secondary button (Picasso 3.26-d): the green links left are the entry links
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it("the import wizard's two buttons are the green primary, not a third colour", () => {
