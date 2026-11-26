@@ -355,6 +355,27 @@ describe("ResearchDraftPage", () => {
     expect(within(container).queryByText("AI próba")).toBeNull();
   });
 
+  // Picasso 3.17 (acrobot 62278): the eight tabs get the common tab shape (underlined active tab on a rule), not framed pill buttons
+  it("draws the tabs as the common underlined tabs: a rule under the row, the active tab underlined, the others not framed", () => {
+    const { container } = render(
+      <KnowledgeBaseTabs active="/tudasbazis/forrasok" />,
+    );
+    const nav = container.querySelector("nav")!;
+    expect(nav.className).toContain("border-b");
+    expect(nav.className).not.toContain("flex-wrap gap-2");
+    const active = within(container).getByText("Források");
+    expect(active.getAttribute("aria-current")).toBe("page");
+    expect(active.className).toContain("border-b-2");
+    expect(active.className).toContain("border-pilot-aqua-600");
+    const other = within(container).getByText("Szótár");
+    expect(other.className).toContain("border-transparent");
+    // no framed button look on any tab
+    for (const tab of container.querySelectorAll("a")) {
+      expect(tab.className).not.toContain("ring-1");
+      expect(tab.className).not.toContain("rounded-lg");
+    }
+  });
+
   it("shows the tab to an editor", () => {
     const { container } = render(
       <KnowledgeBaseTabs active="/tudasbazis/forrasok" />,
