@@ -90,6 +90,24 @@ async function lockDraft(tx: Tx, quoteId: string, versionId: string) {
 }
 
 /**
+ * KIVÁLTOTT TÉTEL: két egyidejű mentés ugyanazt a tételt váltaná ki. Az előzetes ellenőrzés mindkettőnél átmegy, az egyedi index
+ * (`replacesItemId`, `versionId`) a másodikat elutasítja: itt érthető 409 lesz belőle a nyers kulcshiba helyett. Más hiba változatlanul megy tovább.
+ */
+export async function withReplacementConflict<T>(
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (isPrismaUniqueConstraintViolation(error, "replacesItemId"))
+      throw new ConflictException(
+        "Ezt a tételt már kiváltja egy másik opcionális tétel.",
+      );
+    throw error;
+  }
+}
+
+/**
  * Renumbers rows to 0..n-1 in the given order, in two passes, because the
  * position columns are unique within their parent: first to negatives, then
  * to the final values.
@@ -653,16 +671,18 @@ export class QuoteVersionEditor {
         columns.isOptional,
         input.replacesItemId,
       );
-      const created = await tx.quoteItem.create({
-        data: {
-          versionId,
-          blockId,
-          position: -(block.items.length + 1000),
-          ...columns,
-          replacesItemId,
-        },
-        select: { id: true },
-      });
+      const created = await withReplacementConflict(() =>
+        tx.quoteItem.create({
+          data: {
+            versionId,
+            blockId,
+            position: -(block.items.length + 1000),
+            ...columns,
+            replacesItemId,
+          },
+          select: { id: true },
+        }),
+      );
       await renumber(
         insertAt(
           block.items.map((i) => i.id),
@@ -764,10 +784,12 @@ export class QuoteVersionEditor {
             : null,
       );
       // source and variant in ONE write: the identity CHECK sees them together
-      await tx.quoteItem.update({
-        where: { id: itemId },
-        data: { ...merged, replacesItemId },
-      });
+      await withReplacementConflict(() =>
+        tx.quoteItem.update({
+          where: { id: itemId },
+          data: { ...merged, replacesItemId },
+        }),
+      );
       await this.followProductBom(tx, item, merged);
       await audit(tx, user.id, "quote.item_updated", "QuoteItem", itemId, {
         versionId,
