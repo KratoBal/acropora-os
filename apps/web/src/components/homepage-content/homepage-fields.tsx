@@ -12,17 +12,24 @@ import { useState } from "react";
  * theme follows.
  */
 
+/**
+ * `tone="publish"` a KÜLDÉS a webshopba kapcsolóé (Picasso 3.18, acrobot 62278): ugyanaz a zöld kis kapcsoló volt, mint a blokkok láthatóságáé, pedig a kettő súlya más (az egyik a webshopba
+ * ír, a másik a szerkesztő nézetét állítja). A küldés kapcsolója nagyobb és a figyelmeztető (meleg) színt kapja bekapcsolva; a láthatóságé marad a zöld.
+ */
 export function Kapcsolo({
   label,
   checked,
   disabled,
   onChange,
+  tone = "default",
 }: {
   label: string;
   checked: boolean;
   disabled?: boolean;
   onChange: (checked: boolean) => void;
+  tone?: "default" | "publish";
 }) {
+  const publish = tone === "publish";
   return (
     <button
       type="button"
@@ -31,14 +38,26 @@ export function Kapcsolo({
       aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-        checked ? "bg-pilot-aqua-600" : "bg-pilot-grey-300"
+      className={`relative inline-flex shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+        publish ? "h-7 w-12" : "h-5 w-9"
+      } ${
+        checked
+          ? publish
+            ? "bg-pilot-accent-warm"
+            : "bg-pilot-aqua-600"
+          : "bg-pilot-grey-300"
       }`}
     >
       <span
         aria-hidden="true"
-        className={`inline-block size-4 rounded-full bg-white shadow transition-transform ${
-          checked ? "translate-x-4" : "translate-x-0.5"
+        className={`inline-block rounded-full bg-white shadow transition-transform ${
+          publish ? "size-6" : "size-4"
+        } ${
+          checked
+            ? publish
+              ? "translate-x-5"
+              : "translate-x-4"
+            : "translate-x-0.5"
         }`}
       />
     </button>
@@ -130,6 +149,7 @@ export function TextField({
         <input
           aria-label={label}
           value={shown}
+          title={shown}
           maxLength={HOMEPAGE_LIMITS.textValue}
           onChange={(event) => onChange(event.target.value)}
           placeholder={field.type === "image" ? "https://…" : undefined}

@@ -50,6 +50,7 @@ export function HomepageNewsletterEditor({
         <input
           aria-label={`Hírlevél: ${label}`}
           value={row[key]}
+          title={row[key]}
           maxLength={max}
           onChange={(event) => set({ [key]: event.target.value })}
           className={HOMEPAGE_INPUT_CLASS}

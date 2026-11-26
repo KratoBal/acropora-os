@@ -367,13 +367,23 @@ export function HomepageContentEditorPage() {
         <div className="min-w-60 flex-1">
           <div className="flex items-center gap-3">
             <Kapcsolo
+              tone="publish"
               label="Küldés a webshopba: a kezdőlap tartalma menjen a webshopba (és a képek is feltölthetők legyenek)"
               checked={projectionEnabled}
               disabled={!canSwitch || !projectionAllowed}
               onChange={(enabled) => void switchProjection(enabled)}
             />
             <span className="text-sm font-semibold text-pilot-grey-900">
-              Küldés a webshopba
+              Küldés a webshopba:{" "}
+              <span
+                className={
+                  projectionEnabled
+                    ? "text-pilot-accent-warm-text"
+                    : "text-pilot-grey-500"
+                }
+              >
+                {projectionEnabled ? "BE" : "KI"}
+              </span>
             </span>
           </div>
           {!projectionAllowed ? (
