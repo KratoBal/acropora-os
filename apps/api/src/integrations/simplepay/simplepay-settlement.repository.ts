@@ -400,6 +400,16 @@ export class SimplePaySettlementRepository {
   }
 
   /** A report is COMPLETED when none of its lines needs review. */
+  /** The reports that still have an open line: what the hourly re-decision looks at (oldest first). */
+  async openReportIds(): Promise<string[]> {
+    const reports = await prisma.simplePayReport.findMany({
+      where: { status: "NEEDS_REVIEW" },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    });
+    return reports.map((report) => report.id);
+  }
+
   async refreshReportStatus(reportIds: readonly string[]): Promise<void> {
     for (const id of new Set(reportIds)) {
       const open = await prisma.simplePayTransactionLine.count({

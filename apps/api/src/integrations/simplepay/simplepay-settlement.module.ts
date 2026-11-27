@@ -4,6 +4,7 @@ import { SimplePayGmailClient } from "./simplepay-gmail.client.js";
 import { SimplePayGmailSyncScheduler } from "./simplepay-gmail-sync.scheduler.js";
 import { SimplePayGmailSyncService } from "./simplepay-gmail-sync.service.js";
 import { SimplePayMonthlyReportXlsx } from "./simplepay-monthly-report.xlsx.js";
+import { SimplePayOpenLinesScheduler } from "./simplepay-open-lines.scheduler.js";
 import { SimplePaySettlementController } from "./simplepay-settlement.controller.js";
 import { SimplePaySettlementRepository } from "./simplepay-settlement.repository.js";
 import { SimplePaySettlementService } from "./simplepay-settlement.service.js";
@@ -17,6 +18,7 @@ import { SimplePaySettlementService } from "./simplepay-settlement.service.js";
     SimplePayGmailClient,
     SimplePayGmailSyncService,
     SimplePayGmailSyncScheduler,
+    SimplePayOpenLinesScheduler,
   ],
 })
 export class SimplePaySettlementModule {}

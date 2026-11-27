@@ -225,6 +225,22 @@ export class SimplePaySettlementService {
     return this.repository.reportDetail(id);
   }
 
+  /**
+   * EVERY REPORT'S OPEN LINES, AGAIN (Balázs 2026-11-27: three November payments said "A rendelésnek még nincs számlája" days after
+   * their invoices were tied to the orders). A line is decided when its report is read in; an order synced or invoiced later only
+   * resolves it on a reprocess, which was a button. This runs it for each report that still has an open line, with the same rules:
+   * a person's decision is kept (`unresolvedLines` skips it). Local data only, no outside call.
+   */
+  async reprocessOpen(): Promise<{ reports: number; resolved: number }> {
+    const ids = await this.repository.openReportIds();
+    let resolved = 0;
+    for (const id of ids) {
+      resolved += await this.resolve(await this.repository.unresolvedLines(id));
+      await this.repository.refreshReportStatus([id]);
+    }
+    return { reports: ids.length, resolved };
+  }
+
   /** The month's file in Luca's table shape, built from what is stored now. */
   async monthlyReport(year: number, month: number) {
     if (!Number.isInteger(year) || year < 2020 || year > 2100)
