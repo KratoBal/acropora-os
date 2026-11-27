@@ -833,3 +833,49 @@ describe("AssetDetailPage: egy mentés, a szerkesztőben", () => {
     ).toBeTruthy();
   });
 });
+
+/**
+ * A VESZÉLYES SZAKASZ A LEGUTOLSÓ (acrobot 63509, murena 390 px-es képe): telefonon a két oszlop egymás alá kerül, és az Eszköz
+ * kivezetése eddig a QR-kártya és a Belső megjegyzés ELŐTT állt. A happy-dom nem rendez el: a telefonos sorrend a DOM-sorrend, a széles
+ * képernyős hely a rács-osztályokból olvasható. MI PIROSÍT: a kivezetés a QR, a megjegyzés vagy a hierarchia elé kerül; széles képernyőn
+ * nem a bal oszlop alatt áll.
+ */
+describe("AssetDetailPage: a kivezetés a lap végén", () => {
+  it("a DOM-ban (telefonon) az Eszköz kivezetése a QR, a Belső megjegyzés és a hierarchia UTÁN áll", async () => {
+    api.detail.mockResolvedValue({
+      ...asset,
+      ancestors: [{ id: "p1", assetNumber: "ESZ-0000", name: "Főegység" }],
+    });
+    render(<AssetDetailPage assetId="asset-1" />);
+    await screen.findByRole("heading", { level: 1 });
+    const retire = screen.getByRole("heading", { name: "Eszköz kivezetése" });
+    for (const title of [
+      "QR-azonosító",
+      "Belső megjegyzés",
+      "Eszközhierarchia",
+    ]) {
+      const card = screen.getAllByText(title).at(-1)!;
+      expect(
+        card.compareDocumentPosition(retire) & Node.DOCUMENT_POSITION_FOLLOWING,
+        title,
+      ).toBeTruthy();
+    }
+  });
+
+  it("széles képernyőn a bal oszlop alatt: a második sor első oszlopa, a jobb oszlop két sort fog át", async () => {
+    render(<AssetDetailPage assetId="asset-1" />);
+    await screen.findByRole("heading", { level: 1 });
+    const retireBox = screen
+      .getByRole("heading", { name: "Eszköz kivezetése" })
+      .closest("div.empty\\:hidden") as HTMLElement;
+    expect(retireBox.className).toMatch(/lg:col-start-1/);
+    expect(retireBox.className).toMatch(/lg:row-start-2/);
+    const grid = retireBox.parentElement as HTMLElement;
+    expect(grid.className).toMatch(/lg:grid-rows-\[auto_1fr\]/);
+    const right = screen
+      .getAllByText("QR-azonosító")
+      .at(-1)!
+      .closest("div.lg\\:row-span-2");
+    expect(right).not.toBeNull();
+  });
+});
