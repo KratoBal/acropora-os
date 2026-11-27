@@ -336,10 +336,9 @@ describe("akvárium adatlap: a berendezés sora a hiányzó gyártóval", () => 
   const noMaker: AquariumEquipment = {
     id: "eq-2",
     kind: "VILAGITAS",
-    manufacturer: null,
     model: "T5",
     quantity: 1,
-  } as AquariumEquipment;
+  };
   const rowText = (view: HTMLElement) =>
     [...view.querySelectorAll("span")]
       .map((node) => node.textContent?.trim() ?? "")
