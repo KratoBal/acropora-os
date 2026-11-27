@@ -481,9 +481,9 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
           ) : null}
 
           <div
-            className={`grid grid-cols-1 items-start gap-6 ${PAGE_GUTTER_X} py-6 lg:grid-cols-[minmax(0,1fr)_320px]`}
+            className={`grid grid-cols-1 items-start gap-6 ${PAGE_GUTTER_X} py-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[auto_1fr]`}
           >
-            <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-5 lg:col-start-1 lg:row-start-1">
               <PilotCard>
                 <PilotCardHeader title="Azonosítás" />
                 <div className="grid grid-cols-2 gap-x-8 gap-y-4 p-5">
@@ -750,51 +750,9 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                   ))}
                 </div>
               </PilotCard>
-
-              {/*
-                A KIVEZETÉS/TÖRLÉS A RÉGI GOMB- ÉS MEGERŐSÍTŐ-LOGIKÁVAL MARAD
-                ("varrat") -- lásd a mai adatlap fejlécét: a törlés
-                szándékosan NEM egyenrangú a kivezetéssel, egy lépéssel
-                bentebb áll.
-              */}
-              {canManage ? (
-                <PilotCard>
-                  <div className="border-b border-pilot-grey-100 px-5 py-4">
-                    <h3 className="text-sm font-semibold text-red-700">
-                      Eszköz kivezetése
-                    </h3>
-                  </div>
-                  <div className="p-5">
-                    <p className="mb-3 text-xs text-pilot-grey-500">
-                      A kivezetett eszköz megmarad a nyilvántartásban a teljes
-                      történetével együtt, csak az aktív listákból kerül ki.
-                    </p>
-                    <PilotButton
-                      variant="secondary"
-                      disabled={busy || asset.status === "RETIRED"}
-                      onClick={() => setPending({ kind: "retire" })}
-                    >
-                      {asset.status === "RETIRED"
-                        ? "Már kivezetett"
-                        : "Eszköz kivezetése"}
-                    </PilotButton>
-                    {asset.status === "RETIRED" && canDelete ? (
-                      <p className="mt-3 text-sm">
-                        <button
-                          type="button"
-                          className="cursor-pointer text-pilot-grey-500 underline"
-                          onClick={() => setPending({ kind: "delete-asset" })}
-                        >
-                          Végleges törlés
-                        </button>
-                      </p>
-                    ) : null}
-                  </div>
-                </PilotCard>
-              ) : null}
             </div>
 
-            <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-5 lg:col-start-2 lg:row-span-2 lg:row-start-1">
               <PilotCard>
                 <PilotCardHeader title="QR-azonosító" />
                 <div className="flex flex-col items-center gap-3 p-5">
@@ -890,6 +848,56 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                           ))}
                         </div>
                       </div>
+                    ) : null}
+                  </div>
+                </PilotCard>
+              ) : null}
+            </div>
+
+            {/*
+              A VESZÉLYES SZAKASZ A LEGUTOLSÓ (acrobot 63509, murena képe 390 px-en): telefonon a két oszlop egymás alá kerül, és a
+              kivezetés eddig a bal oszlop alján, a QR-kártya és a Belső megjegyzés ELŐTT állt. Most külön rácselem a végén: telefonon az
+              utolsó, széles képernyőn a második sorban a bal oszlop alatt (a jobb oszlop két sort fog át, az első sor a bal oszlop
+              magassága), tehát ott a helye nem változik.
+            */}
+            <div className="flex flex-col gap-5 empty:hidden lg:col-start-1 lg:row-start-2">
+              {/*
+                  A KIVEZETÉS/TÖRLÉS A RÉGI GOMB- ÉS MEGERŐSÍTŐ-LOGIKÁVAL MARAD
+                  ("varrat") -- lásd a mai adatlap fejlécét: a törlés
+                  szándékosan NEM egyenrangú a kivezetéssel, egy lépéssel
+                  bentebb áll.
+                */}
+              {canManage ? (
+                <PilotCard>
+                  <div className="border-b border-pilot-grey-100 px-5 py-4">
+                    <h3 className="text-sm font-semibold text-red-700">
+                      Eszköz kivezetése
+                    </h3>
+                  </div>
+                  <div className="p-5">
+                    <p className="mb-3 text-xs text-pilot-grey-500">
+                      A kivezetett eszköz megmarad a nyilvántartásban a teljes
+                      történetével együtt, csak az aktív listákból kerül ki.
+                    </p>
+                    <PilotButton
+                      variant="secondary"
+                      disabled={busy || asset.status === "RETIRED"}
+                      onClick={() => setPending({ kind: "retire" })}
+                    >
+                      {asset.status === "RETIRED"
+                        ? "Már kivezetett"
+                        : "Eszköz kivezetése"}
+                    </PilotButton>
+                    {asset.status === "RETIRED" && canDelete ? (
+                      <p className="mt-3 text-sm">
+                        <button
+                          type="button"
+                          className="cursor-pointer text-pilot-grey-500 underline"
+                          onClick={() => setPending({ kind: "delete-asset" })}
+                        >
+                          Végleges törlés
+                        </button>
+                      </p>
                     ) : null}
                   </div>
                 </PilotCard>
