@@ -28,6 +28,7 @@ const page = (over: Partial<PublicQuoteDto> = {}): PublicQuoteDto => ({
       netTotal: "100000.00",
       isOptional: false,
       replacesName: null,
+      alternativeOf: null,
       replaced: false,
       chosen: false,
     },
@@ -41,6 +42,7 @@ const page = (over: Partial<PublicQuoteDto> = {}): PublicQuoteDto => ({
       netTotal: "20000.00",
       isOptional: true,
       replacesName: null,
+      alternativeOf: null,
       replaced: false,
       chosen: false,
     },
@@ -48,6 +50,7 @@ const page = (over: Partial<PublicQuoteDto> = {}): PublicQuoteDto => ({
   netTotal: "100000.00",
   optionalNetTotal: "20000.00",
   netTotalWithOptionals: "120000.00",
+  hasAlternatives: false,
   acceptedNetTotal: null,
   state: "OPEN",
   acceptedAt: null,
@@ -186,6 +189,7 @@ describe("Az elfogadó link oldala (#1582 P4b)", () => {
           netTotal: "20000.00",
           isOptional: true,
           replacesName: "Akvárium",
+          alternativeOf: null,
           replaced: false,
           chosen: false,
         },
@@ -273,6 +277,108 @@ describe("Az elfogadó link oldala (#1582 P4b)", () => {
       "Kiváltva",
     );
     expect(screen.queryByText(/opcionális tételekkel együtt/)).toBeNull();
+  });
+
+  /*
+    ALTERNATÍVÁK (kártya 2540d9d4, Luca 2026-11-27): egy tételt több opció is kiválthat, de egyet választhat az ügyfél: amit bejelöl, az számít, a
+    többi nem. MI PIROSÍT: ha a második opció bejelölése az elsőt bejelölve hagyja (a kérés két opciót küld); ha a bejelölés más tétel opcióját is leveszi;
+    ha a címke nem mondja, hogy egyet kell választani; ha az „együtt” összeg nem jelzi, hogy a legdrágább alternatívával számol.
+  */
+  const alternatives = () =>
+    page({
+      items: [
+        ...page().items.slice(0, 1),
+        ...["Fedőlap A", "Fedőlap B"].map((name, index) => ({
+          id: `opt-${index + 1}`,
+          name,
+          quantity: "1",
+          unit: "db",
+          unitNetPrice: index ? "30000.00" : "20000.00",
+          vatRatePercent: "27",
+          netTotal: index ? "30000.00" : "20000.00",
+          isOptional: true,
+          replacesName: "Akvárium",
+          alternativeOf: 0,
+          replaced: false,
+          chosen: false,
+        })),
+        {
+          id: "opt-3",
+          name: "Világítás",
+          quantity: "1",
+          unit: "db",
+          unitNetPrice: "5000.00",
+          vatRatePercent: "27",
+          netTotal: "5000.00",
+          isOptional: true,
+          replacesName: null,
+          alternativeOf: null,
+          replaced: false,
+          chosen: false,
+        },
+      ],
+      netTotalWithOptionals: "35000.00",
+      hasAlternatives: true,
+    });
+
+  it("a második alternatíva bejelölése leveszi az elsőt, és egy opciót küld a szervernek; más tétel opcióját nem érinti", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(reply(200, alternatives()))
+      .mockResolvedValue(
+        reply(200, { netTotal: "30000.00", replacedItems: [0] }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<PublicQuotePage token="tok-123" />);
+    await screen.findByText("Tengeri akvárium");
+    fireEvent.click(screen.getByRole("checkbox", { name: /Világítás/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Fedőlap A/ }));
+    expect(
+      (screen.getByRole("checkbox", { name: /Fedőlap A/ }) as HTMLInputElement)
+        .checked,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Fedőlap B/ }));
+    expect(
+      (screen.getByRole("checkbox", { name: /Fedőlap A/ }) as HTMLInputElement)
+        .checked,
+    ).toBe(false);
+    expect(
+      (screen.getByRole("checkbox", { name: /Fedőlap B/ }) as HTMLInputElement)
+        .checked,
+    ).toBe(true);
+    // a másik tétel opciója megmaradt
+    expect(
+      (screen.getByRole("checkbox", { name: /Világítás/ }) as HTMLInputElement)
+        .checked,
+    ).toBe(true);
+    await waitFor(() => {
+      const last = fetchMock.mock.calls.at(-1)!;
+      expect(
+        JSON.parse((last[1] as RequestInit).body as string)
+          .selectedOptionalItemIds.slice()
+          .sort(),
+      ).toEqual(["opt-2", "opt-3"]);
+    });
+  });
+
+  it("a címke kimondja, hogy egyet kell választani, és az együtt összeg jelzi a legdrágább alternatívát", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(reply(200, alternatives())),
+    );
+    render(<PublicQuotePage token="tok-123" />);
+    await screen.findByText("Tengeri akvárium");
+    const rows = screen.getAllByTestId("quote-item-row");
+    expect(rows[1]!.textContent).toContain(
+      "„Akvárium” helyett · válassz egyet",
+    );
+    expect(rows[2]!.textContent).toContain("válassz egyet");
+    expect(rows[3]!.textContent).not.toContain("válassz egyet");
+    expect(
+      screen.getByText(
+        /Az opcionális tételekkel együtt \(a legdrágább alternatívával\):\s*35\s000 Ft\s*\+ ÁFA/,
+      ),
+    ).toBeTruthy();
   });
 
   it("egy nem működő link a szerver mondatát mutatja", async () => {

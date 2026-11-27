@@ -42,8 +42,9 @@ type QuoteItem = PublicQuoteDto["items"][number];
  * (the server names it: `replacesName`).
  */
 export function optionalItemLabel(item: QuoteItem): string {
+  // ALTERNATÍVA (Luca 2026-11-27): ha ugyanazt a tételt több opció is kiváltja, az ügyfél közülük egyet választ
   return item.replacesName
-    ? `Opcionális · „${item.replacesName}” helyett`
+    ? `Opcionális · „${item.replacesName}” helyett${item.alternativeOf !== null ? " · válassz egyet" : ""}`
     : "Opcionális · kiegészítés";
 }
 
@@ -79,11 +80,14 @@ export function quoteItemColumns({
   chosen,
   setChosen,
   isReplaced = () => false,
+  alternativesOf = () => [],
 }: {
   currency: string;
   canChoose: boolean;
   chosen: string[];
   setChosen: Dispatch<SetStateAction<string[]>>;
+  /** az azonos tételt kiváltó TÖBBI opció azonosítói: a bejelölés leveszi őket (egy tételt egy opció válthat ki, Luca 2026-11-27) */
+  alternativesOf?: (item: QuoteItem) => string[];
   /** a kiváltott tétel (a kiválasztás szerint): áthúzva, "Kiváltva" jelöléssel, a végösszegbe nem számít */
   isReplaced?: (item: QuoteItem) => boolean;
 }): PilotTableColumn<QuoteItem>[] {
@@ -108,9 +112,13 @@ export function quoteItemColumns({
                   // Read before the updater runs: a controlled checkbox is put back to its
                   // state value, so a lazily run updater would see the old `checked`.
                   const checked = event.target.checked;
+                  const others = alternativesOf(item);
                   setChosen((current) =>
                     checked
-                      ? [...current, item.id!]
+                      ? [
+                          ...current.filter((id) => !others.includes(id)),
+                          item.id!,
+                        ]
                       : current.filter((id) => id !== item.id),
                   );
                 }}
@@ -258,12 +266,25 @@ export function PublicQuotePage({ token }: { token: string }) {
       ? item.replaced
       : (selection?.replacedItems.includes(quote?.items.indexOf(item) ?? -1) ??
         false);
+  // az azonos tételt kiváltó többi opció (a `alternativeOf` ugyanaz): az egyik bejelölése leveszi a többit
+  const alternativesOf = (item: QuoteItem) =>
+    item.alternativeOf === null
+      ? []
+      : (quote?.items ?? [])
+          .filter(
+            (other) =>
+              other !== item &&
+              other.alternativeOf === item.alternativeOf &&
+              other.id !== null,
+          )
+          .map((other) => other.id!);
   const columns = quoteItemColumns({
     currency: quote?.currency ?? "HUF",
     canChoose: quote?.state === "OPEN",
     chosen,
     setChosen,
     isReplaced,
+    alternativesOf,
   });
   const rowKey = (item: QuoteItem) =>
     item.id ?? `${quote?.items.indexOf(item)}-${item.name}`;
@@ -367,7 +388,11 @@ export function PublicQuotePage({ token }: { token: string }) {
               ) : null}
               {optional.length && quote.state !== "ACCEPTED" ? (
                 <p className="text-pilot-grey-600">
-                  Az opcionális tételekkel együtt:{" "}
+                  Az opcionális tételekkel együtt
+                  {quote.hasAlternatives
+                    ? " (a legdrágább alternatívával)"
+                    : ""}
+                  :{" "}
                   {formatQuoteMoney(
                     quote.netTotalWithOptionals,
                     quote.currency,

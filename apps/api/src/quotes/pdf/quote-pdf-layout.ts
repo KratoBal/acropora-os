@@ -1,6 +1,12 @@
 import { Prisma } from "@acropora/database";
 import type { QuotePriceDisplay, QuoteRichText } from "@acropora/types";
 
+import {
+  allOptionsSelection,
+  alternativeGroups,
+  replacedItemIds,
+} from "../quote-accepted-items.js";
+
 /**
  * THE QUOTE PDF'S CONTENT, WITHOUT DRAWING (#1582 P2). Everything here is a
  * pure function of the version, so the renderer only places it, and the
@@ -70,6 +76,10 @@ export function lineGross(item: QuotePdfItem): Prisma.Decimal {
  * The offered (non-optional) totals; the optional lines are shown apart. `replacedNet` / `replacedGross` are the offered lines an optional item
  * stands in for (KIVÁLTOTT TÉTEL, card 2540d9d4): with every option chosen they drop out, so "including the optional items" is
  * `gross - replacedGross + optionalGross`, not `gross + optionalGross` (that counted the replaced line twice).
+ *
+ * ALTERNATIVES (Luca 2026-11-27): several optional items may replace the same line, and they exclude each other (the customer's click decides). "Every
+ * option chosen" is then not every alternative but, per line, the DEAREST one (`allOptionsSelection`): the most a customer can pay. `optionalNet` /
+ * `optionalGross` count only the options that are in that selection, `hasAlternatives` tells the renderer to say so on the label.
  */
 export function quoteTotals(blocks: readonly QuotePdfBlock[]) {
   let net = ZERO;
@@ -78,24 +88,35 @@ export function quoteTotals(blocks: readonly QuotePdfBlock[]) {
   let optionalGross = ZERO;
   let replacedNet = ZERO;
   let replacedGross = ZERO;
-  const replaced = new Set<string>();
-  for (const block of blocks)
-    for (const item of block.items)
-      if (item.isOptional && item.replacesRef) replaced.add(item.replacesRef);
-  for (const block of blocks)
-    for (const item of block.items) {
-      if (item.isOptional) {
-        optionalNet = optionalNet.plus(lineNet(item));
-        optionalGross = optionalGross.plus(lineGross(item));
-      } else {
-        net = net.plus(lineNet(item));
-        gross = gross.plus(lineGross(item));
-        if (item.ref && replaced.has(item.ref)) {
-          replacedNet = replacedNet.plus(lineNet(item));
-          replacedGross = replacedGross.plus(lineGross(item));
-        }
+  // an item without a ref (an old published version) cannot be named by another: it stands alone
+  const all = blocks
+    .flatMap((block) => block.items)
+    .map((item, index) => ({
+      item,
+      id: item.ref ?? `#${index}`,
+      isOptional: item.isOptional,
+      replacesItemId: item.replacesRef ?? null,
+    }));
+  const counted = new Set(
+    allOptionsSelection(all, (a, b) =>
+      lineNet(a.item).greaterThan(lineNet(b.item)),
+    ),
+  );
+  const replaced = replacedItemIds(all, counted);
+  for (const { item, id } of all) {
+    if (item.isOptional) {
+      if (!counted.has(id)) continue;
+      optionalNet = optionalNet.plus(lineNet(item));
+      optionalGross = optionalGross.plus(lineGross(item));
+    } else {
+      net = net.plus(lineNet(item));
+      gross = gross.plus(lineGross(item));
+      if (item.ref && replaced.has(item.ref)) {
+        replacedNet = replacedNet.plus(lineNet(item));
+        replacedGross = replacedGross.plus(lineGross(item));
       }
     }
+  }
   return {
     net,
     vat: gross.minus(net),
@@ -104,6 +125,7 @@ export function quoteTotals(blocks: readonly QuotePdfBlock[]) {
     optionalGross,
     replacedNet,
     replacedGross,
+    hasAlternatives: alternativeGroups(all).size > 0,
   };
 }
 

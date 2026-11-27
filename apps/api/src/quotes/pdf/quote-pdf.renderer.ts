@@ -124,6 +124,8 @@ export const LABELS = {
     optionalAddition: "kiegészítés",
     optionalReplaces: (name: string) => `„${name}” helyett`,
     withOptions: "Az opcionális tételekkel együtt",
+    withOptionsAlternatives:
+      "Az opcionális tételekkel együtt (a legdrágább alternatívával)",
     summary: "Összesítés",
     net: "Nettó összeg",
     vat: "ÁFA",
@@ -151,6 +153,8 @@ export const LABELS = {
     optionalAddition: "addition",
     optionalReplaces: (name: string) => `instead of “${name}”`,
     withOptions: "Including the optional items",
+    withOptionsAlternatives:
+      "Including the optional items (the dearest alternative)",
     summary: "Summary",
     net: "Net amount",
     vat: "VAT",
@@ -941,7 +945,16 @@ function drawSummary(
   text(doc, totalValue, valueX, y - 1, TOTAL_VALUE, 156, "right");
   if (withOptions) {
     y += measure(doc, totalValue, TOTAL_VALUE, 156) + 4;
-    text(doc, labels.withOptions, labelX, y, SUMMARY_LABEL, 300);
+    text(
+      doc,
+      totals.hasAlternatives
+        ? labels.withOptionsAlternatives
+        : labels.withOptions,
+      labelX,
+      y,
+      SUMMARY_LABEL,
+      300,
+    );
     text(doc, withOptions, valueX, y, SUMMARY_VALUE, 156, "right");
   }
   flow.y = top + boxHeight + 20;

@@ -105,7 +105,7 @@ describe("tétel: BOM-ból önállóra váltás", () => {
 
 /*
   KIVÁLTOTT TÉTEL (Luca 2026-11-26, card 2540d9d4): az opcionális tétel űrlapján választható, melyik (nem opcionális) tételt váltja ki. MI PIROSÍT: ha
-  a választó nem opcionális tételnél is látszik; ha opcionális tételt, magát a tételt vagy egy másik opcionális által már kiváltott tételt kínál; ha a
+  a választó nem opcionális tételnél is látszik; ha opcionális tételt vagy magát a tételt kínálja; ha a már egy másik opció által kiváltott tételt NEM kínálja (alternatíva, Luca 2026-11-27: az is kiváltható, az ügyfél egyet választ); ha a
   mentés nem a kiválasztott azonosítót küldi (vagy üresnél nem null-t); ha az opcionális jelölés visszavétele után a kiváltás elküldődik.
 */
 const line = (
@@ -157,7 +157,7 @@ function openReplacing(over: Record<string, unknown> = {}) {
 }
 
 describe("tétel: kiváltott tétel", () => {
-  it("nem opcionális tételnél nincs választó, opcionálisnál van, és csak a kiváltható tételeket kínálja", () => {
+  it("nem opcionális tételnél nincs választó, opcionálisnál van, és minden kiváltható tételt kínál, a már kiváltottat is", () => {
     openReplacing();
     expect(screen.queryByLabelText("Kiváltott tétel")).toBeNull();
     fireEvent.click(screen.getByRole("checkbox", { name: /Opcionális tétel/ }));
@@ -168,6 +168,8 @@ describe("tétel: kiváltott tétel", () => {
       "Nincs (kiegészítés)",
       "A régi szűrő",
       "B tartó",
+      // a már egy másik opció (X) által kiváltott tétel is ott áll: alternatívát lehet hozzá felvenni
+      "C már kiváltott",
       "O egy opcionális",
     ]);
     expect(select.value).toBe("");

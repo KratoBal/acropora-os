@@ -90,24 +90,6 @@ async function lockDraft(tx: Tx, quoteId: string, versionId: string) {
 }
 
 /**
- * KIVÁLTOTT TÉTEL: két egyidejű mentés ugyanazt a tételt váltaná ki. Az előzetes ellenőrzés mindkettőnél átmegy, az egyedi index
- * (`replacesItemId`, `versionId`) a másodikat elutasítja: itt érthető 409 lesz belőle a nyers kulcshiba helyett. Más hiba változatlanul megy tovább.
- */
-export async function withReplacementConflict<T>(
-  run: () => Promise<T>,
-): Promise<T> {
-  try {
-    return await run();
-  } catch (error) {
-    if (isPrismaUniqueConstraintViolation(error, "replacesItemId"))
-      throw new ConflictException(
-        "Ezt a tételt már kiváltja egy másik opcionális tétel.",
-      );
-    throw error;
-  }
-}
-
-/**
  * Renumbers rows to 0..n-1 in the given order, in two passes, because the
  * position columns are unique within their parent: first to negatives, then
  * to the final values.
@@ -583,8 +565,8 @@ export class QuoteVersionEditor {
 
   /**
    * KIVÁLTOTT TÉTEL (Luca 2026-11-26, card 2540d9d4): a tárolandó `replacesItemId`, a szabályok ellenőrzésével. Csak OPCIONÁLIS tétel válthat
-   * ki, ugyanazon a verzión belül, egy NEM opcionális tételt, és egy tételt legfeljebb egy opcionális vált ki (a DB egyedi indexe és a CHECK
-   * ugyanezt védi, de itt érthető üzenet jön, nem kulcshiba). Üres vagy null: kiegészítés.
+   * ki, ugyanazon a verzión belül, egy NEM opcionális tételt. Egy tételt TÖBB opcionális is kiválthat (alternatívák, Luca 2026-11-27: az ügyfél
+   * elfogadásánál közülük legfeljebb egy lehet kiválasztva, azt az elfogadás őrzi). Üres vagy null: kiegészítés.
    */
   private async replacesColumn(
     tx: Tx,
@@ -611,18 +593,6 @@ export class QuoteVersionEditor {
       );
     if (replaced.isOptional)
       throw new BadRequestException("Opcionális tételt nem lehet kiváltani.");
-    const other = await tx.quoteItem.findFirst({
-      where: {
-        replacesItemId: target,
-        versionId,
-        ...(selfId ? { NOT: { id: selfId } } : {}),
-      },
-      select: { name: true },
-    });
-    if (other)
-      throw new ConflictException(
-        `Ezt a tételt már kiváltja egy másik opcionális tétel (${other.name}).`,
-      );
     return target;
   }
 
@@ -671,18 +641,16 @@ export class QuoteVersionEditor {
         columns.isOptional,
         input.replacesItemId,
       );
-      const created = await withReplacementConflict(() =>
-        tx.quoteItem.create({
-          data: {
-            versionId,
-            blockId,
-            position: -(block.items.length + 1000),
-            ...columns,
-            replacesItemId,
-          },
-          select: { id: true },
-        }),
-      );
+      const created = await tx.quoteItem.create({
+        data: {
+          versionId,
+          blockId,
+          position: -(block.items.length + 1000),
+          ...columns,
+          replacesItemId,
+        },
+        select: { id: true },
+      });
       await renumber(
         insertAt(
           block.items.map((i) => i.id),
@@ -784,12 +752,10 @@ export class QuoteVersionEditor {
             : null,
       );
       // source and variant in ONE write: the identity CHECK sees them together
-      await withReplacementConflict(() =>
-        tx.quoteItem.update({
-          where: { id: itemId },
-          data: { ...merged, replacesItemId },
-        }),
-      );
+      await tx.quoteItem.update({
+        where: { id: itemId },
+        data: { ...merged, replacesItemId },
+      });
       await this.followProductBom(tx, item, merged);
       await audit(tx, user.id, "quote.item_updated", "QuoteItem", itemId, {
         versionId,

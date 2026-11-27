@@ -20,6 +20,10 @@ import type {
   RevokeQuoteAcceptanceInput,
 } from "@acropora/types";
 
+import {
+  conflictingChoices,
+  conflictSentence,
+} from "./quote-accepted-items.js";
 import { quoteDto } from "./quote-dto.mapper.js";
 import { closeFollowUps, openPostponedFollowUp } from "./quote-follow-up.js";
 import { budapestToday } from "./quote-publish.service.js";
@@ -144,7 +148,14 @@ async function recordAcceptance(
     select: {
       status: true,
       versionNumber: true,
-      items: { where: { isOptional: true }, select: { id: true } },
+      items: {
+        select: {
+          id: true,
+          name: true,
+          isOptional: true,
+          replacesItemId: true,
+        },
+      },
     },
   });
   if (!version)
@@ -153,11 +164,19 @@ async function recordAcceptance(
     throw new ConflictException("Felülírt verzió nem fogadható el.");
   if (version.status !== "PUBLISHED")
     throw new ConflictException("Csak publikált verzió fogadható el.");
-  const optional = new Set(version.items.map((i) => i.id));
+  const optional = new Set(
+    version.items.filter((i) => i.isOptional).map((i) => i.id),
+  );
   if (args.selected.some((id) => !optional.has(id)))
     throw new BadRequestException(
       "Csak ennek a verziónak az opcionális tételei választhatók.",
     );
+  // ALTERNATÍVÁK (Luca 2026-11-27): egy tételt kiváltó opciók közül legfeljebb egy választható
+  const clash = conflictSentence(
+    version.items,
+    conflictingChoices(version.items, args.selected),
+  );
+  if (clash) throw new BadRequestException(clash);
   const acceptance = await tx.quoteAcceptance.create({
     data: {
       quoteId,

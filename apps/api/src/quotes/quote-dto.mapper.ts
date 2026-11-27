@@ -16,6 +16,10 @@ import {
   type QuoteRichText,
 } from "@acropora/types";
 import { isExpired } from "./quote-expiry.js";
+import {
+  allOptionsSelection,
+  replacedItemIds,
+} from "./quote-accepted-items.js";
 import { quoteMoneyFixed } from "./pdf/quote-pdf-layout.js";
 import type { QuoteListRow, QuoteRow } from "./quotes.repository.js";
 export function quoteListItemDto(
@@ -230,28 +234,31 @@ function netTotals(v: QuoteRow["versions"][number]) {
   let optionalGross = new Prisma.Decimal(0);
   // KIVÁLTOTT TÉTEL (card 2540d9d4, Luca): az opciók összege az opciók HATÁSA az összegre: a helyükre lépő opció a kiváltott tétel árát vonja le,
   // nem hozzáadódik (150 000 + 30 000 + 20 000 helyett, ha a 30 000 az 50 000 helyére lép: 0). Kiváltás nélkül a sima összeg.
-  const replaced = new Set<string>();
-  for (const b of v.blocks)
-    for (const i of b.items)
-      if (i.isOptional && i.replacesItemId) replaced.add(i.replacesItemId);
-  for (const b of v.blocks)
-    for (const i of b.items) {
-      const line = i.quantity.times(i.unitNetPrice);
-      const gross = line.times(
-        new Prisma.Decimal(1).plus(i.vatRatePercent.dividedBy(100)),
-      );
-      if (i.isOptional) {
-        optional = optional.plus(line);
-        optionalGross = optionalGross.plus(gross);
-      } else {
-        offered = offered.plus(line);
-        offeredGross = offeredGross.plus(gross);
-        if (replaced.has(i.id)) {
-          optional = optional.minus(line);
-          optionalGross = optionalGross.minus(gross);
-        }
+  // ALTERNATÍVÁK (Luca 2026-11-27): egy tételt kiváltó opciók kizárják egymást, ezért csoportonként a legdrágábbat számoljuk (a legnagyobb hatás).
+  const all = v.blocks.flatMap((b) => b.items);
+  const lineOf = (i: (typeof all)[number]) => i.quantity.times(i.unitNetPrice);
+  const counted = new Set(
+    allOptionsSelection(all, (a, b) => lineOf(a).greaterThan(lineOf(b))),
+  );
+  const replaced = replacedItemIds(all, counted);
+  for (const i of all) {
+    const line = lineOf(i);
+    const gross = line.times(
+      new Prisma.Decimal(1).plus(i.vatRatePercent.dividedBy(100)),
+    );
+    if (i.isOptional) {
+      if (!counted.has(i.id)) continue;
+      optional = optional.plus(line);
+      optionalGross = optionalGross.plus(gross);
+    } else {
+      offered = offered.plus(line);
+      offeredGross = offeredGross.plus(gross);
+      if (replaced.has(i.id)) {
+        optional = optional.minus(line);
+        optionalGross = optionalGross.minus(gross);
       }
     }
+  }
   return {
     netTotal: offered.toDecimalPlaces(4).toFixed(4),
     optionalNetTotal: optional.toDecimalPlaces(4).toFixed(4),

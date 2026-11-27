@@ -569,6 +569,11 @@ export interface PublicQuoteDto {
     isOptional: boolean;
     /** KIVÁLTOTT TÉTEL: egy opcionális tételen az a (nem opcionális) tétel neve, amelynek a helyére lép; null: kiegészítés vagy nem opcionális */
     replacesName: string | null;
+    /**
+     * ALTERNATÍVA (Luca 2026-11-27): ha egy tételt TÖBB opcionális is kivált, ezeken a kiváltott tétel helye a `items` listában; az azonos értékű
+     * opciók kizárják egymást (a lap a bejelölésnél a többit leveszi). Null: nem alternatíva (egyetlen kiváltó, kiegészítés vagy nem opcionális).
+     */
+    alternativeOf: number | null;
     /** az ELFOGADOTT kiválasztás szerint ezt a tételt kiváltották (áthúzva mutatandó); elfogadás előtt mindig false */
     replaced: boolean;
     /** az ELFOGADOTT kiválasztás szerint ezt az opcionális tételt kérték; elfogadás előtt mindig false */
@@ -576,8 +581,10 @@ export interface PublicQuoteDto {
   }>;
   netTotal: string;
   optionalNetTotal: string;
-  /** az összes opcionális tétellel együtt, a kiváltott tételek nélkül (a szerveren számolva) */
+  /** az összes opcionális tétellel együtt, a kiváltott tételek nélkül (a szerveren számolva); alternatíváknál csoportonként a legdrágábbal */
   netTotalWithOptionals: string;
+  /** igaz, ha van olyan tétel, amelyet több opció válthat ki: ekkor a fenti összeg a legdrágább alternatívákkal számol */
+  hasAlternatives: boolean;
   /** az elfogadott kiválasztás nettó összege (a kiváltott tételek nélkül), elfogadás előtt null */
   acceptedNetTotal: string | null;
   /** OPEN: it can be accepted; ACCEPTED: it was (date below); CLOSED: no */

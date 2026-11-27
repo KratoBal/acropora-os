@@ -13,6 +13,11 @@ import type {
 import { QuoteAcceptanceService } from "../quote-acceptance.service.js";
 import { linkTokenHash } from "../quote-link.service.js";
 import { QuotePublishService } from "../quote-publish.service.js";
+import {
+  alternativeGroups,
+  conflictingChoices,
+  conflictSentence,
+} from "../quote-accepted-items.js";
 import { selectionTotals, withAllOptionals } from "./quote-public-selection.js";
 
 /**
@@ -127,6 +132,8 @@ export class QuotePublicService {
       ? selectionTotals(items, acceptance.selectedOptionalItemIds)
       : null;
     const withOptionals = withAllOptionals(items);
+    // ALTERNATÍVÁK (Luca 2026-11-27): a kiváltott tétel helye a listában, azokon az opciókon, amelyeknek van társuk
+    const groups = alternativeGroups(items);
     const snapshot = version.customerSnapshot as Record<string, unknown> | null;
     return {
       quoteNumber: version.quote.quoteNumber,
@@ -149,6 +156,10 @@ export class QuotePublicService {
         // a kiváltott (nem opcionális) tétel neve az opcionális tételen: "a X. tétel helyett" (a PDF és az oldal ezt írja ki)
         replacesName:
           items.find((other) => other.id === item.replacesItemId)?.name ?? null,
+        alternativeOf:
+          item.replacesItemId && groups.has(item.replacesItemId)
+            ? items.findIndex((other) => other.id === item.replacesItemId)
+            : null,
         // az ELFOGADOTT kiválasztás szerint: a kiváltott tétel (áthúzva), és a választott opcionális tétel
         replaced: settled?.replacedIndexes.includes(index) ?? false,
         chosen: settled?.chosenIndexes.includes(index) ?? false,
@@ -156,6 +167,7 @@ export class QuotePublicService {
       netTotal: sum(items.filter((item) => !item.isOptional)),
       optionalNetTotal: sum(items.filter((item) => item.isOptional)),
       netTotalWithOptionals: withOptionals.net.toFixed(2),
+      hasAlternatives: groups.size > 0,
       acceptedNetTotal: settled ? settled.net.toFixed(2) : null,
       // a version that is not the published one any more is not open,
       // whatever the quote's status says (acrobot 28224)
@@ -182,6 +194,7 @@ export class QuotePublicService {
       orderBy: [{ block: { position: "asc" } }, { position: "asc" }],
       select: {
         id: true,
+        name: true,
         isOptional: true,
         replacesItemId: true,
         quantity: true,
@@ -199,6 +212,9 @@ export class QuotePublicService {
       chosen.some((id) => typeof id !== "string" || !optional.has(id))
     )
       throw new BadRequestException("Érvénytelen opcionális tétel-lista.");
+    // ALTERNATÍVÁK: egy tételt kiváltó opciók közül legfeljebb egy (a lap sosem küld kettőt, itt a kézzel összeállított kérés áll meg)
+    const clash = conflictSentence(items, conflictingChoices(items, chosen));
+    if (clash) throw new BadRequestException(clash);
     const totals = selectionTotals(items, chosen);
     return {
       netTotal: totals.net.toFixed(2),
