@@ -468,5 +468,61 @@ describe(
         settled,
       ]);
     });
+
+    /*
+      THE OPEN LINES ARE RE-DECIDED WITHOUT THE BUTTON (Balázs 2026-11-27: three payments said "nincs számlája" days after their
+      invoices were tied to the orders; the hourly scheduler calls this). WHAT TURNS IT RED: an order invoiced after its report came
+      in still open after the run; the report's status not following; a person's decision changed.
+    */
+    it("reprocessOpen resolves an order invoiced after its report came in, keeps a person's decision, and sets the report's status", async () => {
+      await prisma.salesOrder.create({
+        data: { orderNumber: order("9"), channel: "UNAS", totalGross: 12397 },
+      });
+      const csvOf = (rows: string[]) =>
+        Buffer.from("\uFEFF" + [HEADER, ...rows].join("\r\n") + "\r\n", "utf8");
+      const late = await service.ingest(
+        csvOf([row(9, `111T${key("9")}`, 12397)]),
+        `${FILE_PREFIX}report_20261117.csv`,
+        { actorUserId: null, gmailMessageId: null, mailBody: null },
+      );
+      const before = await service.reportDetail(late.id);
+      assert.deepEqual(
+        [before.status, before.lines[0]?.errorCode],
+        ["NEEDS_REVIEW", "ORDER_NOT_INVOICED"],
+      );
+
+      // the UNAS order sync ties the invoice to the order later (on live: 11-20)
+      const tied = `${INVOICE_PREFIX}-2026/T${s5}`;
+      const placed = await prisma.salesOrder.findUniqueOrThrow({
+        where: { orderNumber: order("9") },
+      });
+      await prisma.invoice.create({
+        data: {
+          direction: "OUTBOUND",
+          source: "UNAS",
+          invoiceNumber: tied,
+          partnerName: "Kitalalt Vevo",
+          salesOrderId: placed.id,
+        },
+      });
+
+      const manualBefore = (await service.reportDetail(reportId)).lines.find(
+        (line) => line.resolutionSource === "MANUAL",
+      );
+      const run = await service.reprocessOpen();
+      assert.ok(run.reports >= 1 && run.resolved >= 1, JSON.stringify(run));
+      const after = await service.reportDetail(late.id);
+      assert.deepEqual(
+        [after.status, after.lines[0]?.status, after.lines[0]?.invoiceNumbers],
+        ["COMPLETED", "RESOLVED", [tied]],
+      );
+      const manualAfter = (await service.reportDetail(reportId)).lines.find(
+        (line) => line.id === manualBefore?.id,
+      );
+      assert.deepEqual(
+        [manualAfter?.resolutionSource, manualAfter?.invoiceNumbers],
+        [manualBefore?.resolutionSource, manualBefore?.invoiceNumbers],
+      );
+    });
   },
 );
