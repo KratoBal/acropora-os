@@ -49,6 +49,10 @@ import {
   pendingParts,
   sameMaintainers,
 } from "./aquarium-pending-changes";
+import {
+  PilotAquariumReadView,
+  PilotAquariumTargetRangesRead,
+} from "./pilot-aquarium-read-view";
 import { PilotAquariumWaterValues } from "./pilot-aquarium-water-values";
 import {
   draftFromDefaults,
@@ -89,11 +93,13 @@ const EMPTY_NEW_EQUIPMENT: CreateAquariumEquipmentInput = {
  * útvonalon fut.
  *
  * A FIGMA TERVBEN A DETAIL EGY KÜLÖN, CSAK-OLVASÓ KÉPERNYŐ, "Szerkesztés"
- * ceruza-gombbal. EBBEN A RENDSZERBEN NINCS ILYEN MÓD -- az adatlap MINDIG
- * szerkeszthető űrlap (lásd `[aquariumId]/page.tsx`). A brief eredeti "a
- * mai működéssel" kikötése szerint ezt NEM változtattuk: csak a Figma
- * Detail képernyő KÁRTYA-ELRENDEZÉSÉT vettük át (Alapadatok / Berendezések
- * balra, Vízértékek jobbra) -- a "Szerkesztés" gomb tehát itt nincs.
+ * ceruza-gombbal, és 2026-11-26 óta (Picasso 3.22) itt is így van: a meglévő
+ * akvárium OLVASVA nyílik (`PilotAquariumReadView`: az adatok, a berendezések,
+ * a karbantartók, a vízértékek és csak a beállított céltartományok), az űrlap
+ * a fejléc "Szerkesztés" gombjára. A "Mégse" elveti a lapon álló módosítást,
+ * egy sikeres Mentés visszavisz az olvasó nézetre. Az új akvárium (`/uj`)
+ * továbbra is egyből űrlap. Eddig az adatlap mindig szerkesztő űrlapként
+ * nyílt, tengerinél tizennégy kitöltetlen céltartomány-mezővel.
  */
 export function PilotAquariumEditorPage({
   aquariumId,
@@ -103,6 +109,10 @@ export function PilotAquariumEditorPage({
   const { session } = useAuth();
   const router = useRouter();
   const isEdit = Boolean(aquariumId);
+  // an existing aquarium opens read; the form opens on "Szerkesztés" (Picasso 3.22)
+  const [editing, setEditing] = useState(!aquariumId);
+  // the aquarium as last loaded or saved: what the read view shows, and what "Mégse" goes back to
+  const [snapshot, setSnapshot] = useState<AquariumDetail | null>(null);
   const [assistantEntity, setAssistantEntity] = useState<{
     id: string;
     number: string;
@@ -150,7 +160,7 @@ export function PilotAquariumEditorPage({
   const [savedMaintainers, setSavedMaintainers] = useState<
     AquariumMaintainer[]
   >([]);
-  // a mentéskor elküldött mezők (JSON): a "Mentve." addig áll, amíg a mezők ugyanezek
+  // "Mentve." on the read view after a save, until the form opens again
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [customerEmail, setCustomerEmail] = useState<string | undefined>(
     undefined,
@@ -170,6 +180,43 @@ export function PilotAquariumEditorPage({
     "reefclub-linking",
   );
 
+  /** The page's fields from an aquarium: on load, after a save, and on "Mégse" (back to what was saved). */
+  function applyDetail(detail: AquariumDetail) {
+    setSnapshot(detail);
+    setAssistantEntity({ id: detail.id, number: detail.aquariumNumber });
+    setOwnershipType(detail.ownershipType);
+    setCustomerSelection(
+      detail.customerId
+        ? {
+            customerId: detail.customerId,
+            customerLabel: detail.customerName,
+          }
+        : {},
+    );
+    setDepartmentId(detail.departmentId ?? "");
+    setName(detail.name);
+    setWaterBodyType(detail.waterBodyType);
+    setLengthCm(detail.lengthCm != null ? String(detail.lengthCm) : "");
+    setWidthCm(detail.widthCm != null ? String(detail.widthCm) : "");
+    setHeightCm(detail.heightCm != null ? String(detail.heightCm) : "");
+    setVolumeLiters(
+      detail.systemVolumeLiters != null
+        ? String(detail.systemVolumeLiters)
+        : "",
+    );
+    setVolumeIsManual(detail.systemVolumeIsManual);
+    setWaterType(detail.waterType ?? "");
+    setStartedAt(detail.startedAt ? detail.startedAt.slice(0, 10) : "");
+    setNotes(detail.notes ?? "");
+    setEquipment(detail.equipment);
+    setSavedEquipment(detail.equipment);
+    setMaintainers(detail.maintainers);
+    setSavedMaintainers(detail.maintainers);
+    setCustomerEmail(detail.customerEmail);
+    setExpectedUpdatedAt(detail.updatedAt);
+    setTargetsDraft(draftFromTargets(detail.targets));
+  }
+
   useEffect(() => {
     if (!aquariumId) return;
     let active = true;
@@ -177,38 +224,7 @@ export function PilotAquariumEditorPage({
       .detail(token, aquariumId)
       .then((detail) => {
         if (!active) return;
-        setAssistantEntity({ id: detail.id, number: detail.aquariumNumber });
-        setOwnershipType(detail.ownershipType);
-        setCustomerSelection(
-          detail.customerId
-            ? {
-                customerId: detail.customerId,
-                customerLabel: detail.customerName,
-              }
-            : {},
-        );
-        setDepartmentId(detail.departmentId ?? "");
-        setName(detail.name);
-        setWaterBodyType(detail.waterBodyType);
-        setLengthCm(detail.lengthCm != null ? String(detail.lengthCm) : "");
-        setWidthCm(detail.widthCm != null ? String(detail.widthCm) : "");
-        setHeightCm(detail.heightCm != null ? String(detail.heightCm) : "");
-        setVolumeLiters(
-          detail.systemVolumeLiters != null
-            ? String(detail.systemVolumeLiters)
-            : "",
-        );
-        setVolumeIsManual(detail.systemVolumeIsManual);
-        setWaterType(detail.waterType ?? "");
-        setStartedAt(detail.startedAt ? detail.startedAt.slice(0, 10) : "");
-        setNotes(detail.notes ?? "");
-        setEquipment(detail.equipment);
-        setSavedEquipment(detail.equipment);
-        setMaintainers(detail.maintainers);
-        setSavedMaintainers(detail.maintainers);
-        setCustomerEmail(detail.customerEmail);
-        setExpectedUpdatedAt(detail.updatedAt);
-        setTargetsDraft(draftFromTargets(detail.targets));
+        applyDetail(detail);
       })
       .catch((cause) =>
         setError(
@@ -341,7 +357,12 @@ export function PilotAquariumEditorPage({
     try {
       const basePayload = currentPayload();
       if (isEdit) {
-        await saveEdit(basePayload);
+        const saved = await saveEdit(basePayload);
+        if (saved) {
+          applyDetail(saved);
+          setEditing(false);
+          setSavedNotice("Mentve.");
+        }
       } else {
         const created = await aquariumsApi.create(token, {
           ...basePayload,
@@ -368,7 +389,7 @@ export function PilotAquariumEditorPage({
    */
   async function saveEdit(
     basePayload: Omit<UpdateAquariumInput, "expectedUpdatedAt">,
-  ) {
+  ): Promise<AquariumDetail | null> {
     const { remove, add } = equipmentChanges(savedEquipment, equipment);
     const maintainersChanged = !sameMaintainers(savedMaintainers, maintainers);
     let detail: AquariumDetail | null = null;
@@ -399,7 +420,7 @@ export function PilotAquariumEditorPage({
         );
       setEquipment(detail.equipment);
       setMaintainers(detail.maintainers);
-      setSavedNotice(JSON.stringify(basePayload));
+      return detail;
     } catch (cause) {
       if (detail) {
         const stillToRemove = new Set(remove.filter((id) => !removed.has(id)));
@@ -414,7 +435,7 @@ export function PilotAquariumEditorPage({
             cause instanceof ApiError ? cause.message : "ismeretlen hiba"
           }. Ami eddig lement, mentve maradt; a többi a lapon vár, és a Mentés újra elküldi.`,
         );
-        return;
+        return null;
       }
       throw cause;
     } finally {
@@ -475,6 +496,18 @@ export function PilotAquariumEditorPage({
       <PilotThemeRoot className="h-96 animate-pulse rounded-xl bg-pilot-grey-100" />
     );
 
+  const reading = isEdit && !editing && snapshot !== null;
+  const reefClubPanel =
+    isEdit &&
+    reefClubLinking &&
+    ownershipType === "CUSTOMER" &&
+    customerSelection.customerId ? (
+      <ReefClubCodePanel
+        token={token}
+        customerId={customerSelection.customerId}
+      />
+    ) : null;
+
   return (
     <PilotThemeRoot
       bleed
@@ -487,7 +520,40 @@ export function PilotAquariumEditorPage({
           Akváriumok
         </PilotBackLink>
         <PageHeader
-          title={isEdit ? name || "Akvárium szerkesztése" : "Új akvárium"}
+          title={
+            reading
+              ? snapshot.name
+              : isEdit
+                ? name || "Akvárium szerkesztése"
+                : "Új akvárium"
+          }
+          actions={
+            reading ? (
+              <PilotButton
+                variant="primary"
+                onClick={() => {
+                  setSavedNotice(null);
+                  setEditing(true);
+                }}
+              >
+                <Icon name="pencil" size={12} />
+                Szerkesztés
+              </PilotButton>
+            ) : isEdit ? (
+              <PilotButton
+                variant="secondary"
+                disabled={busy}
+                onClick={() => {
+                  // back to what was saved: what waits on the page is dropped
+                  if (snapshot) applyDetail(snapshot);
+                  setError(null);
+                  setEditing(false);
+                }}
+              >
+                Mégse
+              </PilotButton>
+            ) : undefined
+          }
           meta={
             isEdit ? (
               <>
@@ -514,10 +580,38 @@ export function PilotAquariumEditorPage({
         </div>
       ) : null}
 
-      <form onSubmit={handleSubmit} className={`flex-1 ${PAGE_GUTTER_X} py-6`}>
-        <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="flex flex-col gap-5">
-            {/*
+      {reading ? (
+        <div className={`flex-1 ${PAGE_GUTTER_X} py-6`}>
+          {savedNotice ? (
+            <p role="status" className="mb-4 text-sm text-pilot-grey-600">
+              {savedNotice}
+            </p>
+          ) : null}
+          <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <PilotAquariumReadView
+              detail={snapshot}
+              ownerExtra={reefClubPanel}
+            />
+            <div className="flex flex-col gap-5">
+              <PilotAquariumWaterValues
+                token={token}
+                aquariumId={snapshot.id}
+                waterType={snapshot.waterType}
+                targets={snapshot.targets}
+                canSendEmail={Boolean(snapshot.customerEmail)}
+              />
+              <PilotAquariumTargetRangesRead detail={snapshot} />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <form
+          onSubmit={handleSubmit}
+          className={`flex-1 ${PAGE_GUTTER_X} py-6`}
+        >
+          <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="flex flex-col gap-5">
+              {/*
               NÉGY KÜLÖN KÁRTYA, A TERV SZAKASZOLÁSA SZERINT (2026-09-25,
               terv-összevetés): a terv (`NewAquarium`, App.tsx 861-982. sor)
               öt szakaszt ad (Tulajdon, Akvárium, Méretek, Karbantartók,
@@ -529,340 +623,334 @@ export function PilotAquariumEditorPage({
               és törlése nem ennek a körnek a tárgya, az "Akvárium" kártya
               végén maradt, a terv nem ismeri sorban.
             */}
-            <PilotCard>
-              <PilotCardHeader title="Tulajdon" />
-              <div className="flex flex-col gap-4 p-5">
-                {/* a choice of two is the segmented switch, as the next control on the form (Picasso 3.28, acrobot 62633) */}
-                <div>
-                  <PilotSegmentedControl
-                    options={[OWNERSHIP_LABEL.OWN, OWNERSHIP_LABEL.CUSTOMER]}
-                    value={OWNERSHIP_LABEL[ownershipType]}
-                    onChange={(label) =>
-                      setOwnershipType(
-                        label === OWNERSHIP_LABEL.CUSTOMER ? "CUSTOMER" : "OWN",
-                      )
-                    }
-                  />
-                </div>
-                {ownershipType === "CUSTOMER" ? (
-                  <>
-                    <CustomerPicker
-                      token={token}
-                      selection={customerSelection}
-                      onChange={(selection) => {
-                        setCustomerSelection(selection);
-                        setDepartmentId("");
-                      }}
-                    />
-                    {isEdit &&
-                    reefClubLinking &&
-                    customerSelection.customerId ? (
-                      <ReefClubCodePanel
-                        token={token}
-                        customerId={customerSelection.customerId}
-                      />
-                    ) : null}
-                    {customerSelection.customerId ? (
-                      <PilotFormField
-                        label="Helyszín"
-                        help="Elhagyható. A Partner Portálon a partner ezek közül a hozzárendelt helyszínek közül választ majd."
-                      >
-                        <PilotSelect
-                          value={departmentId}
-                          onChange={setDepartmentId}
-                        >
-                          <option value="">Nincs megadva</option>
-                          {buildSiteOptions(departments).map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </PilotSelect>
-                      </PilotFormField>
-                    ) : null}
-                  </>
-                ) : null}
-              </div>
-            </PilotCard>
-
-            <PilotCard>
-              <PilotCardHeader title="Akvárium" />
-              <div className="flex flex-col gap-4 p-5">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <PilotFormField label="Név">
-                    <PilotInput value={name} onChange={setName} />
-                  </PilotFormField>
-                  <PilotFormField label="Akvárium vagy tó">
-                    <PilotSegmentedControl
-                      options={["Akvárium", "Tó"]}
-                      value={WATER_BODY_LABEL[waterBodyType]}
-                      onChange={(value) =>
-                        setWaterBodyType(value === "Tó" ? "TO" : "AKVARIUM")
-                      }
-                    />
-                  </PilotFormField>
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <PilotFormField label="Víztípus">
-                    <PilotSelect
-                      value={waterType || undefined}
-                      onChange={(value) =>
-                        setWaterType(value as WaterType | "")
-                      }
-                    >
-                      <option value="">—</option>
-                      <option value="EDESVIZI">
-                        {WATER_TYPE_LABEL.EDESVIZI}
-                      </option>
-                      <option value="TENGERI">
-                        {WATER_TYPE_LABEL.TENGERI}
-                      </option>
-                    </PilotSelect>
-                  </PilotFormField>
-                  <PilotFormField label="Indítás dátuma">
-                    <PilotInput
-                      type="date"
-                      value={startedAt}
-                      onChange={setStartedAt}
-                    />
-                  </PilotFormField>
-                </div>
-                <PilotFormField label="Megjegyzés">
-                  <PilotInput value={notes} onChange={setNotes} />
-                </PilotFormField>
-              </div>
-            </PilotCard>
-
-            <PilotCard>
-              <PilotCardHeader title="Méretek" />
-              <div className="flex flex-col gap-4 p-5">
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <PilotFormField label="Hossz (cm)">
-                    <PilotInput
-                      type="number"
-                      value={lengthCm}
-                      onChange={setLengthCm}
-                    />
-                  </PilotFormField>
-                  <PilotFormField label="Szélesség (cm)">
-                    <PilotInput
-                      type="number"
-                      value={widthCm}
-                      onChange={setWidthCm}
-                    />
-                  </PilotFormField>
-                  <PilotFormField label="Magasság (cm)">
-                    <PilotInput
-                      type="number"
-                      value={heightCm}
-                      onChange={setHeightCm}
-                    />
-                  </PilotFormField>
-                  <PilotFormField
-                    label="Térfogat"
-                    help={
-                      volumeIsManual
-                        ? "Kézzel megadva"
-                        : "A méretekből számolva"
-                    }
-                  >
-                    <PilotInput
-                      type="number"
-                      value={volumeLiters}
-                      onChange={(value) => {
-                        setVolumeLiters(value);
-                        setVolumeIsManual(true);
-                      }}
-                    />
-                  </PilotFormField>
-                </div>
-                {volumeIsManual ? (
-                  <PilotButton
-                    type="button"
-                    variant="secondary"
-                    onClick={() => setVolumeIsManual(false)}
-                  >
-                    Visszaállítás számolt literre
-                  </PilotButton>
-                ) : null}
-              </div>
-            </PilotCard>
-
-            {isEdit ? (
               <PilotCard>
-                <PilotCardHeader title="Karbantartók" />
+                <PilotCardHeader title="Tulajdon" />
                 <div className="flex flex-col gap-4 p-5">
-                  <PilotMaintainersEditor
-                    selected={maintainers}
-                    selectable={selectableMaintainers}
-                    busy={busy}
-                    onToggle={toggleMaintainer}
-                  />
+                  {/* a choice of two is the segmented switch, as the next control on the form (Picasso 3.28, acrobot 62633) */}
+                  <div>
+                    <PilotSegmentedControl
+                      options={[OWNERSHIP_LABEL.OWN, OWNERSHIP_LABEL.CUSTOMER]}
+                      value={OWNERSHIP_LABEL[ownershipType]}
+                      onChange={(label) =>
+                        setOwnershipType(
+                          label === OWNERSHIP_LABEL.CUSTOMER
+                            ? "CUSTOMER"
+                            : "OWN",
+                        )
+                      }
+                    />
+                  </div>
+                  {ownershipType === "CUSTOMER" ? (
+                    <>
+                      <CustomerPicker
+                        token={token}
+                        selection={customerSelection}
+                        onChange={(selection) => {
+                          setCustomerSelection(selection);
+                          setDepartmentId("");
+                        }}
+                      />
+                      {reefClubPanel}
+                      {customerSelection.customerId ? (
+                        <PilotFormField
+                          label="Helyszín"
+                          help="Elhagyható. A Partner Portálon a partner ezek közül a hozzárendelt helyszínek közül választ majd."
+                        >
+                          <PilotSelect
+                            value={departmentId}
+                            onChange={setDepartmentId}
+                          >
+                            <option value="">Nincs megadva</option>
+                            {buildSiteOptions(departments).map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </PilotSelect>
+                        </PilotFormField>
+                      ) : null}
+                    </>
+                  ) : null}
                 </div>
               </PilotCard>
-            ) : null}
 
-            <PilotCard>
-              <PilotCardHeader title="Berendezések" />
-              <div className="divide-y divide-pilot-grey-100 px-5 py-2">
-                {equipment.length ? (
-                  equipment.map((row) => (
-                    <div
-                      key={row.id}
-                      className="grid grid-cols-[130px_minmax(0,1fr)_auto] items-center gap-4 py-2.5"
+              <PilotCard>
+                <PilotCardHeader title="Akvárium" />
+                <div className="flex flex-col gap-4 p-5">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <PilotFormField label="Név">
+                      <PilotInput value={name} onChange={setName} />
+                    </PilotFormField>
+                    <PilotFormField label="Akvárium vagy tó">
+                      <PilotSegmentedControl
+                        options={["Akvárium", "Tó"]}
+                        value={WATER_BODY_LABEL[waterBodyType]}
+                        onChange={(value) =>
+                          setWaterBodyType(value === "Tó" ? "TO" : "AKVARIUM")
+                        }
+                      />
+                    </PilotFormField>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <PilotFormField label="Víztípus">
+                      <PilotSelect
+                        value={waterType || undefined}
+                        onChange={(value) =>
+                          setWaterType(value as WaterType | "")
+                        }
+                      >
+                        <option value="">—</option>
+                        <option value="EDESVIZI">
+                          {WATER_TYPE_LABEL.EDESVIZI}
+                        </option>
+                        <option value="TENGERI">
+                          {WATER_TYPE_LABEL.TENGERI}
+                        </option>
+                      </PilotSelect>
+                    </PilotFormField>
+                    <PilotFormField label="Indítás dátuma">
+                      <PilotInput
+                        type="date"
+                        value={startedAt}
+                        onChange={setStartedAt}
+                      />
+                    </PilotFormField>
+                  </div>
+                  <PilotFormField label="Megjegyzés">
+                    <PilotInput value={notes} onChange={setNotes} />
+                  </PilotFormField>
+                </div>
+              </PilotCard>
+
+              <PilotCard>
+                <PilotCardHeader title="Méretek" />
+                <div className="flex flex-col gap-4 p-5">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <PilotFormField label="Hossz (cm)">
+                      <PilotInput
+                        type="number"
+                        value={lengthCm}
+                        onChange={setLengthCm}
+                      />
+                    </PilotFormField>
+                    <PilotFormField label="Szélesség (cm)">
+                      <PilotInput
+                        type="number"
+                        value={widthCm}
+                        onChange={setWidthCm}
+                      />
+                    </PilotFormField>
+                    <PilotFormField label="Magasság (cm)">
+                      <PilotInput
+                        type="number"
+                        value={heightCm}
+                        onChange={setHeightCm}
+                      />
+                    </PilotFormField>
+                    <PilotFormField
+                      label="Térfogat"
+                      help={
+                        volumeIsManual
+                          ? "Kézzel megadva"
+                          : "A méretekből számolva"
+                      }
                     >
-                      <span className="text-xs font-medium text-pilot-grey-400">
-                        {EQUIPMENT_KIND_LABEL[row.kind]}
-                      </span>
-                      <span className="text-sm text-pilot-grey-700">
-                        {row.manufacturer ?? "—"}
-                        {row.model ? ` · ${row.model}` : ""}
-                      </span>
-                      <div className="flex items-center gap-3">
-                        <span className="font-mono text-xs text-pilot-grey-400">
-                          {row.quantity} db
-                          {row.channelCount
-                            ? ` · ${row.channelCount} csat.`
-                            : ""}
+                      <PilotInput
+                        type="number"
+                        value={volumeLiters}
+                        onChange={(value) => {
+                          setVolumeLiters(value);
+                          setVolumeIsManual(true);
+                        }}
+                      />
+                    </PilotFormField>
+                  </div>
+                  {volumeIsManual ? (
+                    <PilotButton
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setVolumeIsManual(false)}
+                    >
+                      Visszaállítás számolt literre
+                    </PilotButton>
+                  ) : null}
+                </div>
+              </PilotCard>
+
+              {isEdit ? (
+                <PilotCard>
+                  <PilotCardHeader title="Karbantartók" />
+                  <div className="flex flex-col gap-4 p-5">
+                    <PilotMaintainersEditor
+                      selected={maintainers}
+                      selectable={selectableMaintainers}
+                      busy={busy}
+                      onToggle={toggleMaintainer}
+                    />
+                  </div>
+                </PilotCard>
+              ) : null}
+
+              <PilotCard>
+                <PilotCardHeader title="Berendezések" />
+                <div className="divide-y divide-pilot-grey-100 px-5 py-2">
+                  {equipment.length ? (
+                    equipment.map((row) => (
+                      <div
+                        key={row.id}
+                        className="grid grid-cols-[130px_minmax(0,1fr)_auto] items-center gap-4 py-2.5"
+                      >
+                        <span className="text-xs font-medium text-pilot-grey-400">
+                          {EQUIPMENT_KIND_LABEL[row.kind]}
                         </span>
-                        <button
-                          type="button"
-                          aria-label={`${EQUIPMENT_KIND_LABEL[row.kind]}${row.manufacturer ? ` · ${row.manufacturer}` : ""}: törlés`}
-                          onClick={() => setPendingRemoval(row)}
-                          className="cursor-pointer text-pilot-grey-300 transition-colors hover:text-red-500"
-                        >
-                          <Icon name="x" size={14} />
-                        </button>
+                        <span className="text-sm text-pilot-grey-700">
+                          {row.manufacturer ?? "—"}
+                          {row.model ? ` · ${row.model}` : ""}
+                        </span>
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-xs text-pilot-grey-400">
+                            {row.quantity} db
+                            {row.channelCount
+                              ? ` · ${row.channelCount} csat.`
+                              : ""}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label={`${EQUIPMENT_KIND_LABEL[row.kind]}${row.manufacturer ? ` · ${row.manufacturer}` : ""}: törlés`}
+                            onClick={() => setPendingRemoval(row)}
+                            className="cursor-pointer text-pilot-grey-300 transition-colors hover:text-red-500"
+                          >
+                            <Icon name="x" size={14} />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="py-3 text-sm text-pilot-grey-500">
-                    Nincs felvitt berendezés.
-                  </p>
-                )}
-              </div>
-              <div className="grid grid-cols-1 gap-3 px-5 pb-4 sm:grid-cols-5">
-                <PilotFormField label="Fajta">
-                  <PilotSelect
-                    value={newEquipment.kind}
-                    onChange={(value) =>
-                      setNewEquipment((current) => ({
-                        ...current,
-                        kind: value as AquariumEquipmentKind,
-                        channelCount: undefined,
-                      }))
-                    }
-                  >
-                    {EQUIPMENT_KIND_OPTIONS.map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </PilotSelect>
-                </PilotFormField>
-                <PilotFormField label="Gyártó">
-                  <PilotInput
-                    value={newEquipment.manufacturer ?? ""}
-                    onChange={(value) =>
-                      setNewEquipment((current) => ({
-                        ...current,
-                        manufacturer: value,
-                      }))
-                    }
-                  />
-                </PilotFormField>
-                <PilotFormField label="Típus">
-                  <PilotInput
-                    value={newEquipment.model ?? ""}
-                    onChange={(value) =>
-                      setNewEquipment((current) => ({
-                        ...current,
-                        model: value,
-                      }))
-                    }
-                  />
-                </PilotFormField>
-                <PilotFormField label="Darabszám">
-                  <PilotInput
-                    type="number"
-                    value={String(newEquipment.quantity ?? 1)}
-                    onChange={(value) =>
-                      setNewEquipment((current) => ({
-                        ...current,
-                        quantity: Number(value),
-                      }))
-                    }
-                  />
-                </PilotFormField>
-                {newEquipment.kind === "NYOMELEM_ADAGOLO" ? (
-                  <PilotFormField label="Csatornaszám">
-                    <PilotInput
-                      type="number"
-                      value={String(newEquipment.channelCount ?? "")}
+                    ))
+                  ) : (
+                    <p className="py-3 text-sm text-pilot-grey-500">
+                      Nincs felvitt berendezés.
+                    </p>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 gap-3 px-5 pb-4 sm:grid-cols-5">
+                  <PilotFormField label="Fajta">
+                    <PilotSelect
+                      value={newEquipment.kind}
                       onChange={(value) =>
                         setNewEquipment((current) => ({
                           ...current,
-                          channelCount: Number(value),
+                          kind: value as AquariumEquipmentKind,
+                          channelCount: undefined,
+                        }))
+                      }
+                    >
+                      {EQUIPMENT_KIND_OPTIONS.map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </PilotSelect>
+                  </PilotFormField>
+                  <PilotFormField label="Gyártó">
+                    <PilotInput
+                      value={newEquipment.manufacturer ?? ""}
+                      onChange={(value) =>
+                        setNewEquipment((current) => ({
+                          ...current,
+                          manufacturer: value,
                         }))
                       }
                     />
                   </PilotFormField>
+                  <PilotFormField label="Típus">
+                    <PilotInput
+                      value={newEquipment.model ?? ""}
+                      onChange={(value) =>
+                        setNewEquipment((current) => ({
+                          ...current,
+                          model: value,
+                        }))
+                      }
+                    />
+                  </PilotFormField>
+                  <PilotFormField label="Darabszám">
+                    <PilotInput
+                      type="number"
+                      value={String(newEquipment.quantity ?? 1)}
+                      onChange={(value) =>
+                        setNewEquipment((current) => ({
+                          ...current,
+                          quantity: Number(value),
+                        }))
+                      }
+                    />
+                  </PilotFormField>
+                  {newEquipment.kind === "NYOMELEM_ADAGOLO" ? (
+                    <PilotFormField label="Csatornaszám">
+                      <PilotInput
+                        type="number"
+                        value={String(newEquipment.channelCount ?? "")}
+                        onChange={(value) =>
+                          setNewEquipment((current) => ({
+                            ...current,
+                            channelCount: Number(value),
+                          }))
+                        }
+                      />
+                    </PilotFormField>
+                  ) : null}
+                </div>
+                <div className="px-5 pb-5">
+                  <PilotButton
+                    type="button"
+                    variant="secondary"
+                    onClick={addEquipmentRow}
+                  >
+                    <Icon name="plus" size={13} />
+                    Berendezés hozzáadása
+                  </PilotButton>
+                </div>
+              </PilotCard>
+
+              <div className="flex flex-wrap items-center justify-end gap-3 pb-8">
+                {isEdit ? (
+                  <p
+                    className="mr-auto text-sm text-pilot-grey-600"
+                    role="status"
+                    data-testid="aquarium-save-state"
+                  >
+                    {waiting.length
+                      ? `Mentésre vár: ${waiting.join(" és ")}. A Mentés a fenti adatokkal együtt viszi.`
+                      : "A Mentés az összes fenti adatot menti, a karbantartókat és a berendezéseket is."}
+                  </p>
                 ) : null}
-              </div>
-              <div className="px-5 pb-5">
-                <PilotButton
-                  type="button"
-                  variant="secondary"
-                  onClick={addEquipmentRow}
-                >
-                  <Icon name="plus" size={13} />
-                  Berendezés hozzáadása
+                <PilotButton type="submit" variant="primary" disabled={busy}>
+                  {isEdit ? "Mentés" : "Létrehozás"}
                 </PilotButton>
               </div>
-            </PilotCard>
+            </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-3 pb-8">
-              {isEdit ? (
-                <p
-                  className="mr-auto text-sm text-pilot-grey-600"
-                  role="status"
-                  data-testid="aquarium-save-state"
-                >
-                  {waiting.length
-                    ? `Mentésre vár: ${waiting.join(" és ")}. A Mentés a fenti adatokkal együtt viszi.`
-                    : savedNotice === JSON.stringify(currentPayload())
-                      ? "Mentve."
-                      : "A Mentés az összes fenti adatot menti, a karbantartókat és a berendezéseket is."}
-                </p>
+            <div className="flex flex-col gap-5">
+              {isEdit && aquariumId ? (
+                <PilotAquariumWaterValues
+                  token={token}
+                  aquariumId={aquariumId}
+                  waterType={waterType || undefined}
+                  targets={targetsPayload(targetsDraft)}
+                  canSendEmail={Boolean(customerEmail)}
+                />
               ) : null}
-              <PilotButton type="submit" variant="primary" disabled={busy}>
-                {isEdit ? "Mentés" : "Létrehozás"}
-              </PilotButton>
+              <PilotAquariumTargetRanges
+                waterType={waterType || undefined}
+                draft={targetsDraft}
+                onChange={(next) => {
+                  setTargetsTouched(true);
+                  setTargetsDraft(next);
+                }}
+              />
             </div>
           </div>
-
-          <div className="flex flex-col gap-5">
-            {isEdit && aquariumId ? (
-              <PilotAquariumWaterValues
-                token={token}
-                aquariumId={aquariumId}
-                waterType={waterType || undefined}
-                targets={targetsPayload(targetsDraft)}
-                canSendEmail={Boolean(customerEmail)}
-              />
-            ) : null}
-            <PilotAquariumTargetRanges
-              waterType={waterType || undefined}
-              draft={targetsDraft}
-              onChange={(next) => {
-                setTargetsTouched(true);
-                setTargetsDraft(next);
-              }}
-            />
-          </div>
-        </div>
-      </form>
+        </form>
+      )}
 
       <ConfirmDialog
         open={pendingRemoval != null}

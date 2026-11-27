@@ -92,8 +92,10 @@ beforeEach(() => {
   api.selectableMaintainers.mockResolvedValue([anna, bela]);
 });
 
+// an existing aquarium opens read (Picasso 3.22): the form is behind "Szerkesztés"
 async function page() {
   render(createElement(PilotAquariumEditorPage, { aquariumId: "aq-1" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Szerkesztés" }));
   await screen.findByDisplayValue("Nappali");
   await screen.findByRole("button", { name: /Nagy Béla/ });
 }
@@ -157,7 +159,7 @@ describe("akvárium adatlap: egy mentés", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
 
-    await waitFor(() => expect(state()).toBe("Mentve."));
+    expect(await screen.findByText("Mentve.")).toBeTruthy();
     expect(calls).toEqual(["update", "add", "maintainers"]);
     expect(api.update.mock.calls[0]![2]).toMatchObject({
       name: "Nappali",
@@ -170,7 +172,9 @@ describe("akvárium adatlap: egy mentés", () => {
     expect(api.addEquipment.mock.calls[0]![2]).not.toHaveProperty("id");
     expect(navigation.push).not.toHaveBeenCalled();
 
-    // the next save starts from the new updatedAt and sends nothing that is already saved
+    // the next save (the form opened again) starts from the new updatedAt and sends nothing that is already saved
+    fireEvent.click(screen.getByRole("button", { name: "Szerkesztés" }));
+    await screen.findByDisplayValue("Nappali");
     api.update.mockResolvedValue(
       detail({
         equipment: [lamp, { ...lamp, id: "eq-2" }],
@@ -199,7 +203,7 @@ describe("akvárium adatlap: egy mentés", () => {
     api.update.mockResolvedValue(detail());
     api.removeEquipment.mockResolvedValue(detail({ equipment: [] }));
     fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
-    await waitFor(() => expect(state()).toBe("Mentve."));
+    expect(await screen.findByText("Mentve.")).toBeTruthy();
     expect(api.removeEquipment).toHaveBeenCalledWith("t", "aq-1", "eq-1");
   });
 
@@ -242,21 +246,87 @@ describe("akvárium adatlap: egy mentés", () => {
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
-    await waitFor(() => expect(state()).toBe("Mentve."));
+    expect(await screen.findByText("Mentve.")).toBeTruthy();
     expect(api.addEquipment).toHaveBeenCalledTimes(1);
     expect(api.update.mock.calls[1]![2]).toMatchObject({
       expectedUpdatedAt: "2026-11-26T08:01:30.000Z",
     });
   });
 
-  it("a mentés után egy mező átírása leveszi a Mentve jelzést", async () => {
+  it("a sikeres Mentés után az adatlap olvasva áll és kimondja; a Szerkesztés újra az űrlapot nyitja, a jelzés nélkül", async () => {
     await page();
-    api.update.mockResolvedValue(detail());
-    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
-    await waitFor(() => expect(state()).toBe("Mentve."));
+    api.update.mockResolvedValue(detail({ name: "Iroda" }));
     fireEvent.change(screen.getByDisplayValue("Nappali"), {
       target: { value: "Iroda" },
     });
-    expect(state()).toMatch(/A Mentés az összes fenti adatot menti/);
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+    expect(await screen.findByText("Mentve.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Mentés" })).toBeNull();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Iroda");
+    fireEvent.click(screen.getByRole("button", { name: "Szerkesztés" }));
+    expect(await screen.findByDisplayValue("Iroda")).toBeTruthy();
+    expect(screen.queryByText("Mentve.")).toBeNull();
+  });
+});
+
+/**
+ * OLVASVA NYÍLIK (Picasso 3.22). Eddig a meglévő akvárium szerkesztő űrlapként nyílt, tengerinél tizennégy üres céltartomány-mezővel.
+ * MI PIROSÍT: a meglévő akvárium űrlappal nyílik; az olvasó nézet a beállítatlan céltartományokat is sorolja, vagy a beállítottat
+ * nem; a "Mégse" a lapon álló módosítást a szerverre viszi vagy megtartja; az új akvárium nem űrlappal nyílik.
+ */
+describe("akvárium adatlap: olvasva nyílik, a szerkesztés a Szerkesztés gombra", () => {
+  it("a meglévő akvárium olvasva nyílik: nincs beviteli mező, csak a beállított céltartomány látszik", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        waterType: "TENGERI",
+        notes: "Nappali sarok",
+        targets: [{ parameterCode: "KH", min: 7, max: 9 }],
+      }),
+    );
+    render(createElement(PilotAquariumEditorPage, { aquariumId: "aq-1" }));
+    expect(
+      await screen.findByRole("button", { name: "Szerkesztés" }),
+    ).toBeTruthy();
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+    expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "Mentés" })).toBeNull();
+    expect(screen.getByText("Nappali sarok")).toBeTruthy();
+    expect(screen.getByText("Kiss Anna")).toBeTruthy();
+    // one set range, as a line; not fourteen empty fields
+    expect(screen.getByText(/7 – 9/)).toBeTruthy();
+    expect(screen.queryAllByPlaceholderText("Tól")).toHaveLength(0);
+    expect(api.update).not.toHaveBeenCalled();
+  });
+
+  it("céltartomány nélkül kimondja, hol adható meg", async () => {
+    render(createElement(PilotAquariumEditorPage, { aquariumId: "aq-1" }));
+    expect(
+      await screen.findByText(
+        "Nincs saját céltartomány beállítva; a Szerkesztésben adható meg.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("a Mégse elveti a lapon álló módosítást, a szerverre semmi nem megy", async () => {
+    await page();
+    fireEvent.change(screen.getByDisplayValue("Nappali"), {
+      target: { value: "Iroda" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Mégse" }));
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "Nappali",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Szerkesztés" }));
+    expect(await screen.findByDisplayValue("Nappali")).toBeTruthy();
+    expect(api.update).not.toHaveBeenCalled();
+  });
+
+  it("az új akvárium egyből űrlap, Szerkesztés gomb nélkül", async () => {
+    render(createElement(PilotAquariumEditorPage, {}));
+    expect(
+      await screen.findByRole("button", { name: "Létrehozás" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Szerkesztés" })).toBeNull();
+    expect(api.detail).not.toHaveBeenCalled();
   });
 });
