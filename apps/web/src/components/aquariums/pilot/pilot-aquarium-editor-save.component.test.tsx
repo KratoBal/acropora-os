@@ -330,3 +330,50 @@ describe("akvárium adatlap: olvasva nyílik, a szerkesztés a Szerkesztés gomb
     expect(api.detail).not.toHaveBeenCalled();
   });
 });
+
+// acrobot 63508 (a #2950 elve): a hiányzó gyártó nem kötőjelként áll a Berendezések sorában, sem olvasva, sem a Szerkesztés után
+describe("akvárium adatlap: a berendezés sora a hiányzó gyártóval", () => {
+  const noMaker: AquariumEquipment = {
+    id: "eq-2",
+    kind: "VILAGITAS",
+    manufacturer: null,
+    model: "T5",
+    quantity: 1,
+  } as AquariumEquipment;
+  const rowText = (view: HTMLElement) =>
+    [...view.querySelectorAll("span")]
+      .map((node) => node.textContent?.trim() ?? "")
+      .filter((text) => text.includes("T5"));
+
+  it("olvasva: „T5”, nem „— · T5”", async () => {
+    api.detail.mockResolvedValue(detail({ equipment: [noMaker] }));
+    const { container } = render(
+      createElement(PilotAquariumEditorPage, { aquariumId: "aq-1" }),
+    );
+    await screen.findByRole("button", { name: "Szerkesztés" });
+    expect(rowText(container)).toEqual(["T5"]);
+    expect(container.textContent).not.toContain("— · T5");
+  });
+
+  it("a Szerkesztés után is: „T5”, nem „— · T5”", async () => {
+    api.detail.mockResolvedValue(detail({ equipment: [noMaker] }));
+    const { container } = render(
+      createElement(PilotAquariumEditorPage, { aquariumId: "aq-1" }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Szerkesztés" }));
+    await screen.findByDisplayValue("Nappali");
+    expect(rowText(container)).toEqual(["T5"]);
+    expect(container.textContent).not.toContain("— · T5");
+  });
+
+  it("a kitöltött gyártó és típus ` · ` jellel áll", async () => {
+    api.detail.mockResolvedValue(
+      detail({ equipment: [{ ...noMaker, manufacturer: "Minta" }] }),
+    );
+    const { container } = render(
+      createElement(PilotAquariumEditorPage, { aquariumId: "aq-1" }),
+    );
+    await screen.findByRole("button", { name: "Szerkesztés" });
+    expect(container.textContent).toContain("Minta · T5");
+  });
+});

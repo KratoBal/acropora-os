@@ -76,6 +76,7 @@ import {
   pilotAvatarColor,
   pilotInitials,
 } from "@/components/pilot/pilot-ui";
+import { equipmentTitle } from "./aquarium-equipment-title";
 
 const EMPTY_NEW_EQUIPMENT: CreateAquariumEquipmentInput = {
   kind: "VILAGITAS",
@@ -804,8 +805,7 @@ export function PilotAquariumEditorPage({
                           {EQUIPMENT_KIND_LABEL[row.kind]}
                         </span>
                         <span className="text-sm text-pilot-grey-700">
-                          {row.manufacturer ?? "—"}
-                          {row.model ? ` · ${row.model}` : ""}
+                          {equipmentTitle(row)}
                         </span>
                         <div className="flex items-center gap-3">
                           <span className="font-mono text-xs text-pilot-grey-400">
