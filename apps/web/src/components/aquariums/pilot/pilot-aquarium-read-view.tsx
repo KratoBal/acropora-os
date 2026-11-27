@@ -20,6 +20,7 @@ import {
   WATER_BODY_LABEL,
   WATER_TYPE_LABEL,
 } from "../aquarium-labels";
+import { equipmentTitle } from "./aquarium-equipment-title";
 
 /**
  * AZ AKVÁRIUM ADATLAPJA OLVASVA (Picasso 3.22). Eddig a meglévő akvárium szerkesztő űrlapként nyílt, a jobb oszlopban tizennégy
@@ -141,8 +142,7 @@ export function PilotAquariumReadView({
                   {EQUIPMENT_KIND_LABEL[row.kind]}
                 </span>
                 <span className="text-sm text-pilot-grey-700">
-                  {row.manufacturer ?? "—"}
-                  {row.model ? ` · ${row.model}` : ""}
+                  {equipmentTitle(row)}
                 </span>
                 <span className="font-mono text-xs text-pilot-grey-400">
                   {row.quantity} db
