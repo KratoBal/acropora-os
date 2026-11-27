@@ -265,6 +265,7 @@ describe(
           "acceptedNetTotal",
           "currency",
           "customerName",
+          "hasAlternatives",
           "items",
           "netTotal",
           "netTotalWithOptionals",
@@ -279,6 +280,7 @@ describe(
         "PUBLIC-KEYS",
       );
       assert.deepEqual(Object.keys(page.body!.items[0]).sort(), [
+        "alternativeOf",
         "chosen",
         "id",
         "isOptional",
@@ -347,6 +349,87 @@ describe(
         { selectedOptionalItemIds: [] },
       );
       assert.equal(unknown.status, 404);
+    });
+
+    /*
+      ALTERNATÍVÁK (Luca 2026-11-27, card 2540d9d4): egy tételt több opció is kiválthat, az ügyfél közülük egyet választ. MI PIROSÍT: ha a lap nem jelöli az
+      alternatívákat (`alternativeOf`); ha a végösszeg endpoint két alternatívát elfogad; ha az elfogadás kettőt rögzít; ha az „együtt” összeg mindkettőt hozzáadja;
+      ha az elfogadott összeg a nem választott alternatívát is tartalmazza.
+    */
+    it("two options of one line are alternatives: marked, never both chosen, and the dearest counts in the with-options total", async () => {
+      const q = await linked("P4b alternatives");
+      const offered = await prisma.quoteItem.findUniqueOrThrow({
+        where: { id: q.offeredId },
+      });
+      const second = await prisma.quoteItem.create({
+        data: {
+          versionId: q.versionId,
+          blockId: offered.blockId,
+          position: 2,
+          source: "STANDALONE",
+          name: "Második fedőlap",
+          quantity: "1",
+          unit: "db",
+          unitNetPrice: "40000",
+          vatRatePercent: "27",
+          isOptional: true,
+          replacesItemId: q.offeredId,
+        },
+      });
+      await prisma.quoteItem.update({
+        where: { id: q.optionalId },
+        data: { unitNetPrice: "30000", replacesItemId: q.offeredId },
+      });
+      const page = await request(`/public/quotes/${q.token}`);
+      assert.equal(page.status, 200);
+      assert.equal(page.body!.hasAlternatives, true);
+      assert.deepEqual(
+        page.body!.items.map((item: Json) => item.alternativeOf),
+        [null, 0, 0],
+      );
+      // 100000 offered line out, the dearest alternative (40000) in; not 30000 + 40000
+      assert.equal(page.body!.netTotalWithOptionals, "40000.00");
+      const both = await request(`/public/quotes/${q.token}/total`, "POST", {
+        selectedOptionalItemIds: [q.optionalId, second.id],
+      });
+      assert.equal(both.status, 400, JSON.stringify(both.body));
+      assert.match(
+        both.body!.message as string,
+        /csak egy opciót választhatsz/,
+      );
+      const one = await request(`/public/quotes/${q.token}/total`, "POST", {
+        selectedOptionalItemIds: [second.id],
+      });
+      assert.deepEqual(one.body, { netTotal: "40000.00", replacedItems: [0] });
+      const refused = await request(
+        `/public/quotes/${q.token}/accept`,
+        "POST",
+        {
+          name: "Teszt Vevő",
+          selectedOptionalItemIds: [q.optionalId, second.id],
+          requestId: randomUUID(),
+        },
+      );
+      assert.equal(refused.status, 400, JSON.stringify(refused.body));
+      const accepted = await request(
+        `/public/quotes/${q.token}/accept`,
+        "POST",
+        {
+          name: "Teszt Vevő",
+          selectedOptionalItemIds: [second.id],
+          requestId: randomUUID(),
+        },
+      );
+      assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
+      assert.equal(accepted.body!.acceptedNetTotal, "40000.00");
+      assert.deepEqual(
+        accepted.body!.items.map((item: Json) => [item.replaced, item.chosen]),
+        [
+          [true, false],
+          [false, false],
+          [false, true],
+        ],
+      );
     });
 
     it("an accepted replacing option shows the replaced line struck and the accepted total", async () => {

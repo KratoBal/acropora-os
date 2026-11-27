@@ -181,16 +181,18 @@ describe(
       // a line that is not in this version
       res = await patch(o1, { replacesItemId: "no-such-item" });
       assert.equal(res.status, 400, JSON.stringify(res.body));
-      // one replacer per line
+      // several alternatives per line (Luca 2026-11-27): a second optional line may replace the same line
       assert.equal((await patch(o1, { replacesItemId: a })).status, 200);
       res = await patch(o2, { replacesItemId: a });
-      assert.equal(res.status, 409, JSON.stringify(res.body));
-      assert.match(res.body.message as string, /már kiváltja/);
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+      assert.equal(await replaces(o2), a);
       // the replaced line cannot become optional while something replaces it
       res = await patch(a, { isOptional: true });
       assert.equal(res.status, 409, JSON.stringify(res.body));
       assert.match(res.body.message as string, /nem lehet opcionális/);
       assert.equal(await replaces(o1), a);
+      // the second alternative goes back to a supplement: the next tests start from the one replacer
+      assert.equal((await patch(o2, { replacesItemId: null })).status, 200);
     });
 
     it("taking the optional mark back also ends the replacement", async () => {
@@ -239,7 +241,7 @@ describe(
       );
     });
 
-    it("the database keeps the same rules: only an optional line replaces, one replacer per line, same version", async () => {
+    it("the database keeps the same rules: only an optional line replaces, several may replace one line, same version", async () => {
       await assert.rejects(
         prisma.quoteItem.update({
           where: { id: b },
@@ -247,13 +249,16 @@ describe(
         }),
         "a non optional line cannot replace (CHECK)",
       );
-      await assert.rejects(
-        prisma.quoteItem.update({
-          where: { id: o2 },
-          data: { replacesItemId: a },
-        }),
-        "one replacer per line (unique)",
-      );
+      // several optional lines may replace the same line (Luca 2026-11-27): the unique index is gone, the application keeps them exclusive
+      await prisma.quoteItem.update({
+        where: { id: o2 },
+        data: { replacesItemId: a },
+      });
+      assert.equal(await replaces(o2), a);
+      await prisma.quoteItem.update({
+        where: { id: o2 },
+        data: { replacesItemId: null },
+      });
       // a line of ANOTHER quote's version (its own throwaway quote)
       const otherQuote = await request("/quotes", "POST", {
         title: "Replaces other",

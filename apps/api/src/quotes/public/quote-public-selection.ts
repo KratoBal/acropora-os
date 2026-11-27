@@ -1,6 +1,10 @@
 import { Prisma } from "@acropora/database";
 
-import { acceptedItemIds, replacedItemIds } from "../quote-accepted-items.js";
+import {
+  acceptedItemIds,
+  allOptionsSelection,
+  replacedItemIds,
+} from "../quote-accepted-items.js";
 
 /**
  * A NYILVÁNOS OLDAL VÉGÖSSZEGE EGY KIVÁLASZTÁSRA (Luca 2026-11-26, card 2540d9d4: kiváltott tétel). A számítás a SZERVEREN van, nem a böngészőben:
@@ -44,12 +48,15 @@ export function selectionTotals(
   return { net: total, replacedIndexes, chosenIndexes };
 }
 
-/** Az összes opcionális tétel kiválasztva: az "opcionális tételekkel együtt" összeg (a kiváltott tételek nélkül). */
+/**
+ * Az összes opció kiválasztva: az "opcionális tételekkel együtt" összeg (a kiváltott tételek nélkül). Egy tételt kiváltó alternatívák kizárják
+ * egymást, ezért csoportonként a LEGDRÁGÁBB számít (`allOptionsSelection`): ennél többet egy ügyfél nem fizethet.
+ */
 export function withAllOptionals(
   items: readonly SelectableItem[],
 ): SelectionTotals {
   return selectionTotals(
     items,
-    items.filter((item) => item.isOptional).map((item) => item.id),
+    allOptionsSelection(items, (a, b) => net(a).greaterThan(net(b))),
   );
 }

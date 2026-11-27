@@ -752,3 +752,40 @@ test("P4a: the detail carries the acceptance and the closing fields; the event p
     /Kovács|acceptances/,
   );
 });
+
+/*
+  ALTERNATÍVÁK A BELSŐ KALKULÁCIÓBAN (Luca 2026-11-27, card 2540d9d4): egy tételt több opció is kiválthat, és kizárják egymást, ezért az opciók összege a
+  LEGDRÁGÁBB alternatíva hatása. Az alap: 100 000 + 50 000 nettó; a 50 000 helyére a 30 000 és a 40 000 lép. MI PIROSÍT: ha az opciók összege mindkét
+  alternatívát hozzáadja (70 000 - 50 000 = 20 000 a helyes -10 000 helyett); ha a legolcsóbbat számolja (-20 000); ha a bruttó nem követi a nettót.
+*/
+test("with several alternatives the options' total is the dearest alternative's effect", () => {
+  const row = quoteFixture();
+  const block = row.versions[0]!.blocks[0]!;
+  const template = block.items[0]!;
+  const make = (
+    id: string,
+    price: string,
+    isOptional: boolean,
+    replacesItemId: string | null,
+  ) => ({
+    ...template,
+    id,
+    position: 0,
+    quantity: new Prisma.Decimal("1"),
+    unitNetPrice: new Prisma.Decimal(price),
+    vatRatePercent: new Prisma.Decimal("27"),
+    isOptional,
+    replacesItemId,
+  });
+  block.items = [
+    make("a", "100000", false, null),
+    make("b", "50000", false, null),
+    make("o1", "30000", true, "b"),
+    make("o2", "40000", true, "b"),
+  ].map((item, position) => ({ ...item, position }));
+  const version = internalQuoteDto(row).versions[0]!;
+  assert.equal(version.netTotal, "150000.0000");
+  // 40 000 takes the place of 50 000: -10 000, once
+  assert.equal(version.optionalNetTotal, "-10000.0000");
+  assert.equal(version.optionalGrossTotal, "-12700");
+});

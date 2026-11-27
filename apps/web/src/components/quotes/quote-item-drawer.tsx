@@ -251,14 +251,10 @@ export function QuoteItemDrawer({
     vat.trim() &&
     (source !== "PRODUCT" || variant);
 
-  // KIVÁLTHATÓ TÉTELEK: nem opcionálisak, nem ez a tétel, és még nem váltja ki őket másik opcionális tétel
+  // KIVÁLTHATÓ TÉTELEK: nem opcionálisak és nem ez a tétel. Az is kiváltható, amit már egy másik opció kivált (alternatíva, Luca 2026-11-27):
+  // az ügyfél közülük egyet választ, a kiváltott tétel pedig a listában marad.
   const replaceCandidates = lines.filter(
-    (line) =>
-      !line.isOptional &&
-      line.id !== item?.id &&
-      !lines.some(
-        (other) => other.replacesItemId === line.id && other.id !== item?.id,
-      ),
+    (line) => !line.isOptional && line.id !== item?.id,
   );
 
   const save = async (dropBomItems = false) => {
@@ -498,7 +494,7 @@ export function QuoteItemDrawer({
         {optional ? (
           <PilotFormField
             label="Kiváltott tétel"
-            help="Ha az ügyfél ezt az opcionális tételt választja, a kiváltott tétel kiesik az összegből, és ez lép a helyére. Üresen az opcionális tétel kiegészítés: hozzáadódik."
+            help="Ha az ügyfél ezt az opcionális tételt választja, a kiváltott tétel kiesik az összegből, és ez lép a helyére. Ugyanazt a tételt több opció is kiválthatja: az ügyfél közülük egyet választ. Üresen az opcionális tétel kiegészítés: hozzáadódik."
           >
             <PilotSelect
               chevron

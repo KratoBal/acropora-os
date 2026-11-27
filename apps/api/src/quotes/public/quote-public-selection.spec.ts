@@ -67,3 +67,33 @@ describe("withAllOptionals", () => {
     assert.equal(withAllOptionals(ITEMS).net.toString(), "4700"); // 1000 + 3000 + 700
   });
 });
+
+/*
+  ALTERNATÍVÁK (Luca 2026-11-27): az „összes opcionálissal” összeg csoportonként a legdrágább alternatívát számolja, és a kiválasztott összeg a bejelöltet.
+  MI PIROSÍT: ha az „összes” összeg mindkét alternatívát hozzáadja; ha a legolcsóbbat veszi a legdrágább helyett; ha a kiválasztott alternatíva mellett a
+  másik is beleszámít a kiválasztás összegébe.
+*/
+describe("alternatives in the totals", () => {
+  const ALT = [
+    line("a", "1000"),
+    line("b", "5000"),
+    line("o1", "3000", { isOptional: true, replacesItemId: "b" }),
+    line("o2", "4000", { isOptional: true, replacesItemId: "b" }),
+    line("o3", "700", { isOptional: true }),
+  ];
+
+  it("with every option chosen the dearest alternative counts, once, and the replaced line drops out", () => {
+    const r = withAllOptionals(ALT);
+    // 1000 + 4000 + 700, not 1000 + 3000 + 4000 + 700 and not 1000 + 5000 + ...
+    assert.equal(r.net.toString(), "5700");
+    assert.deepEqual(r.replacedIndexes, [1]);
+    assert.deepEqual(r.chosenIndexes, [3, 4]);
+  });
+
+  it("a chosen alternative counts alone: the other alternative of the same line adds nothing", () => {
+    assert.equal(selectionTotals(ALT, ["o1"]).net.toString(), "4000"); // 1000 + 3000
+    assert.equal(selectionTotals(ALT, ["o2"]).net.toString(), "5000"); // 1000 + 4000
+    assert.equal(selectionTotals(ALT, ["o2", "o3"]).net.toString(), "5700");
+    assert.equal(selectionTotals(ALT, []).net.toString(), "6000");
+  });
+});

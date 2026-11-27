@@ -147,6 +147,109 @@ describe("quote PDF content", () => {
     assert.equal(plain.replacedGross.toString(), "0");
   });
 
+  /*
+    ALTERNATÍVÁK (Luca 2026-11-27, card 2540d9d4): egy tételt több opció is kiválthat, és kizárják egymást: az "együtt" összeg csoportonként a LEGDRÁGÁBBAT
+    számolja, egyszer. MI PIROSÍT: ha az "együtt" összeg mindkét alternatívát hozzáadja; ha a legolcsóbbat számolja; ha a kiváltott sor kimarad a kivonásból;
+    ha az alternatívás ajánlat felirata nem mondja ki a legdrágább alternatívát; ha kiváltás nélküli ajánlatnál a felirat megváltozik.
+  */
+  it("totals: with several alternatives the with-options total counts the dearest one once", () => {
+    const blocks = [
+      block("SECTION", {
+        items: [
+          item("Akvárium", { ref: "a", unitNetPrice: d("100000") }),
+          item("Régi szűrő", { ref: "b", unitNetPrice: d("50000") }),
+          item("Szűrő A", {
+            ref: "x1",
+            isOptional: true,
+            unitNetPrice: d("30000"),
+            replacesRef: "b",
+          }),
+          item("Szűrő B", {
+            ref: "x2",
+            isOptional: true,
+            unitNetPrice: d("40000"),
+            replacesRef: "b",
+          }),
+          item("Kiegészítés", {
+            ref: "x3",
+            isOptional: true,
+            unitNetPrice: d("10000"),
+          }),
+        ],
+      }),
+    ];
+    const t = quoteTotals(blocks);
+    assert.equal(t.hasAlternatives, true);
+    // 40 000 + 10 000 net x 1.27, not 80 000 (both alternatives)
+    assert.equal(t.optionalNet.toString(), "50000");
+    assert.equal(t.optionalGross.toString(), "63500");
+    assert.equal(t.replacedNet.toString(), "50000");
+    // 190 500 - 63 500 + 63 500 = 190 500
+    assert.equal(
+      t.gross.minus(t.replacedGross).plus(t.optionalGross).toString(),
+      "190500",
+    );
+    // a single replacer is not an alternative
+    const single = quoteTotals([
+      block("SECTION", {
+        items: [
+          item("Régi", { ref: "b", unitNetPrice: d("50000") }),
+          item("Új", {
+            ref: "x1",
+            isOptional: true,
+            unitNetPrice: d("30000"),
+            replacesRef: "b",
+          }),
+        ],
+      }),
+    ]);
+    assert.equal(single.hasAlternatives, false);
+    assert.equal(single.optionalNet.toString(), "30000");
+  });
+
+  it("the summary says the with-options total counts the dearest alternative, only when there is one", async () => {
+    const withAlternatives = [
+      block("SECTION", {
+        items: [
+          item("Régi szűrő", { ref: "b" }),
+          item("Szűrő A", {
+            ref: "x1",
+            isOptional: true,
+            replacesRef: "b",
+            replacesName: "Régi szűrő",
+          }),
+          item("Szűrő B", {
+            ref: "x2",
+            isOptional: true,
+            replacesRef: "b",
+            replacesName: "Régi szűrő",
+          }),
+        ],
+      }),
+    ];
+    const pdf = await renderQuotePdf(input(withAlternatives));
+    assert.ok(
+      (await readPdfTextLines(pdf.bytes)).some((l) =>
+        l.text.includes("legdrágább alternatívával"),
+      ),
+    );
+    const plain = await renderQuotePdf(
+      input([
+        block("SECTION", {
+          items: [
+            item("Régi", { ref: "b" }),
+            item("Opció", { isOptional: true }),
+          ],
+        }),
+      ]),
+    );
+    const lines = await readPdfTextLines(plain.bytes);
+    assert.ok(
+      lines.some((l) => l.text.includes("Az opcionális tételekkel együtt")),
+    );
+    assert.ok(!lines.some((l) => l.text.includes("legdrágább")));
+  });
+
   it("the optional tag names what the item replaces, in both languages, and cuts a long name to one line", () => {
     const opt = item("Új szűrő", {
       isOptional: true,
